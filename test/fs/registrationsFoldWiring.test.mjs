@@ -1,0 +1,286 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readSource } from '../sourceScan.mjs';
+
+/**
+ * THE FOLD, AT THE SEAM. What the pure tier cannot see.
+ *
+ * `foldLegsIntoRows` and `requestStatusOf` are pure and are tested as such. The
+ * three properties below are about the QUERY, and the query is a `'use server'`
+ * export that calls `requireAdmin` and opens Mongo on its first line, so nothing
+ * here can invoke it. These are shape checks on the code.
+ *
+ * They are also the only tier that can see the property with the most teeth:
+ *
+ *     `$skip` AND `$limit` COME AFTER `$group`.
+ *
+ * Move them above it and the screen still renders, the tests still pass, the
+ * numbers still look plausible — and a request straddling a page boundary is
+ * rendered twice, incomplete both times, on two different pages. There is no
+ * rendered symptom on page one.
+ */
+
+const ACTIONS = readSource('src/lib/actions/registrations.js');
+
+function actionBody(name) {
+  const start = ACTIONS.code.indexOf(`export async function ${name}(`);
+  assert.notEqual(start, -1, `${name} is gone`);
+  const rest = ACTIONS.code.slice(start + 1);
+  const next = rest.indexOf('\nexport ');
+  return next === -1 ? rest : rest.slice(0, next);
+}
+
+const LIST   = actionBody('listRegistrations');
+const TOTAL  = actionBody('getRegistrationTotal');
+const COUNTS = actionBody('getRegistrationStatusCounts');
+
+// ── 1. ONE KEY, THREE CONSUMERS ─────────────────────────────────────────────
+
+test('all three query actions group by the SHARED key expression', () => {
+  /**
+   * The header, the badge and the cards must count the set the ROWS are. They
+   * can only do that if they group by the same thing, and the only way to
+   * guarantee that is for there to be one definition of it.
+   */
+  assert.match(ACTIONS.withImports,
+    /import\s*\{[^}]*\bREQUEST_KEY_EXPR\b[^}]*\}\s*from\s*'@\/lib\/registrations\/foldRequests'/,
+    'the actions file does not import the shared grouping key');
+
+  for (const [name, body] of [['listRegistrations', LIST], ['getRegistrationTotal', TOTAL], ['getRegistrationStatusCounts', COUNTS]]) {
+    assert.match(body, /_id:\s*REQUEST_KEY_EXPR/,
+      `${name} does not group by REQUEST_KEY_EXPR — it is counting a different set from the rows`);
+  }
+});
+
+test('no action rolls its own grouping key', () => {
+  // A hand-written `$ifNull` here would be a second definition that happens to
+  // agree today. That is how the cards and the table drifted apart twice.
+  for (const [name, body] of [['listRegistrations', LIST], ['getRegistrationTotal', TOTAL], ['getRegistrationStatusCounts', COUNTS]]) {
+    assert.ok(!/\$ifNull/.test(body), `${name} builds its own key expression`);
+    assert.ok(!/bundle\.requestId'\s*\}\s*\}/.test(body.replace(/\s+/g, ' ')) || /REQUEST_KEY_EXPR/.test(body),
+      `${name} names bundle.requestId in a group stage of its own`);
+  }
+});
+
+test('CONTROL: the body extractor found three real functions', () => {
+  // Every assertion above is a `match` on a string. An empty string fails them,
+  // but a WRONG string could pass them, so pin that each body is the one named.
+  assert.ok(LIST.includes('PAGE_SIZE'), 'the listRegistrations body is not the list');
+  assert.ok(TOTAL.includes('countDocuments'), 'the getRegistrationTotal body is not the total');
+  assert.ok(COUNTS.includes('INHOUSE_STATUS_VALUES'), 'the counts body is not the counts');
+  for (const body of [LIST, TOTAL, COUNTS]) assert.ok(body.length > 300, `a body parsed to ${body.length} chars`);
+});
+
+// ── 2. THE PAGINATION PROPERTY ──────────────────────────────────────────────
+
+test('$skip and $limit come AFTER $group — pagination is over REQUESTS', () => {
+  const group = LIST.indexOf('$group');
+  const skip  = LIST.indexOf('$skip');
+  const limit = LIST.indexOf('$limit');
+
+  assert.notEqual(group, -1, 'no $group in listRegistrations — the fold is gone');
+  assert.notEqual(skip,  -1, 'no $skip in listRegistrations');
+  assert.notEqual(limit, -1, 'no $limit in listRegistrations');
+
+  assert.ok(group < skip,
+    'THE PAGINATION BUG: $skip precedes $group, so skip/limit are applied over LEGS. '
+    + 'A page of twenty legs folds to fewer rows, pageCount describes a set the rows are not, '
+    + 'and a request straddling a page boundary renders twice.');
+  assert.ok(skip < limit, '$limit precedes $skip — the page window is inverted');
+});
+
+test('the pagination property, reported by LINE so a reviewer can look', () => {
+  /**
+   * The same claim as above, expressed as line numbers and printed, because
+   * "an index is smaller than another index" is not something a reader can
+   * check against the file. Each marker must occur EXACTLY ONCE in the raw
+   * source of this action, or the ordering claim is about an arbitrary one of
+   * several.
+   */
+  const rawStart = ACTIONS.raw.indexOf('export async function listRegistrations');
+  assert.notEqual(rawStart, -1);
+  const rawEnd = ACTIONS.raw.indexOf('\nexport ', rawStart + 1);
+  const body = ACTIONS.raw.slice(rawStart, rawEnd === -1 ? undefined : rawEnd);
+  const baseLine = ACTIONS.raw.slice(0, rawStart).split('\n').length;
+
+  const lineOf = (needle) => {
+    const lines = body.split('\n');
+    const hits = [];
+    lines.forEach((l, i) => { if (l.includes(needle)) hits.push(baseLine + i); });
+    assert.equal(hits.length, 1,
+      `"${needle}" occurs ${hits.length} times in listRegistrations — expected exactly once`);
+    const n = hits[0];
+    assert.ok(Number.isInteger(n) && n > 0, `computed line for "${needle}" is not a positive integer: ${n}`);
+    return n;
+  };
+
+  const groupLine = lineOf('_id: REQUEST_KEY_EXPR,');
+  const skipLine  = lineOf('{ $skip: skip },');
+  const limitLine = lineOf('{ $limit: PAGE_SIZE },');
+
+  console.log(`      [fold] $group at line ${groupLine}, $skip at ${skipLine}, $limit at ${limitLine}`);
+  assert.ok(groupLine < skipLine && skipLine < limitLine,
+    `pipeline order is wrong: group ${groupLine}, skip ${skipLine}, limit ${limitLine}`);
+});
+
+test('the count of requests is its own grouped pipeline, not countDocuments', () => {
+  // `countDocuments(filter)` counts LEGS. The header would then read 46 above
+  // 43 rows — the silent-wrong-number class, which is the whole subject here.
+  assert.match(LIST, /\$count:\s*'n'/, 'the public total is not a grouped $count');
+  assert.ok(!/const total = await Model\.countDocuments\(filter\)/.test(LIST),
+    'the public branch counts documents again — that is legs, not requests');
+});
+
+// ── 3. THE SECOND QUERY FETCHES THE REQUEST WHOLE ───────────────────────────
+
+test('the leg re-fetch does NOT re-apply the list filter', () => {
+  /**
+   * The filter matches LEGS. Applying it again to the second query would return
+   * only the legs that matched — rendering a three-course package as a
+   * one-course row under a course filter, which is the screen lying about the
+   * size of the request.
+   */
+  const start = LIST.indexOf("{ 'bundle.requestId': { $in: keys } }");
+  assert.notEqual(start, -1, 'the sibling lookup by requestId is gone');
+
+  const fetchStart = LIST.lastIndexOf('Model.find(', start);
+  assert.notEqual(fetchStart, -1);
+  const fetchCall = LIST.slice(fetchStart, start);
+  assert.ok(!/\bfilter\b/.test(fetchCall),
+    'the leg re-fetch applies `filter` — it would return only the legs that matched');
+});
+
+test('the re-fetch covers BOTH kinds of key', () => {
+  // An ordinary registration keys on its own `_id`; a bundle leg on its
+  // `bundle.requestId`. Missing either branch drops half the list.
+  assert.match(LIST, /\{ _id: \{ \$in: ids \} \}/, 'plain registrations are not fetched back');
+  assert.match(LIST, /\{ 'bundle\.requestId': \{ \$in: keys \} \}/, 'bundle siblings are not fetched back');
+});
+
+test('the rows are assembled by the shared pure function', () => {
+  assert.match(ACTIONS.withImports,
+    /import\s*\{[^}]*\bfoldLegsIntoRows\b[^}]*\}\s*from\s*'@\/lib\/registrations\/foldRequests'/,
+    'the action does not import the shared assembler');
+  assert.match(LIST, /docs = foldLegsIntoRows\(keys, legs\)/,
+    'the action assembles rows itself instead of calling the tested function');
+});
+
+// ── 4. IN-HOUSE IS UNTOUCHED ────────────────────────────────────────────────
+
+test('in-house still counts documents and does not fold', () => {
+  /**
+   * `register_inhouse` has no `bundle` field on any document, so there is
+   * nothing to fold — and a grouped pipeline there would be a rewrite with no
+   * behaviour change and a new way to be wrong.
+   */
+  assert.match(LIST, /total = await Model\.countDocuments\(filter\)/,
+    'the in-house branch no longer counts documents');
+  assert.match(TOTAL, /if \(source === 'inhouse'\) return Model\.countDocuments\(scope\)/,
+    'the in-house toggle badge no longer counts documents');
+});
+
+// ── 5. THE CARDS COLLAPSE EACH REQUEST BEFORE COUNTING ──────────────────────
+
+test('the summary cards count one bucket per REQUEST, via the shared precedence', () => {
+  assert.match(ACTIONS.withImports,
+    /import\s*\{[^}]*\brequestStatusExpr\b[^}]*\}\s*from\s*'@\/lib\/registrations\/requestStatus'/,
+    'the counts action does not import the shared precedence');
+  assert.match(COUNTS, /requestStatusExpr\('\$statuses'\)/,
+    'the counts action does not collapse a request to one status before counting');
+  assert.match(COUNTS, /statuses:\s*\{\s*\$addToSet:\s*'\$status'\s*\}/,
+    'the per-request status set is not collected');
+  assert.ok(!/Model\.countDocuments\(\{ \.\.\.scope, status: value \}\)/.test(COUNTS),
+    'a per-status countDocuments is back — that counts a mixed request into two cards');
+});
+
+test('the card keys are still built from the declared vocabulary', () => {
+  // The property the previous shape had and this one must keep: a status added
+  // to PUBLIC_STATUSES is counted without this file being edited.
+  assert.match(COUNTS, /PUBLIC_STATUS_VALUES\.map\(\(value\)\s*=>/,
+    'the card keys are hand-named again');
+});
+
+// ── 6. THE DASHBOARD COUNTS THE SAME THING THE LIST DOES ────────────────────
+
+/**
+ * TWO SCREENS, ONE QUESTION, ONE ANSWER.
+ *
+ * The dashboard's registration numbers and the list's header describe the same
+ * set. A dashboard total differing from the list header by the number of bundle
+ * legs, with nothing on either screen explaining which is right, is the
+ * silent-wrong-number class in its cross-screen form — and it is worse than the
+ * within-screen version, because the two numbers are never visible together.
+ */
+const DASHBOARD = readSource('src/lib/actions/dashboard.js');
+
+/**
+ * The trend aggregation, bounded by the statement that CONSUMES it rather than
+ * by a character count — see the control below for why that distinction earned
+ * its own note.
+ */
+function trendAggregation() {
+  const start = DASHBOARD.code.indexOf('const trendAgg');
+  assert.notEqual(start, -1, 'the trend aggregation is gone');
+  const end = DASHBOARD.code.indexOf('trendMap', start);
+  assert.notEqual(end, -1, 'the statement that reads trendAgg is gone — the bound is wrong');
+  return DASHBOARD.code.slice(start, end);
+}
+
+test('the dashboard imports the SAME key and the SAME precedence', () => {
+  assert.match(DASHBOARD.withImports,
+    /import\s*\{[^}]*\bREQUEST_KEY_EXPR\b[^}]*\}\s*from\s*'@\/lib\/registrations\/foldRequests'/,
+    'the dashboard does not group by the shared key');
+  assert.match(DASHBOARD.withImports,
+    /import\s*\{[^}]*\brequestStatusExpr\b[^}]*\}\s*from\s*'@\/lib\/registrations\/requestStatus'/,
+    'the dashboard does not collapse a request with the shared precedence');
+});
+
+test('the dashboard no longer counts public registrations one status at a time', () => {
+  /**
+   * The exact shape that counted legs: `countDocuments({...dateFilter, status})`
+   * once per value. Four of them, plus a bare total.
+   */
+  assert.ok(!/RegisterPublic\.countDocuments\(\{ \.\.\.dateFilter, status:/.test(DASHBOARD.code),
+    'a per-status countDocuments on RegisterPublic is back — that counts legs');
+  assert.ok(!/RegisterPublic\.countDocuments\(dateFilter\)/.test(DASHBOARD.code),
+    'the public total counts documents again — that is legs, not requests');
+  assert.match(DASHBOARD.code, /requestStatusExpr\('\$statuses'\)/,
+    'the dashboard does not resolve one status per request');
+});
+
+test('the SEVEN-DAY TREND counts requests too', () => {
+  // Without the group stage a three-course package draws a bar of three on the
+  // day it was bought — a busy day that was one enquiry.
+  const trend = trendAggregation();
+  assert.match(trend, /_id: REQUEST_KEY_EXPR/, 'the trend does not group by request');
+  assert.match(trend, /\$min: '\$createdAt'/,
+    'the trend does not date a request by its FIRST leg — a late-evening request could land on the wrong day');
+});
+
+test('CONTROL: the dashboard slice is the trend aggregation and nothing else', () => {
+  /**
+   * BOUNDED ON A STATEMENT, NOT ON A CHARACTER COUNT. The first draft sliced
+   * 900 characters and this control caught it running past the end of the
+   * aggregation into `statusDist` — sourceScan's defect 6 exactly, a matcher
+   * whose bound has nothing to do with its subject. The bound is now the line
+   * that consumes the aggregation's result.
+   */
+  const trend = trendAggregation();
+  assert.ok(trend.includes('dateToString'), 'the slice is not the trend aggregation');
+  assert.equal(trend.includes('statusDist'), false, 'the slice has run past the trend');
+  assert.ok(trend.length > 200 && trend.length < 1500, `the trend slice is ${trend.length} chars`);
+});
+
+test('the seat count that KEEPS legs says so where it is rendered', () => {
+  /**
+   * `getRoundRegistrationSummary` answers "who is expected in this room" and
+   * must count legs — a bundle's three courses are three rooms on three days.
+   * That is a different question from the list's, and the label is what stops
+   * the two numbers reading as a disagreement.
+   */
+  const panel = readSource('src/app/admin/schedules/_components/RegistrationSummaryPanel.jsx');
+  assert.match(panel.code, /ผู้เข้าอบรมในรอบนี้/,
+    'the round total no longer says it counts attendees in this round');
+  // …and the word the render tier pins is still there.
+  assert.match(panel.code, /ทั้งหมด/, 'the pinned total label was renamed');
+});

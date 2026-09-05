@@ -135,9 +135,25 @@ test('both clients append the SERVER entry, through the SAME reader as the load'
   for (const src of CLIENTS) {
     assert.match(src.code, /setInternalNotes\(\(prev\) => \[\.\.\.prev, \.\.\.readNotes\(\[res\.note \?\? \{ body \}\]\)\]\)/,
       `${src.rel} does not append the server's entry through readNotes`);
-    // …and the initial load uses the same reader, which is the other half of
-    // "the two paths cannot disagree".
-    assert.match(src.code, /useState\(\s*\(\) => readNotes\(/,
+    /**
+     * …and the initial load uses the same reader, which is the other half of
+     * "the two paths cannot disagree".
+     *
+     * ── THE SEED MAY BE ONE STEP AWAY NOW ───────────────────────────────────
+     * The public client seeds from `mergedNotes` — the union of every leg's
+     * notes on a bundle request, because new notes go to the marker leg and
+     * anchoring the read as well would hide notes written against a sibling.
+     * That derivation still runs through `readNotes`, which is the property
+     * this test owns; what it cannot be is a seed that bypasses the reader.
+     *
+     * Accepts either the direct form or a named derivation, and then proves the
+     * derivation itself calls `readNotes` — so "one step away" cannot become
+     * "not through the reader at all".
+     */
+    const direct = /useState\(\s*\(\) => readNotes\(/.test(src.code);
+    const derived = /useState\(\(\) => mergedNotes\)/.test(src.code)
+      && /const mergedNotes = [\s\S]{0,400}readNotes\(/.test(src.code);
+    assert.ok(direct || derived,
       `${src.rel} no longer seeds its notes through readNotes`);
   }
 });

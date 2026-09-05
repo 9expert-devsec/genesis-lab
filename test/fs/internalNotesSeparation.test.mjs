@@ -192,8 +192,26 @@ test('each detail client holds the two notes in DISTINCT state', () => {
 
   // Public: the customer note in `notes`, the internal list in `internalNotes`.
   assert.match(PUB.code, /useState\(doc\.notes \?\? ''\)/, 'the public customer note lost its own state');
-  assert.match(PUB.code, /useState\(\(\) => readNotes\(doc\.adminNotes\)\)/,
-    'the public internal notes are not read through readNotes into their own state');
+  /**
+   * ── THE SEED IS A UNION NOW, AND STILL GOES THROUGH `readNotes` ──────────
+   *
+   * It was `useState(() => readNotes(doc.adminNotes))`. On a bundle request the
+   * page shows ONE thread built from EVERY leg's notes — new notes are written
+   * to the marker leg, and anchoring the read as well would leave notes written
+   * against a sibling in a document no screen fetches.
+   *
+   * The property this test owns is unchanged and is asserted in two parts: the
+   * internal notes are held in their OWN state (not merged with the customer
+   * note), and whatever seeds that state passes through `readNotes` — the same
+   * reader the append path uses, so a loaded note and an appended one cannot
+   * differ in shape.
+   */
+  assert.match(PUB.code, /useState\(\(\) => mergedNotes\)/,
+    'the public internal notes are not held in their own state');
+  assert.match(PUB.code, /const mergedNotes = [\s\S]{0,400}readNotes\(/,
+    'the internal notes are seeded without going through readNotes');
+  assert.match(PUB.code, /: readNotes\(doc\.adminNotes\)/,
+    'an ordinary registration no longer seeds its notes from its own document');
 
   // In-house: the customer note is `message`.
   assert.match(INH.code, /useState\(doc\.message \?\? ''\)/, 'the in-house customer note lost its own state');

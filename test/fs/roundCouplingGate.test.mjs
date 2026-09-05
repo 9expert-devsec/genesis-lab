@@ -217,3 +217,156 @@ test('the contract permits it WITHOUT relaxing the PII cap', () => {
   assert.match(entryLine('registrations', 'inhouse'), /'status_only'/,
     'the in-house pair moved too — it has no rounds and should not have');
 });
+
+// ── 6. A BUNDLE LEG'S ROUND CANNOT BE MOVED ─────────────────────────────────
+
+/**
+ * ══ A RULE THAT LIVES ONLY IN A DISABLED BUTTON IS NOT A RULE ══════════════
+ *
+ * A promotion registration cannot change its round: one package price was
+ * quoted over the exact rounds the customer registered for, and moving one
+ * afterwards silently changes what was sold.
+ *
+ * It is enforced in TWO places and this section asserts BOTH, because either
+ * alone is a hole:
+ *
+ *   · the ACTION refuses — every export of a `'use server'` module is a POST
+ *     endpoint, so the screen cannot be the enforcement;
+ *   · the SCREEN does not offer it AND SAYS WHY — an admin who cannot see the
+ *     reason will try another way, and the other way is the endpoint.
+ *
+ * The Early Bird round is the precedent for the first half and the reason the
+ * second half is not treated as decoration.
+ */
+
+const DETAIL = readSource('src/app/admin/registrations/_components/RegistrationDetailClient.jsx');
+const ROUND_MODULE = readSource('src/lib/registrations/roundSelection.js');
+
+test('BOTH sentences are declared in ONE module, not one per side', () => {
+  // Two hand-written sentences about one rule drift, and the one that drifts is
+  // the one the admin actually reads.
+  assert.match(ROUND_MODULE.code, /export const BUNDLE_ROUND_LOCK_HINT\s*=/,
+    'the screen-side hint is not declared beside the rule');
+  assert.match(ROUND_MODULE.code, /export const BUNDLE_ROUND_LOCK_ERROR\s*=/,
+    'the action-side refusal is not declared beside the rule');
+  /**
+   * ── ASSERTED BY INDEX, NOT BY A CONSTRUCTED REGEX ────────────────────────
+   * The first draft built `new RegExp(name + '[\\s\\S]{0,200}…')` and the
+   * escaping did not survive the way it was written to disk: the pattern
+   * compiled to `[sS]` — a character class of two letters — and the assertion
+   * failed against a file that plainly satisfied it. Index arithmetic has no
+   * escaping to lose, and the distance it measures is the thing meant.
+   */
+  const PACKAGE_WORD = 'แพ็กเกจ';
+  for (const name of ['BUNDLE_ROUND_LOCK_HINT', 'BUNDLE_ROUND_LOCK_ERROR']) {
+    const at = ROUND_MODULE.code.indexOf(name);
+    assert.notEqual(at, -1, `${name} is gone`);
+    const declaration = ROUND_MODULE.code.slice(at, at + 220);
+    assert.ok(declaration.includes(PACKAGE_WORD),
+      `${name} does not mention the package — the admin cannot tell why. Got: ${declaration.slice(0, 120)}`);
+  }
+});
+
+test('CONTROL: the index probe can fail — it is not matching the whole file', () => {
+  // The bounded slice must NOT contain a word that appears elsewhere in the
+  // module, or "the declaration mentions X" is really "the file mentions X".
+  const at = ROUND_MODULE.code.indexOf('BUNDLE_ROUND_LOCK_HINT');
+  const declaration = ROUND_MODULE.code.slice(at, at + 220);
+  assert.equal(declaration.includes('roundFieldsFor'), false,
+    'the 220-char slice has run into the rest of the module');
+  assert.ok(ROUND_MODULE.code.includes('roundFieldsFor'),
+    'the control is comparing against a word that is not in the file at all');
+});
+
+test('THE ACTION REFUSES a bundle leg, before any upstream call', () => {
+  assert.match(ACTIONS.withImports,
+    /import\s*\{[^}]*\bBUNDLE_ROUND_LOCK_ERROR\b[^}]*\}\s*from\s*'@\/lib\/registrations\/roundSelection'/,
+    'the action does not import the shared refusal');
+  assert.match(ROUND_BODY, /if \(doc\.bundle\) \{/,
+    'updateRegistrationRound does not refuse a bundle leg — the round is movable by POST');
+  assert.match(ROUND_BODY, /error: BUNDLE_ROUND_LOCK_ERROR/,
+    'the refusal does not carry the shared reason');
+
+  // It must READ the tag, or `doc.bundle` is undefined on every document and
+  // the guard is dead code that always passes.
+  assert.match(ROUND_BODY, /\.select\('[^']*\bbundle\b[^']*'\)/,
+    'the pre-read does not project `bundle` — the lock would never fire');
+});
+
+test('the refusal is cheap: it precedes the course and schedule fetches', () => {
+  const lock  = ROUND_BODY.indexOf('if (doc.bundle)');
+  const course = ROUND_BODY.indexOf('getCourseByCodeInsensitive');
+  const rounds = ROUND_BODY.indexOf('listSchedulesByCourse');
+  assert.ok(lock !== -1 && course !== -1 && rounds !== -1, 'a marker is missing');
+  assert.ok(lock < course && lock < rounds,
+    'the bundle refusal happens after an upstream round trip it did not need');
+});
+
+test('the cancellation lock still answers FIRST', () => {
+  // A cancelled record is read-only to every action on this screen and must
+  // give the same answer here as everywhere else — a cancelled bundle leg is
+  // refused as cancelled, not as bundled.
+  const cancelled = ROUND_BODY.indexOf("doc.status === 'cancelled'");
+  const lock = ROUND_BODY.indexOf('if (doc.bundle)');
+  assert.ok(cancelled !== -1 && lock !== -1);
+  assert.ok(cancelled < lock, 'the bundle lock now pre-empts the cancellation lock');
+});
+
+test('THE SCREEN withholds the control THROUGH THE SHARED GATE', () => {
+  /**
+   * `editProps` is the single producer of `onEdit`. A hand-made object spread
+   * past it is the exact shape fs/registrationActionsDerived already caught
+   * once, and a second door here would be that defect with a better excuse.
+   */
+  /**
+   * The lock reads the ONE flag the request view derives from the tag, rather
+   * than testing `doc.bundle` a second time. Both facts are asserted: that the
+   * flag comes from the tag, and that the round gate reads the flag — a lock
+   * derived from something else would satisfy the second alone.
+   */
+  assert.match(DETAIL.code, /const isBundleRequest = Boolean\(doc\.bundle\)/,
+    'the request-view flag is no longer derived from the tag');
+  assert.match(DETAIL.code, /const roundLockedByBundle = isBundleRequest/,
+    'the round lock no longer reads that flag');
+  assert.match(DETAIL.code, /editProps\('course', rounds\.length > 0 && !roundLockedByBundle\)/,
+    'the lock does not go through the single edit gate');
+});
+
+test('THE SCREEN SAYS WHY, and the package reason outranks the shortage', () => {
+  /**
+   * A bundle leg whose course also has no upcoming rounds must not be told
+   * "ไม่มีรอบให้เลือกในขณะนี้" — "not at the moment" invites the admin back
+   * tomorrow, and then to look for another way. Only one of the two reasons
+   * will ever stop being true.
+   */
+  assert.match(DETAIL.withImports,
+    /import\s*\{[\s\S]*?\bBUNDLE_ROUND_LOCK_HINT\b[\s\S]*?\}\s*from\s*'@\/lib\/registrations\/roundSelection'/,
+    'the screen does not import the shared hint');
+
+  const lockHint = DETAIL.code.indexOf('BUNDLE_ROUND_LOCK_HINT');
+  const noRounds = DETAIL.code.indexOf('ไม่มีรอบให้เลือกในขณะนี้');
+  const gone     = DETAIL.code.indexOf('รอบนี้ไม่เปิดรับแล้ว');
+  assert.ok(lockHint !== -1, 'the package reason is not rendered at all');
+  assert.ok(noRounds !== -1 && gone !== -1, 'an existing reason disappeared');
+  assert.ok(lockHint < noRounds && lockHint < gone,
+    'the package reason is not the first branch — a locked leg would be told rounds are merely unavailable');
+});
+
+test('ORDINARY registrations are untouched — the control is still offered', () => {
+  /**
+   * The rule is about bundle legs only. If this ever reads as an unconditional
+   * lock, เปลี่ยนรอบ has been removed from the whole screen and nobody asked
+   * for that.
+   */
+  assert.ok(!/editProps\('course', false\)/.test(DETAIL.code), 'the round card is locked for everyone');
+  assert.match(DETAIL.code, /rounds\.length > 0/, 'the availability condition is gone');
+  assert.match(DETAIL.code, /onSave=\{handleSaveRound\}/, 'the round card can no longer save at all');
+});
+
+test('CONTROL: these probes are reading real files with real content', () => {
+  assert.ok(DETAIL.code.length > 20000, `the detail client parsed to ${DETAIL.code.length} chars`);
+  assert.ok(ROUND_MODULE.code.length > 2000, `roundSelection parsed to ${ROUND_MODULE.code.length} chars`);
+  assert.ok(ROUND_BODY.includes('roundFieldsFor'), 'the round action body is not the round action');
+  // …and a name that is certainly absent does not match, so the matchers can fail.
+  assert.equal(/BUNDLE_ROUND_LOCK_NONSENSE/.test(ROUND_MODULE.code), false);
+});

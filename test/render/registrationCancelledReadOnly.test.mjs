@@ -410,3 +410,254 @@ test('CONTROL: the element probes can tell the status NAME from the action', () 
   assert.equal(countExactly(sample, 'ยกเลิก'), 1, 'but exactly one element IS the bare word');
   assert.equal(countExactly(sample, 'ยกเลิกการสมัคร'), 1);
 });
+
+// ── 6. A BUNDLE LEG'S PAGE IS THE REQUEST, AND IT IS READ-ONLY ──────────────
+
+/**
+ * ══ THE SAME CLAIM AS THE CANCELLATION LOCK, FOR A DIFFERENT REASON ════════
+ *
+ * A bundle quotation request is stored as one row per course and this page is
+ * opened by ANY of them. It shows the REQUEST — the coordinator, the invoice
+ * block, and a table of every course with its round — because the team's job
+ * with these rows is to produce one quotation from one form.
+ *
+ * It is READ-ONLY this round, with ONE exception: the invoice card. Every
+ * per-record edit here changes ONE DOCUMENT and the model forbids widening one
+ * into a silent fan-out, so a page presenting one request whose buttons change
+ * one leg would be lying about its own scope. The invoice stays because it is
+ * the only in-app path for repairing a `requestInvoice` flag.
+ *
+ * Asserted in THIS file rather than a new one because it is the same shape of
+ * claim the whole file is about: which affordances render, and whether the
+ * screen says why they do not.
+ */
+const REQ_ID = 'aaaaaaaaaaaaaaaaaaaa9001';
+
+const BUNDLE_TAG = {
+  pageId: '6500000000000000000000aa',
+  sectionId: 'sec-9',
+  requestId: REQ_ID,
+  name: 'Claude AI ครบลูป',
+};
+
+const BUNDLE_LEGS = [
+  { _id: REQ_ID, courseName: 'Claude AI', courseCode: 'CLAUDE-AI', classDate: '16-17 ก.ย. 2569', scheduleType: 'hybrid', attendanceMode: 'teams', status: 'pending', bundle: BUNDLE_TAG },
+  { _id: 'aaaaaaaaaaaaaaaaaaaa9002', courseName: 'Vibe Code L1', courseCode: 'VIBE-CODE-L1', classDate: '19-20 ต.ค. 2569', scheduleType: 'classroom', attendanceMode: 'classroom', status: 'pending', bundle: BUNDLE_TAG },
+  { _id: 'aaaaaaaaaaaaaaaaaaaa9003', courseName: 'Vibe Code L2', courseCode: 'VIBE-CODE-L2', classDate: '24-25 ก.ย. 2569', scheduleType: 'online', attendanceMode: 'classroom', status: 'cancelled', bundle: BUNDLE_TAG },
+];
+
+const bundleHtml = renderToStaticMarkup(createElement(RegistrationDetailClient, {
+  doc: { ...BASE_DOC, _id: REQ_ID, status: 'pending', bundle: BUNDLE_TAG },
+  rounds: ROUNDS,
+  bundleLegs: BUNDLE_LEGS,
+}));
+
+test('the page SAYS it is a request and what may still be edited', () => {
+  // A card with no แก้ไข and no explanation reads as a broken page. Stated once,
+  // above the cards, rather than repeated on each that lost its button.
+  assert.ok(bundleHtml.includes('data-testid="bundle-request-readonly-note"'),
+    'the read-only explanation is missing entirely');
+  assert.ok(bundleHtml.includes('แพ็กเกจ'), 'the note does not mention the package');
+  assert.ok(bundleHtml.includes('ใบเสนอราคา'),
+    'the note does not name the exception — "read-only" beside an editable invoice card contradicts itself');
+});
+
+test('EVERY course of the request is listed, with its own round', () => {
+  assert.ok(bundleHtml.includes('data-testid="bundle-courses-list"'), 'the courses card is gone');
+  for (const leg of BUNDLE_LEGS) {
+    assert.ok(bundleHtml.includes(leg.courseName), `${leg.courseName} is not listed`);
+    assert.ok(bundleHtml.includes(leg.classDate), `${leg.courseName}'s round is not shown`);
+  }
+});
+
+/**
+ * ══ THE PAGE HAS NO "CURRENT LEG" ══════════════════════════════════════════
+ *
+ * Reversed deliberately. The first version of this view kept an ข้อมูลคอร์ส
+ * card describing ONE course while the package table below listed all of them
+ * including that same one — so the first course rendered twice — and a กำลังดู
+ * marker announced which leg the page was privately still thinking in.
+ *
+ * The id in the URL is how you ARRIVED, not what the page is ABOUT.
+ */
+
+test('the course card is ABSENT on a request view — the package table is the course data', () => {
+  assert.ok(!bundleHtml.includes('ข้อมูลคอร์ส'),
+    'the single-course card is still rendered beside the package table — the first course appears twice');
+});
+
+test('no course is marked as the one being viewed', () => {
+  assert.ok(!showsExactly(bundleHtml, 'กำลังดู'),
+    'the current-leg marker is back; a request view has no current leg');
+});
+
+test('the heading names the PACKAGE, not one of its courses', () => {
+  assert.ok(bundleHtml.includes('Claude AI ครบลูป'), 'the subtitle does not name the package');
+});
+
+test('the system card shows the REQUEST id and drops the leg’s round', () => {
+  // Neither `Registration ID` nor `Class ID` has a referent once there is no
+  // current leg — an opaque 24-character string a reader would take to identify
+  // what is on screen.
+  assert.ok(bundleHtml.includes('Request ID'), 'the request id row is missing');
+  assert.ok(!bundleHtml.includes('Class ID'), 'the leg’s round id is still shown on a request view');
+  assert.ok(bundleHtml.includes(REQ_ID), 'the request id itself is not rendered');
+});
+
+test('CONTROL: an ordinary registration keeps its course card and both ids', () => {
+  const plain = renderToStaticMarkup(createElement(RegistrationDetailClient, {
+    doc: { ...BASE_DOC, _id: REQ_ID, status: 'pending' },
+    rounds: ROUNDS,
+  }));
+  assert.ok(plain.includes('ข้อมูลคอร์ส'), 'the ordinary page lost its course card');
+  assert.ok(plain.includes('Registration ID'), 'the ordinary page lost its registration id');
+  assert.ok(plain.includes('Class ID'), 'the ordinary page lost its class id');
+});
+
+test('each course links to its own leg, so the per-leg controls can be reached', () => {
+  for (const leg of BUNDLE_LEGS) {
+    assert.ok(bundleHtml.includes(`/admin/registrations/${leg._id}`),
+      `no link to leg ${leg._id}`);
+  }
+});
+
+test('the per-leg statuses are visible, so the request\u2019s one word is not lossy', () => {
+  // One leg of this fixture is cancelled while the request is pending. The list
+  // row files it under รอดำเนินการ; this is where the cancelled course shows.
+  assert.ok(showsExactly(bundleHtml, LABEL.cancelled), 'the cancelled leg does not show its status');
+  assert.ok(showsExactly(bundleHtml, LABEL.pending), 'the pending legs do not show theirs');
+});
+
+/**
+ * ══ THE STATUS CONTROL IS OFFERED, AND WAS WRONG TO BE WITHHELD ════════════
+ *
+ * This file previously asserted the opposite, on the reasoning that
+ * `updateRegistrationStatus` moves ONE leg. The premise was right and the
+ * conclusion was not: moving a quotation from รอดำเนินการ to ส่งใบเสนอราคาแล้ว
+ * is the daily work of this screen, and a request that can never leave
+ * รอดำเนินการ is a worse failure than the duplication above.
+ *
+ * The repair was an action that means what the page says —
+ * `updateBundleRequestStatus`, which moves every leg and states what it will
+ * touch — not a hidden control.
+ */
+
+test('a request view OFFERS the status move its request can make', () => {
+  // The fixture's legs are all `pending`, so the request is pending and the
+  // table permits `confirmed` (primary) and `cancelled` (menu).
+  // `offeredTargets` returns status VALUES, from both slots together.
+  assert.notEqual(primaryButton(bundleHtml), null, 'a request view offers no primary status action');
+  assert.deepEqual(offeredTargets(bundleHtml), ['confirmed', 'cancelled'],
+    'a pending request does not offer exactly the moves its status permits');
+});
+
+test('the moves offered come from the REQUEST’s status, not the URL leg’s', () => {
+  /**
+   * The leg in the URL is `confirmed` while two siblings are `pending`. The
+   * request's status is `confirmed` by the shared precedence (most advanced
+   * live leg wins), so `confirmed → cancelled` is the only move — and the
+   * primary slot is empty, because cancellation is terminal.
+   *
+   * Read off the LEG this would offer ส่งใบเสนอราคาแล้ว as a primary action on
+   * a request that has already had one sent.
+   */
+  const html = renderToStaticMarkup(createElement(RegistrationDetailClient, {
+    doc: { ...BASE_DOC, _id: REQ_ID, status: 'confirmed', bundle: BUNDLE_TAG },
+    rounds: ROUNDS,
+    bundleLegs: [
+      { ...BUNDLE_LEGS[0], status: 'confirmed' },
+      { ...BUNDLE_LEGS[1], status: 'pending' },
+      { ...BUNDLE_LEGS[2], status: 'pending' },
+    ],
+  }));
+  assert.equal(primaryButton(html), null,
+    'a confirmed request offers a primary move — the only edge out of confirmed is terminal');
+  assert.deepEqual(offeredTargets(html), ['cancelled']);
+});
+
+test('CONTROL: read off the URL LEG instead, that fixture would offer a different set', () => {
+  /**
+   * The discriminating half. The same three legs with the URL leg PENDING and a
+   * sibling confirmed: the request is still `confirmed` by the precedence, so
+   * the offered set must not change. If the screen read `doc.status` it would
+   * flip to offering ส่งใบเสนอราคาแล้ว on a request that has already had one.
+   */
+  const html = renderToStaticMarkup(createElement(RegistrationDetailClient, {
+    doc: { ...BASE_DOC, _id: REQ_ID, status: 'pending', bundle: BUNDLE_TAG },
+    rounds: ROUNDS,
+    bundleLegs: [
+      { ...BUNDLE_LEGS[0], status: 'pending' },
+      { ...BUNDLE_LEGS[1], status: 'confirmed' },
+      { ...BUNDLE_LEGS[2], status: 'pending' },
+    ],
+  }));
+  assert.deepEqual(offeredTargets(html), ['cancelled'],
+    'the offered moves follow the URL leg, not the request');
+});
+
+test('DELETE moved OUT of the menu and NEXT TO each course', () => {
+  /**
+   * "ลบใบสมัครนี้" needed a current leg to mean anything. `deleteRegistration`
+   * still removes ONE document — that is the ruling — so the control sits in
+   * the package table beside the course it removes, one per row.
+   */
+  assert.ok(!showsExactly(bundleHtml, 'ลบใบสมัครนี้'),
+    'the menu still offers a delete with no referent');
+  const perCourse = (bundleHtml.match(/data-testid="bundle-leg-delete"/g) ?? []).length;
+  assert.equal(perCourse, BUNDLE_LEGS.length,
+    `expected one delete control per course, found ${perCourse}`);
+});
+
+test('CONTROL: an ordinary registration keeps delete in its menu', () => {
+  // Without this, "delete left the menu" is satisfied by a screen that lost
+  // delete altogether.
+  const plain = renderToStaticMarkup(createElement(RegistrationDetailClient, {
+    doc: { ...BASE_DOC, _id: REQ_ID, status: 'pending' },
+    rounds: ROUNDS,
+  }));
+  assert.ok(showsExactly(plain, 'ลบใบสมัครนี้'), 'the ordinary page lost its delete control');
+  assert.equal((plain.match(/data-testid="bundle-leg-delete"/g) ?? []).length, 0,
+    'a per-course delete rendered on a registration with no courses beside it');
+});
+
+test('THE INVOICE CARD KEEPS ITS แก้ไข, and it is the only one that does', () => {
+  /**
+   * The exception, asserted as a COUNT rather than a presence: "the invoice is
+   * editable" is satisfied by a page where everything is editable, which is the
+   * failure this ruling is about.
+   */
+  assert.equal(countExactly(bundleHtml, 'แก้ไข'), 1,
+    'a request view must offer exactly one edit control — the invoice card');
+});
+
+test('CONTROL: the same document WITHOUT the tag offers the ordinary controls', () => {
+  /**
+   * Without this, every assertion above is satisfied by a component that
+   * renders no controls for anybody. This is the same fixture with the bundle
+   * tag removed, and it must behave like the ordinary pending record it is.
+   */
+  const plain = renderToStaticMarkup(createElement(RegistrationDetailClient, {
+    doc: { ...BASE_DOC, _id: REQ_ID, status: 'pending' },
+    rounds: ROUNDS,
+  }));
+  assert.ok(countExactly(plain, 'แก้ไข') > 1,
+    'the ordinary page lost its edit controls too — the gate is not bundle-scoped');
+  assert.notEqual(primaryButton(plain), null, 'the ordinary page offers no status action');
+  assert.ok(!plain.includes('data-testid="bundle-request-readonly-note"'),
+    'the read-only note renders for a registration that is not part of a package');
+  assert.ok(!plain.includes('data-testid="bundle-courses-list"'),
+    'the courses card renders for a registration that has no siblings');
+});
+
+test('CONTROL: an empty sibling list renders no courses card rather than an empty one', () => {
+  // `bundleLegs` is [] when the lookup failed. A card headed
+  // "หลักสูตรในแพ็กเกจ" over nothing would claim the package is empty.
+  const noLegs = renderToStaticMarkup(createElement(RegistrationDetailClient, {
+    doc: { ...BASE_DOC, _id: REQ_ID, status: 'pending', bundle: BUNDLE_TAG },
+    rounds: ROUNDS,
+    bundleLegs: [],
+  }));
+  assert.ok(!noLegs.includes('data-testid="bundle-courses-list"'), 'an empty courses card rendered');
+  // …but the page still says what it is.
+  assert.ok(noLegs.includes('data-testid="bundle-request-readonly-note"'), 'the note vanished with the legs');
+});

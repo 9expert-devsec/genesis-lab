@@ -552,10 +552,50 @@ test('the primary slot is still fed ONLY by the transition table', () => {
    * expression ever renders into that slot, this says so — which is what stops
    * the ruling above being obeyed in the letter and broken in the spirit.
    */
+  /**
+   * ── WIDENED FOR THE REQUEST VIEW, WITHOUT LOSING THE TEETH ───────────────
+   *
+   * This pinned the slot to `primaryTarget` literally. The public screen now
+   * shows one row per REQUEST when the record is a bundle leg, and a request
+   * view offers no status action at all: `updateRegistrationStatus` moves ONE
+   * leg, and a button on a page headed by the whole request would read as
+   * moving the request.
+   *
+   * That gate is NOT a status value — which is the thing this file exists to
+   * keep out of the slot decision — so the claim is restated rather than
+   * dropped: the slot is still fed from exactly ONE place, and that place is
+   * either the derived target itself or a value whose only difference from it
+   * is the request-view flag. A second expression, or a gate on anything else,
+   * still fails here.
+   */
   for (const { name, src } of CLIENTS) {
     const uses = (src.code.match(/primary=\{/g) ?? []).length;
     assert.equal(uses, 1, `${name}: the status bar's primary slot is fed from ${uses} places`);
-    assert.match(src.code, /primary=\{primaryTarget \? \(/,
-      `${name}: the primary slot no longer branches on the derived target alone`);
+
+    const fed = /primary=\{(\w+) \? \(/.exec(src.code);
+    assert.ok(fed, `${name}: the primary slot does not branch on a single named value`);
+    const source = fed[1];
+
+    if (source === 'primaryTarget') continue;
+
+    assert.equal(source, 'offeredPrimary',
+      `${name}: the primary slot is fed by "${source}", which is neither the derived target nor the request-view gate`);
+    assert.match(src.code, /const offeredPrimary\s*=\s*isBundleRequest \? null : primaryTarget;/,
+      `${name}: offeredPrimary is not "the derived target unless this is a request view" — something else is deciding the slot`);
+    assert.match(src.code, /const isBundleRequest = Boolean\(doc\.bundle\)/,
+      `${name}: the request-view flag is not derived from the bundle tag`);
+  }
+});
+
+test('the OVERFLOW menu is gated by the same one flag, or not at all', () => {
+  // The pair must move together: a primary slot withheld beside a menu still
+  // offering the same moves is the screen contradicting itself.
+  for (const { name, src } of CLIENTS) {
+    const fed = /\{(\w+)\.map\(\(next\) => \(/.exec(src.code);
+    assert.ok(fed, `${name}: the overflow menu does not map a single named list`);
+    if (fed[1] === 'menuTargets') continue;
+    assert.equal(fed[1], 'offeredMenuTargets', `${name}: the menu is fed by "${fed[1]}"`);
+    assert.match(src.code, /const offeredMenuTargets\s*=\s*isBundleRequest \? \[\] : menuTargets;/,
+      `${name}: the menu gate is not the same request-view flag the primary slot uses`);
   }
 });

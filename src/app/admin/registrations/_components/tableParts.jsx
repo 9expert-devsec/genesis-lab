@@ -160,13 +160,35 @@ export function Th({ children, first, gap, edgeLeft = 18, edgeRight = 15 }) {
  * trade, and it is the honest direction to err in, because the alternative
  * failure silently sends people to the wrong record.
  */
-export function CellLink({ href, first, children, className, style }) {
+/**
+ * ── `heightPx` EXISTS FOR THE FOLDED ROW, AND ONLY FOR IT ──────────────────
+ *
+ * The public list shows one row per REQUEST, and a request may hold several
+ * courses. A three-course row cannot live inside a fixed 82px box, so the
+ * caller computes a height and every cell of that row is given the SAME one —
+ * which is what keeps the course lines and their schedule chips on the same
+ * baselines across two `<td>`s.
+ *
+ * OMITTED, the markup is exactly what it was: the `h-[82px]` class and nothing
+ * else. Single-leg rows — 41 of the 46 records this screen last held — are
+ * therefore byte-identical to before the fold, which is why every existing
+ * render assertion over this table still binds.
+ *
+ * IT IS AN INLINE STYLE, NOT AN ASSEMBLED CLASS. `h-[${n}px]` would produce
+ * correct-looking markup and NO CSS AT ALL — Tailwind cannot see a class that
+ * does not exist as a literal in the source. That is the exact failure
+ * test/fs/tailwindArbitraryValueRules exists to catch, and the reason this is
+ * a number in a style object.
+ */
+export function CellLink({ href, first, children, className, style, heightPx }) {
   return (
     <Link
       href={href}
       tabIndex={first ? undefined : -1}
-      className={cn('flex h-[82px] flex-col justify-center', className)}
-      style={style}
+      // The class ORDER is preserved exactly — `flex h-[82px] flex-col
+      // justify-center` — so an unfolded row's markup is unchanged to the byte.
+      className={cn('flex', heightPx ? null : 'h-[82px]', 'flex-col justify-center', className)}
+      style={heightPx ? { ...style, height: heightPx } : style}
     >
       {children}
     </Link>
@@ -174,10 +196,14 @@ export function CellLink({ href, first, children, className, style }) {
 }
 
 /** The 22px chevron, vertically centred. Decorative — the row is the link. */
-export function ChevronCell({ href, edgeRight = 15 }) {
+export function ChevronCell({ href, edgeRight = 15, heightPx }) {
   return (
     <td className="p-0 align-top">
-      <CellLink href={href} className="items-center" style={{ paddingRight: `${edgeRight}px` }}>
+      {/* `heightPx` is forwarded because this is a cell OF THE ROW: a chevron
+          left at 82px beside cells grown to hold three courses would sit
+          against the top of the row and break the line the whole table reads
+          along. Omitted on an unfolded row, where it changes nothing. */}
+      <CellLink href={href} className="items-center" style={{ paddingRight: `${edgeRight}px` }} heightPx={heightPx}>
         <ChevronRight aria-hidden="true" className="h-[22px] w-[22px] text-[var(--text-muted)]" />
       </CellLink>
     </td>

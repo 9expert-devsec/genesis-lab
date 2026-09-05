@@ -9,6 +9,12 @@ import Article         from '@/models/Article';
 import FeaturedReview  from '@/models/FeaturedReview';
 import Recruit         from '@/models/Recruit';
 import { requireAdmin } from '@/lib/actions/auth';
+// ══ THE SAME TWO RULES /admin/registrations COUNTS BY ═════════════════════
+// Imported, never restated. This screen and that one must not disagree about
+// how many registrations exist, and the only way to guarantee that is for both
+// to group by the same key and collapse a request with the same precedence.
+import { REQUEST_KEY_EXPR } from '@/lib/registrations/foldRequests';
+import { requestStatusExpr } from '@/lib/registrations/requestStatus';
 import {
   buildStatusLabels,
   INHOUSE_STATUS_VALUES,
@@ -68,22 +74,53 @@ export async function getDashboardMetrics(range = 'today') {
   const dateFilter = from ? { createdAt: { $gte: from, $lte: to } } : {};
 
   // ── Registration counts ────────────────────────────────────────
+  /**
+   * ══ THE PUBLIC NUMBERS COUNT REQUESTS, NOT LEGS ═══════════════════════════
+   *
+   * They counted legs until this commit, and a three-course bundle added three
+   * to the total, three to the donut and three to the seven-day trend.
+   *
+   * THE RULE IS THAT THE TWO SCREENS MUST NOT DISAGREE. /admin/registrations
+   * shows one row per request and every number on it counts requests; a
+   * dashboard total differing from the list header by the number of bundle
+   * legs, with nothing on either screen explaining which is right, is the
+   * silent-wrong-number class this project keeps removing. It does not matter
+   * which of the two is "correct" if they differ.
+   *
+   * ── SAME KEY, SAME PRECEDENCE, NOT A SECOND COPY ────────────────────────
+   * `REQUEST_KEY_EXPR` and `requestStatusExpr` are imported from the same two
+   * modules the list and its cards read. A dashboard that grouped by a
+   * hand-written `$ifNull` here would agree today and drift the first time the
+   * precedence changed.
+   *
+   * ── WHAT WOULD KEEP LEGS ────────────────────────────────────────────────
+   * Anything about SEATS OR ROOMS: a bundle's three legs are three different
+   * rooms on three different days and that person is expected in each. There is
+   * no such metric on this screen — the seat count lives on the schedules round
+   * panel, which reads `find({classId})` and is labelled there. If one is ever
+   * added here it keeps legs and says so in its own label.
+   */
+  const publicByStatus = await RegisterPublic.aggregate([
+    { $match: dateFilter },
+    { $group: { _id: REQUEST_KEY_EXPR, statuses: { $addToSet: '$status' } } },
+    { $group: { _id: requestStatusExpr('$statuses'), n: { $sum: 1 } } },
+  ]);
+
+  const publicTally = new Map(publicByStatus.map((r) => [String(r._id ?? ''), r.n]));
+  // EVERY bucket reaches the total, including a status the vocabulary does not
+  // know — so the donut can sum to less than the total and never to more.
+  const publicTotal     = publicByStatus.reduce((sum, r) => sum + r.n, 0);
+  const publicPending   = publicTally.get('pending')   ?? 0;
+  const publicConfirmed = publicTally.get('confirmed') ?? 0;
+  const publicPaid      = publicTally.get('paid')      ?? 0;
+  const publicCancelled = publicTally.get('cancelled') ?? 0;
+
   const [
-    publicTotal,
-    publicPending,
-    publicConfirmed,
-    publicPaid,
-    publicCancelled,
     inhouseTotal,
     inhousePending,
     inhouseQuoted,
     inhouseCancelled,
   ] = await Promise.all([
-    RegisterPublic.countDocuments(dateFilter),
-    RegisterPublic.countDocuments({ ...dateFilter, status: 'pending' }),
-    RegisterPublic.countDocuments({ ...dateFilter, status: 'confirmed' }),
-    RegisterPublic.countDocuments({ ...dateFilter, status: 'paid' }),
-    RegisterPublic.countDocuments({ ...dateFilter, status: 'cancelled' }),
     RegisterInhouse.countDocuments(dateFilter),
     /**
      * THE THREE LIVE IN-HOUSE STATUSES, matched through `storedValuesForFilter`.
@@ -126,6 +163,17 @@ export async function getDashboardMetrics(range = 'today') {
 
   const trendAgg = await RegisterPublic.aggregate([
     { $match: { createdAt: { $gte: sevenDaysAgo } } },
+    /**
+     * REQUESTS PER DAY, not legs. Without this stage a customer who bought a
+     * three-course package on Tuesday puts a bar of three on Tuesday — the
+     * chart would report a busy day that was one enquiry.
+     *
+     * `$min` because the legs of one request are written inside a single
+     * transaction milliseconds apart: the request happened when the FIRST leg
+     * landed, and taking any other one could push a request submitted at
+     * 23:59:59.9 into the following day.
+     */
+    { $group: { _id: REQUEST_KEY_EXPR, createdAt: { $min: '$createdAt' } } },
     {
       $group: {
         _id: {

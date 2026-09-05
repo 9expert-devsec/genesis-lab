@@ -372,3 +372,102 @@ test('the transition table is chosen by source, and there is no second branch', 
   assert.equal((STATUS_BODY.match(/findOneAndUpdate\(/g) ?? []).length, 1,
     'there must be exactly one status write in this action');
 });
+
+// ── THE REQUEST-LEVEL STATUS ACTION ─────────────────────────────────────────
+
+/**
+ * ══ A FAN-OUT IS ONLY PERMITTED AS ITS OWN ACTION ══════════════════════════
+ *
+ * A quotation is issued for the PACKAGE, so a bundle request's status is a fact
+ * about the request. The `bundle` ruling on models/RegisterPublic forbids
+ * widening a per-document edit into a fan-out and sanctions exactly one
+ * alternative: a separate, explicit action that says what it is about to touch.
+ *
+ * These assert BOTH halves — that the separate action exists and behaves, and
+ * that the per-document one was NOT widened to get there.
+ */
+
+function actionSlice(name) {
+  const at = ACTIONS.code.indexOf(`export async function ${name}(`);
+  assert.notEqual(at, -1, `${name} is gone`);
+  const rest = ACTIONS.code.slice(at + 1);
+  const next = rest.indexOf('\nexport ');
+  return next === -1 ? rest : rest.slice(0, next);
+}
+
+test('updateRegistrationStatus was NOT widened — it still writes ONE document', () => {
+  const body = actionSlice('updateRegistrationStatus');
+  assert.match(body, /findOneAndUpdate\(\s*\{ _id: id, status: \{ \$in: fromStates \} \}/,
+    'the single-document action no longer filters on this id and its stored status');
+  for (const forbidden of ['updateMany', 'bundle.requestId', 'planBundleStatusChange']) {
+    assert.ok(!body.includes(forbidden),
+      `updateRegistrationStatus mentions ${forbidden} — the per-document action has been widened into a fan-out`);
+  }
+});
+
+test('the request-level action is SEPARATE and derives its write set from the shared plan', () => {
+  const body = actionSlice('updateBundleRequestStatus');
+  assert.match(ACTIONS.withImports,
+    /import \{ planBundleStatusChange \} from '@\/lib\/registrations\/bundleStatusPlan'/,
+    'the action does not import the shared plan — the dialog and the write could describe different sets');
+  assert.match(body, /planBundleStatusChange\(\{ legs, to: status \}\)/, 'the action does not build the plan');
+  assert.match(body, /for \(const leg of plan\.changing\)/,
+    'the action does not write the plan it built — it is deciding twice');
+});
+
+test('a terminal leg cannot be moved: the per-leg write re-checks the stored status', () => {
+  /**
+   * Belt and braces, deliberately. `plan.changing` already excludes a leg the
+   * table cannot move; the filter repeats the question so a concurrent writer
+   * between the read and the write cannot land the move either — the same
+   * reasoning the single-document action's filter is built on.
+   */
+  const body = actionSlice('updateBundleRequestStatus');
+  assert.match(body, /allowedFromStates\(status, transitionsForSource\('public'\)\)/,
+    'the from-states are not derived from the shared transition table');
+  assert.match(body, /\{ _id: leg\._id, status: \{ \$in: fromStates \} \}/,
+    'the per-leg write does not re-check the stored status');
+});
+
+test('it is wrapped in a transaction, and the callback resets its own accumulator', () => {
+  // Same shape as writeLegsAtomically in the bundle route. `withTransaction`
+  // MAY RUN THE CALLBACK AGAIN, so an array declared outside and appended to
+  // would double-count on a retry.
+  const body = actionSlice('updateBundleRequestStatus');
+  assert.match(body, /mongoose\.startSession\(\)/, 'no session is opened');
+  assert.match(body, /withTransaction\(/, 'the fan-out is not wrapped');
+  assert.match(body, /endSession\(\)/, 'the session is never ended — it would leak per click');
+  assert.match(body, /moved = \[\];/, 'the callback does not reset its accumulator on a retry');
+  assert.match(body, /session: mongooseSession/, 'a write inside the transaction does not carry the session');
+});
+
+test('ONE AUDIT ROW PER LEG, keyed on the leg — never a phantom row on the requestId', () => {
+  const body = actionSlice('updateBundleRequestStatus');
+  assert.match(body, /for \(const leg of moved\)/, 'the audit rows are not written per moved leg');
+  assert.match(body, /recordId:\s*String\(leg\._id\)/,
+    'the audit row is not keyed on the leg — a row keyed on the requestId is invisible to every screen');
+  assert.match(body, /before:\s*\{ status: leg\.previous \}/, 'the audit row has no before value');
+  assert.ok(!/recordId:\s*String\(id\)/.test(body),
+    'an audit row is keyed on the requestId — no screen queries that record');
+});
+
+test('a plan that changes nothing writes nothing and files no audit row', () => {
+  // Same rule the single action follows for a rejected transition: a refused
+  // move did not happen, and filing a row for it reads as evidence.
+  const body = actionSlice('updateBundleRequestStatus');
+  const refusal = body.indexOf('if (!plan.ok)');
+  const write = body.indexOf('withTransaction');
+  const audit = body.indexOf('recordAdminActionAfter');
+  assert.notEqual(refusal, -1, 'the empty-plan refusal is gone');
+  assert.ok(refusal < write && refusal < audit,
+    'the empty-plan refusal happens after the write or the audit');
+});
+
+test('CONTROL: the slices are the two real actions, and they differ', () => {
+  const single = actionSlice('updateRegistrationStatus');
+  const bundle = actionSlice('updateBundleRequestStatus');
+  assert.ok(single.length > 300 && bundle.length > 300, 'a slice parsed to almost nothing');
+  assert.notEqual(single, bundle, 'both names resolved to the same body');
+  assert.ok(single.includes('transitionsForSource'), 'the single-action slice is not the single action');
+  assert.ok(bundle.includes('bundle.requestId'), 'the bundle-action slice is not the bundle action');
+});
