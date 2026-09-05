@@ -5,12 +5,16 @@ import { GraduationCap } from 'lucide-react';
 import { cn, formatPrice, courseHref } from '@/lib/utils';
 import { cardSurfaceClass, accentButtonClass } from '@/lib/pageBuilder/presets';
 import { discountPercent } from '@/lib/pageBuilder/bundlePricing';
+// The ONE definition of "is this bundle taking registrations". Imported rather
+// than spelled here, because the bundle quotation form has to answer the same
+// question and a page that shows the closed message while the form still
+// accepts a submission is a closed bundle registerable through a stale link.
+import { BUNDLE_CLOSED_MESSAGE, isBundleRegistrationOpen } from '@/lib/pageBuilder/bundleRegistration';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';
 import { resolveDerivedRoundBadge } from '@/lib/scheduleStatus';
 import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
 import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
-import { CopyCodeButton } from '../CopyCodeButton';
 
 /**
  * promotion_bundle — ONE bundle promotion: a name, a blurb, ราคาปกติ and
@@ -21,11 +25,13 @@ import { CopyCodeButton } from '../CopyCodeButton';
  * section rather than a row in a table. One page still produces ONE card on
  * /promotions — nothing here touches the grid, the loader or `promotionOrder`.
  *
- * Server component. The one client module it reaches for is `CopyCodeButton`,
- * which states its own case for existing (an interaction and a permission-gated
- * browser API that no string field can express); the CODE itself is rendered
- * here, as selectable text, so the button is an accelerator and never the only
- * path to the value.
+ * Server component, and now a WHOLLY server-rendered one: it reached for
+ * `CopyCodeButton` — the one client module the page-builder's public render
+ * added — until the register button replaced the copy button, at which point
+ * that component had no callers left and was deleted. The discount CODE is
+ * still rendered here as selectable text, because `content.discountCode` is a
+ * schema field and a field with no reader is the thing this repo keeps
+ * removing.
  *
  * ── FAILS CLOSED ONLY ON NOTHING-AT-ALL ───────────────────────────────────
  * Mirrored by `sectionRendersEmpty`'s `promotion_bundle` case, which is a
@@ -62,8 +68,15 @@ import { CopyCodeButton } from '../CopyCodeButton';
  * A fixed string, not an author field. The decided scope is "a state message",
  * and an author-written one would be a fourth thing to keep right per bundle
  * with no reader that behaves differently for it.
+ *
+ * ── IT IS NO LONGER PRIVATE TO THIS FILE, AND THE PREMISE THAT CHANGED ────
+ * It was a `const` here because this component was its only reader. It is not
+ * any more: the bundle quotation form shows the SAME sentence when a stale
+ * link reaches a closed bundle, and a visitor who is told one thing on the
+ * page and another on the form has been told nothing. So the string moved to
+ * `lib/pageBuilder/bundleRegistration.js`, beside the predicate that decides
+ * when it is shown — one rule, one wording, imported by both.
  */
-const CLOSED_MESSAGE = 'โปรโมชันนี้ปิดรับสมัครแล้ว';
 
 /**
  * ── ONE ITEM CARD: ONE COURSE, ONE ROUND OF IT ────────────────────────────
@@ -217,7 +230,7 @@ function BundleItemCard({ entry, item, todayKey, currentYear }) {
   );
 }
 
-export function PromotionBundleSection({ content, data, style }) {
+export function PromotionBundleSection({ content, data, style, pageId = null, sectionId = '' }) {
   const name = typeof content?.name === 'string' ? content.name.trim() : '';
   const blurb = typeof content?.blurb === 'string' ? content.blurb.trim() : '';
   const code = typeof content?.discountCode === 'string' ? content.discountCode.trim() : '';
@@ -230,11 +243,38 @@ export function PromotionBundleSection({ content, data, style }) {
 
   const items = Array.isArray(content?.items) ? content.items : [];
 
-  // ABSENT MEANS OPEN. `!== false`, never truthiness: this field can only ever
-  // REMOVE the button, so anything other than a literal `false` an author wrote
-  // has to leave the bundle open. (A `.lean()` read applies no Mongoose
-  // defaults and JSON drops `undefined`, so a key can arrive absent.)
-  const open = content?.registrationOpen !== false;
+  /**
+   * The BUNDLE-LEVEL register link, or null when this render cannot build one.
+   *
+   * Named apart from `BundleItemCard`'s `registerHref` deliberately: that one
+   * is a per-COURSE link into the ordinary wizard for one round, built by
+   * `scheduleRegistrationHref`, and it is NOT governed by this bundle's switch.
+   * Two links, two audiences, two rules — and one shared name would have been
+   * the first step to someone applying one rule to both.
+   *
+   * `pageId` is absent on the editor canvas (which renders SectionRenderer
+   * directly) and on any caller that does not thread it, and a link missing
+   * half its key is worse than no link: it would resolve to a different bundle
+   * on a duplicated page, or to nothing at all.
+   *
+   * `section.id` reaches this component only as part of the pair the PAGE
+   * threads — a section component is not handed its own id — so the id comes
+   * from `content` having been resolved under it upstream. It is passed as
+   * `sectionId` alongside `pageId` for that reason.
+   */
+  const bundleRegisterHref =
+    pageId && sectionId
+      ? `/registration/bundle?page=${encodeURIComponent(pageId)}&section=${encodeURIComponent(sectionId)}`
+      : null;
+
+  // ABSENT MEANS OPEN, and the rule lives in `isBundleRegistrationOpen` rather
+  // than in this line. It used to be `content?.registrationOpen !== false`
+  // written out here, which was correct and was about to acquire a second copy:
+  // the bundle quotation form must refuse a submission on exactly the same
+  // condition that removes the button, and two spellings of one rule is how a
+  // closed bundle stays registerable through a stale link. See that module for
+  // why it is `!== false` and never truthiness.
+  const open = isBundleRegistrationOpen(content);
 
   // The guard `sectionRendersEmpty` mirrors. Nothing authored at all → nothing
   // drawn; the editor warns and the structure tree marks it.
@@ -348,20 +388,58 @@ export function PromotionBundleSection({ content, data, style }) {
         enforcement; if the switch is ever widened, that test says so.
       */}
       {open
-        ? code && (
+        ? (bundleRegisterHref || code) && (
             <div data-testid="bundle-offer" className="flex flex-wrap items-center gap-3">
               {/*
-                The code as TEXT, always, and before the button. It is the value;
-                the button is only a faster way to take it. A visitor with no
-                JavaScript, or a blocked clipboard, can still read and select it.
+                ── THE REGISTER BUTTON, AND WHAT IT REPLACED ──────────────────
+                Until this commit the bundle-level affordance was a
+                คัดลอกรหัสส่วนลด button beside the code: the visitor took a
+                string away and used it somewhere this page could not see. The
+                button asks for the package instead, and the request is stored
+                as an ordinary quotation the sales team already knows how to
+                answer.
+
+                THE CODE STAYS, AS SELECTABLE TEXT. Only the COPY BUTTON was
+                removed. `content.discountCode` is a schema field and the rule
+                in this repo is that no field ships without a named reader —
+                this chip is it, along with the editor's own input and
+                `sectionRendersEmpty`'s guard. Deleting the chip too would have
+                left the field read by nothing.
+
+                THE LINK CARRIES (pageId, sectionId) AND NOT sectionId ALONE.
+                `duplicatePageBuilderPage` keeps section ids by design, so two
+                bundles on a duplicated promotion page share one — a quotation
+                keyed on the id alone could not say which page it came from.
+
+                NO BUTTON WITHOUT A pageId. The editor canvas renders
+                SectionRenderer directly and passes none, so a bundle on the
+                canvas draws the code and no button. That is right: the canvas
+                previews a page that may not be published, and the form would
+                refuse such a link anyway — better to draw nothing than a link
+                that leads to a refusal.
+
+                The link is NOT validated here and must not be: it is a lookup
+                key, and `resolveBundleRequest` re-derives everything from the
+                stored page at both ends. A page that could go stale between
+                render and click is exactly why the guard lives there.
               */}
-              <code
-                data-testid="bundle-code"
-                className="rounded-9e-sm border border-[var(--surface-border)] px-3 py-2 font-en text-sm font-bold tracking-wider text-[var(--pb-accent-text)]"
-              >
-                {code}
-              </code>
-              <CopyCodeButton code={code} className={accentButtonClass('promotion_bundle', style)} />
+              {bundleRegisterHref && (
+                <Link
+                  href={bundleRegisterHref}
+                  data-testid="bundle-register"
+                  className={accentButtonClass('promotion_bundle', style)}
+                >
+                  ขอใบเสนอราคาแพ็กเกจนี้
+                </Link>
+              )}
+              {code && (
+                <code
+                  data-testid="bundle-code"
+                  className="rounded-9e-sm border border-[var(--surface-border)] px-3 py-2 font-en text-sm font-bold tracking-wider text-[var(--pb-accent-text)]"
+                >
+                  {code}
+                </code>
+              )}
             </div>
           )
         : (
@@ -369,7 +447,7 @@ export function PromotionBundleSection({ content, data, style }) {
             data-testid="bundle-closed"
             className="rounded-9e-md border border-[var(--surface-border)] px-4 py-3 text-sm font-bold text-9e-slate-dp-50 dark:text-[#94a3b8]"
           >
-            {CLOSED_MESSAGE}
+            {BUNDLE_CLOSED_MESSAGE}
           </p>
         )}
     </div>

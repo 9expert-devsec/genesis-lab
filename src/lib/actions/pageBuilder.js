@@ -420,6 +420,45 @@ export async function getPageBuilderPageBySlug(slug) {
   );
 }
 
+/**
+ * The BY-ID TWIN of `getPageBuilderPageBySlug`, and it exists because the
+ * bundle quotation form is reached by id rather than by slug.
+ *
+ * ── IT IS NOT `getPageBuilderPageById`, AND MUST NOT BECOME IT ────────────
+ * That function is fifteen lines above and is `findById(id).lean()` with NO
+ * status filter and NO `-draft` projection. It is not a substitute here and
+ * calling it from a public surface would publish unpublished draft content to
+ * anyone who could guess an ObjectId. Its own exposure is filed as a ticket
+ * (docs/ticket-pagebuilder-by-id-unauthenticated-draft.md) and is deliberately
+ * NOT touched by this round.
+ *
+ * This one carries the same two guards the slug read carries, for the same
+ * reason its header gives: `-draft` is a PROJECTION rather than a post-filter,
+ * because an unpublished draft must never leave the database on a public read
+ * and the query is the cheapest place to guarantee it. `status: "published"` is
+ * the coarse gate; the fine one — the publish window — is `isPubliclyVisible`,
+ * applied by the caller against the fields this returns, exactly as the public
+ * catch-all route does.
+ *
+ * A malformed id is a MISS, not a throw: `findById` rejects on a non-ObjectId
+ * string, and this is reached from a query parameter a person can type.
+ */
+export async function getPublishedPageBuilderPageById(id) {
+  if (!id) return null;
+  await dbConnect();
+  try {
+    return serialize(
+      await PageBuilder.findOne({ _id: String(id), status: "published" })
+        .select("-draft")
+        .lean(),
+    );
+  } catch {
+    // CastError on an id that is not ObjectId-shaped. A hand-edited link is a
+    // miss like any other, and a 500 would turn a bad URL into an error page.
+    return null;
+  }
+}
+
 /** Any-status read — admin preview / redirect lookup. */
 export async function getPageBuilderPageBySlugAny(slug) {
   if (!slug) return null;

@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
 
 import { PromotionBundleSection } from '@/components/pageBuilder/sections/promotion_bundle';
+import { isBundleRegistrationOpen } from '@/lib/pageBuilder/bundleRegistration';
 import { sectionRendersEmpty } from '@/lib/pageBuilder/sectionLabels';
 import { sectionSchema } from '@/lib/schemas/pageBuilder';
 import { newSection } from '@/lib/pageBuilder/newSection';
@@ -23,10 +24,16 @@ import { newSection } from '@/lib/pageBuilder/newSection';
  * renders would pass while the feature did nothing.
  */
 
-const doc = (content, style) =>
+/**
+ * `pageId`/`sectionId` default to the PAIR, because the bundle-level affordance
+ * is now a register link keyed on it — a render without the pair draws no
+ * button (correctly: that is the editor canvas, which threads neither). Tests
+ * that are about the pair itself pass their own.
+ */
+const doc = (content, style, ref = { pageId: 'p1', sectionId: 'sec-1' }) =>
   new JSDOM(
     `<!doctype html><body>${renderToStaticMarkup(
-      createElement(PromotionBundleSection, { content, style }),
+      createElement(PromotionBundleSection, { content, style, ...ref }),
     )}</body>`,
   ).window.document;
 
@@ -166,13 +173,60 @@ test('CONTROL: the zero and the unset renders genuinely differ', () => {
 
 // ── the open/closed switch ────────────────────────────────────────────────
 
-test('OPEN (the absent default) draws the code and the copy button', () => {
+test('OPEN (the absent default) draws the register button and the code', () => {
+  /**
+   * ── WHAT THIS ASSERTED BEFORE, AND WHY IT CHANGED ────────────────────────
+   * It asserted the code and the COPY BUTTON. The copy button is gone: the
+   * bundle-level affordance is now a link into the quotation form, and
+   * `CopyCodeButton` had no callers left and was deleted with it.
+   *
+   * The CODE stays, as selectable text — `content.discountCode` is a schema
+   * field and a field with no reader is what this repo keeps removing.
+   */
   for (const content of [FULL, { ...FULL, registrationOpen: true }]) {
     const d = doc(content);
+    assert.notEqual(d.querySelector('[data-testid="bundle-register"]'), null);
     assert.notEqual(d.querySelector('[data-testid="bundle-code"]'), null);
-    assert.notEqual(d.querySelector('[data-testid="bundle-copy-code"]'), null);
     assert.equal(d.querySelector('[data-testid="bundle-closed"]'), null);
   }
+});
+
+test('the register link carries the PAIR, not the section id alone', () => {
+  /**
+   * `duplicatePageBuilderPage` keeps section ids by design, so two bundles on a
+   * duplicated promotion page share one. A link carrying only the section id
+   * could not say which page the quotation came from.
+   */
+  const href = doc(FULL).querySelector('[data-testid="bundle-register"]').getAttribute('href');
+  assert.match(href, /[?&]page=p1(&|$)/, 'the link does not carry the page id');
+  assert.match(href, /[?&]section=sec-1(&|$)/, 'the link does not carry the section id');
+  assert.ok(href.startsWith('/registration/bundle?'), `unexpected target: ${href}`);
+});
+
+test('NO pageId, NO button — the editor canvas draws the code and nothing to click', () => {
+  /**
+   * The canvas renders SectionRenderer directly and threads no page id. A link
+   * missing half its key is worse than no link: it would resolve to a different
+   * bundle on a duplicated page, or to nothing. And the canvas previews a page
+   * that may not be published, which the form would refuse anyway.
+   */
+  const d = doc(FULL, undefined, {});
+  assert.equal(d.querySelector('[data-testid="bundle-register"]'), null);
+  // The code is still drawn, so this is the BUTTON being withheld rather than
+  // the whole offer block failing closed.
+  assert.notEqual(d.querySelector('[data-testid="bundle-code"]'), null);
+});
+
+test('CONTROL: half a pair is still no button', () => {
+  for (const ref of [{ pageId: 'p1' }, { sectionId: 'sec-1' }, { pageId: '', sectionId: 'sec-1' }]) {
+    assert.equal(
+      doc(FULL, undefined, ref).querySelector('[data-testid="bundle-register"]'),
+      null,
+      `a button was drawn from ${JSON.stringify(ref)}`,
+    );
+  }
+  // …and the complete pair DOES draw one, so the nulls above discriminate.
+  assert.notEqual(doc(FULL).querySelector('[data-testid="bundle-register"]'), null);
 });
 
 test('CLOSED replaces both with a state message, and the section stays visible', () => {
@@ -184,9 +238,10 @@ test('CLOSED replaces both with a state message, and the section stays visible',
 
   assert.notEqual(d.querySelector('[data-testid="bundle-closed"]'), null);
   // The code goes WITH the button: a displayed code is an invitation to use it,
-  // and a closed bundle's code will not be honoured.
+  // and a closed bundle's code will not be honoured. The register link goes for
+  // the more direct reason that a closed bundle must not be registerable.
   assert.equal(d.querySelector('[data-testid="bundle-code"]'), null);
-  assert.equal(d.querySelector('[data-testid="bundle-copy-code"]'), null);
+  assert.equal(d.querySelector('[data-testid="bundle-register"]'), null);
 });
 
 test('CONTROL: only a literal false closes it — every other value leaves it open', () => {
@@ -197,15 +252,43 @@ test('CONTROL: only a literal false closes it — every other value leaves it op
    */
   for (const v of [undefined, true]) {
     assert.notEqual(
-      doc({ ...FULL, registrationOpen: v }).querySelector('[data-testid="bundle-copy-code"]'),
+      doc({ ...FULL, registrationOpen: v }).querySelector('[data-testid="bundle-register"]'),
       null,
       `registrationOpen: ${String(v)} closed the bundle`,
     );
   }
   assert.equal(
-    doc({ ...FULL, registrationOpen: false }).querySelector('[data-testid="bundle-copy-code"]'),
+    doc({ ...FULL, registrationOpen: false }).querySelector('[data-testid="bundle-register"]'),
     null,
   );
+});
+
+test('the RENDERER and the FORM read the same open/closed predicate', () => {
+  /**
+   * Asserted behaviourally over a grid of stored values rather than by reading
+   * an import: whatever removes the bundle-level affordance from the page must
+   * be exactly what `isBundleRegistrationOpen` refuses, or a bundle showing the
+   * closed message stays registerable through a stale link — the one failure
+   * the round brief names outright.
+   *
+   * The odd values are the point. `0`, `''` and `null` are not things an author
+   * can type, but a bad write could store one, and a truthiness check on either
+   * side would silently retire a live promotion for each of them.
+   */
+  const stored = [undefined, true, false, null, 0, '', 'false', 1, {}];
+  for (const v of stored) {
+    const drewAffordance =
+      doc({ ...FULL, registrationOpen: v }).querySelector('[data-testid="bundle-register"]') !== null;
+    assert.equal(
+      drewAffordance,
+      isBundleRegistrationOpen({ ...FULL, registrationOpen: v }),
+      `the page and the predicate disagree about registrationOpen: ${JSON.stringify(v)}`,
+    );
+  }
+  // CONTROL: the grid contains BOTH answers, so the loop above is not comparing
+  // two constant trues.
+  assert.equal(stored.some((v) => isBundleRegistrationOpen({ registrationOpen: v })), true);
+  assert.equal(stored.some((v) => !isBundleRegistrationOpen({ registrationOpen: v })), true);
 });
 
 // ── the schema's own claims ───────────────────────────────────────────────

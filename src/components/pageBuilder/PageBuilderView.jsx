@@ -113,8 +113,29 @@ export async function PageBuilderView({ page }) {
       style={themeStyle(page.theme)}
       data-pb-theme={page.theme || 'default'}
     >
+      {/*
+        `pageId` — the page's own `_id`, threaded down for `promotion_bundle`,
+        whose register link must be keyed on (pageId, sectionId) rather than on
+        the section id alone: `duplicatePageBuilderPage` keeps section ids by
+        design, so a duplicated promotion page mints two bundles sharing an id
+        and a quotation could not say which page it came from.
+
+        THIS COMPONENT IS THE ONLY THING THAT KNOWS IT. A section carries its
+        own id and has no way to reach its page, and the canvas renders
+        SectionRenderer directly — which is why a bundle drawn in the editor
+        gets `null` here and renders no register button. That is correct: the
+        canvas is a preview of a page that may not be published, and a live
+        registration link inside it would point at a bundle the form would
+        refuse anyway.
+      */}
       {sections.map((section, i) => (
-        <SectionRenderer key={section?.id ?? i} section={section} depth={0} resolvedData={resolvedData} />
+        <SectionRenderer
+          key={section?.id ?? i}
+          section={section}
+          depth={0}
+          resolvedData={resolvedData}
+          pageId={page._id ? String(page._id) : null}
+        />
       ))}
     </div>
   );

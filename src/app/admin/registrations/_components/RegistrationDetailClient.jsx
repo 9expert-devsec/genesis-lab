@@ -938,6 +938,34 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
               />
             ) : (
               <DL>
+                {/*
+                  ── THIS ROW IS ONE LEG OF A BUNDLE, AND THE CARD SAYS SO ────
+                  A bundle quotation request is stored as one row per course, so
+                  this record is a registration for ONE course out of a package
+                  the customer asked for as a whole. Without this row an admin
+                  reading it sees an ordinary single-course registration and has
+                  no way at all to learn there are others — the coordinator
+                  repeats, but so do genuine repeat bookings.
+
+                  It leads the card because it changes what everything under it
+                  MEANS: the course below is one of several, and the round below
+                  is that course's round rather than the customer's whole
+                  arrangement.
+
+                  `emptyHint` covers the unnamed bundle — an author may ship
+                  one, the storage floor accepts it (see the model), and a bare
+                  colon here would read as a value that failed to load. The
+                  section id is deliberately NOT shown: it identifies the bundle
+                  to the code and would be noise to a person, who has the name
+                  and the หลักสูตร rows to work with.
+                */}
+                {doc.bundle && (
+                  <DLRow
+                    label="แพ็กเกจ"
+                    value={doc.bundle.name}
+                    emptyHint="แพ็กเกจนี้ไม่ได้ตั้งชื่อไว้"
+                  />
+                )}
                 <DLRow label="หลักสูตร"  value={doc.courseName} />
                 <DLRow label="รหัสคอร์ส" value={doc.courseCode || doc.courseId} />
                 <DLRow

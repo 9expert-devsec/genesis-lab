@@ -35,10 +35,34 @@ const CONTENT = {
   stat_card: { value: 'V', label: 'L' },
   icon_card: { title: 'T', description: 'D' },
   cta: { buttonLabel: 'Go', buttonHref: '/x' },
-  // `discountCode` is what makes the button exist at all — without it the
-  // buttonStyle half of this type's declaration would compare two renders with
-  // no button in either and pass while reading nothing.
+  /**
+   * ── THE PREMISE OF THIS FIXTURE CHANGED, AND SO DID THE FIXTURE ─────────
+   * It used to read: "`discountCode` is what makes the button exist at all".
+   * That was true while the bundle's styled button was the คัดลอกรหัสส่วนลด
+   * one, which rendered only when a code was set. That button is GONE — it was
+   * replaced by the register link, which is keyed on (pageId, sectionId) and
+   * does not care about the code.
+   *
+   * So the thing that makes the button exist is now the PAIR, supplied via
+   * EXTRA_PROPS below. `discountCode` stays because the section still draws the
+   * code chip beside the button and the fixture should look like a real bundle,
+   * but it is no longer what this assertion depends on.
+   *
+   * Without the pair, both renders would contain no button at all and the
+   * buttonStyle half of this type's declaration would compare two identical
+   * outputs — passing while reading nothing. That is the failure this note has
+   * always been about; only the mechanism moved.
+   */
   promotion_bundle: { name: 'T', netPrice: 1, discountCode: 'EXP1' },
+};
+
+/**
+ * Per-type props beyond `content`/`style`, for types whose styled surface needs
+ * render context. Empty for every other type, so the loop below is unchanged
+ * for them.
+ */
+const EXTRA_PROPS = {
+  promotion_bundle: { pageId: 'p1', sectionId: 'sec-1' },
 };
 const VALUES = { cardStyle: ['shadow', 'plain'], buttonStyle: ['outline', 'primary'] };
 const R = (C, props) => renderToStaticMarkup(C(props));
@@ -48,9 +72,10 @@ for (const [type, props] of Object.entries(SECTION_STYLE_CAPS)) {
     test(`${type} genuinely reads ${prop} (render differs between values)`, () => {
       const [a, b] = VALUES[prop];
       assert.ok(CONTENT[type], `no sample content for ${type}`);
+      const extra = EXTRA_PROPS[type] ?? {};
       assert.notEqual(
-        R(COMP[type], { content: CONTENT[type], style: { [prop]: a } }),
-        R(COMP[type], { content: CONTENT[type], style: { [prop]: b } }),
+        R(COMP[type], { content: CONTENT[type], style: { [prop]: a }, ...extra }),
+        R(COMP[type], { content: CONTENT[type], style: { [prop]: b }, ...extra }),
       );
     });
   }

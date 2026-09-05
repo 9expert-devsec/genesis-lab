@@ -21,10 +21,16 @@ import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
  *      course's rounds.
  */
 
+/**
+ * The (pageId, sectionId) pair is supplied because the BUNDLE-LEVEL affordance
+ * is a register link keyed on it. Nothing in this file is about that link
+ * except the control asserting the switch still governs it — the subject here
+ * is the per-COURSE buttons, which the pair does not touch.
+ */
 const doc = (content, data) =>
   new JSDOM(
     `<!doctype html><body>${renderToStaticMarkup(
-      createElement(PromotionBundleSection, { content, data }),
+      createElement(PromotionBundleSection, { content, data, pageId: 'p1', sectionId: 'sec-1' }),
     )}</body>`,
   ).window.document;
 
@@ -231,8 +237,12 @@ test('CONTROL: the same switch DOES remove the bundle-level button, so it is wir
   const at = (registrationOpen) =>
     doc({ name: 'B', discountCode: 'EXP1', items, registrationOpen }, data);
 
-  assert.notEqual(at(true).querySelector('[data-testid="bundle-copy-code"]'), null);
-  assert.equal(at(false).querySelector('[data-testid="bundle-copy-code"]'), null);
+  // The bundle-level affordance is the register link now — the copy button was
+  // removed with the round that made registering possible, and CopyCodeButton
+  // deleted with it. The CLAIM is unchanged: the switch governs this and not
+  // the per-course buttons below.
+  assert.notEqual(at(true).querySelector('[data-testid="bundle-register"]'), null);
+  assert.equal(at(false).querySelector('[data-testid="bundle-register"]'), null);
   assert.notEqual(at(false).querySelector('[data-testid="bundle-closed"]'), null);
 });
 
