@@ -11,9 +11,10 @@ import {
   savePromotionEarlyBird,
   releaseEarlyBirdFromPromotion,
   deletePromotionEarlyBird,
-  EB_CLAIMED,
-  EB_NEEDS_ADOPTION,
 } from '@/lib/actions/course-promos';
+// The codes moved OUT of the actions module — see the identical note in
+// test/fs/earlyBirdClaimRule.
+import { EB_CLAIMED, EB_NEEDS_ADOPTION } from '@/lib/earlyBird/codes';
 
 /**
  * The promotion side of the same rows — /admin/promotions/<id>/early-bird.

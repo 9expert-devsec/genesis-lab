@@ -9,9 +9,13 @@ import Promotion from '@/models/Promotion';
 import {
   saveEarlyBird,
   getEarlyBirdClaim,
-  EB_CLAIMED,
-  EB_NEEDS_ADOPTION,
 } from '@/lib/actions/course-promos';
+// The codes moved OUT of the actions module: it carries 'use server', where a
+// non-async export is a build error that 500s every route. They are imported
+// from their own plain module now — and this split is why the move is safe to
+// make, because these assertions compare against the constants rather than
+// against retyped literals.
+import { EB_CLAIMED, EB_NEEDS_ADOPTION } from '@/lib/earlyBird/codes';
 
 /**
  * ONE COURSE, ONE EARLY BIRD — the rule, executed rather than read.

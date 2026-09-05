@@ -10,6 +10,9 @@ import {
   releaseEarlyBirdFromPromotion,
   deletePromotionEarlyBird,
 } from '@/lib/actions/course-promos';
+// The server's own vocabulary, imported rather than retyped — see the identical
+// note in EarlyBirdTab, which held the second copy of this literal.
+import { EB_NEEDS_ADOPTION } from '@/lib/earlyBird/codes';
 import { cn } from '@/lib/utils';
 
 /**
@@ -175,7 +178,7 @@ export function PromotionEarlyBirdClient({
     const res = await savePromotionEarlyBird(promotionId, form.course_id, payloadFrom(form));
     setBusy(false);
 
-    if (res?.code === 'EB_NEEDS_ADOPTION') {
+    if (res?.code === EB_NEEDS_ADOPTION) {
       /**
        * Load the EXISTING row into the form before asking. The author confirms
        * what they can see, and the values that come under this promotion are
