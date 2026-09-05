@@ -20,7 +20,41 @@ import { slotsOf } from './containerSlots';
 export const RESOLVED_TYPES = new Set([
   'course_card', 'instructor_card', 'course_selector', 'bundle_courses', 'course_list',
   'course_schedule',
+  // `promotion_bundle` needs BOTH passes: the course (for its cover and title)
+  // and that course's rounds (for the one the author chose). Neither is a new
+  // KIND of fetch — course_card already resolves courses by code and
+  // course_schedule already resolves code → ObjectId → /schedules — so this
+  // type contributes ids to the two existing sets and adds no third one.
+  'promotion_bundle',
 ]);
+
+/**
+ * A bundle's item course codes, de-duplicated and in order.
+ *
+ * ONE definition, called from BOTH `collectRefs` (which needs them to fetch)
+ * and `dataRefSignature`'s caller (which needs them to decide whether to
+ * refetch). Those two must never disagree about what a bundle references: a
+ * code the signature ignores is a canvas that goes stale when the author
+ * changes it, and a code the collector ignores is an item that never resolves.
+ *
+ * Exported rather than inlined twice for that reason — the same rule that keeps
+ * DRAFT_CONTENT_KEYS a single exported constant. `dataRefs.js` is client-safe
+ * and imports only `slotsOf`, and so does this module, so the sharing costs
+ * nothing at the boundary.
+ *
+ * The same course+round may legitimately appear in more than one bundle on a
+ * page, and the same course twice in ONE bundle; de-duplication here is about
+ * the FETCH, never about the items, which stay exactly as authored.
+ */
+export function bundleCourseCodes(content) {
+  const items = Array.isArray(content?.items) ? content.items : [];
+  const out = [];
+  for (const item of items) {
+    const code = typeof item?.courseId === 'string' ? item.courseId.trim() : '';
+    if (code && !out.includes(code)) out.push(code);
+  }
+  return out;
+}
 
 /**
  * Walk the tree; return the data-backed nodes plus the refs each source needs:
@@ -53,6 +87,23 @@ export function collectRefs(sections) {
       needInstructors = true;
     } else if (s.type === 'course_schedule') {
       if (c.courseId) scheduleCourseIds.add(String(c.courseId));
+    } else if (s.type === 'promotion_bundle') {
+      /**
+       * An explicit branch, NOT the `else` at the foot of this chain. A bundle
+       * has no `content.courseIds`, so falling through would collect nothing
+       * and change nothing — which is exactly why it would be missed. Naming
+       * the type here is what makes "a bundle references its items' courses"
+       * something the code says rather than something that happens to work.
+       *
+       * Both sets, from one list of codes. The course pass gives each item its
+       * cover and title; the schedule pass gives it the rounds to choose from.
+       * `resolveSectionData` already de-dupes the two sets against each other
+       * before fetching, so a code named by both costs one course fetch.
+       */
+      for (const code of bundleCourseCodes(c)) {
+        courseIds.add(code);
+        scheduleCourseIds.add(code);
+      }
     } else if (s.type === 'course_list') {
       const source = c.source ?? 'manual';
       if (source === 'skill') {
@@ -146,6 +197,47 @@ export function assembleResolved(nodes, courseMap, instructorById, derived = {})
        */
       const capped = c.source !== 'manual' && Number(c.limit) > 0;
       out[s.id] = capped ? rows.slice(0, Number(c.limit)) : rows;
+    } else if (s.type === 'promotion_bundle') {
+      /**
+       * ── ONE ENTRY PER ITEM, IN THE AUTHOR'S ORDER ────────────────────────
+       * A bundle resolves to a LIST parallel to `content.items` — same length,
+       * same order, one entry each. Not a map keyed by course code: the same
+       * course may appear twice in one bundle (two rounds of it), and a map
+       * would silently merge them.
+       *
+       * ── A MISSING COURSE IS `null`, AND THE ITEM STILL GETS AN ENTRY ─────
+       * This is the deliberate departure from `bundle_courses`, which fails
+       * closed — `ids.map(...).filter(Boolean)` — and simply draws fewer cards
+       * when a code stops resolving. That is right for a plain grid and wrong
+       * here, and the difference is not stylistic:
+       *
+       *   A BUNDLE STATES ONE PACKAGE PRICE COMPUTED OVER N NAMED COURSES.
+       *   Rendered with N−1 of them, the price on screen is wrong in a way no
+       *   reader can detect — the page looks complete and quietly overstates
+       *   what the money buys.
+       *
+       * So the entry survives with `course: null`, the renderer draws a marked
+       * row carrying the stored code, and the editor warns. Same rule round 64
+       * settled for a chosen ROUND ("never silently dropped"), applied to a
+       * course, where the consequence is larger. Nobody should "fix" the
+       * inconsistency with bundle_courses by making this one filter.
+       *
+       * ── THE ROUNDS ARE THE COURSE'S WHOLE FETCHED LIST, NOT THE CHOSEN ONE ─
+       * The selection is applied in the RENDERER, via `chooseRounds`. Its
+       * header argues why, and the argument is this type's too: the editor's
+       * round picker reads exactly this map and has to see the rounds the
+       * author has NOT picked yet. Narrowing here would blind the control.
+       */
+      const rows = Array.isArray(c.items) ? c.items : [];
+      out[s.id] = rows.map((item) => {
+        const code = typeof item?.courseId === 'string' ? item.courseId.trim() : '';
+        return {
+          id: typeof item?.id === 'string' ? item.id : '',
+          courseId: code,
+          course: code ? (courseMap.get(code) ?? null) : null,
+          rounds: code ? (scheduleMap.get(code) ?? []) : [],
+        };
+      });
     } else if (s.type === 'course_list') {
       out[s.id] = resolveCourseList(c, courseMap, coursesBySkill, coursesByProgram);
     } else {

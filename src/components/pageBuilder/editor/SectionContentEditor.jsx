@@ -23,6 +23,17 @@ import { duplicateCourseCodes } from "./duplicateCodes";
 // Round 48, ADDED beside the line above. The picker that replaces this file's
 // course textarea; see CoursePicker.jsx for the rule it must not break.
 import { CourseIdsPicker, CourseSelectPicker } from "./CoursePicker";
+// ADDED beside the line above rather than folded into it — the standing rule in
+// this repo. The bundle's per-item round control; see RoundPicker.jsx for where
+// its options come from and why the Early Bird selects were not extracted.
+import { RoundPicker } from "./RoundPicker";
+import { newSectionId } from "@/lib/pageBuilder/reidSection";
+// The ONE derivation of a bundle's percentage and of the inverted-price rule.
+// Imported by this editor AND by the renderer/publishBlockers respectively, so
+// the author's preview and the published page cannot disagree about the first,
+// and the field warning and the publish refusal cannot disagree about the
+// second. Pure and dependency-free, so it is safe in this client bundle.
+import { discountPercent, isInvertedPrice } from "@/lib/pageBuilder/bundlePricing";
 import { IconPicker } from "./IconPicker";
 import {
   Field,
@@ -1128,6 +1139,25 @@ function BundleCoursesEditor({ content, patch, resolved, courses }) {
  * prop. It is not that yet — `source='manual'` is unreachable from the editor
  * (steps 4-5) — so splitting now would ship two identical strings and an
  * argument nobody can read.
+ *
+ * ── RE-READ WHEN `promotion_bundle` JOINED, BECAUSE ITS PREMISE MOVED ─────
+ * The paragraph above names the exact condition that would force a split: a
+ * type whose row SET is authored rather than derived. A bundle's row set IS
+ * authored — the author names each course and each round — so that condition
+ * has now arrived, and this comment is re-read here rather than left standing.
+ *
+ * The label is STILL HONEST for it, and the reason is that the sentence is
+ * about the DATA, not the rows: "หน้าที่เผยแพร่จริงจะดึงข้อมูลใหม่เป็นระยะ".
+ * What a published bundle re-fetches is each item's course and that course's
+ * rounds — the cover, the title, whether the chosen round is still returned —
+ * and every one of those really can differ from what the canvas is showing. The
+ * items themselves do not change, and the label does not claim they do.
+ *
+ * What round 63 feared was a label promising a row set would be recomputed when
+ * the author had fixed it. This wording never says that. So the sharing stands,
+ * NOT because the condition failed to arrive, but because it arrived and the
+ * string turned out to be about the other thing. If the wording is ever changed
+ * to mention which rows are shown, this is the note that says it must split.
  */
 function SampleLabel() {
   return (
@@ -1255,6 +1285,287 @@ function CourseScheduleEditor({ content, patch, resolved, courses }) {
         />
       </Field>
       {courseId !== "" && <SampleLabel />}
+    </>
+  );
+}
+
+/**
+ * ── A BUNDLE'S PRICE FIELD: '' IS `null`, NOT `0` ─────────────────────────
+ *
+ * The existing numeric pattern in this file is `Number.parseInt(v, 10) || 0`
+ * (course_list's and course_schedule's `limit`), and it is WRONG for money: it
+ * folds an emptied box to zero, so clearing a price would store "free" rather
+ * than "not set". The schema keeps those apart on purpose — a percentage
+ * derived from an unset price is not zero, it is nothing — and this is the end
+ * of the path that has to keep them apart.
+ *
+ * `NaN` also becomes `null` rather than `0`: a half-typed "1e" is not a free
+ * bundle. The schema then REFUSES a string or a fraction outright (no
+ * `z.coerce`), so a bug here fails at the save that introduced it rather than
+ * surfacing later as a wrong percentage.
+ */
+export function priceFromInput(raw) {
+  const text = String(raw ?? '').trim();
+  if (text === '') return null;
+  const n = Number.parseInt(text, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** A price for the input's `value` — `null` must render EMPTY, never "null". */
+const priceToInput = (v) => (typeof v === 'number' ? String(v) : '');
+
+/**
+ * ── ONE BUNDLE ITEM'S ROW ─────────────────────────────────────────────────
+ *
+ * Not `ItemList` below, and the reason is that component's own safety note:
+ * its rows are keyed by INDEX, which it proves safe only because "every field
+ * is fully controlled … there is no defaultValue and no uncontrolled input
+ * anywhere in fields.jsx, and neither the row nor the field components hold any
+ * state of their own", and then says exactly when that stops holding — "give a
+ * row local state, or an uncontrolled input, and this stops being safe … The
+ * items carry no id to key on today, so that would mean adding one."
+ *
+ * `CourseSelectPicker` holds local state (its direct-entry `typed` box). So a
+ * bundle row is precisely the case that note anticipated: the items DO carry an
+ * id, the schema requires one, and these rows are keyed by it. Moving an item
+ * therefore moves its half-typed code with it instead of leaving it behind on
+ * whatever now occupies that index.
+ *
+ * The row's CHROME is ItemList's, deliberately — the numbered header, the
+ * up/down buttons with the ends disabled rather than wrapping, the trash
+ * button, the same aria wording. An author should not meet two different list
+ * idioms in one panel.
+ */
+function BundleItemRow({ item, index, total, courses, resolved, onPatch, onMove, onRemove }) {
+  const courseId = String(item?.courseId ?? '').trim();
+  // Tri-state, the same discipline as every other data-backed editor here:
+  // `undefined` = the canvas fetch is in flight (never warn), `[]` = it landed
+  // and there is nothing, an array = found.
+  const rounds = resolved?.rounds;
+  const courseMissing = courseId !== '' && resolved !== undefined && !resolved?.course;
+  const noRounds = courseId !== '' && Array.isArray(rounds) && rounds.length === 0;
+
+  return (
+    <div className="mb-2 rounded-9e-md border border-[var(--surface-border)] p-2">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-[10px] font-bold text-9e-slate-dp-50">#{index + 1}</span>
+        <span className="flex items-center gap-0.5">
+          <button
+            type="button" data-move="up" data-row={index} disabled={index === 0}
+            aria-label={`ย้ายคอร์สที่ ${index + 1} ขึ้น`} onClick={() => onMove(index, 'up')}
+            className="rounded p-0.5 text-9e-slate-dp-50 enabled:hover:bg-9e-ice enabled:hover:text-9e-action disabled:opacity-30 dark:enabled:hover:bg-9e-navy"
+          >
+            <ChevronUp className="h-3 w-3" />
+          </button>
+          <button
+            type="button" data-move="down" data-row={index} disabled={index === total - 1}
+            aria-label={`ย้ายคอร์สที่ ${index + 1} ลง`} onClick={() => onMove(index, 'down')}
+            className="rounded p-0.5 text-9e-slate-dp-50 enabled:hover:bg-9e-ice enabled:hover:text-9e-action disabled:opacity-30 dark:enabled:hover:bg-9e-navy"
+          >
+            <ChevronDown className="h-3 w-3" />
+          </button>
+          <button
+            type="button" aria-label={`ลบคอร์สที่ ${index + 1}`} onClick={() => onRemove(index)}
+            className="rounded p-0.5 text-9e-slate-dp-50 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </span>
+      </div>
+
+      {/*
+        REUSED AS-IS, not re-implemented. It already carries the two rules this
+        row needs and neither is obvious: a stored code the catalogue has never
+        heard of still displays (marked ไม่ทราบชื่อ) rather than vanishing, and
+        a code upstream has not published yet stays authorable through its
+        direct-entry box.
+      */}
+      <CourseSelectPicker
+        value={item?.courseId}
+        onChange={(next) =>
+          /**
+           * CHANGING THE COURSE CLEARS THE ROUND, and its snapshot with it. A
+           * round id belongs to ONE course; carrying it across would leave an
+           * item pointing at a round of a course it no longer names, which
+           * resolves to `missing` and draws a dead row the author never chose.
+           * The Early Bird form does the same on its course select, for the
+           * same reason.
+           */
+          onPatch(index, { courseId: next, roundId: '', roundSnapshot: undefined })
+        }
+        courses={courses}
+        label="คอร์ส"
+        hint="เลือกจากรายการ หรือพิมพ์รหัสเองถ้ายังไม่มีในรายการ"
+        invalid={courseMissing}
+      />
+      {courseMissing && (
+        <Warn tone="red">
+          ไม่พบคอร์สรหัสนี้ — การ์ดจะแสดงรหัสพร้อมคำเตือนแทนชื่อคอร์ส
+          และราคาแพ็กเกจจะไม่ตรงกับคอร์สที่แสดง
+        </Warn>
+      )}
+
+      <RoundPicker
+        value={item?.roundId}
+        rounds={rounds}
+        onChange={(roundId, roundSnapshot) => onPatch(index, { roundId, roundSnapshot })}
+        hint="รอบที่จะแสดงบนการ์ดนี้ — เลือกได้หลังจากระบุคอร์สแล้ว"
+      />
+      {noRounds && (
+        <Warn>ไม่พบรอบที่เปิดรับสมัครของคอร์สนี้ตอนนี้ — เลือกรอบไม่ได้จนกว่าจะมีรอบเปิด</Warn>
+      )}
+      {courseId !== '' && !String(item?.roundId ?? '').trim() && (
+        <Warn>ยังไม่ได้เลือกรอบ — การ์ดนี้จะไม่แสดงวันที่และไม่มีปุ่มลงทะเบียน</Warn>
+      )}
+    </div>
+  );
+}
+
+function PromotionBundleEditor({ content, patch, resolved, courses }) {
+  const items = Array.isArray(content?.items) ? content.items : [];
+  const listPrice = content?.listPrice;
+  const netPrice = content?.netPrice;
+
+  /**
+   * Both read from `bundlePricing`, never re-derived here.
+   *
+   * `isInvertedPrice` has exactly two readers — this warning and
+   * `publishBlockers`' refusal — and they MUST agree: a warning that does not
+   * block is noise, and a block with no warning is an author stuck at เผยแพร่
+   * with nothing on screen saying why. A second copy of `netPrice > listPrice`
+   * in this file is how those two come to disagree about an edge (the unset
+   * cases, in particular, where both must answer false).
+   *
+   * `discountPercent`'s other reader is the RENDERER's chip. Showing it here is
+   * what makes the derivation checkable by the person who owns the numbers:
+   * an author typing the pair sees the same percentage the page will print,
+   * before publishing rather than after.
+   *
+   * Synchronous — no fetch, so no tri-state and no waiting. WARN, NEVER EDIT,
+   * and never refuse the save: a zod `.refine()` on this pair would be
+   * validated on every autosave and would stop the WHOLE PAGE saving because a
+   * second number had not been typed yet.
+   */
+  const inverted = isInvertedPrice(listPrice, netPrice);
+  const discount = discountPercent(listPrice, netPrice);
+
+  const setItems = (next) => patch({ items: next });
+  const patchItem = (i, fields) =>
+    setItems(items.map((it, j) => (j === i ? { ...it, ...fields } : it)));
+  const removeItem = (i) => setItems(items.filter((_, j) => j !== i));
+  const addItem = () =>
+    // The id is minted HERE, at the only moment an item comes into existence.
+    // `newSectionId` is reused rather than twinned: what it does is mint a UUID
+    // with a non-secure-context fallback, and a second minter for one job is
+    // the drift this repo keeps removing.
+    setItems([...items, { id: newSectionId(), courseId: '', roundId: '' }]);
+
+  const moveItem = (i, dir) => {
+    const to = dir === 'up' ? i - 1 : i + 1;
+    // Refused here rather than in moveInArray, which CLAMPS a destination
+    // instead of rejecting it — asking it to move item 0 to -1 hands back a new
+    // array in the same order, which would dirty the page for a press that
+    // changed nothing. Same reasoning as ItemList's and CourseIdsPicker's.
+    if (to < 0 || to >= items.length) return;
+    const next = moveInArray(items, i, to);
+    if (next === items) return;
+    setItems(next);
+  };
+
+  return (
+    <>
+      <Field label="ชื่อแพ็กเกจ" hint='เช่น "Bundle 1" หรือ "แพ็กเกจ Claude AI ครบชุด"'>
+        <TextInput value={content?.name} onChange={(v) => patch({ name: v })} />
+      </Field>
+      <Field label="คำโปรย" hint="ประโยคสั้น ๆ ใต้ชื่อแพ็กเกจ — ไม่บังคับ">
+        <TextArea value={content?.blurb} onChange={(v) => patch({ blurb: v })} rows={2} />
+      </Field>
+
+      <Field label="ราคาปกติ (บาท)" hint="ราคารวมของคอร์สทั้งหมดก่อนลด">
+        <TextInput
+          value={priceToInput(listPrice)}
+          onChange={(v) => patch({ listPrice: priceFromInput(v) })}
+          inputMode="numeric"
+        />
+      </Field>
+      <Field label="ราคาสุทธิ (บาท)" hint="ราคาที่ลูกค้าจ่ายจริง — ต้องตรงกับใบเสนอราคา">
+        <TextInput
+          value={priceToInput(netPrice)}
+          onChange={(v) => patch({ netPrice: priceFromInput(v) })}
+          invalid={inverted}
+          inputMode="numeric"
+        />
+      </Field>
+      {inverted && (
+        <Warn tone="red">
+          ราคาสุทธิสูงกว่าราคาปกติ — ตรวจสอบตัวเลข บันทึกฉบับร่างได้
+          แต่จะเผยแพร่ไม่ได้จนกว่าจะแก้
+        </Warn>
+      )}
+      {/*
+        The percentage the PAGE will print, shown to the person who owns the
+        numbers, before they publish rather than after. `> 0` matches the
+        renderer's own guard: 0 is an honest answer and a chip advertising
+        nothing is not worth drawing.
+      */}
+      {discount != null && discount > 0 && (
+        <Warn tone="info">
+          หน้าเว็บจะแสดงป้าย “ลด {discount}%” — คำนวณจากสองราคาข้างบน ไม่ได้เก็บไว้
+        </Warn>
+      )}
+
+      <Field label="รหัสส่วนลด" hint='รหัสที่ลูกค้าใช้ เช่น "EXP1" — แสดงเป็นข้อความพร้อมปุ่มคัดลอก'>
+        <TextInput
+          value={content?.discountCode}
+          onChange={(v) => patch({ discountCode: v })}
+        />
+      </Field>
+
+      <Field
+        label="เปิดรับสมัครแพ็กเกจนี้"
+        hint="ปิดแล้วแพ็กเกจยังแสดงอยู่ แต่ปุ่มคัดลอกรหัสจะถูกแทนด้วยข้อความแจ้งสถานะ — ปุ่มลงทะเบียนของแต่ละคอร์สไม่เปลี่ยน"
+      >
+        <Toggle
+          checked={content?.registrationOpen !== false}
+          onChange={(v) => patch({ registrationOpen: v })}
+          onLabel="เปิดรับสมัคร"
+          offLabel="ปิดรับสมัคร"
+        />
+      </Field>
+
+      <FieldBlock label="คอร์สในแพ็กเกจ" hint="ลำดับที่แสดงคือลำดับในรายการนี้ — คอร์สเดียวกันซ้ำได้ ถ้าเป็นคนละรอบ">
+        <div>
+          {items.map((it, i) => (
+            // Keyed by the item's OWN id — see BundleItemRow's header for why an
+            // index key is unsafe on a row that holds local state.
+            <BundleItemRow
+              key={it?.id || `item-${i}`}
+              item={it}
+              index={i}
+              total={items.length}
+              courses={courses}
+              resolved={Array.isArray(resolved) ? resolved[i] : undefined}
+              onPatch={patchItem}
+              onMove={moveItem}
+              onRemove={removeItem}
+            />
+          ))}
+          {!items.length && <Warn>ยังไม่มีคอร์สในแพ็กเกจนี้</Warn>}
+          <button
+            type="button"
+            data-testid="bundle-add-item"
+            onClick={addItem}
+            className={cn(
+              "flex w-full items-center justify-center gap-1 rounded-9e-md border border-dashed",
+              "border-[var(--surface-border)] px-2 py-1 text-[11px] text-9e-slate-dp-50",
+              "hover:border-9e-action/40 hover:text-9e-action",
+            )}
+          >
+            <Plus className="h-3 w-3" /> เพิ่มคอร์ส
+          </button>
+        </div>
+      </FieldBlock>
+      <SampleLabel />
     </>
   );
 }
@@ -1467,6 +1778,7 @@ const CONTENT_EDITORS = {
   bundle_courses: BundleCoursesEditor,
   course_list: CourseListEditor,
   course_schedule: CourseScheduleEditor,
+  promotion_bundle: PromotionBundleEditor,
   checklist: ({ content, patch }) => (
     <>
       {/**

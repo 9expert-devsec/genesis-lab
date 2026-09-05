@@ -1,4 +1,12 @@
 import { slotsOf } from './containerSlots';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. `bundleCourseCodes` is IMPORTED rather than re-derived: it
+// decides what a bundle references, and this module and `collectRefs` must
+// never disagree about that. A code the signature ignores is a canvas that goes
+// stale when the author changes it; a code the collector ignores is an item
+// that never resolves. Both modules are client-safe (their only other import is
+// `slotsOf`), so sharing costs nothing at the boundary.
+import { bundleCourseCodes } from './resolveSectionRefs';
 
 /**
  * Client-safe signature of a tree's data-backed references (2C.2a).
@@ -16,6 +24,7 @@ import { slotsOf } from './containerSlots';
 const DATA_BACKED = new Set([
   'course_card', 'instructor_card', 'course_selector', 'bundle_courses', 'course_list',
   'course_schedule',
+  'promotion_bundle',
 ]);
 
 export function dataRefSignature(sections) {
@@ -36,6 +45,21 @@ export function dataRefSignature(sections) {
           (Array.isArray(c.courseIds) ? c.courseIds : []).join(','),
           c.limit ?? 0,
           c.source ?? '', c.filter ?? '',
+          /**
+           * The bundle's item course codes. Empty for every other type, so this
+           * appends one '|' to their signatures — a ONE-TIME extra canvas
+           * refetch on the first edit after deploy, and nothing else. The
+           * signature is only ever compared to another signature from the same
+           * build (EditorProvider diffs it against its own previous value), so
+           * it has no stored or cross-version meaning to preserve.
+           *
+           * `roundId` is deliberately NOT in here, and that is the same call
+           * chosenRounds.js made for `roundIds`: changing WHICH round an item
+           * shows re-DRAWS from rows already fetched, because the resolver hands
+           * over the course's whole round list and the renderer picks. A refetch
+           * for it would be work with no new data at the end of it.
+           */
+          bundleCourseCodes(c).join(','),
         ].join('|'));
       }
       const slots = slotsOf(s.type);

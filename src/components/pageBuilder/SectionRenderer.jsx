@@ -79,6 +79,7 @@ import { CourseSelectorSection } from "./sections/course_selector";
 import { BundleCoursesSection } from "./sections/bundle_courses";
 import { CourseListSection } from "./sections/course_list";
 import { CourseScheduleSection } from "./sections/course_schedule";
+import { PromotionBundleSection } from "./sections/promotion_bundle";
 
 /**
  * SectionRenderer — dispatches one section to its component and applies the
@@ -175,6 +176,12 @@ const REGISTRY = {
   // The picker flips these from "เร็ว ๆ นี้" to clickable automatically now that
   // they are in REGISTRY (RENDERABLE_SECTION_TYPES derives from it).
   course_schedule: CourseScheduleSection,
+  // One bundle promotion — its own name, prices, discount code and open/closed
+  // switch, plus (from the next commit) course+round item cards resolved the
+  // same way every other data-backed type is. Landing HERE is what makes the
+  // picker offer it: RENDERABLE_SECTION_TYPES is this object's keys, and
+  // test/render/sectionTypeCoverage asserts no declared type is missing from it.
+  promotion_bundle: PromotionBundleSection,
 };
 
 /**

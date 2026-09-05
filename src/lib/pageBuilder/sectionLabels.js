@@ -45,12 +45,31 @@ export const SECTION_LABELS = {
   instructor_card: 'การ์ดผู้สอน',
   course_selector: 'ตัวเลือกคอร์ส',
   course_list:     'รายการคอร์ส',
-  bundle_courses:  'คอร์สในแพ็กเกจ',
+  /**
+   * ── TWO BUNDLE-ISH TYPES, AND THE LABELS ARE WHAT TELL THEM APART ────────
+   * `promotion_bundle` (below) ships into this same picker group, so an author
+   * now meets both. These two labels are the only thing on screen that can say
+   * which is which, so they say it:
+   *
+   *   bundle_courses    a plain GRID OF COURSE CARDS from a list of codes. No
+   *                     price, no code, no rounds. Measured at near-zero use —
+   *                     see the note in lib/schemas/sections/dynamic.js.
+   *   promotion_bundle  a whole BUNDLE OFFER: name, the two prices, the
+   *                     discount code, and one chosen ROUND per course.
+   *
+   * Reworded from the bare 'คอร์สในแพ็กเกจ', which described both.
+   */
+  bundle_courses:  'กริดคอร์ส (ไม่มีราคา)',
 
   // 2C.2b shipped the derived / time-varying data-backed type — it renders now
   // (from a request-time schedule fetch hoisted above the renderer; the canvas
   // shows an edit-time SAMPLE the editor labels as such).
   course_schedule: 'ตารางคอร์ส',
+
+  // One bundle promotion: name, ราคาปกติ / ราคาสุทธิ, a discount code, an
+  // open/closed switch, and an ordered list of course+round items. See the
+  // bundle_courses note above for why the two labels read as they do.
+  promotion_bundle: 'แพ็กเกจโปรโมชัน',
 };
 
 export function labelOf(type) {
@@ -150,6 +169,8 @@ export function sectionSummary(section) {
  *              nothing regardless — that is by design, not "empty")
  *   course_card / instructor_card   no id reference set     → the *_card.jsx
  *   course_selector / bundle_courses  no courseIds set
+ *   promotion_bundle  nothing authored at all — no name, blurb, price of
+ *              either kind, discount code or item → sections/promotion_bundle.jsx
  *   course_list  manual: no courseIds · skill/program: no filter set (2C.2b)
  *   course_schedule  no course code set (2C.2b)
  *
@@ -227,6 +248,30 @@ export function sectionRendersEmpty(section) {
     case 'course_selector':
     case 'bundle_courses':
       return !(Array.isArray(c.courseIds) && c.courseIds.some((id) => String(id ?? '').trim()));
+    /**
+     * A bundle draws a panel of its OWN content — a name, a blurb, two prices,
+     * a code — before it draws any item, so "no items" is NOT empty: a bundle
+     * priced but not yet filled in renders, and should, or an author would see
+     * the canvas go blank the moment they added the section.
+     *
+     * Statically empty means nothing authored AT ALL, which mirrors
+     * price_card's multi-field guard rather than the data-backed types'
+     * no-reference-set one. Whether a set courseId RESOLVES is a runtime fetch
+     * the tree does not have — the settings panel warns — same exception the
+     * header above records for every other data-backed type.
+     *
+     * `!= null` on the prices, not truthiness: `0` is a real price (free) and
+     * must count as authored. `null` is the unset default.
+     */
+    case 'promotion_bundle':
+      return (
+        !String(c.name ?? '').trim() &&
+        !String(c.blurb ?? '').trim() &&
+        !String(c.discountCode ?? '').trim() &&
+        c.listPrice == null &&
+        c.netPrice == null &&
+        !(Array.isArray(c.items) && c.items.length > 0)
+      );
     default: {
       const slots = slotsOf(section.type);
       if (!slots) return false; // cta / timeline / tabs / accordion: render a wrapper — not marked

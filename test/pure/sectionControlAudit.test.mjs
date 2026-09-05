@@ -189,6 +189,20 @@ test("AUDIT TRIPWIRE (finding 2): exactly eleven section components paint with t
       "icon_card",
       "instructor_card",
       "price_card",
+      /**
+       * ── THE ELEVENTH, AND THE ARGUMENT FOR IT ────────────────────────────
+       * The message below demands the argument be made in
+       * docs/section-control-audit.md before this list is extended. It is —
+       * see finding 2's addendum there, "promotion_bundle, and why it paints".
+       *
+       * In one line: a bundle's ราคาสุทธิ is a KEY FIGURE, which is the exact
+       * surface round 21 measured the accent as reaching, and price_card — the
+       * type this one is closest to — already paints its price with
+       * `--pb-accent-text` for the same reason. This is not a new claim about
+       * what an accent is for; it is the existing claim applied to a type that
+       * did not exist when the eleven were counted.
+       */
+      "promotion_bundle",
       "rich_text",
       "stat_card",
       "tabs",
@@ -202,7 +216,11 @@ test("AUDIT TRIPWIRE (finding 2): exactly eleven section components paint with t
 
   assert.deepEqual(
     buttonHelperConsumers(),
-    ["cta", "price_card"],
+    // `promotion_bundle` joins for the ordinary reason: it draws a button
+    // (คัดลอกรหัสส่วนลด) on a card, so it declares `buttonStyle` in
+    // SECTION_STYLE_CAPS and reads it through the same helper. Same pair as
+    // price_card, which is the type it is shaped like.
+    ["cta", "price_card", "promotion_bundle"],
     "the indirect route changed — accentButtonClass is how cta gets its accent without naming " +
       "the variable, and it is gated by SECTION_STYLE_CAPS",
   );
@@ -212,7 +230,10 @@ test("AUDIT TRIPWIRE (finding 2): exactly eleven section components paint with t
   const painting = [
     ...new Set([...directAccentConsumers(), ...buttonHelperConsumers()]),
   ].sort();
-  assert.equal(painting.length, 11);
+  // 12 since promotion_bundle, which is in BOTH routes (like price_card) and so
+  // adds exactly one to the union. The complement below is unchanged at 16:
+  // ALL_SECTION_TYPES went 27 → 28 in the same commit.
+  assert.equal(painting.length, 12);
 
   /**
    * The eleven with no accent surface, named. This is the half that was only
