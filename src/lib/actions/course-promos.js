@@ -13,6 +13,14 @@ import CoursePromoLink from '@/models/CoursePromoLink';
 import EarlyBirdConfig from '@/models/EarlyBirdConfig';
 import Promotion from '@/models/Promotion';
 import { requireAdmin } from '@/lib/actions/auth';
+// ADDED beside the statements above rather than folded into one — the standing
+// rule in this repo. These were `export const` IN THIS FILE, which is a build
+// error: every export of a `'use server'` module must be an async function, and
+// a non-async one took the whole app down (every route 500ing) while the suite
+// stayed green, because the suite has no bundler. They live in a plain module
+// now. Do NOT re-export them from here — a re-exported const is still a
+// non-async export and brings the error straight back.
+import { EB_CLAIMED, EB_NEEDS_ADOPTION } from '@/lib/earlyBird/codes';
 import {
   listSchedulesByCourse,
   PUBLIC_SCHEDULE_STATUSES,
@@ -226,9 +234,6 @@ export async function getEarlyBirdAdminByCourse(courseId) {
 // strand it, since a course claimed by nobody would appear in no promotion and
 // could only be freed from the course's own tab — the tedium this round exists
 // to remove.
-
-export const EB_CLAIMED = 'EB_CLAIMED';
-export const EB_NEEDS_ADOPTION = 'EB_NEEDS_ADOPTION';
 
 /** The field set a save may write. Everything else on the row is untouchable. */
 function earlyBirdUpdate(data) {

@@ -4,6 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveEarlyBird } from '@/lib/actions/course-promos';
 import { getActivePromotionsForAdmin } from '@/lib/actions/promotions';
+// The server's own vocabulary, imported rather than retyped. This comparison
+// was the string literal 'EB_NEEDS_ADOPTION': rename the code on the server and
+// a literal keeps compiling, keeps passing, and silently stops matching — so the
+// adoption confirm never appears and the save reports a bare refusal instead.
+import { EB_NEEDS_ADOPTION } from '@/lib/earlyBird/codes';
 import { cn } from '@/lib/utils';
 
 /**
@@ -83,7 +88,7 @@ export function EarlyBirdTab({
      * Nothing is carried into the form on this path because the form was
      * already seeded from THIS row — the values on screen are the row's own.
      */
-    if (result?.code === 'EB_NEEDS_ADOPTION') {
+    if (result?.code === EB_NEEDS_ADOPTION) {
       const agreed = typeof window !== 'undefined' &&
         window.confirm(`${result.error}\n\n(${courseId})`);
       if (!agreed) {
