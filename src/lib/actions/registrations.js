@@ -20,12 +20,34 @@ import {
 // derivation beside the shared one — which is precisely the shape that let the
 // cards and the table disagree before this module existed.
 import { buildRegistrationFilter, buildRegistrationScope } from '@/lib/registrations/listFilter';
+// ══ ONE ROW PER REQUEST ═══════════════════════════════════════════════════
+// `REQUEST_KEY_EXPR` is the SINGLE definition of "which request is this row
+// part of", and all three query actions below group by it — the list, the
+// toggle total and the summary cards. A second spelling in any one of them is
+// how the header comes to count a different set from the rows, which is the
+// defect lib/registrations/listFilter.js exists to prevent and which this
+// screen has already shipped twice.
+import { REQUEST_KEY_EXPR, foldLegsIntoRows, orderLegsForDisplay } from '@/lib/registrations/foldRequests';
+// The precedence that gives one request one status, as a Mongo expression BUILT
+// from the same array the rows read. See lib/registrations/requestStatus.
+import { requestStatusExpr } from '@/lib/registrations/requestStatus';
+// For the leg re-fetch below: the grouped keys come back as strings and the
+// `_id` half of them has to be cast before it can match.
+import mongoose, { Types } from 'mongoose';
+// The plan the SCREEN renders into its confirmation and this file derives its
+// write set from — one rule, two readers, so the sentence the admin agreed to
+// and the write that follows cannot describe different sets.
+import { planBundleStatusChange } from '@/lib/registrations/bundleStatusPlan';
 // The ONE derivation site for "which course codes does this search term name".
 // All three query actions call it, so the four numbers on the screen cannot
 // disagree about what a search means — see its own header.
 import { inhouseCourseCodes } from '@/lib/registrations/inhouseCourseSearch';
 import { normalizeNoteBody, buildNoteEntry } from '@/lib/registrations/internalNotes';
-import { ROUND_FIELDS, roundFieldsFor } from '@/lib/registrations/roundSelection';
+// `BUNDLE_ROUND_LOCK_ERROR` is declared beside the round rule itself, not here:
+// the screen renders the matching hint from the same module, and two
+// hand-written sentences about one rule drift — the one that drifts being the
+// one the admin actually reads.
+import { ROUND_FIELDS, roundFieldsFor, BUNDLE_ROUND_LOCK_ERROR } from '@/lib/registrations/roundSelection';
 // The duplicate rule lives beside the roster derivation, not here — the screens
 // and the server must agree about what "the same attendee twice" means, and a
 // second copy is how they come to disagree.
@@ -110,10 +132,17 @@ export async function listRegistrations({
   const filter = buildRegistrationFilter({ status, q, source, range, from, to, course, legacy, courseCodes });
 
   const skip  = (Math.max(1, page) - 1) * PAGE_SIZE;
-  const total = await Model.countDocuments(filter);
 
   let docs;
+  let total;
   if (source === 'inhouse') {
+    /**
+     * IN-HOUSE DOES NOT FOLD, AND CANNOT. `register_inhouse` has no `bundle`
+     * field and no `classId` on any document — a bundle is a public-registration
+     * shape. So this branch is untouched: one row per document, counted with
+     * `countDocuments`, exactly as before.
+     */
+    total = await Model.countDocuments(filter);
     docs = await Model.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -136,10 +165,84 @@ export async function listRegistrations({
       .select('companyName contactFirstName contactLastName contactEmail contactPhone coursesInterested participantsCount trainingFormat preferredMonth status createdAt')
       .lean();
   } else {
-    docs = await Model.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(PAGE_SIZE)
+    /**
+     * ══ THE PUBLIC LIST SHOWS ONE ROW PER REQUEST ═══════════════════════════
+     *
+     * ── THE PAGINATION IS THE WHOLE REASON THIS IS A PIPELINE ──────────────
+     *
+     * `$skip` and `$limit` come AFTER `$group`, so a page of twenty is twenty
+     * REQUESTS. Doing it the other way — fetching a page of legs and folding
+     * them in JavaScript — was rejected, and not for tidiness: skip/limit would
+     * be applied over legs, so a page of twenty legs folding to fourteen rows
+     * gives a page whose size varies with how many bundles land in it, a
+     * `pageCount` describing a set the rows are not, and A REQUEST STRADDLING A
+     * PAGE BOUNDARY RENDERED TWICE, incomplete both times.
+     *
+     * If you are about to move `$skip` above `$group`, that is the bug.
+     * test/fs/registrationsFoldWiring pins the order.
+     *
+     * ── TWO AGGREGATIONS IN PARALLEL, NOT ONE THEN THE OTHER ───────────────
+     * The keys for this page and the count of all of them are independent, so
+     * they go in one `Promise.all` rather than as a serial await — the same
+     * rule page.jsx already applies to its five queries.
+     */
+    const [keyRows, countRows] = await Promise.all([
+      Model.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: REQUEST_KEY_EXPR,
+            // The legs of one request are written inside a single transaction,
+            // milliseconds apart, so any of them dates the request. `$max`
+            // rather than `$min` only because it is the value the sort wants —
+            // the ROW reports the earliest, which the assembler derives.
+            sortKey: { $max: '$createdAt' },
+          },
+        },
+        // `_id` breaks ties so the pager is stable: two requests submitted in
+        // the same millisecond must not swap places between page 1 and page 2.
+        { $sort: { sortKey: -1, _id: -1 } },
+        { $skip: skip },
+        { $limit: PAGE_SIZE },
+      ]),
+      Model.aggregate([
+        { $match: filter },
+        { $group: { _id: REQUEST_KEY_EXPR } },
+        { $count: 'n' },
+      ]),
+    ]);
+
+    // `$count` emits NO DOCUMENT for an empty match, rather than `{n: 0}`.
+    total = countRows[0]?.n ?? 0;
+    const keys = keyRows.map((r) => String(r._id));
+
+    /**
+     * ══ EVERY LEG OF THE SELECTED REQUESTS, UNFILTERED ═════════════════════
+     *
+     * The filter above matches LEGS. Under a course filter or a search term it
+     * matches ONE leg of a three-leg request — which is correct and must stay
+     * correct, because a filter that hides a matching request is worse than one
+     * that shows a bundle row. But it means the grouped result knows only the
+     * legs that matched, and a row built from those alone would render a
+     * three-course package as a one-course row: the screen lying about the size
+     * of the request.
+     *
+     * So this query re-fetches the requests WHOLE. `filter` is deliberately not
+     * applied here.
+     *
+     * The `$or` covers both kinds of key with one round trip: an ordinary
+     * registration keys on its own `_id`, a bundle leg on its `bundle.requestId`.
+     * The two branches can both match nothing for a given key and that is fine —
+     * what they cannot do is disagree.
+     */
+    const ids = keys.filter((k) => Types.ObjectId.isValid(k));
+    const legs = keys.length
+      ? await Model.find({
+          $or: [
+            { _id: { $in: ids } },
+            { 'bundle.requestId': { $in: keys } },
+          ],
+        })
       /**
        * THE PROJECTION IS THE RENDER LIST, field for field — the same rule the
        * in-house branch above is held to.
@@ -169,23 +272,31 @@ export async function listRegistrations({
        * adding `attendeesListProvided` and the `attendees` ARRAY — personal data
        * — to a list query, to render a three-way chip.
        *
-       * ── `bundle` IS HERE BECAUSE THE TABLE DRAWS IT, AND IT MUST ─────────
-       * A bundle quotation request is stored as ONE ROW PER COURSE, so a
-       * three-course package is three rows sitting next to each other with the
-       * same coordinator and three different courses. Without the tag in this
-       * projection they render as three unrelated registrations that happen to
-       * share a name, and there is nothing on the screen — not one pixel — to
-       * say otherwise.
+       * ── `bundle` IS HERE BECAUSE IT IS WHAT MAKES THE ROW A REQUEST ──────
+       * The tag is read TWICE off this projection: `foldLegsIntoRows` buckets
+       * the legs by `bundle.requestId`, and the table draws the แพ็กเกจ chip
+       * from `bundle.name`. Without it in this projection every leg would key
+       * on its own `_id` and the fold would silently do nothing — a page of
+       * three unrelated-looking registrations that happen to share a name,
+       * which is exactly the screen this round exists to replace.
        *
-       * That is the whole reason the field exists rather than being a fact only
-       * the database knows. See the note on `bundle` in models/RegisterPublic
-       * for the shape, its cost, and why the counts on this screen mean LEGS.
+       * See the note on `bundle` in models/RegisterPublic for the shape and for
+       * why the STORAGE is still one row per course+round.
        *
        * It is a SUBDOCUMENT, and the rule this projection is held to is that it
        * equals the render. Four short strings, on a page of twenty rows.
        */
-      .select('courseName classDate scheduleType attendanceMode coordinator attendeesCount status createdAt bundle')
-      .lean();
+        .select('courseName classDate scheduleType attendanceMode coordinator attendeesCount status createdAt bundle')
+        .lean()
+      : [];
+
+    /**
+     * THE ASSEMBLY IS PURE AND LIVES ELSEWHERE — see foldLegsIntoRows. It takes
+     * the page's keys IN THE ORDER MONGO RETURNED THEM and never re-sorts:
+     * a second opinion about the order here would be the one that disagrees
+     * with `pageCount`.
+     */
+    docs = foldLegsIntoRows(keys, legs);
   }
 
   return {
@@ -206,6 +317,77 @@ export async function getRegistrationById(id, source = 'public') {
   const Model = getModel(source);
   const doc   = await Model.findById(id).lean();
   return serialize(doc);
+}
+
+/**
+ * EVERY LEG OF ONE BUNDLE REQUEST. Read-only.
+ *
+ * ══ WHY THE DETAIL SCREEN NEEDS THIS ═══════════════════════════════════════
+ *
+ * A bundle leg's page used to show a registration for ONE course and say
+ * nothing about its siblings — the แพ็กเกจ row named the package and stopped
+ * there. Two things on that screen were wrong as a result, and both are about
+ * the admin being told the truth:
+ *
+ *   · THE REFERENCE NUMBER. The customer's confirmation email quotes
+ *     `refNo(requestId)`. The screen showed `refNo(doc._id)`, which for any
+ *     NON-MARKER leg is a different number. An admin reading it down the phone
+ *     was reading a number the customer could not see anywhere.
+ *
+ *   · THE DELETE CONFIRMATION. `deleteRegistration` removes ONE leg. Nothing
+ *     said a package was being broken up, and that is not hypothetical: on
+ *     2026-09-05 five legs of two requests were deleted one at a time, in
+ *     under five minutes, with no sign on screen that any of them belonged
+ *     together.
+ *
+ * ── SORTED MARKER FIRST, LIKE THE LIST ROW ────────────────────────────────
+ * `isMarkerLeg` is the shared predicate; the marker is the first authored item
+ * and therefore the course the package is named by. The ordering agrees with
+ * `foldLegsIntoRows` because both call the same function — a second ordering
+ * rule here would put the list row and the detail page in different orders for
+ * the same request.
+ *
+ * ── THE PROJECTION IS THE RENDER LIST ─────────────────────────────────────
+ * Same rule the list queries are held to. No coordinator, no attendees, no
+ * invoice: this answers "which courses, which rounds, what state", and pulling
+ * personal data into it to render a course table would be the widening
+ * `listRegistrations` refuses for the same reason.
+ *
+ * ── `adminNotes` IS THE ONE ADDITION, AND IT IS NOT A WIDENING ────────────
+ * The request view shows ONE internal-notes thread. New notes are written to
+ * the anchor leg, but the thread READS every leg's notes, so a note written
+ * against a non-marker leg — under the per-leg screen this replaced — is still
+ * visible instead of becoming unreachable. Relocating where notes are written
+ * without also widening where they are read would be data loss by relocation:
+ * the body would exist in a document no screen fetches, with only the audit
+ * trail's "a note was added" to say it was ever there.
+ *
+ * Measured before building: of the 46 documents in the last known state of this
+ * collection, ONE carried notes and it was not a bundle leg. So there is
+ * nothing to lose today — which is an argument from the sample, not from the
+ * design, and the union is what makes the question moot.
+ */
+export async function getBundleRequestLegs(requestId) {
+  await requireAdmin('registrations');
+  await dbConnect();
+
+  const id = String(requestId ?? '').trim();
+  if (!id) return [];
+
+  const rows = await RegisterPublic.find({ 'bundle.requestId': id })
+    .select('courseName courseCode classDate scheduleType attendanceMode status createdAt bundle adminNotes')
+    .lean();
+
+  /**
+   * THE SHARED ORDERING, not a second comparator.
+   *
+   * The folded list row orders the same legs, and two comparators would put one
+   * request in two different orders on two screens for no reason a reader could
+   * discover. It also keeps this file free of an array `.sort(` — which
+   * fs/courseOrderOwnership flags in anything importing the course origin,
+   * precisely so a sort here is a visible ruling rather than a quiet one.
+   */
+  return serialize(orderLegsForDisplay(rows));
 }
 
 // ── Status update ──────────────────────────────────────────────────
@@ -349,6 +531,139 @@ export async function updateRegistrationStatus(id, status, source = 'public') {
   });
 
   return { ok: true };
+}
+
+/**
+ * MOVE EVERY LEG OF ONE BUNDLE REQUEST TO A STATUS. Public only.
+ *
+ * ══ A DISTINCT ACTION, NOT A WIDENING OF `updateRegistrationStatus` ════════
+ *
+ * A quotation is issued for the PACKAGE, so its status is a fact about the
+ * request. But a fan-out is exactly what the `bundle` ruling on
+ * models/RegisterPublic forbids doing to an existing per-document edit:
+ *
+ *     "IT MUST NOT be 'fixed' by making one edit fan out to the siblings … the
+ *      honest shape is a SEPARATE, EXPLICIT 'apply to every leg of this
+ *      request' action that says what it is about to touch."
+ *
+ * This is that action. `updateRegistrationStatus` is untouched — same
+ * signature, same single-document atomicity, same audit shape — and it is still
+ * the only status writer an ordinary registration ever meets.
+ *
+ * ── AND IT SAYS WHAT IT WILL TOUCH, THROUGH THE SAME FUNCTION THE SCREEN USES
+ * `planBundleStatusChange` decides which legs move and which are skipped. The
+ * confirmation dialog renders that plan BEFORE the click and this action
+ * derives its write set from it, so the sentence the admin agreed to and the
+ * write that follows cannot describe different sets.
+ *
+ * ══ A TERMINAL LEG IS SKIPPED BY CONSTRUCTION ══════════════════════════════
+ *
+ * `cancelled` has no outgoing edge, so it never enters `changing` — and the
+ * per-document filter below carries the permitted from-states anyway, which is
+ * the same belt-and-braces the single action uses. Setting a cancelled course
+ * back to active from a mixed request would destroy a cancellation that no
+ * screen could restore.
+ *
+ * ══ WRAPPED IN A TRANSACTION, FOR THE SAME REASON THE WRITE PATH IS ════════
+ *
+ * "The quotation was sent for this package" is one fact. A partial application
+ * would leave a request half-moved — recoverable by clicking again, but only if
+ * someone notices, and the หลายสถานะ it produces is indistinguishable from a
+ * deliberate per-leg state.
+ *
+ * Same shape as `writeLegsAtomically` in the bundle route, including the reset
+ * inside the callback because `withTransaction` MAY RUN IT AGAIN on a transient
+ * error. The deployment was re-verified a replica set on 2026-09-05.
+ *
+ * ══ ONE AUDIT ROW PER LEG, KEYED ON THE LEG ════════════════════════════════
+ *
+ * Never one row keyed on the requestId: no screen queries that record, so it
+ * would be a phantom entry invisible to the inline history widget forever —
+ * the hazard `entityForSource` exists to prevent. Per-leg rows also keep the
+ * `status` before/after payload, which is the ONE sanctioned exception to the
+ * no-diff rule on this collection.
+ *
+ * Filed AFTER the commit, and only for legs the write actually moved.
+ *
+ * @param {string} requestId `bundle.requestId`
+ * @param {string} status the target status
+ * @returns {Promise<{ok: true, changed: number, skipped: number, status: string}
+ *                  |{ok: false, error: string}>}
+ */
+export async function updateBundleRequestStatus(requestId, status) {
+  const session = await requireAdmin('registrations');
+  const id = String(requestId ?? '').trim();
+  if (!id) return { ok: false, error: 'Missing id' };
+  if (!PUBLIC_STATUSES.has(status)) return { ok: false, error: 'สถานะไม่ถูกต้อง' };
+
+  await dbConnect();
+
+  const legs = await RegisterPublic.find({ 'bundle.requestId': id })
+    .select('status courseName courseCode bundle')
+    .lean();
+  if (!legs.length) return { ok: false, error: 'ไม่พบรายการ' };
+
+  const plan = planBundleStatusChange({ legs, to: status });
+  if (!plan.ok) {
+    // Nothing to move. Not a write of zero documents and not an audit row: a
+    // refused action did not happen, which is the same rule
+    // `updateRegistrationStatus` follows for its rejected transitions.
+    return { ok: false, error: `ไม่มีหลักสูตรใดในแพ็กเกจนี้ที่เปลี่ยนเป็น "${statusLabel(status)}" ได้` };
+  }
+
+  // The permitted from-states, composed exactly as the single-document action
+  // composes them — `storedValuesForFilter` is identity for the public
+  // vocabulary today and is kept so the two filters cannot diverge if it ever
+  // stops being.
+  const fromStates = allowedFromStates(status, transitionsForSource('public'))
+    .flatMap((from) => storedValuesForFilter(from, 'public'));
+
+  const mongooseSession = await mongoose.startSession();
+  let moved = [];
+  try {
+    await mongooseSession.withTransaction(async () => {
+      // Reset inside the callback — withTransaction may run it again.
+      moved = [];
+      for (const leg of plan.changing) {
+        // eslint-disable-next-line no-await-in-loop
+        const before = await RegisterPublic.findOneAndUpdate(
+          { _id: leg._id, status: { $in: fromStates } },
+          { $set: { status } },
+          { new: false, runValidators: false, session: mongooseSession },
+        );
+        // A leg a concurrent writer moved between the read and here simply does
+        // not match, and is reported as skipped rather than forced.
+        if (before) moved.push({ _id: leg._id, previous: before.status });
+      }
+    });
+  } catch (err) {
+    return { ok: false, error: `บันทึกไม่สำเร็จ: ${err?.message ?? err}` };
+  } finally {
+    await mongooseSession.endSession();
+  }
+
+  revalidatePath(ADMIN_PATH);
+  for (const leg of moved) revalidatePath(`${ADMIN_PATH}/${leg._id}`);
+
+  for (const leg of moved) {
+    recordAdminActionAfter({
+      menu:        'registrations',
+      action:      'status',
+      entity:      'public',
+      recordId:    String(leg._id),
+      recordLabel: '',
+      before:      { status: leg.previous },
+      after:       { status },
+      actor:       { id: session.user?.id, name: session.user?.name },
+    });
+  }
+
+  return {
+    ok: true,
+    status,
+    changed: moved.length,
+    skipped: legs.length - moved.length,
+  };
 }
 
 // ── Update fields ──────────────────────────────────────────────────
@@ -793,16 +1108,44 @@ export async function updateRegistrationRound(id, { classId, attendanceMode } = 
    * `before` values the audit row needs. One read serves both.
    */
   const doc = await RegisterPublic.findById(id)
-    .select('status courseId classId classDate scheduleType attendanceMode')
+    // `bundle` joins the read for the lock below. One round trip already
+    // happens here for the course id and the audit `before`; this is a fourth
+    // purpose for the same read, not a fifth query.
+    .select('status courseId classId classDate scheduleType attendanceMode bundle')
     .lean();
   if (!doc) return { ok: false, error: 'ไม่พบรายการ' };
+
+  /**
+   * ══ A BUNDLE LEG'S ROUND CANNOT BE MOVED ═════════════════════════════════
+   *
+   * The customer chose a PACKAGE whose courses and rounds the author had set,
+   * and one package price was quoted over those exact rounds. Moving one of
+   * them afterwards silently changes what was sold.
+   *
+   * ── THIS REFUSAL IS THE RULE. THE HIDDEN BUTTON IS NOT. ─────────────────
+   * The detail screen also withholds the เปลี่ยนรอบ control and states the
+   * reason, and that is NOT what enforces this. Every export of a `'use
+   * server'` module is a POST endpoint — the same argument `adminNotes` makes
+   * in `updateRegistration`, and the one the Early Bird round had to learn
+   * twice. Both halves ship together; neither is sufficient.
+   *
+   * Checked AFTER the cancellation lock and BEFORE any upstream call, because
+   * refusing costs nothing and the schedule fetch costs a round trip.
+   */
   // The cancellation lock, read here rather than in a filter because the write
   // below is already preceded by this read for the course id — so unlike every
   // other action on this screen there is no extra round trip to save, and the
   // conditional update below still carries the same `$ne` so a cancel racing
   // this call cannot land.
+  //
+  // FIRST, deliberately: a cancelled record is read-only to every action on
+  // this screen and must give the SAME answer here as everywhere else. A
+  // cancelled bundle leg is refused as cancelled, not as bundled.
   if (doc.status === 'cancelled') {
     return { ok: false, error: 'ใบสมัครนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้' };
+  }
+  if (doc.bundle) {
+    return { ok: false, error: BUNDLE_ROUND_LOCK_ERROR };
   }
 
   /**
@@ -1154,9 +1497,30 @@ export async function getRegistrationTotal({
    */
   const courseCodes = await inhouseCourseCodes({ q, source });
 
-  return getModel(source).countDocuments(
-    buildRegistrationScope({ q, source, range, from, to, course, legacy, courseCodes }),
-  );
+  const scope = buildRegistrationScope({ q, source, range, from, to, course, courseCodes });
+  const Model = getModel(source);
+
+  /**
+   * ── IT COUNTS THE SAME THING THE TAB WOULD SHOW ──────────────────────────
+   *
+   * This badge is a promise about what you will see if you click it, so it has
+   * to count ROWS OF THAT LIST. The public list shows one row per request, so
+   * this counts requests — through `REQUEST_KEY_EXPR`, the same key the list
+   * groups by and the same key the cards group by.
+   *
+   * In-house does not fold (no `bundle` field on that collection), so it stays
+   * a `countDocuments` and the two branches genuinely mean the same thing:
+   * "how many rows are in that table".
+   */
+  if (source === 'inhouse') return Model.countDocuments(scope);
+
+  const rows = await Model.aggregate([
+    { $match: scope },
+    { $group: { _id: REQUEST_KEY_EXPR } },
+    { $count: 'n' },
+  ]);
+  // `$count` emits no document at all for an empty match.
+  return rows[0]?.n ?? 0;
 }
 
 // ── Course options for the filter panel ───────────────────────────
@@ -1263,23 +1627,35 @@ export async function getRegistrationStatusCounts({
   const Model = getModel(source);
 
   /**
-   * ── THESE NUMBERS COUNT LEGS, NOT REQUESTS, AND THAT IS DELIBERATE ───────
+   * ── THESE NUMBERS COUNT REQUESTS, NOT LEGS — AND THAT CHANGED ────────────
    *
-   * A bundle quotation request is stored as one row per course, so a
-   * three-course package adds THREE to every count below — and to the ทั้งหมด
-   * card, the toggle badge and the dashboard donut.
+   * IT USED TO BE THE OPPOSITE, deliberately, and the note that stood here said
+   * so at length. Its argument was sound and its PREMISE is what changed:
    *
-   * If you have arrived here to "fix" that by excluding rows carrying a
-   * `bundle`, or by counting distinct `bundle.requestId`: DON'T, and read the
-   * note on the `bundle` field in models/RegisterPublic first. The short
-   * version is that these cards sit directly above a TABLE THAT LISTS LEGS,
-   * because legs are what the collection holds — so narrowing the count and not
-   * the table would make this screen answer one question two ways, which is the
-   * exact defect this module was created to end and which it has already
-   * shipped twice.
+   *     "these cards sit directly above a TABLE THAT LISTS LEGS"
    *
-   * "How many people asked for Bundle 1" is a different question and it has its
-   * own one-line answer: `distinct('bundle.requestId', …)`.
+   * The table no longer lists legs. It shows one row per REQUEST, because the
+   * team's job with these rows is to produce one quotation from one form, and
+   * three rows for one customer made them reassemble by hand what arrived as a
+   * single request. So the cards followed the table rather than the table
+   * following the cards — the direction is the whole point. A header counting
+   * legs above a list showing requests is the silent-wrong-number class this
+   * module exists to remove, and it does not matter which of the two numbers is
+   * "right" if they disagree.
+   *
+   * Measured on the live collection before it was emptied: 46 legs, five of
+   * them across two bundle requests, so the folded list shows 43 rows and every
+   * number on this screen says 43.
+   *
+   * ── WHAT IS STILL COUNTED IN LEGS, AND WHY THAT IS NOT A CONTRADICTION ───
+   * Anything about SEATS OR ROOMS. `getRoundRegistrationSummary` counts the
+   * people expected in one training round and reads `find({classId})` on the
+   * collection — a bundle's three legs are three different rooms on three
+   * different days, and each one genuinely has that person in it. That number
+   * is not this number and is labelled where it appears.
+   *
+   * THE STORAGE IS UNCHANGED. One row per course+round, each with its own real
+   * `classId`. See the `bundle` note on models/RegisterPublic.
    */
 
   if (source === 'inhouse') {
@@ -1319,25 +1695,49 @@ export async function getRegistrationStatusCounts({
     return serialize({ total, ...byStatus, range, source });
   } else {
     /**
-     * ONE COUNT PER DECLARED STATUS, driven by the array — the same shape as
-     * the in-house branch above and for the same reason. The four hand-named
-     * counts this replaces were the last hand-written spelling of the public
-     * enum on the server, and a fifth status added to PUBLIC_STATUSES would
-     * have been counted by nothing while its card rendered `undefined`.
+     * ONE BUCKET PER DECLARED STATUS, driven by the array — the same rule the
+     * in-house branch above keeps, arrived at differently. The four hand-named
+     * counts this originally replaced were the last hand-written spelling of
+     * the public enum on the server, and a fifth status added to
+     * PUBLIC_STATUSES would have been counted by nothing while its card
+     * rendered `undefined`. That property is preserved: the keys below are
+     * still built by mapping the array.
      *
      * The returned keys are unchanged (`pending`, `confirmed`, `paid`,
      * `cancelled`) because they ARE the stored values, which is also the card
      * key and the URL filter value.
      */
-    const [total, ...perStatus] = await Promise.all([
-      Model.countDocuments(scope),
-      ...PUBLIC_STATUS_VALUES.map((value) =>
-        Model.countDocuments({ ...scope, status: value })
-      ),
+    /**
+     * ── IT IS NO LONGER ONE countDocuments PER VALUE, AND IT COULD NOT BE ───
+     *
+     * A per-status count over LEGS would put a request holding one cancelled
+     * leg and two pending ones into TWO cards at once, and the strip would sum
+     * to more than the ทั้งหมด card above it — a set of cards totalling more
+     * than the list is the silent-wrong-number class in its purest form.
+     *
+     * So the pipeline collapses each request to a SINGLE status first —
+     * `requestStatusExpr`, generated from the same precedence array the rows
+     * read, so the cards and the table cannot disagree about which status wins
+     * — and only then counts. A request lands in exactly one bucket by
+     * construction.
+     *
+     * The card keys still come from `PUBLIC_STATUS_VALUES`, so a status added
+     * to the vocabulary is counted without this file being edited. An
+     * unrecognised STORED value reaches `total` and has no card, so the strip
+     * can sum to less than the total and never to more — the safe direction,
+     * and the behaviour this action already had.
+     */
+    const rows = await Model.aggregate([
+      { $match: scope },
+      { $group: { _id: REQUEST_KEY_EXPR, statuses: { $addToSet: '$status' } } },
+      { $group: { _id: requestStatusExpr('$statuses'), n: { $sum: 1 } } },
     ]);
 
+    const tally = new Map(rows.map((r) => [String(r._id ?? ''), r.n]));
+    const total = rows.reduce((sum, r) => sum + r.n, 0);
+
     const byStatus = Object.fromEntries(
-      PUBLIC_STATUS_VALUES.map((value, i) => [value, perStatus[i]])
+      PUBLIC_STATUS_VALUES.map((value) => [value, tally.get(value) ?? 0])
     );
 
     return serialize({ total, ...byStatus, range, source });

@@ -368,34 +368,49 @@ const RegisterPublicSchema = new mongoose.Schema(
      * genuinely is attending round X of course A and round Y of course B, and
      * each round's summary should count them.
      *
-     * ══ THE COST WE ARE ACCEPTING. READ THIS BEFORE "FIXING" A COUNT. ══════
+     * ══ WHAT THE SCREENS COUNT, AND WHAT THIS COLLECTION HOLDS ═════════════
      *
-     * COUNTS ACROSS THE REGISTRATION SCREENS MEAN **LEGS, NOT REQUESTS**.
+     * THE STORAGE IS **LEGS**. THE ADMIN SCREENS COUNT **REQUESTS**.
      *
-     * A three-course bundle is three rows. It adds three to the ทั้งหมด card,
-     * three to the source-toggle badge, three to the dashboard donut and three
-     * to the seven-day trend. One customer, one form, one email — three rows,
-     * and every number on those screens counts three.
+     * Those are two different sentences about two different things and both are
+     * true. A three-course bundle is three documents here, forever, for the
+     * reasons above. It is ONE ROW on /admin/registrations, one entry in the
+     * ทั้งหมด card, one in the source-toggle badge and one on the dashboard.
      *
-     * THAT IS DELIBERATE AND IT IS NOT A BUG. A future reader will meet the
-     * inflated number BEFORE they meet this paragraph, and the obvious repair —
-     * excluding rows where `bundle` exists, or counting `distinct requestId`
-     * inside the shared scope — is the wrong one twice over:
+     * ── THIS REVERSED, AND THE OLD NOTE'S ARGUMENT IS WHY ────────────────
+     * The note that stood here said counts mean LEGS, and it was right at the
+     * time. Its deciding argument was:
      *
-     *   1. It would make the cards disagree with the TABLE BELOW THEM, which
-     *      lists legs because legs are what the collection holds. That exact
-     *      disagreement is what lib/registrations/listFilter.js exists to
-     *      prevent, and this screen has shipped it twice already (the date
-     *      chips filtering the cards and not the table; ทั้งหมด 6 over cards
-     *      summing to 5). A third would be this.
-     *   2. It would mean a bundle leg is a registration for the seat-accounting
-     *      and the course filter and the rename preview, but not for the count
-     *      — one row that is a registration to five readers and not to a sixth.
+     *     "it would make the cards disagree with the TABLE BELOW THEM, which
+     *      lists legs because legs are what the collection holds"
      *
-     * The question a bundle-shaped count actually answers — "how many people
-     * asked for Bundle 1" — is `distinct('bundle.requestId', {…})`, one line,
-     * and it belongs wherever someone asks it rather than folded into a number
-     * that means something else.
+     * That premise is gone. The table lists REQUESTS now — the team's job with
+     * these rows is to produce one quotation from one form, and three rows for
+     * one customer made them reassemble by hand what arrived as a single
+     * request. The rule the old note was defending is unchanged and is the
+     * reason the counts moved WITH the table rather than against it: the cards,
+     * the header, the badge and the pager must all count the set the rows are.
+     * Which of the two numbers is "right" does not matter if they disagree.
+     *
+     * Measured before the collection was emptied on 2026-09-05: 46 legs, five
+     * of them across two bundle requests → 43 rows, and every number on that
+     * screen reads 43.
+     *
+     * ── WHAT STILL COUNTS LEGS, AND MUST ────────────────────────────────────
+     * Anything about SEATS OR ROOMS. `getRoundRegistrationSummary` is
+     * `find({classId})` and answers "who is expected in this round" — a
+     * bundle's three legs are three different rooms on three different days and
+     * that person is expected in each. Same for the rename preview and the
+     * course filter, which ask about COURSES and therefore about legs. None of
+     * those is the registrations list's number, and each is labelled where it
+     * appears.
+     *
+     * ── HOW THE FOLD IS DONE, SO NOBODY REDOES IT WRONG ─────────────────────
+     * By GROUPING IN THE QUERY on `bundle.requestId` (falling back to `_id`),
+     * with `$skip`/`$limit` applied AFTER the group — see
+     * lib/registrations/foldRequests. NOT by folding a fetched page in
+     * JavaScript: that applies pagination over legs, and a request straddling a
+     * page boundary then renders twice, incomplete both times.
      *
      * ── AND EVERY PER-ROW ADMIN EDIT IS ONE EDIT PER LEG ────────────────────
      *
@@ -429,10 +444,15 @@ const RegisterPublicSchema = new mongoose.Schema(
      *                       on the id alone. Read by the form's
      *                       `resolveBundleRequest` guard and by the detail
      *                       screen's หลักสูตร card.
-     *   requestId           groups the legs. Read by `PublicTable`'s course
-     *                       cell (which marks them as one request), by the
-     *                       email (ONE send per request, not one per leg), and
-     *                       by `distinct` for the count above.
+     *   requestId           GROUPS THE LEGS, and that is now load-bearing
+     *                       rather than informational: it is the list's
+     *                       grouping key (`REQUEST_KEY_EXPR` in
+     *                       lib/registrations/foldRequests, read by the list,
+     *                       the toggle total and the summary cards), the
+     *                       request detail page's sibling lookup, and the
+     *                       marker-leg completeness test. Also read by
+     *                       `PublicTable`'s course cell and by the email (ONE
+     *                       send per request, not one per leg).
      *   name                the bundle's name AS IT WAS AT SUBMISSION. Read by
      *                       the list chip and the detail row.
      *

@@ -44,6 +44,9 @@ function actionBody(code, name) {
 
 const NOTE_BODY   = actionBody(ACTIONS.code, 'addInternalNote');
 const UPDATE_BODY = actionBody(ACTIONS.code, 'updateRegistration');
+// The one READER of the field outside the writer — the request view's notes
+// thread. Sliced out of the sole-writer scan below, and then proved read-only.
+const LEGS_BODY   = actionBody(ACTIONS.code, 'getBundleRequestLegs');
 
 // ── 1. APPEND-ONLY, STRUCTURALLY ────────────────────────────────────────────
 
@@ -96,9 +99,45 @@ test('THE BACK DOOR IS SHUT: updateRegistration cannot write adminNotes', () => 
 test('addInternalNote is the ONLY writer of adminNotes in the whole action layer', () => {
   // Not "the other actions do not write it" — the strong form. Anything that
   // mentions the field outside this one action is a candidate second writer.
-  const others = ACTIONS.code.replace(NOTE_BODY, '');
+  //
+  // ── ONE EXCEPTION, AND IT IS VERIFIED READ-ONLY RATHER THAN TRUSTED ──────
+  // `getBundleRequestLegs` PROJECTS the field: the request view shows one notes
+  // thread built from every leg's notes, because new notes are written to the
+  // marker leg and anchoring the READ as well would leave older notes in a
+  // document no screen fetches. A reader is not a writer — but "it is only a
+  // projection" is exactly the sort of claim that stops being true quietly, so
+  // the exemption is not a hole punched in the scan: the test below proves that
+  // action contains no write at all.
+  const others = ACTIONS.code.replace(NOTE_BODY, '').replace(LEGS_BODY, '');
   assert.ok(!others.includes('adminNotes'),
     'something other than addInternalNote references adminNotes in registrations.js');
+});
+
+test('THE EXEMPTED READER IS READ-ONLY — proved, not assumed', () => {
+  /**
+   * The exemption above removes one action from a scan whose whole value is
+   * that it is unconditional. This is what pays for it: `getBundleRequestLegs`
+   * must contain NO write of any kind, so exempting it cannot hide a second
+   * writer of the append-only array.
+   */
+  assert.ok(LEGS_BODY.includes('adminNotes'),
+    'the exempted action no longer mentions adminNotes — the exemption is now dead weight');
+  assert.match(LEGS_BODY, /\.select\('[^']*\badminNotes\b[^']*'\)/,
+    'adminNotes appears in the exempted action somewhere other than its projection');
+
+  for (const writer of ['$push', '$set', '$pull', '$addToSet', 'updateOne', 'updateMany',
+    'findOneAndUpdate', 'findByIdAndUpdate', 'deleteOne', 'deleteMany', 'save(', 'create(']) {
+    assert.ok(!LEGS_BODY.includes(writer),
+      `getBundleRequestLegs contains ${writer} — it is exempted from the sole-writer scan as a reader`);
+  }
+});
+
+test('CONTROL: the exempted slice is that action, and the writer list can match', () => {
+  // An empty slice would satisfy every assertion above at once.
+  assert.ok(LEGS_BODY.length > 200, `the exempted slice parsed to ${LEGS_BODY.length} chars`);
+  assert.ok(LEGS_BODY.includes('bundle.requestId'), 'the slice is not getBundleRequestLegs');
+  // …and the writer probe really does find a write where one exists.
+  assert.ok(NOTE_BODY.includes('$push'), 'the writer probe cannot see the $push it is built to find');
   assert.ok(!INHOUSE.code.includes('adminNotes'),
     'inhouse-registrations.js still touches adminNotes — updateInhouseAdminNotes should be gone');
 });

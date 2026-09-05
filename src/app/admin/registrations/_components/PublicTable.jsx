@@ -1,6 +1,9 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+// The ONE label map. `statusLabel` is imported rather than a literal written
+// here for the divergence sub-line — see `mixedStatusNote`.
+import { statusLabel } from '@/lib/registrations/statuses';
 import {
   CellLink,
   ChevronCell,
@@ -72,6 +75,40 @@ import {
  * here: it has no label, no share and no data.
  */
 const COLUMN_GAP = 18;
+
+/**
+ * THE ROW GEOMETRY OF A FOLDED REQUEST.
+ *
+ * `ROW_BASE_H` is `CellLink`'s own 82px — the height of every row on this table
+ * before the fold and the height of every single-course row still. A request
+ * with N courses is that plus one `LEG_ROW_H` per EXTRA course, so a one-course
+ * row computes to exactly 82 and is given no height at all (see the row body:
+ * `undefined` keeps the original `h-[82px]` class and the original markup).
+ *
+ * 34px per course line holds a 17px course name over a 14px round date with
+ * 3px between — the same two-line shape the unfolded course cell has always
+ * had, at the smaller size a list of several wants.
+ *
+ * Both are NUMBERS, not classes. They are multiplied, and an assembled
+ * `h-[${n}px]` compiles to nothing at all — see the note on `CellLink`.
+ */
+const ROW_BASE_H = 82;
+const LEG_ROW_H  = 34;
+
+/**
+ * The sub-line under a folded row's status chip, naming every status its legs
+ * hold. Only rendered when they disagree.
+ *
+ * Read through `statusLabel` rather than written out: the label is the
+ * vocabulary's, byte for byte, or this line and the card above it stop agreeing
+ * about what a status is called. That is the drift lib/registrations/statuses
+ * exists to prevent, and a sentence is exactly where a hand-written label looks
+ * harmless.
+ */
+function mixedStatusNote(statuses) {
+  const list = (Array.isArray(statuses) ? statuses : []).map((s) => statusLabel(s));
+  return `หลายสถานะ: ${list.join(' · ')}`;
+}
 
 /**
  * ── REVISED AFTER THE CLICK-TEST. SIX COLUMNS, NOT FIVE. ───────────────────
@@ -171,6 +208,21 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
             paddingRight: `${COLUMN_GAP}px`,
           });
 
+          /**
+           * ── HOW TALL THIS ROW IS ──────────────────────────────────────────
+           *
+           * `undefined` for a single-course row, which is 41 of the 46 records
+           * this collection last held — those keep the fixed 82px box and their
+           * markup is unchanged to the byte.
+           *
+           * A request with N courses grows by one LEG_ROW per extra course, and
+           * EVERY cell of the row is given the same number so the course lines
+           * and their chips share baselines across two `<td>`s.
+           */
+          const legs = Array.isArray(row.legs) ? row.legs : [];
+          const multi = legs.length > 1;
+          const heightPx = multi ? ROW_BASE_H + (legs.length - 1) * LEG_ROW_H : undefined;
+
           return (
             <tr
               key={row._id}
@@ -178,16 +230,22 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
             >
               {/* วันที่สมัคร — the date, with the audit hint beneath it. */}
               <td className="p-0 align-top">
-                <CellLink href={href} first style={pad(0)}>
+                <CellLink href={href} first style={pad(0)} heightPx={heightPx}>
                   <DateCell iso={row.createdAt} entry={lastEdited[String(row._id)]} />
                 </CellLink>
               </td>
 
               {/* หลักสูตร / รอบอบรม — the title, then a 32px row holding the
-                  round dates. The schedule chip has moved to its own column. */}
+                  round dates. The schedule chip has moved to its own column.
+                  A folded request lists every course it asked for. */}
               <td className="p-0 align-top">
-                <CellLink href={href} style={pad(1)}>
-                  <CourseCell name={row.courseName} classDate={row.classDate} bundle={row.bundle} />
+                <CellLink href={href} style={pad(1)} heightPx={heightPx}>
+                  <CourseCell
+                    name={row.courseName}
+                    classDate={row.classDate}
+                    bundle={row.bundle}
+                    legs={legs}
+                  />
                 </CellLink>
               </td>
 
@@ -198,15 +256,38 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
                 round dates, and it competed for that width badly enough that the
                 first row's course name truncated. Its own column costs 8.5% and
                 gives 2% of it back to the name.
+
+                ONE CHIP PER COURSE on a folded row, in the same order and on the
+                same baselines as the course lines beside it — a package whose
+                three courses run classroom, online and hybrid says exactly that,
+                and a reader can tell WHICH course is which because the two cells
+                line up.
               */}
               <td className="p-0 align-top">
-                <CellLink href={href} className="items-start" style={pad(2)}>
-                  <ScheduleBadge type={row.scheduleType} mode={row.attendanceMode} />
+                <CellLink href={href} className="items-start" style={pad(2)} heightPx={heightPx}>
+                  {multi ? (
+                    <>
+                      {/*
+                        Matches the แพ็กเกจ chip's block in the course cell so
+                        the first course line starts level in both columns.
+                        `aria-hidden` because it is spacing, not content — and
+                        the empty-element guard excludes exactly that.
+                      */}
+                      <div aria-hidden="true" className="h-[24px] w-full" />
+                      {legs.map((leg) => (
+                        <div key={String(leg._id)} className="flex h-[34px] items-center">
+                          <ScheduleBadge type={leg.scheduleType} mode={leg.attendanceMode} />
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <ScheduleBadge type={row.scheduleType} mode={row.attendanceMode} />
+                  )}
                 </CellLink>
               </td>
 
               <td className="p-0 align-top">
-                <CellLink href={href} style={pad(3)}>
+                <CellLink href={href} style={pad(3)} heightPx={heightPx}>
                   <CoordinatorCell
                     name={`${row.coordinator?.firstName ?? ''} ${row.coordinator?.lastName ?? ''}`}
                     email={row.coordinator?.email}
@@ -225,21 +306,46 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
                 a three-way chip.
               */}
               <td className="p-0 align-top">
-                <CellLink href={href} style={pad(4)}>
+                <CellLink href={href} style={pad(4)} heightPx={heightPx}>
                   <p className="text-[14px] font-bold leading-[17px] tabular-nums text-[var(--text-primary)]">
                     {row.attendeesCount ?? '—'}
                   </p>
                 </CellLink>
               </td>
 
-              {/* สถานะ — the chip, and nothing under it. See StatusCell. */}
+              {/*
+                สถานะ — the chip, and under it NOTHING unless the request's legs
+                disagree.
+
+                ── THE ONE THING A FOLDED ROW MUST NOT HIDE ──────────────────
+                A request counts once, into one status — see
+                lib/registrations/requestStatus for the precedence and why
+                `cancelled` is not at the top of it. That single word is lossy
+                by construction: a three-course request with one course
+                cancelled and two awaiting a quotation is filed under
+                รอดำเนินการ, which is the honest answer to "what needs doing"
+                and says nothing about the cancelled one.
+
+                So where the legs disagree the row SAYS SO, in words, naming
+                every status present. A request filed under one status whose
+                other legs are elsewhere must not look like a request whose legs
+                agree.
+              */}
               <td className="p-0 align-top">
-                <CellLink href={href} style={pad(5)}>
+                <CellLink href={href} style={pad(5)} heightPx={heightPx}>
                   <StatusCell status={row.status} />
+                  {row.mixedStatus ? (
+                    <span
+                      data-testid="mixed-status-note"
+                      className="mt-[3px] truncate text-[11px] leading-[14px] text-[var(--text-muted)]"
+                    >
+                      {mixedStatusNote(row.statuses)}
+                    </span>
+                  ) : null}
                 </CellLink>
               </td>
 
-              <ChevronCell href={href} />
+              <ChevronCell href={href} heightPx={heightPx} />
             </tr>
           );
         })}
@@ -287,8 +393,57 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
  * reader that has to decide what to show. `แพ็กเกจ` alone still says the thing
  * that matters: this row is one leg of several.
  */
-function CourseCell({ name, classDate, bundle }) {
+function CourseCell({ name, classDate, bundle, legs = [] }) {
   const bundleName = String(bundle?.name ?? '').trim();
+
+  /**
+   * ── THE FOLDED CASE: EVERY COURSE THE REQUEST ASKED FOR ──────────────────
+   *
+   * The chip now carries the COURSE COUNT as well as the name, and that is the
+   * fix for the thing this table could not previously say. Before the fold a
+   * reader could see that a row belonged to a package and could not see how big
+   * the package was — so a two-leg wreck of a three-course bundle read as an
+   * ordinary two-course bundle, which is the defect
+   * docs/ticket-bundle-request-completeness-unqueryable.md was filed for. The
+   * count is derived from the legs actually present, so it reports what IS
+   * rather than what was ordered; the authored total is still not stored.
+   *
+   * Each course gets its own line with its own round date, because a package's
+   * courses run on different days and a single date would be a lie about the
+   * other two.
+   */
+  if (legs.length > 1) {
+    return (
+      <>
+        <div className="flex h-[24px] items-center">
+          <span
+            data-testid="bundle-leg-chip"
+            className="inline-flex w-fit max-w-full items-center truncate rounded-9e-sm bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
+          >
+            {bundleName ? `แพ็กเกจ: ${bundleName}` : 'แพ็กเกจ'} · {legs.length} หลักสูตร
+          </span>
+        </div>
+        {legs.map((leg) => (
+          <div key={String(leg._id)} className="flex h-[34px] flex-col justify-center">
+            <p className="truncate text-[13px] font-semibold leading-[17px] text-[var(--text-primary)]">
+              {leg.courseName || '—'}
+            </p>
+            {/*
+              Conditional for the same reason the single-course round line is:
+              `classDate` is genuinely optional, and an unconditional element
+              would render an empty span the empty-element guard would catch.
+            */}
+            {leg.classDate ? (
+              <span className="truncate text-[11px] leading-[14px] text-[var(--text-secondary)]">
+                {leg.classDate}
+              </span>
+            ) : null}
+          </div>
+        ))}
+      </>
+    );
+  }
+
   return (
     <>
       <p className="truncate text-[15px] font-bold leading-[20px] text-[var(--text-primary)]">

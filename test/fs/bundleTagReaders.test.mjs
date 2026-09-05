@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// Comment-stripped source, for the NEGATIVE assertions only. A "this string is
+// absent" claim over raw source cannot tell code from prose about code — see
+// the note at the เลขอ้างอิง test, which failed on its own explanation.
+import { readSource } from '../sourceScan.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const read = (p) => readFileSync(path.join(ROOT, p), 'utf8');
@@ -109,11 +113,45 @@ test('the schema comment carries the cost, not just the shape', () => {
   assert.notEqual(start, -1, 'the bundle field lost its explanation');
   const note = model.slice(start, model.indexOf('bundle: { type: BundleSchema', start));
 
-  assert.match(note, /LEGS, NOT REQUESTS/, 'the cost is no longer stated in the schema comment');
-  assert.match(note, /getRoundRegistrationSummary/, 'the deciding argument (seat accounting) is gone');
+  /**
+   * ── REWRITTEN WITH THE ROUND THAT REVERSED ITS SUBJECT ──────────────────
+   *
+   * This used to assert `LEGS, NOT REQUESTS` — that every count on the admin
+   * screens meant legs. That was true and is no longer: the list shows one row
+   * per request, so the counts moved with it. The note was rewritten in the
+   * same commit as the code, which is the standing rule for a comment whose
+   * premise changes.
+   *
+   * What is asserted is the same PROPERTY at the new position: the note must
+   * still say which of the two things this collection stores, which the screens
+   * count, and which readers still legitimately count legs — because those are
+   * the three facts a reader meeting an unexpected number needs, and a comment
+   * is the only mechanism protecting them.
+   */
+  assert.match(note, /THE STORAGE IS \*\*LEGS\*\*/,
+    'the note no longer says what the collection holds');
+  assert.match(note, /THE ADMIN SCREENS COUNT \*\*REQUESTS\*\*/,
+    'the note no longer says what the screens count');
+  assert.match(note, /getRoundRegistrationSummary/, 'the seat-accounting reader is gone');
   assert.match(note, /rename/i, 'the second silent-breakage reader is no longer named');
-  assert.match(note, /distinct/, 'the note no longer says how to count requests instead of legs');
   assert.match(note, /ONE EDIT PER LEG/, 'the per-leg admin edit cost is no longer recorded');
+  assert.match(note, /foldRequests/,
+    'the note does not say HOW the fold is done, so the next reader may redo it in JavaScript');
+  assert.match(note, /straddling a\s*\n?\s*\*?\s*page boundary/i,
+    'the pagination hazard — the reason the fold is a grouping — is no longer recorded');
+});
+
+test('CONTROL: the reversed claim is NOT still in the schema note', () => {
+  /**
+   * The old sentence and the new one are contradictory, so both being present
+   * would mean the rewrite was additive and the note now says two things. This
+   * is the assertion that would catch a merge putting the old paragraph back.
+   */
+  const model = read(MODEL);
+  const start = model.indexOf('THIS ROW IS ONE LEG OF A BUNDLE');
+  const note = model.slice(start, model.indexOf('bundle: { type: BundleSchema', start));
+  assert.equal(/COUNTS ACROSS THE REGISTRATION SCREENS MEAN \*\*LEGS, NOT REQUESTS\*\*/.test(note), false,
+    'the superseded "counts mean legs" ruling is back beside the one that replaced it');
 });
 
 test('CONTROL: the comment probe is reading the note, not the whole file', () => {
@@ -134,11 +172,149 @@ test('CONTROL: the comment probe is reading the note, not the whole file', () =>
   assert.equal(note.includes('AttendeeSchema'), false, 'the slice has swallowed the attendee note');
 });
 
-test('the counts action warns against narrowing itself', () => {
-  // The other place a reader lands: someone looking at an inflated ทั้งหมด card
-  // arrives at the counts, not at the model.
+test('the counts action states which of the two things it counts', () => {
+  /**
+   * The other place a reader lands: someone looking at a number that surprises
+   * them arrives at the counts, not at the model. It has to say what it counts,
+   * that this REVERSED (so the old note is not re-applied from memory), what is
+   * still counted in legs, and where the full reasoning lives.
+   */
   const code = read(ACTIONS);
-  const start = code.indexOf('THESE NUMBERS COUNT LEGS, NOT REQUESTS');
-  assert.notEqual(start, -1, 'the counts action no longer warns about the leg semantics');
-  assert.match(code.slice(start, start + 1400), /models\/RegisterPublic/, 'the pointer to the full reasoning is gone');
+  const start = code.indexOf('THESE NUMBERS COUNT REQUESTS, NOT LEGS');
+  assert.notEqual(start, -1, 'the counts action no longer says what it counts');
+  const note = code.slice(start, start + 2000);
+  assert.match(note, /IT USED TO BE THE OPPOSITE/, 'the reversal is not recorded, so it reads as always-was');
+  assert.match(note, /getRoundRegistrationSummary/, 'the seats-and-rooms exception is not named');
+  assert.match(note, /models\/RegisterPublic/, 'the pointer to the full reasoning is gone');
+});
+
+test('CONTROL: the counts-action probe is reading the note, not the file', () => {
+  const code = read(ACTIONS);
+  const start = code.indexOf('THESE NUMBERS COUNT REQUESTS, NOT LEGS');
+  const note = code.slice(start, start + 2000);
+  // Bounded, and it does not reach the neighbouring action's docstring.
+  assert.equal(note.includes('export async function'), false,
+    'the 2000-char slice has run past the end of the note');
+  assert.ok(note.length > 500, `the slice is only ${note.length} chars`);
+});
+
+// ── THE DETAIL SCREEN TELLS THE TRUTH ABOUT A LEG OF A PACKAGE ─────────────
+
+const DETAIL_PAGE = 'src/app/admin/registrations/[id]/page.jsx';
+const FOLD = 'src/lib/registrations/foldRequests.js';
+
+/**
+ * TWO THINGS THIS SCREEN GOT WRONG FOR A NON-MARKER LEG, and both are about an
+ * admin being able to trust what is in front of them.
+ */
+
+test('the เลขอ้างอิง is the REQUEST’s number, not the leg’s', () => {
+  /**
+   * The confirmation email quotes `refNo(requestId)` — one number for the whole
+   * package. The screen showed `refNo(doc._id)`, which for any leg that is not
+   * the marker is a different number, so an admin reading it down the phone was
+   * reading something the customer could not find anywhere.
+   *
+   * `requestKeyOf` rather than a local `doc.bundle?.requestId ?? doc._id`: the
+   * list groups by that function, and a second spelling would be two
+   * definitions of "which request is this" that agree only until one moves.
+   */
+  /**
+   * READ COMMENT-STRIPPED. The first draft asserted `refNo(doc._id)` was absent
+   * from the raw file and failed — on the explanatory comment ABOVE the fixed
+   * line, which quotes the defect it describes. A negative assertion over raw
+   * source cannot tell code from prose about code, and weakening it to a
+   * narrower literal would have kept the bug reachable through any other call
+   * site.
+   */
+  const detail = readSource(DETAIL);
+  assert.ok(detail.code.includes('const referenceNumber = refNo(requestKeyOf(doc))'),
+    'the reference number is not derived from the shared request key');
+  assert.ok(!detail.code.includes('refNo(doc._id)'),
+    'refNo(doc._id) is back — a non-marker leg would show a number the customer cannot see');
+  assert.ok(detail.code.includes('value={mono(referenceNumber)}'),
+    'the ข้อมูลระบบ row no longer renders the derived reference number');
+});
+
+test('the TAB TITLE quotes the same number', () => {
+  // The place an admin is most likely to read a number off while on the phone.
+  const page = read(DETAIL_PAGE);
+  assert.ok(page.includes('requestKeyOf(doc)'),
+    'generateMetadata still titles the tab with the URL id');
+});
+
+test('CONTROL: requestKeyOf really is the list’s grouping key', () => {
+  // Without this, "it uses the shared function" is satisfied by any function
+  // with that name anywhere.
+  const fold = read(FOLD);
+  assert.ok(fold.includes('export function requestKeyOf'), 'requestKeyOf is not exported from the fold module');
+  assert.ok(fold.includes('export const REQUEST_KEY_EXPR'), 'the fold module is not the grouping-key module');
+});
+
+test('DELETING ONE LEG NAMES THE PACKAGE, THE COUNT AND THE COURSE', () => {
+  /**
+   * Not hypothetical. On 2026-09-05 five legs of two requests were deleted one
+   * at a time, in under five minutes, with nothing on screen saying a package
+   * was being broken up.
+   *
+   * The ability to delete one leg is deliberate and is kept — the legs are
+   * genuinely separate registrations. The silence is what is fixed.
+   */
+  /**
+   * ── THE CONTROL MOVED, THE CLAIM DID NOT ─────────────────────────────────
+   * It was `handleDelete` in the "•••" menu. Once the request view stopped
+   * having a current leg, "ลบใบสมัครนี้" had no referent — so the control moved
+   * into the package table, beside the course it removes, as `handleDeleteLeg`.
+   * The three things it must name are unchanged, because the reason it must
+   * name them is unchanged: every leg of a request shares a coordinator and a
+   * date, so the course is the only fact telling them apart.
+   */
+  const detail = read(DETAIL);
+  const at = detail.indexOf('const handleDeleteLeg');
+  assert.notEqual(at, -1, 'the per-course delete handler is gone');
+  const body = detail.slice(at, detail.indexOf('startTransition', at));
+
+  assert.ok(body.includes('bundleLegs.length'), 'the confirmation does not say how many courses there are');
+  assert.ok(body.includes('doc.bundle?.name'), 'the confirmation does not name the package');
+  assert.ok(body.includes('leg?.courseName'), 'the confirmation does not say WHICH course is being deleted');
+  assert.ok(body.includes('referenceNumber'), 'the confirmation quotes the wrong reference number');
+  assert.ok(body.includes('หลักสูตรสุดท้าย'),
+    'the confirmation does not warn when this is the LAST course of the request');
+});
+
+test('the per-course delete is rendered once per course, and takes that leg', () => {
+  const detail = readSource(DETAIL);
+  assert.match(detail.code, /onDelete=\{handleDeleteLeg\}/,
+    'the package table is not wired to the per-course delete');
+  assert.match(detail.code, /onClick=\{\(\) => onDelete\(leg\)\}/,
+    'the row button does not pass its own leg — it would delete the wrong course');
+  assert.ok(!detail.code.includes('currentId'),
+    'the package table still takes a current leg');
+});
+
+test('CONTROL: the handleDelete slice is that function and not the file', () => {
+  const detail = read(DETAIL);
+  const at = detail.indexOf('const handleDelete');
+  const body = detail.slice(at, detail.indexOf('startTransition', at));
+  assert.ok(body.length > 200 && body.length < 3000, `the slice is ${body.length} chars`);
+  assert.equal(body.includes('handleSaveRound'), false, 'the slice has run into a neighbouring handler');
+});
+
+test('the siblings are FETCHED, or the count in that sentence is always zero', () => {
+  const page = read(DETAIL_PAGE);
+  assert.ok(page.includes('getBundleRequestLegs(doc.bundle?.requestId)'),
+    'the detail page does not fetch the request’s legs');
+  assert.ok(page.includes('bundleLegs={bundleLegs}'),
+    'the legs are fetched and not handed to the screen');
+  // …in the SAME round as the rounds lookup, not as a serial await.
+  assert.ok(page.includes('Promise.all(['), 'the two lookups are serial');
+});
+
+test('an ORDINARY registration pays nothing for any of this', () => {
+  const actions = read(ACTIONS);
+  const at = actions.indexOf('export async function getBundleRequestLegs');
+  assert.notEqual(at, -1, 'getBundleRequestLegs is gone');
+  const body = actions.slice(at, actions.indexOf('\nexport ', at + 1));
+  assert.ok(body.includes("if (!id) return [];"),
+    'the sibling lookup queries even when there is no request id');
 });

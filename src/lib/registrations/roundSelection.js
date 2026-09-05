@@ -68,6 +68,41 @@ export function formatClassDates(dates) {
 export const ROUND_FIELDS = Object.freeze(['classId', 'classDate', 'scheduleType', 'attendanceMode']);
 
 /**
+ * ══ A BUNDLE LEG'S ROUND CANNOT BE MOVED ═══════════════════════════════════
+ *
+ * A promotion registration cannot change its round. That is a BUSINESS RULE,
+ * not a preference: the customer chose a package whose courses and rounds were
+ * set by the author at the moment they registered, one package price was quoted
+ * over those exact rounds, and moving one of them afterwards silently changes
+ * what was sold.
+ *
+ * Ordinary registrations keep their เปลี่ยนรอบ control unchanged. The lock is
+ * only about legs of a bundle.
+ *
+ * ── TWO STRINGS, AND BOTH ARE NEEDED ──────────────────────────────────────
+ * The rule is enforced in TWO places and neither is optional:
+ *
+ *   · `updateRegistrationRound` REFUSES. Every export of a `'use server'`
+ *     module is a POST endpoint, so a rule that lives only in a hidden button
+ *     is not a rule — the lesson `adminNotes` records in `updateRegistration`
+ *     and the one the Early Bird round learned the hard way.
+ *   · THE SCREEN DOES NOT OFFER IT, and says why. An admin who cannot see the
+ *     reason will try another way, and the other way here is the endpoint.
+ *
+ * They are declared HERE, together, rather than one in the action and one in
+ * the component: two hand-written sentences about the same rule drift, and the
+ * one that drifts is the one the admin actually reads. This module is already
+ * imported by both sides — it is the wizard's, the action's and the detail
+ * screen's shared definition of what a round is.
+ *
+ * The HINT is the short line the card shows in place of the button; the ERROR
+ * is the full sentence the action returns to a caller that tried anyway.
+ */
+export const BUNDLE_ROUND_LOCK_HINT = 'รอบของหลักสูตรในแพ็กเกจเปลี่ยนไม่ได้';
+export const BUNDLE_ROUND_LOCK_ERROR =
+  'หลักสูตรนี้เป็นส่วนหนึ่งของแพ็กเกจ จึงเปลี่ยนรอบไม่ได้ — รอบถูกกำหนดไว้ตั้งแต่ตอนที่ลูกค้าลงทะเบียนแพ็กเกจนี้';
+
+/**
  * Is this round hybrid? One predicate, so the rule is spelled once.
  *
  * `?.` and a string compare rather than a truthiness test: `scheduleType` is

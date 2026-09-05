@@ -49,8 +49,36 @@ export function RegistrationSummaryPanel({ summary }) {
 
   return (
     <div className="space-y-3">
+      {/*
+        ── THIS NUMBER COUNTS SEATS IN THIS ROUND, AND SAYS SO ────────────────
+
+        /admin/registrations counts REQUESTS: a customer who asked for a
+        three-course package is one row and one entry in every card there.
+
+        THIS ONE COUNTS LEGS, and must. It answers "who is expected in this
+        room, on this day" — `getRoundRegistrationSummary` is `find({classId})`
+        — and a bundle's three courses are three different rooms on three
+        different days with that person in each of them. Counting requests here
+        would under-report the room.
+
+        Two screens, two questions, two right answers. The label is what stops
+        that reading as a disagreement, which is the whole reason it is here
+        rather than left to the reader.
+      */}
       <div className="flex items-baseline justify-between rounded-9e-md border border-[var(--surface-border)] px-3 py-2">
-        <span className="text-sm text-9e-slate-dp-50">ทั้งหมด</span>
+        <span className="text-sm text-9e-slate-dp-50">
+          ทั้งหมด
+          {/*
+            THE WORD `ทั้งหมด` IS KEPT, and the qualification goes beside it.
+            Three assertions in test/render/adminRoundDetails pin that word,
+            one of them the NEGATIVE control that no total row is drawn beside
+            the empty state — renaming the label would have made that control
+            vacuous while looking like an improvement.
+          */}
+          <span className="ml-1.5 text-[11px] font-normal text-[var(--text-muted)]">
+            ผู้เข้าอบรมในรอบนี้
+          </span>
+        </span>
         <span className="text-lg font-bold text-9e-navy dark:text-white">
           {total}
         </span>

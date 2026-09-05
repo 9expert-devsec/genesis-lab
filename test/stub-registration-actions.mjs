@@ -37,3 +37,14 @@ export async function getRegistrationStatusCounts()  { return { total: 0, range:
 // a render with no options must still produce a working select.
 export async function getRegistrationCourseOptions() { return []; }
 export async function getRegistrationTotal()         { return 0; }
+// The detail screen's sibling lookup: every leg of one bundle request. An EMPTY
+// list is the honest stub and it is what an ordinary registration really gets —
+// the action returns [] without a query when there is no requestId. A render
+// with no siblings must still produce a working page, which is the case this
+// tier exercises.
+export async function getBundleRequestLegs()         { return []; }
+// The request-level status move: every leg of one bundle request, as its own
+// explicit action rather than a widening of updateRegistrationStatus. Stubbed
+// as a refusal like every export here — a fan-out that quietly "succeeded"
+// against a stub would be the worst possible false green on this screen.
+export async function updateBundleRequestStatus()    { return { ok: false, error: 'stubbed' }; }

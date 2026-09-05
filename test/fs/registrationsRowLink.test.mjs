@@ -130,6 +130,41 @@ function fieldsRead(src) {
 }
 
 /**
+ * ══ FIELDS THE ROW CARRIES THAT NO PROJECTION NAMES ════════════════════════
+ *
+ * The public list now shows ONE ROW PER REQUEST. A row is no longer a document:
+ * it is assembled by `foldLegsIntoRows` from the legs the projection fetched.
+ * These three are DERIVED there, from fields that ARE projected —
+ *
+ *   legs         from every projected leg field, one entry per course
+ *   mixedStatus  from the legs' `status`
+ *   statuses     from the legs' `status`
+ *
+ * — so the rule this file enforces is intact and only its statement moves: the
+ * projection must still equal what the row is BUILT FROM, and every rendered
+ * field must still trace to a projected one. An exemption list is the weak
+ * point of that, so it is not merely a list: the test below asserts each name
+ * here is actually produced by the assembler. A typo, or a field smuggled in
+ * that nothing derives, fails there rather than passing silently here.
+ */
+const DERIVED_ROW_FIELDS = new Set(['legs', 'mixedStatus', 'statuses', 'legCount']);
+
+test('every derived row field is really produced by the assembler', () => {
+  const fold = readSource('src/lib/registrations/foldRequests.js');
+  for (const field of DERIVED_ROW_FIELDS) {
+    assert.match(fold.code, new RegExp(`\\b${field}\\s*:`),
+      `${field} is exempted from the projection rule but foldLegsIntoRows does not produce it — `
+      + 'the exemption list is being used to smuggle an unprojected read.');
+  }
+});
+
+test('CONTROL: the assembler probe rejects a name it does not produce', () => {
+  // Without this, the test above passes for any string at all.
+  const fold = readSource('src/lib/registrations/foldRequests.js');
+  assert.equal(/\bnotAFieldAtAll\s*:/.test(fold.code), false);
+});
+
+/**
  * ── THE RULE, IN BOTH DIRECTIONS ────────────────────────────────────────────
  *
  * A projection that is a SUBSET of the render makes cells render `undefined` —
@@ -150,7 +185,7 @@ for (const [name, rel, key] of [
   test(`${name}: every field it renders is projected`, () => {
     const projected = new Set(projections()[key]);
     const read = fieldsRead(readSource(rel).code);
-    const missing = [...read].filter((f) => f !== '_id' && !projected.has(f));
+    const missing = [...read].filter((f) => f !== '_id' && !DERIVED_ROW_FIELDS.has(f) && !projected.has(f));
     assert.deepEqual(missing, [],
       `${name} renders ${missing.join(', ')} but listRegistrations does not select ${missing.length > 1 ? 'them' : 'it'}. `
       + 'The cell will render undefined, which looks like missing data rather than a bug.');
@@ -265,8 +300,16 @@ test('CONTROL: the function bound really excludes the other actions’ selects',
   // The number moving DOWN is the same deliberate bump in reverse, and it is
   // the reason this is an equality: a floor would have sat silently at `>= 4`
   // through all four of these changes and told the next reader nothing.
-  assert.equal((ACTIONS.code.match(/\.select\(/g) ?? []).length, 6,
-    'the actions file no longer has six selects — re-read the scoping note');
+  // SEVEN. `getBundleRequestLegs` added the seventh: the detail screen's
+  // sibling lookup, which is a projection of its own render list and has
+  // nothing to do with either list table. Bumped deliberately rather than
+  // floored, for the reason four notes up — a `>= 4` would have sat silently
+  // through every one of these changes and told the next reader nothing.
+  // EIGHT. `updateBundleRequestStatus` added the eighth: the read that builds
+  // the plan it will write and the confirmation the admin agreed to. Bumped
+  // deliberately rather than floored, for the reason five notes up.
+  assert.equal((ACTIONS.code.match(/\.select\(/g) ?? []).length, 8,
+    'the actions file no longer has eight selects — re-read the scoping note');
 });
 
 test('CONTROL: the field matcher would catch an unprojected read', () => {

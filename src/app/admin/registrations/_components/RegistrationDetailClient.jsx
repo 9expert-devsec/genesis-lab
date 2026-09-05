@@ -6,6 +6,7 @@ import {
   Trash2, X, Plus, Pencil, Copy, GraduationCap, User, Users, Receipt,
   CreditCard, StickyNote, Database, ClipboardList, History, Lock,
 } from 'lucide-react';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { formatTHB } from '@/lib/pricing';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
@@ -13,14 +14,33 @@ import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { onlyDigits } from '@/lib/registration/digitsOnly';
 import {
   updateRegistrationStatus,
+  updateBundleRequestStatus,
   updateRegistration,
   deleteRegistration,
   addInternalNote,
   updateRegistrationRound,
 } from '@/lib/actions/registrations';
-import { storedRoundOption, isHybridRound, formatClassDates } from '@/lib/registrations/roundSelection';
+import {
+  storedRoundOption,
+  isHybridRound,
+  formatClassDates,
+  // The screen's half of the round lock. The action returns the matching
+  // sentence from the same module — see the note there for why both exist and
+  // why neither is sufficient alone.
+  BUNDLE_ROUND_LOCK_HINT,
+} from '@/lib/registrations/roundSelection';
 import { normalizeScheduleStatus } from '@/lib/scheduleStatus';
 import { refNo } from '@/lib/refNo';
+// The ONE definition of 'which request is this row part of' — shared with the
+// list's grouping key, so the reference number this screen shows and the row
+// the list links from cannot disagree.
+import { requestKeyOf } from '@/lib/registrations/foldRequests';
+// The request's own status, by the same precedence the list row and the summary
+// cards use — every leg cancelled wins only when nothing is left.
+import { requestStatusOf } from '@/lib/registrations/requestStatus';
+// What a request-level status move will touch. The ACTION derives its write set
+// from this same function, so the dialog and the write cannot disagree.
+import { planBundleStatusChange } from '@/lib/registrations/bundleStatusPlan';
 import { detailHeading, publicHeadingIdentifier } from '@/lib/registrations/detailHeading';
 import { allowedTransitions, isSystemSet, statusBadge, statusLabel } from '@/lib/registrations/statuses';
 import { rosterState, rosterHasRoom } from '@/lib/registrations/attendeeInfo';
@@ -254,11 +274,84 @@ const TABS = [
  *        SERVER-SIDE by page.jsx — see its docstring for why not here, and for
  *        why past rounds are not among them.
  */
-export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
+export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], history = null }) {
   const router = useRouter();
 
+  /**
+   * ══ A REQUEST VIEW HAS NO "CURRENT LEG" ════════════════════════════════════
+   *
+   * The document in `doc` is the leg whose id happened to be in the URL. It is
+   * how you ARRIVED, not what this page is ABOUT — and the first version of
+   * this screen let that leak: an ข้อมูลคอร์ส card described ONE course while
+   * the package table below listed all of them including that same one, so the
+   * first course rendered twice and a กำลังดู marker announced which leg the
+   * page was privately still thinking in.
+   *
+   * Both are gone. What stays leg-scoped is only what is genuinely per-leg:
+   * DELETING a course (its control now sits in the package table, next to the
+   * course it removes) and the AUDIT TRAIL (labelled with whose trail it is,
+   * rather than implying it is the request's).
+   *
+   * Declared here, above the state, because the notes thread below is derived
+   * from it and a `useState` initialiser cannot read a `const` declared later.
+   */
+  const isBundleRequest = Boolean(doc.bundle);
+
+  /**
+   * WHERE A NEW INTERNAL NOTE IS WRITTEN. One request, one thread.
+   *
+   * The MARKER leg by preference — its `_id` IS the `requestId`, so it is the
+   * request's own row rather than an arbitrary pick. The fallback is not
+   * defensive: deleting the marker while its siblings remain is reachable from
+   * the package table, and the request still resolves afterwards through any
+   * surviving leg, so the anchor has to survive it too.
+   */
+  const noteAnchorId = String(
+    bundleLegs.find((l) => String(l._id) === String(l.bundle?.requestId))?._id
+    ?? bundleLegs[0]?._id
+    ?? doc._id
+  );
+
+  /**
+   * EVERY LEG'S NOTES, AS ONE THREAD, OLDEST FIRST.
+   *
+   * New notes go to the anchor. They were previously written to whichever leg
+   * the admin had open, so READING the union is what keeps those visible —
+   * anchoring the read as well would leave a note's body in a document no
+   * screen fetches, with only the audit trail's "a note was added" to say it
+   * ever existed. That is data loss by relocation, and it is why the read and
+   * the write are deliberately not symmetrical.
+   *
+   * Sorted by `createdAt`, because a thread is a conversation in time; which
+   * document a line was filed against is an artefact of the shape this page has
+   * just stopped having.
+   */
+  const mergedNotes = isBundleRequest && bundleLegs.length
+    ? readNotes(bundleLegs.flatMap((l) => l.adminNotes ?? []))
+      .slice()
+      .sort((a, b) => new Date(a.createdAt ?? 0) - new Date(b.createdAt ?? 0))
+    : readNotes(doc.adminNotes);
+
   // ── Editable state (mirrors doc on load) ────────────────────
-  const [status,       setStatus]       = useState(doc.status);
+  /**
+   * ON A REQUEST VIEW THIS IS THE REQUEST'S STATUS, NOT THE URL LEG'S.
+   *
+   * `doc.status` is one leg's, and on a page headed by the whole request that
+   * is the current-leg leak wearing a different hat: the bar would say
+   * ส่งใบเสนอราคาแล้ว because the leg you happened to open was, while two
+   * others sat at รอดำเนินการ. It also decides which moves the bar OFFERS —
+   * `statusActions` reads this — so a leg-scoped value would offer moves the
+   * request cannot make.
+   *
+   * `requestStatusOf` is the same precedence the list row and the summary cards
+   * use: every leg cancelled → cancelled, otherwise the most advanced live one.
+   * `mixed` is not hidden; see `requestMixedStatus` below.
+   */
+  const [status,       setStatus]       = useState(() => (
+    isBundleRequest
+      ? (requestStatusOf(bundleLegs.map((l) => l.status)).status || doc.status)
+      : doc.status
+  ));
   /**
    * The round, as the screen currently believes it to be.
    *
@@ -285,6 +378,31 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
     classId: doc.classId ?? '',
     attendanceMode: doc.attendanceMode ?? '',
   });
+  /**
+   * ══ THESE FOUR ARE ONE LEG'S COPY, AND ON A REQUEST VIEW THAT IS SAFE ONLY
+   *    BECAUSE ANOTHER MODULE COPIES THEM ═══════════════════════════════════
+   *
+   * `coordinator`, `attendeesListProvided`, `attendeesCount`, `attendees` — and
+   * `notes` below — are read from `doc`, which on a request view is whichever
+   * leg's id was in the URL. Showing one leg's copy as the request's is correct
+   * TODAY for exactly one reason: `buildBundleLegs` writes them IDENTICALLY to
+   * every leg. Its own header states that as a decision —
+   *
+   *     "ONE PERSON ATTENDS EVERY COURSE, SO EVERY LEG CARRIES THE SAME PEOPLE
+   *      … there is no per-course attendee UI. So `attendeesCount`, `attendees`
+   *      and the coordinator are identical across the legs"
+   *
+   * THAT IS A PREMISE IN ANOTHER FILE, NOT A PROPERTY OF THIS ONE. It stops
+   * being true the moment the bundle form grows a per-course attendee list, or
+   * an admin edits one leg's roster through some future path — and when it
+   * does, this page will show one leg's answer as the whole request's, silently
+   * and with nothing to catch it.
+   *
+   * Written here rather than only in a round report because a safety that
+   * depends on a copy in another module is exactly the kind that goes stale
+   * without anyone noticing. If `buildBundleLegs` stops copying, these reads
+   * need a decision: show the union, show the anchor's and say so, or refuse.
+   */
   const [coordinator,  setCoordinator]  = useState({ ...doc.coordinator });
   const [attendeesListProvided, setAttendeesListProvided] = useState(doc.attendeesListProvided ?? true);
   const [attendeesCount, setAttendeesCount] = useState(doc.attendeesCount ?? 1);
@@ -292,6 +410,8 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
   // `notes` IS THE CUSTOMER'S. It is editable through updateRegistration and is
   // shown back to them. Do not confuse it with `internalNotes` below — see the
   // naming note in lib/registrations/internalNotes.
+  // ONE LEG'S COPY TOO, and safe for the same borrowed reason — see the note
+  // on the four above. `buildBundleLegs` writes `notes` verbatim to every leg.
   const [notes,        setNotes]        = useState(doc.notes ?? '');
 
   /**
@@ -303,7 +423,7 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
    * The list only ever grows, and it grows by appending what the server
    * accepted rather than by trusting the draft — see `handleAddNote`.
    */
-  const [internalNotes, setInternalNotes] = useState(() => readNotes(doc.adminNotes));
+  const [internalNotes, setInternalNotes] = useState(() => mergedNotes);
   const [noteDraft,     setNoteDraft]     = useState('');
   const [invoice,      setInvoice]      = useState(
     doc.invoice
@@ -325,6 +445,48 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
   const [error,        setError]        = useState(null);
   const [busy,         setBusy]         = useState(null);
   const [, startTransition] = useTransition();
+
+  /**
+   * ══ THE NUMBER THE CUSTOMER IS LOOKING AT ══════════════════════════════════
+   *
+   * `refNo` of the REQUEST, not of this document.
+   *
+   * A bundle's confirmation email quotes `refNo(requestId)` — one number for
+   * the whole package, because the customer made one request. This screen
+   * showed `refNo(doc._id)`, and for any leg that is not the marker that is a
+   * DIFFERENT NUMBER. An admin reading it down the phone was reading something
+   * the customer could not find anywhere.
+   *
+   * `requestKeyOf` is the same function the list groups by: the tag's
+   * `requestId` where there is one, the document's own `_id` otherwise. So an
+   * ordinary registration's reference number is unchanged, and there is one
+   * definition of "which request is this" rather than two that agree today.
+   */
+  const referenceNumber = refNo(requestKeyOf(doc));
+
+  /**
+   * ══ THIS PAGE IS A REQUEST, NOT A LEG ══════════════════════════════════════
+   *
+   * A bundle quotation request is stored as one row per course, and this screen
+   * is opened by ANY of them — an old bookmark to any leg still lands here and
+   * renders, which is why there is no separate route and no redirect.
+   *
+   * What it shows is the REQUEST: the coordinator, the invoice block, and a
+   * table of every course with its round. The team's job with these rows is to
+   * produce one quotation from one form, and three separate pages made them
+   * reassemble by hand what arrived as a single request.
+   *
+   * ── AND IT IS READ-ONLY THIS ROUND, EXCEPT THE INVOICE ────────────────────
+   * Ruled for this round. Every per-record edit on this screen edits ONE
+   * DOCUMENT, and the model forbids widening one into a silent fan-out across
+   * the siblings — so a page that presents one request while its buttons change
+   * one leg would be lying about its own scope.
+   *
+   * THE INVOICE CARD IS THE EXCEPTION and it is a deliberate one: it is the
+   * only in-app path for repairing a `requestInvoice` flag, and removing it
+   * would take that away with nothing in its place.
+   */
+  // Declared at the top of the component — see the note there.
 
   // ── Helpers ───────────────────────────────────────────────────
   const save = (payload, busyKey) => {
@@ -393,7 +555,7 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
     if (!body) return;
     setBusy('add-note'); setError(null);
     startTransition(async () => {
-      const res = await addInternalNote(doc._id, body);
+      const res = await addInternalNote(noteAnchorId, body);
       if (res.ok) {
         setInternalNotes((prev) => [...prev, ...readNotes([res.note ?? { body }])]);
         setNoteDraft('');
@@ -448,6 +610,55 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
     const message = next === 'cancelled'
       ? 'ยกเลิกใบสมัครนี้?\n\nการยกเลิกไม่สามารถย้อนกลับได้ และหลังจากนี้จะแก้ไขข้อมูลใบสมัครไม่ได้อีก'
       : `เปลี่ยนสถานะเป็น "${statusLabel(next)}"?`;
+    /**
+     * ══ ON A REQUEST, THE DIALOG NAMES THE COURSES ═════════════════════════
+     *
+     * `updateBundleRequestStatus` moves EVERY leg, so the admin is told which
+     * courses will move and which will NOT before they agree to it — built
+     * from `planBundleStatusChange`, the same function the action derives its
+     * write set from, so the sentence and the write cannot describe different
+     * sets.
+     *
+     * The skipped list is the half that matters. A cancelled course is left
+     * alone rather than reactivated, and after the click the request may still
+     * be หลายสถานะ — the admin needs to know that was intended rather than a
+     * failure.
+     */
+    if (isBundleRequest) {
+      const plan = planBundleStatusChange({ legs: bundleLegs, to: next });
+      if (!plan.ok) {
+        setError(`ไม่มีหลักสูตรใดในแพ็กเกจนี้ที่เปลี่ยนเป็น "${statusLabel(next)}" ได้`);
+        return;
+      }
+      const lines = [
+        `${statusLabel(next)} จะบันทึกกับ ${plan.changing.length} หลักสูตร:`,
+        plan.changing.map((l) => `  · ${l.courseName}`).join('\n'),
+      ];
+      if (plan.skipped.length) {
+        lines.push('', `${plan.skipped.length} หลักสูตรจะไม่เปลี่ยน:`);
+        lines.push(plan.skipped
+          .map((l) => `  · ${l.courseName} (${statusLabel(l.status)})`)
+          .join('\n'));
+      }
+      if (!window.confirm(`${message}\n\n${lines.join('\n')}`)) return;
+      setMenuOpen(false);
+      setBusy(next); setError(null);
+      startTransition(async () => {
+        const res = await updateBundleRequestStatus(doc.bundle.requestId, next);
+        if (res.ok) {
+          setStatus(next);
+          // The legs came from the server; their statuses have moved and the
+          // per-course chips must follow. A refresh re-reads them rather than
+          // the screen guessing which ones the action actually wrote.
+          router.refresh();
+        } else {
+          setError(res.error || 'เกิดข้อผิดพลาด');
+        }
+        setBusy(null);
+      });
+      return;
+    }
+
     if (!window.confirm(message)) return;
     setMenuOpen(false);
     setBusy(next); setError(null);
@@ -459,14 +670,104 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
   };
 
   // ── Delete ────────────────────────────────────────────────────
+  /**
+   * ══ DELETING ONE LEG OF A PACKAGE SAYS SO. OBSERVED, NOT HYPOTHETICAL. ════
+   *
+   * `deleteRegistration` removes ONE document, and that is the ruling — the
+   * legs are genuinely separate registrations and an admin may legitimately
+   * want to remove one. THE ABILITY IS NOT THE PROBLEM; THE SILENCE IS.
+   *
+   * On 2026-09-05 five legs of two bundle requests were deleted one at a time,
+   * in under five minutes, with nothing on screen saying a package was being
+   * broken up. This dialog is what would have said it.
+   *
+   * It names three things, and each earns its line:
+   *   · the PACKAGE, so the admin knows there is one at all;
+   *   · HOW MANY sibling legs exist, so "one of three" is visible before the
+   *     click rather than reconstructible after it;
+   *   · WHICH COURSE this leg is, because every leg of a request shares a
+   *     coordinator and a date and the course is the only thing telling them
+   *     apart.
+   *
+   * A CASCADE WAS CONSIDERED AND IS NOT THIS. Deleting the whole request in one
+   * action is a reasonable thing to want and it is deliberately not built here:
+   * the model's ruling forbids widening an existing per-leg edit into a silent
+   * fan-out, and the honest shape is a SEPARATE action that says what it is
+   * about to touch. That is a decision for its own round.
+   */
   const handleDelete = () => {
-    if (!window.confirm(`ลบใบสมัคร ${refNo(doc._id)} ถาวร?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) return;
+    if (!window.confirm(
+      `ลบใบสมัคร ${referenceNumber} ถาวร?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`
+    )) return;
     setMenuOpen(false);
     setBusy('delete'); setError(null);
     startTransition(async () => {
       const res = await deleteRegistration(doc._id);
       if (res.ok) router.push('/admin/registrations');
       else { setError(res.error || 'ลบไม่สำเร็จ'); setBusy(null); }
+    });
+  };
+
+  /**
+   * ══ DELETING ONE COURSE OF A PACKAGE ═══════════════════════════════════════
+   *
+   * THE CONTROL MOVED INTO THE PACKAGE TABLE, next to the course it removes,
+   * because this page no longer has a current leg — `ลบใบสมัครนี้` in the "•••"
+   * menu had no referent once "this registration" stopped meaning anything.
+   *
+   * `deleteRegistration` still removes ONE document and that is the ruling: the
+   * legs are genuinely separate registrations and an admin may legitimately
+   * remove one. THE ABILITY IS NOT THE PROBLEM; THE SILENCE WAS. On 2026-09-05
+   * five legs of two requests were deleted one at a time in under five minutes
+   * with nothing on screen saying a package was being broken up.
+   *
+   * So the confirmation names the three things that tell the legs apart: the
+   * PACKAGE, HOW MANY courses it has, and WHICH course this is — every leg
+   * shares a coordinator and a date, so the course is the only distinguishing
+   * fact.
+   *
+   * ── WHERE YOU LAND AFTERWARDS, INCLUDING THE LAST LEG ────────────────────
+   * Deleting a course you are not "on" refreshes in place. Deleting the leg
+   * whose id is in the URL would leave this route resolving to a document that
+   * no longer exists — `getRegistrationById` returns null and the page calls
+   * `notFound()` — so it navigates to a SURVIVING leg instead. When the leg
+   * deleted was the last one there is no surviving leg, and it goes to the
+   * list: the request is gone, and a 404 on a record the admin themselves just
+   * removed is a worse answer than the list they came from.
+   *
+   * Whole-request deletion remains the separate explicit action it has always
+   * been, and is still unbuilt.
+   */
+  const handleDeleteLeg = (leg) => {
+    const total = bundleLegs.length;
+    const packageName = String(doc.bundle?.name ?? '').trim();
+    const courseName = String(leg?.courseName ?? leg?.courseCode ?? '').trim() || 'หลักสูตรนี้';
+    const remaining = Math.max(0, total - 1);
+
+    if (!window.confirm(
+      `ลบ “${courseName}” ออกจากใบสมัคร ${referenceNumber} ถาวร?`
+      + `\n\nหลักสูตรนี้เป็น 1 ใน ${total} หลักสูตรของแพ็กเกจ`
+      + `${packageName ? ` “${packageName}”` : ''}`
+      + (remaining > 0
+        ? `\nอีก ${remaining} หลักสูตรจะยังอยู่`
+        : '\nนี่เป็นหลักสูตรสุดท้าย — ลบแล้วใบสมัครนี้จะไม่เหลืออยู่')
+      + '\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้'
+    )) return;
+
+    setBusy(`delete-leg-${leg._id}`); setError(null);
+    startTransition(async () => {
+      const res = await deleteRegistration(leg._id);
+      if (!res.ok) { setError(res.error || 'ลบไม่สำเร็จ'); setBusy(null); return; }
+
+      const survivor = bundleLegs.find((l) => String(l._id) !== String(leg._id));
+      if (String(leg._id) !== String(doc._id)) {
+        router.refresh();
+        setBusy(null);
+      } else if (survivor) {
+        router.push(`/admin/registrations/${survivor._id}`);
+      } else {
+        router.push('/admin/registrations');
+      }
     });
   };
 
@@ -525,8 +826,45 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
    * fall between the two.
    */
   const isTerminalTarget = (target) => allowedTransitions(target).length === 0;
+  /**
+   * WITHHELD ON A REQUEST VIEW. `updateRegistrationStatus` moves ONE leg, and a
+   * button on a page headed by the whole request would read as moving the
+   * request. Status stays per-leg and out of scope this round — see
+   * `isBundleRequest`.
+   *
+   * The "•••" menu is NOT emptied by this: delete lives there and is still
+   * offered, now naming the package it would break up.
+   */
   const primaryTarget    = statusActions.find((next) => !isTerminalTarget(next)) ?? null;
   const menuTargets      = statusActions.filter((next) => next !== primaryTarget);
+
+  /**
+   * WHAT THE TABLE PERMITS vs WHAT THIS SCREEN OFFERS. Two questions.
+   *
+   * The derivation above is untouched and stays the answer to the first — a
+   * permitted move must never fall between the two slots, and
+   * fs/registrationActionsDerived pins that shape precisely because it is the
+   * kind of thing a later edit smuggles a status literal into.
+   *
+   * ── THE SECOND QUESTION HAD THE WRONG ANSWER, AND IT IS CORRECTED HERE ───
+   *
+   * A request view briefly offered NEITHER slot, on the reasoning that
+   * `updateRegistrationStatus` moves ONE leg so a button on a page headed by
+   * the whole request would read as moving the request. The premise was right;
+   * the conclusion was not. Moving a quotation from รอดำเนินการ to
+   * ส่งใบเสนอราคาแล้ว is the daily work of this screen, and a request that can
+   * never leave รอดำเนินการ is a worse failure than the one the fold fixed.
+   *
+   * The repair is not to withhold the control but to give it an action that
+   * means what the page says. `updateBundleRequestStatus` moves EVERY leg — as
+   * its own explicit action, never a widening of the per-document one — and
+   * says what it will touch before the click.
+   *
+   * So both slots feed from the table's own answer again, and it is
+   * `handleStatusAction` that routes to the right writer. `status` holds the
+   * REQUEST's status on this view (see its declaration), so the moves offered
+   * are the moves the request can actually make.
+   */
 
   /**
    * A CANCELLED RECORD IS READ-ONLY, AND THE SCREEN SAYS SO.
@@ -735,7 +1073,7 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
    * shape that lets a future control be added beside it WITHOUT the gate, which
    * is the defect the single-producer rule exists to make unrepresentable.
    */
-  const attendeeEdit = editProps('attendees');
+  const attendeeEdit = editProps('attendees', !isBundleRequest);
 
   /**
    * THE ROUND CARD'S EDIT GATE, taken once — same single-producer rule as the
@@ -750,7 +1088,24 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
    *
    * The read view says why; see the empty hint below.
    */
-  const roundEdit = editProps('course', rounds.length > 0);
+  /**
+   * ── AND IT CLOSES FOR A BUNDLE LEG, WHICH IS A DIFFERENT KIND OF REASON ──
+   *
+   * The two existing reasons are about AVAILABILITY — upstream is down, or the
+   * course has no upcoming rounds. This one is a RULE: a promotion
+   * registration cannot change its round, because one package price was quoted
+   * over the exact rounds the customer registered for.
+   *
+   * It goes through the SAME gate rather than beside it. `editProps` is the
+   * single producer of `onEdit`, and fs/registrationActionsDerived already
+   * caught one attempt to spread a hand-made object past it — a second door
+   * here would be that defect with a better excuse.
+   *
+   * THE ACTION REFUSES INDEPENDENTLY. This is the affordance, not the
+   * enforcement; see `updateRegistrationRound`.
+   */
+  const roundLockedByBundle = isBundleRequest;
+  const roundEdit = editProps('course', rounds.length > 0 && !roundLockedByBundle);
 
   /**
    * The stored round WHEN IT IS NO LONGER IN THE LIST — see requirement 5.
@@ -843,7 +1198,7 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
         badge={<TypeBadge label="Public" className="bg-sky-100 text-sky-700" />}
         timestamp={`สมัครเมื่อ ${fmtDate(doc.createdAt)}`}
         title={detailHeading(publicHeadingIdentifier(doc))}
-        subtitle={doc.courseName}
+        subtitle={isBundleRequest ? (String(doc.bundle?.name ?? '').trim() || 'แพ็กเกจ') : doc.courseName}
       />
 
       {/*
@@ -890,19 +1245,53 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
             {/* DELETE IS NOT GATED ON `readOnly`, and that is the ruling rather
                 than an oversight — see lib/actions/registrations.js. It is also
                 what keeps this menu from ever being empty: a cancelled record
-                has no status actions left and still has exactly one item. */}
-            <OverflowItem
-              icon={Trash2}
-              onClick={handleDelete}
-              disabled={busy !== null}
-              busy={busy === 'delete'}
-              tone="text-9e-accent"
-            >
-              ลบใบสมัครนี้
-            </OverflowItem>
+                has no status actions left and still has exactly one item.
+
+                ── ABSENT ON A REQUEST VIEW, WHERE IT HAD NO REFERENT ────────
+                "ลบใบสมัครนี้" means "this registration", and once the page
+                stopped having a current leg there was no such thing: the id in
+                the URL is how you arrived, not what the page is about. The
+                control moved into the package table, beside the course it
+                removes. A cancelled BUNDLE therefore has an empty "•••" —
+                which is honest, because every action it could offer is either
+                per-course (and now lives per course) or a move the transition
+                table forbids. */}
+            {isBundleRequest ? null : (
+              <OverflowItem
+                icon={Trash2}
+                onClick={handleDelete}
+                disabled={busy !== null}
+                busy={busy === 'delete'}
+                tone="text-9e-accent"
+              >
+                ลบใบสมัครนี้
+              </OverflowItem>
+            )}
           </OverflowMenu>
         )}
       />
+
+      {/*
+        ── THE ONE PLACE THIS PAGE SAYS WHAT IT IS ─────────────────────────────
+
+        A card with no แก้ไข and no explanation reads as a broken page — the
+        same reasoning the round card's three hints already follow. Rather than
+        repeating a hint on each of the four cards that lost their button, the
+        reason is stated ONCE, above them, where a reader arrives before they
+        start looking for controls.
+
+        It names the exception too. "Read-only" beside an invoice card that
+        still has a แก้ไข button would be the screen contradicting itself.
+      */}
+      {isBundleRequest ? (
+        <div
+          data-testid="bundle-request-readonly-note"
+          className="mt-[16px] rounded-9e-md border border-violet-200 bg-violet-50 px-[14px] py-[10px] text-[12px] leading-[18px] text-violet-900 dark:border-violet-900/50 dark:bg-violet-950/30 dark:text-violet-200"
+        >
+          ใบสมัครนี้เป็นหนึ่งในหลักสูตรของแพ็กเกจ — หน้านี้แสดงคำขอทั้งชุด
+          แก้ไขได้เฉพาะข้อมูลใบเสนอราคา/ใบกำกับภาษี ส่วนอื่นดูได้อย่างเดียว
+        </div>
+      ) : null}
 
       <DetailError message={error} />
 
@@ -923,6 +1312,24 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
             What replaces it sends an ID and lets the server derive the rest.
             See lib/registrations/roundSelection and `updateRegistrationRound`.
           */}
+          {/*
+            ── THE ข้อมูลคอร์ส CARD IS ABSENT ON A REQUEST VIEW ─────────────
+
+            It described ONE course — the leg whose id was in the URL — while
+            the package table below listed every course of the request
+            INCLUDING that one. The first course rendered twice, and the
+            duplication was the visible half of a page still privately
+            thinking "you opened leg 1".
+
+            A request view has no current leg, so there is no course this card
+            could be about. THE PACKAGE TABLE IS THE COURSE DATA: it carries
+            the same หลักสูตร, รอบอบรม and รูปแบบ, once per course, with no
+            arbitrary one promoted above the others.
+
+            It stays exactly as it was for an ordinary registration, which is
+            the only kind of record that HAS one course.
+          */}
+          {isBundleRequest ? null : (
           <SectionCard
             icon={GraduationCap}
             title="ข้อมูลคอร์ส"
@@ -976,13 +1383,27 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
                   /*
                     THE READ VIEW SAYS WHY THE BUTTON IS MISSING. A card with no
                     แก้ไข and no explanation reads as a broken page — the same
-                    reasoning as the status bar's read-only copy. Two distinct
+                    reasoning as the status bar's read-only copy. THREE distinct
                     reasons, and they are not interchangeable:
+                      · this is a leg of a PACKAGE → the round cannot be changed
+                        at all, ever. A rule, not a shortage.
                       · no rounds at all  → nothing to move to
                       · the stored round is gone → it can be SHOWN but not
                         re-chosen, which is a different sentence
+
+                    THE PACKAGE REASON IS FIRST, and the order is the ruling. A
+                    bundle leg whose course also happens to have no upcoming
+                    rounds would otherwise be told "ไม่มีรอบให้เลือกในขณะนี้" —
+                    "not at the moment" — which invites the admin to come back
+                    tomorrow and try again, and then to look for another way
+                    when it still does not work. The rule outranks the shortage
+                    because only one of them will ever stop being true.
                   */
-                  action={rounds.length === 0 ? (
+                  action={roundLockedByBundle ? (
+                    <span className="shrink-0 text-[11px] italic leading-[16px] text-[var(--text-muted)]">
+                      {BUNDLE_ROUND_LOCK_HINT}
+                    </span>
+                  ) : rounds.length === 0 ? (
                     <span className="shrink-0 text-[11px] italic leading-[16px] text-[var(--text-muted)]">
                       ไม่มีรอบให้เลือกในขณะนี้
                     </span>
@@ -1003,11 +1424,34 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
               </DL>
             )}
           </SectionCard>
+          )}
+
+          {/*
+            ── EVERY COURSE OF THE REQUEST, WITH ITS OWN ROUND ─────────────────
+
+            THE SINGLE FORM THE TEAM ACTUALLY WORKS FROM. One quotation is
+            produced from one request over N named courses, and until this card
+            existed an admin had to open N pages and reassemble the list by
+            hand — or, worse, not realise there were others at all.
+
+            EVERY VALUE IS READ FROM THE LEG, never re-derived from the
+            promotion page. That page can be edited, unpublished or deleted, and
+            an admin reading a six-month-old quotation must see what was SOLD;
+            a lookup would show today's answer to a question about last March.
+            Same reason `courseName` and `bundle.name` are denormalised.
+
+            The row you arrived on is marked. Every leg's own page IS this page
+            — any leg id lands here — so the links are how you change which leg
+            the per-leg controls (delete, and the course card above) act on.
+          */}
+          {isBundleRequest ? (
+            <BundleCoursesCard legs={bundleLegs} onDelete={handleDeleteLeg} busy={busy} />
+          ) : null}
 
           <SectionCard
             icon={User}
             title="ผู้ประสานงาน"
-            {...editProps('coordinator')}
+            {...editProps('coordinator', !isBundleRequest)}
             onSave={() => save({ coordinator }, 'save-coordinator')}
           >
             {editSection === 'coordinator' ? (
@@ -1117,7 +1561,7 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
           <SectionCard
             icon={StickyNote}
             title="หมายเหตุ"
-            {...editProps('notes')}
+            {...editProps('notes', !isBundleRequest)}
             onSave={() => save({ notes }, 'save-notes')}
           >
             {editSection === 'notes' ? (
@@ -1171,9 +1615,27 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
               a human quotes down the phone — the 24-character `_id` below it is
               for pasting into a query.
             */}
-            <DLRow label="เลขอ้างอิง"      value={mono(refNo(doc._id))} />
-            <DLRow label="Registration ID" value={mono(doc._id)} />
-            <DLRow label="Class ID"        value={mono(doc.classId)} />
+            <DLRow label="เลขอ้างอิง"      value={mono(referenceNumber)} />
+            {/*
+              ── THE TWO IDS BELOW NAME A LEG, SO A REQUEST VIEW SHOWS ONE ────
+
+              `Registration ID` is the document id and `Class ID` is its round.
+              On a request view neither has a referent: there is no current leg,
+              and showing the id of whichever one happened to be in the URL
+              would be the same leak the ข้อมูลคอร์ส card was removed for — an
+              opaque 24-character string that a reader would reasonably take to
+              identify the thing on screen.
+
+              So a request shows the REQUEST's id, which is what
+              `bundle.requestId` is and what `เลขอ้างอิง` above is computed
+              from, and drops the round entirely. Per-leg ids stay reachable:
+              every course in the package table links to its own leg.
+            */}
+            <DLRow
+              label={isBundleRequest ? 'Request ID' : 'Registration ID'}
+              value={mono(isBundleRequest ? requestKeyOf(doc) : doc._id)}
+            />
+            {isBundleRequest ? null : <DLRow label="Class ID" value={mono(doc.classId)} />}
             <DLRow label="แหล่งที่มา"       value={doc.source ?? 'web'} />
             <DLRow label="IP Address"      value={doc.ipAddress} />
             <DLRow label="อัปเดตล่าสุด"     value={fmtDate(doc.updatedAt)} />
@@ -1415,6 +1877,104 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
         </TabPanel>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * THE COURSES OF ONE BUNDLE REQUEST. Read-only by ruling this round.
+ *
+ * ── WHY IT LISTS AND NAVIGATES RATHER THAN ACTING ─────────────────────────
+ * Every per-record action on this screen edits ONE DOCUMENT, and the model
+ * forbids widening one into a silent fan-out across the siblings. So this card
+ * shows what the request IS; it does not act on it.
+ *
+ * ── AN EMPTY LIST RENDERS NOTHING ─────────────────────────────────────────
+ * `bundleLegs` is [] when the sibling lookup failed or the tag carries no
+ * requestId. A card headed "หลักสูตรในแพ็กเกจ" over no courses would claim the
+ * package is empty — a stronger and falser statement than saying nothing, which
+ * is the degrade rule the round card's empty hint already follows.
+ */
+function BundleCoursesCard({ legs = [], onDelete, busy }) {
+  if (!legs.length) return null;
+
+  return (
+    <SectionCard icon={GraduationCap} title={`หลักสูตรในแพ็กเกจ (${legs.length})`}>
+      <ul className="divide-y divide-[var(--surface-border)]" data-testid="bundle-courses-list">
+        {legs.map((leg) => {
+          return (
+            <li key={String(leg._id)} className="flex items-start justify-between gap-[12px] py-[11px]">
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-[6px]">
+                  <Link
+                    href={`/admin/registrations/${leg._id}`}
+                    className={cn(
+                      // The shared value size, imported rather than spelled: a
+                      // card file writing its own `text-[…]` is what
+                      // test/render/registrationTypeScale forbids, and the
+                      // reason is that the value column's size is one decision
+                      // for the whole screen.
+                      'truncate font-semibold text-[var(--text-primary)] hover:underline',
+                      DETAIL_FIELD_VALUE,
+                    )}
+                  >
+                    {leg.courseName || leg.courseCode || '—'}
+                  </Link>
+                  {/*
+                    ── THE กำลังดู MARKER IS GONE, AND SO IS THE IDEA ─────────
+                    It marked which leg's id was in the URL. On a page that
+                    presents itself as the whole request that is not a fact
+                    about anything a reader needs — it announced that the page
+                    was privately still thinking in legs. Every course here is
+                    equal; none is "the one you are on".
+                  */}
+                </div>
+                {/* The round and the delivery type, from THIS leg. */}
+                <p className="truncate text-[12px] leading-[17px] text-[var(--text-secondary)]">
+                  {leg.classDate || 'ยังไม่ได้ระบุรอบ'} · {scheduleLabel(leg.scheduleType, leg.attendanceMode)}
+                </p>
+              </div>
+              {/*
+                The per-leg status. A request counts once into one status on the
+                list — see lib/registrations/requestStatus — and this is where
+                the legs behind that single word are individually visible, in
+                the one place a reader can act on them.
+              */}
+              <div className="flex shrink-0 items-center gap-[8px]">
+                <span className={cn(
+                  'inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-[8px] text-[11px] font-semibold',
+                  statusBadge(leg.status)
+                )}>
+                  {statusLabel(leg.status)}
+                </span>
+                {/*
+                  ── DELETE LIVES HERE, BESIDE THE COURSE IT REMOVES ─────────
+                  `deleteRegistration` removes ONE document and that is the
+                  ruling — the legs are genuinely separate registrations. It
+                  moved out of the "•••" menu because "ลบใบสมัครนี้" needed a
+                  current leg to mean anything, and this page no longer has
+                  one. Next to the row, it names its own target.
+
+                  The confirmation still says what the round-before-last built
+                  it to say: the package, how many courses, and which one.
+                */}
+                {onDelete ? (
+                  <button
+                    type="button"
+                    data-testid="bundle-leg-delete"
+                    onClick={() => onDelete(leg)}
+                    disabled={busy !== null}
+                    aria-label={`ลบ ${leg.courseName || leg.courseCode || 'หลักสูตรนี้'} ออกจากใบสมัคร`}
+                    className="inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-9e-md text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-9e-accent disabled:opacity-40"
+                  >
+                    <Trash2 aria-hidden="true" className="h-[14px] w-[14px]" />
+                  </button>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </SectionCard>
   );
 }
 

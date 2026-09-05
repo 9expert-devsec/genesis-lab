@@ -683,3 +683,154 @@ test('the chip does not add a cell — the bundle row still matches the header',
   const row = rowFor(bundleHtml, BUNDLE_LEG._id);
   assert.equal((row.match(/<td\b/g) ?? []).length, headerCount);
 });
+
+/**
+ * ══ THE FOLDED ROW: ONE REQUEST, N COURSES ═════════════════════════════════
+ *
+ * The fixtures above are the UNFOLDED shape — a row per leg, no `legs` array —
+ * and they still render, because a one-course row must be byte-identical to
+ * what this table drew before the fold. 41 of the 46 records this collection
+ * last held were exactly that.
+ *
+ * These are the other case. They get their own render for the reason the bundle
+ * fixtures above give: adding rows to `ROWS` would perturb every geometry
+ * assertion in the file for the sake of a few.
+ */
+const FOLD_REQ = 'ffffffffffffffffffff0010';
+
+const FOLDED = {
+  _id: FOLD_REQ,
+  courseName: 'Claude AI',
+  classDate: '16-17 ก.ย. 2569',
+  scheduleType: 'hybrid',
+  attendanceMode: 'teams',
+  coordinator: { firstName: 'ยานิสา', lastName: 'พงศ์เมธา', email: 'yanisa@example.com' },
+  attendeesCount: 2,
+  status: 'pending',
+  createdAt: '2026-09-05T15:11:29.857Z',
+  bundle: { pageId: 'p1', sectionId: 's1', requestId: FOLD_REQ, name: 'Claude AI ครบลูป' },
+  legs: [
+    { _id: FOLD_REQ, courseName: 'Claude AI', classDate: '16-17 ก.ย. 2569', scheduleType: 'hybrid', attendanceMode: 'teams', status: 'pending' },
+    { _id: 'ffffffffffffffffffff0011', courseName: 'Vibe Code L1', classDate: '19-20 ต.ค. 2569', scheduleType: 'classroom', attendanceMode: 'classroom', status: 'pending' },
+    { _id: 'ffffffffffffffffffff0012', courseName: 'Vibe Code L2', classDate: '24-25 ก.ย. 2569', scheduleType: 'online', attendanceMode: 'classroom', status: 'pending' },
+  ],
+  legCount: 3,
+  mixedStatus: false,
+  statuses: ['pending'],
+};
+
+/** The same request with one course cancelled — the divergence case. */
+const FOLDED_MIXED = {
+  ...FOLDED,
+  _id: 'ffffffffffffffffffff0020',
+  legs: [
+    { ...FOLDED.legs[0], _id: 'ffffffffffffffffffff0020' },
+    { ...FOLDED.legs[1], status: 'cancelled' },
+    FOLDED.legs[2],
+  ],
+  mixedStatus: true,
+  statuses: ['pending', 'cancelled'],
+};
+
+const foldedHtml = renderToStaticMarkup(createElement(PublicTable, {
+  items: [FOLDED, FOLDED_MIXED, FULL],
+  lastEdited: {},
+  detailHref: href,
+}));
+
+test('a three-course request is ONE row, and it names all three courses', () => {
+  const row = rowFor(foldedHtml, FOLD_REQ);
+  for (const name of ['Claude AI', 'Vibe Code L1', 'Vibe Code L2']) {
+    assert.ok(row.includes(name), `the folded row does not name ${name}`);
+  }
+  for (const date of ['16-17 ก.ย. 2569', '19-20 ต.ค. 2569', '24-25 ก.ย. 2569']) {
+    assert.ok(row.includes(date), `the folded row does not carry the round ${date}`);
+  }
+});
+
+test('the chip says HOW MANY courses, which the table could not say before', () => {
+  /**
+   * A reader could previously see that a row belonged to a package and not how
+   * big the package was — so a two-leg wreck of a three-course bundle read as
+   * an ordinary two-course bundle. See
+   * docs/ticket-bundle-request-completeness-unqueryable.md.
+   */
+  const row = rowFor(foldedHtml, FOLD_REQ);
+  assert.match(row, /แพ็กเกจ: Claude AI ครบลูป · 3 หลักสูตร/);
+});
+
+test('one schedule chip per course, so the two columns line up', () => {
+  const row = rowFor(foldedHtml, FOLD_REQ);
+  // hybrid+teams, classroom, online — three distinct arrangements, all drawn.
+  assert.ok(row.includes('Hybrid · Teams'), 'the hybrid leg lost its mode');
+  assert.ok(row.includes('Classroom'), 'the classroom leg has no chip');
+  assert.ok(row.includes('Online'), 'the online leg has no chip');
+});
+
+test('the folded row is TALLER, by exactly one leg-row per extra course', () => {
+  /**
+   * 82 + 2 × 34 = 150. An inline height, not an assembled `h-[150px]` class,
+   * which would compile to no CSS at all — see the note on CellLink.
+   */
+  const row = rowFor(foldedHtml, FOLD_REQ);
+  assert.ok(row.includes('height:150px'), `no computed 150px height on the folded row: ${row.slice(0, 300)}`);
+  assert.ok(!row.includes('h-[150px]'), 'the height is an assembled Tailwind class — it emits no CSS');
+});
+
+test('CONTROL: a single-course row keeps the fixed 82px class and no inline height', () => {
+  // The property that makes every pre-fold assertion in this file still binding.
+  const row = rowFor(foldedHtml, FULL._id);
+  assert.ok(row.includes('h-[82px]'), 'an unfolded row lost its fixed height class');
+  assert.ok(!row.includes('height:'), 'an unfolded row gained an inline height it should not have');
+});
+
+test('EVERY cell of the folded row shares the row height', () => {
+  // A cell left at 82px would sit against the top of a 150px row and break the
+  // line the whole table reads along. Six columns plus the chevron.
+  const row = rowFor(foldedHtml, FOLD_REQ);
+  const heights = (row.match(/height:150px/g) ?? []).length;
+  assert.equal(heights, headerCells(foldedHtml).length,
+    `${heights} cells carry the row height, expected ${headerCells(foldedHtml).length}`);
+});
+
+test('legs that AGREE draw no divergence note', () => {
+  const row = rowFor(foldedHtml, FOLD_REQ);
+  assert.ok(!row.includes('data-testid="mixed-status-note"'),
+    'an unmixed request is flagged as mixed');
+});
+
+test('legs that DISAGREE say so, naming every status present', () => {
+  /**
+   * The one thing a folded row must not hide. The request is filed under
+   * รอดำเนินการ — one cancelled leg does not cancel a request — and the row has
+   * to say that a course was cancelled, or it looks like a request whose legs
+   * agree.
+   */
+  const row = rowFor(foldedHtml, FOLDED_MIXED._id);
+  assert.ok(row.includes('data-testid="mixed-status-note"'), 'the divergence note is gone');
+  assert.match(row, /หลายสถานะ/);
+  assert.ok(row.includes('รอดำเนินการ'), 'the note does not name the pending legs');
+  assert.ok(row.includes('ยกเลิก'), 'the note does not name the cancelled leg');
+});
+
+test('CONTROL: the divergence probe distinguishes the two rows', () => {
+  // Without this, "the note is gone" passes for a table that renders no rows.
+  const mixed = rowFor(foldedHtml, FOLDED_MIXED._id);
+  const clean = rowFor(foldedHtml, FOLD_REQ);
+  assert.notEqual(mixed.includes('mixed-status-note'), clean.includes('mixed-status-note'));
+});
+
+test('no folded row emits an empty element', () => {
+  // Including the aria-hidden spacer that aligns the chip column, which the
+  // sweep deliberately tolerates and everything else it does not.
+  const m = EMPTY_ELEMENT.exec(foldedHtml);
+  assert.equal(m, null, `an empty element rendered: ${m?.[0]}`);
+});
+
+test('the folded row still has exactly as many cells as the header', () => {
+  const headerCount = headerCells(foldedHtml).length;
+  for (const id of [FOLD_REQ, FOLDED_MIXED._id, FULL._id]) {
+    const row = rowFor(foldedHtml, id);
+    assert.equal((row.match(/<td\b/g) ?? []).length, headerCount, `row ${id} has the wrong cell count`);
+  }
+});

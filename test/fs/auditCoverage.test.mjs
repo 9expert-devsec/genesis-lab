@@ -771,7 +771,19 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // overwrites this round makes impossible were, historically, unrecoverable:
 // nothing recorded them. Sweeping this file is a separate open ticket
 // (docs/early-bird-audit-trail.md), deliberately not folded in here.
-const MUTATING_EXPORT_COUNT = 183;
+//
+// 183 → 184: `updateBundleRequestStatus` (registrations.js). The request-level
+// status move for a bundle quotation — a SEPARATE action rather than a widening
+// of `updateRegistrationStatus`, because the `bundle` ruling on
+// models/RegisterPublic forbids turning a per-document edit into a silent
+// fan-out and sanctions exactly this shape instead. It is mutating, it is
+// swept, and it files ONE AUDIT ROW PER LEG keyed on the leg's own recordId —
+// never a phantom row keyed on the requestId, which no screen queries.
+//
+// It needs no REACHED_THROUGH_IMPORT entry: it writes through
+// `RegisterPublic.findOneAndUpdate` in its own body, so the file-local
+// classifier sees it and the depth-0 figure below moves with it.
+const MUTATING_EXPORT_COUNT = 184;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -993,7 +1005,11 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 175,
+    zero, 176,
+    'ROUND: 175 → 176 for updateBundleRequestStatus, which calls ' +
+    'RegisterPublic.findOneAndUpdate in its own body — so depth 0 sees it and ' +
+    'the two figures move together, which is the property this control exists ' +
+    'to demonstrate. ' +
     'ROUND: the CustomPage draft split, 169 → 172 — saveCustomPageDraft, ' +
     'publishCustomPage and discardCustomPageDraft all call ' +
     'CustomPage.findByIdAndUpdate in their own body, so depth 0 sees all three. ' +
