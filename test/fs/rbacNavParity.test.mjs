@@ -62,15 +62,29 @@ const SIDEBAR = readSource(SIDEBAR_REL);
  *
  *   ['some_key', 'why it has no link — e.g. reached only from a parent row'],
  *
- * Exactly one entry, and the same one named in NO_NAV_ITEM in
- * test/fs/adminNavShape.test.mjs — the two guards approach the same fact from
- * opposite directions (this one asks "is every registered page linked?", that
- * one asserts set equality both ways) and both have to be told about it.
+ * The same names appear in NO_NAV_ITEM in test/fs/adminNavShape.test.mjs — the
+ * two guards approach the same fact from opposite directions (this one asks "is
+ * every registered page linked?", that one asserts set equality both ways) and
+ * both have to be told about it.
  */
 const NO_SIDEBAR_LINK = new Map([
   ['profile', 'reached from the signed-in identity card in the sidebar footer '
     + '(AdminSidebar.jsx), not from a nav row — it is still registered here for '
     + 'the permission key, MENU_ENUM membership and the /admin/roles checkbox'],
+
+  // ── THE TWO DASHBOARD SCOPES ──────────────────────────────────────────────
+  // These carry `href: null` in ADMIN_PAGES, so parityGaps' own `if (!page.href)
+  // continue` would already skip them and these entries are, today, redundant.
+  // They are written down anyway: the day someone gives a scope an href — which
+  // is exactly the mistake to catch, because /admin is already `dashboard` and a
+  // second row claiming it would make resolvePageKey ambiguous — the redundancy
+  // ends and this becomes the record of a decision rather than a formality.
+  ['dashboard_registrations', 'a permission over a SECTION of /admin, not a page '
+    + 'of its own — it has no route, so there is no href for a nav row to point '
+    + 'at. /admin is linked once, by `dashboard`'],
+  ['dashboard_system', 'a permission over a SECTION of /admin, not a page of its '
+    + 'own — it has no route, so there is no href for a nav row to point at. '
+    + '/admin is linked once, by `dashboard`'],
 ]);
 
 /** Every `{ … href: '…' … pageKey: '…' … }` object literal in the source. */

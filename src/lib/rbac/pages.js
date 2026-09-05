@@ -41,6 +41,37 @@ export const ADMIN_PAGES = [
     group: 'ภาพรวม',
     pages: [
       { key: 'dashboard', label: 'แดชบอร์ด', href: '/admin', match: 'exact' },
+      // ── THE TWO DASHBOARD SCOPES — REGISTERED KEYS WITH NO ROUTE ──────────
+      //
+      // `dashboard` gates the PAGE. These two gate what the page CONTAINS, and
+      // they are ordinary page keys rather than a new field on Role or a
+      // `dashboardScope` enum, for the reason every other permission here is a
+      // page key: one mechanism, one checkbox list, one audit enum, one place a
+      // superadmin bypass is written down. A second permission system would
+      // have to re-answer all four questions and would answer at least one of
+      // them differently.
+      //
+      // NAMING follows `promotions_banner` — the parent key, then the qualifier
+      // — which is the registry's existing convention for a sub-surface of a
+      // page that already has a key.
+      //
+      // ── `href: null` IS THE LOAD-BEARING PART ────────────────────────────
+      // These are the first registry rows with NO ROUTE OF THEIR OWN, and that
+      // is the difference from `profile`, which is unlinked but still has
+      // /admin/profile behind it. There is no /admin/dashboard-registrations to
+      // navigate to, so an href would have to be either a lie or a duplicate of
+      // '/admin' — and a duplicate would make resolvePageKey('/admin')
+      // ambiguous between `dashboard` and a scope, which is precisely the
+      // permission that must NOT be reachable by URL. resolvePageKey skips
+      // href-less rows explicitly (see below) rather than relying on
+      // `undefined` failing a string comparison by luck.
+      //
+      // Both are allow-listed BY NAME in the two nav guards —
+      // NO_NAV_ITEM in test/fs/adminNavShape.test.mjs and NO_SIDEBAR_LINK in
+      // test/fs/rbacNavParity.test.mjs — for the same reason `profile` is: a
+      // key that goes quiet must fail the suite unless somebody wrote down why.
+      { key: 'dashboard_registrations', label: 'แดชบอร์ด — การลงทะเบียน', href: null, match: 'none' },
+      { key: 'dashboard_system',        label: 'แดชบอร์ด — ภาพรวมระบบ',   href: null, match: 'none' },
     ],
   },
   {
@@ -207,6 +238,12 @@ export function resolvePageKey(pathname) {
   let best = null;
   for (const page of FLAT_PAGES) {
     const { href, match } = page;
+    // A registry row with no href is a PERMISSION WITHOUT A ROUTE — the two
+    // dashboard scopes. Skipped explicitly: without this, `path.startsWith(
+    // `${undefined}/`)` would be doing the work, i.e. the correctness of a
+    // permission boundary would rest on the string 'undefined/' happening never
+    // to prefix an admin path. That is true today and is not a reason.
+    if (!href) continue;
     const isMatch =
       match === 'exact'
         ? path === href

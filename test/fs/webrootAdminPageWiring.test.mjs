@@ -41,14 +41,22 @@ test('the nested route resolves to the EXISTING media key, with no new page key'
    * rule changes are auditable, and the checkbox in the role editor) and the
    * NAV_GROUPS line, which rbacNavParity checks.
    *
+   * 39 → 41: round E2 split the dashboard into two SCOPES,
+   * `dashboard_registrations` and `dashboard_system`. These break the "a new key
+   * means a new sidebar line" half of the protocol below, on purpose and for the
+   * first time: they gate SECTIONS of /admin rather than pages of their own, so
+   * they carry `href: null` and are named in BOTH nav allowlists (NO_NAV_ITEM
+   * and NO_SIDEBAR_LINK) rather than gaining a menu row. The other half of the
+   * protocol is untouched — each one is a new checkbox in the role editor, which
+   * is exactly how they are meant to be granted.
+   *
    * This assertion is not about the total for its own sake: it is here so that a
    * key appearing WITHOUT someone noticing is impossible. A new key means a new
-   * checkbox and a new sidebar line, and both have to be chosen rather than
-   * arrived at. Bumped in the same commit as the key, which is the whole
-   * protocol.
+   * checkbox, and a sidebar line unless somebody wrote down why not. Bumped in
+   * the same commit as the key, which is the whole protocol.
    */
   assert.equal(
-    ALL_PAGE_KEYS.length, 39,
+    ALL_PAGE_KEYS.length, 41,
     'a page key was added or removed. This route is supposed to inherit `media` '
     + 'by href prefix; another key means a new checkbox in the role editor and a '
     + 'new NAV_GROUPS line, and rbacNavParity will say so',

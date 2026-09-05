@@ -44,7 +44,20 @@ const DETAIL    = readSource('src/app/admin/registrations/_components/Registrati
  */
 const CELLS     = readSource('src/app/admin/registrations/_components/tableParts.jsx');
 const PUB_TABLE = readSource('src/app/admin/registrations/_components/PublicTable.jsx');
-const DASH_ACT  = readSource('src/lib/actions/dashboard.js');
+/**
+ * The dashboard's donut is built in lib/dashboard/buildMetrics.js, NOT in
+ * lib/actions/dashboard.js, since round E2.
+ *
+ * The action became a thin authorised wrapper — guard, scopes, models — and the
+ * reads (and with them the donut's labels and colours) moved to an ordinary
+ * module so the read layer could take injectable models without exposing a
+ * `models` parameter on a `'use server'` endpoint. The ASSERTIONS below are
+ * unchanged: same labels derived, same colours local. Only the file that has to
+ * satisfy them moved, and repointing this constant is how that stays honest —
+ * leaving it aimed at the action would have made both dashboard tests pass
+ * vacuously against a file that no longer mentions a status at all.
+ */
+const DASH_ACT  = readSource('src/lib/dashboard/buildMetrics.js');
 const DASH_CLI  = readSource('src/app/admin/_components/DashboardClient.jsx');
 
 const MC_LIST   = readSource('src/app/admin/masterclass/registrations/_components/MasterclassRegistrationsClient.jsx');

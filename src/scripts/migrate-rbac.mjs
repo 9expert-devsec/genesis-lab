@@ -33,8 +33,23 @@ import mongoose from 'mongoose';
 const { MONGODB_URI, MONGODB_DB_NAME } = process.env;
 
 // Mirror of src/lib/rbac/pages.js `ALL_PAGE_KEYS`, in registry order.
+//
+// ── THIS MIRROR IS INCOMPLETE, AND KNOWINGLY SO ─────────────────────────────
+// It is missing `media`, `redirects` and `audit_log`, which the real registry
+// has had for some time. `assertRegistryCoverage()` below did not catch that
+// and cannot: it compares this local list against the local PAGE_SET, i.e. two
+// constants in THIS file, and never against src/lib/rbac/pages.js. The seed
+// roles it builds therefore grant three fewer pages than the registry knows
+// about. Adding them here would change what `migrate-rbac` grants, which is a
+// permissions decision and not this round's; the drift is instead pinned, by
+// name, in test/fs/rbacRegistryMirror.test.mjs so it cannot grow silently.
 const ALL_PAGE_KEYS = [
   'dashboard',
+  // The two dashboard SCOPES — see the block comment on the ภาพรวม group in
+  // src/lib/rbac/pages.js. They are seeded exactly where `dashboard` is, so a
+  // role that this script grants the dashboard to also gets both halves of it
+  // and nothing changes for anyone the day they ship.
+  'dashboard_registrations', 'dashboard_system',
   'featured_courses', 'featured_online_courses', 'nav_featured_online_courses',
   'courses', 'schedules', 'instructors', 'programs', 'career_paths', 'masterclass',
   'mc_registrations', 'tnhs_courses', 'page_configs',
@@ -74,6 +89,10 @@ if (!MONGODB_URI) {
 const PAGE_SET = {
   // ภาพรวม
   dashboard: 'ALL',
+  // Both scopes ride with `dashboard`: ALL, so no seeded role's view of the
+  // dashboard changes. A role that can open the page keeps both halves of it.
+  dashboard_registrations: 'ALL',
+  dashboard_system: 'ALL',
   // จัดการหลักสูตร
   featured_courses: 'IT',
   featured_online_courses: 'IT',

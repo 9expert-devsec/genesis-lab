@@ -44,10 +44,27 @@ import { ADMIN_PAGES } from '@/lib/rbac/pages';
  */
 const EXACT_HREFS = new Set(['/admin', '/admin/promotions']);
 
-const ITEMS = ADMIN_PAGES.flatMap((g) => g.pages).map((p) => ({
-  href: p.href,
-  exact: EXACT_HREFS.has(p.href),
-}));
+/**
+ * `.filter((p) => p.href)` — REGISTRY ROWS WITH NO ROUTE ARE NOT NAV ITEMS.
+ *
+ * Round E2 added `dashboard_registrations` and `dashboard_system`, permissions
+ * over sections of /admin that have no page of their own and carry `href: null`.
+ * Without this filter they entered ITEMS as two rows with a null href, and
+ * `activeCount` — which counts `items.filter((i) => i.href === winner)` — then
+ * matched BOTH of them whenever `activeNavHref` returned null for an unmatched
+ * path. '/admin/no-such-page' reported two highlighted rows instead of none.
+ *
+ * That was a fixture defect, not a rule defect: ITEMS is standing in for what
+ * the SIDEBAR renders, and the sidebar has never had a row without an href
+ * (test/fs/adminNavShape asserts `typeof item.href === 'string'` on every real
+ * NAV_GROUPS entry). The rule under test is untouched.
+ */
+const ITEMS = ADMIN_PAGES.flatMap((g) => g.pages)
+  .filter((p) => p.href)
+  .map((p) => ({
+    href: p.href,
+    exact: EXACT_HREFS.has(p.href),
+  }));
 
 /** How many rows the sidebar would render highlighted for `path`. */
 function activeCount(path, items = ITEMS) {

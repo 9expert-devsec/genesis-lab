@@ -1,5 +1,30 @@
 'use server';
 
+/**
+ * The dashboard's one server action — the AUTHORISED WRAPPER.
+ *
+ * ══ WHAT THIS FILE IS AND IS NOT ════════════════════════════════════════════
+ * It owns exactly three things: the guard, the scope resolution, and handing the
+ * real mongoose models to the read layer. The reads themselves, the filters and
+ * the payload shape live in lib/dashboard/buildMetrics.js — see that file's
+ * header for why the models are a parameter there and must never be one here.
+ *
+ * ── THE SCOPES COME FROM THE SESSION. THERE IS NO OTHER SOURCE. ─────────────
+ * `requireAdmin('dashboard')` returns the session it just validated, and
+ * `dashboardScopes` reads the page keys off `session.user`. Nothing about which
+ * sections run is derived from an argument: this module is `'use server'`, so
+ * every parameter it declares is a client-supplied value, and `range` is the
+ * only one — a value that can change WHICH ROWS are counted but never WHETHER
+ * they are counted. A system-only caller can post any range they like and reach
+ * no registration read, because the branch that would run one is decided by
+ * `canAccess` on their session before `range` is looked at.
+ *
+ * ── requirePage('dashboard') IS NOT WEAKENED ────────────────────────────────
+ * The scopes NARROW. A caller still needs `dashboard` to get past the guard
+ * below; holding `dashboard_registrations` without `dashboard` gets them
+ * nothing, because they never reach this function.
+ */
+
 import { dbConnect } from '@/lib/db/connect';
 import RegisterPublic  from '@/models/RegisterPublic';
 import RegisterInhouse from '@/models/RegisterInhouse';
@@ -8,182 +33,61 @@ import Promotion       from '@/models/Promotion';
 import Article         from '@/models/Article';
 import FeaturedReview  from '@/models/FeaturedReview';
 import Recruit         from '@/models/Recruit';
+/**
+ * Round E3's action queue.
+ *
+ * `MasterclassRegistration` is the FIRST masterclass figure ever to reach this
+ * page — one queue card, no section, no batch seats, no revenue. Round E1
+ * measured it as the largest queue in the system (30 pending, 28 of them older
+ * than a fortnight) against a dashboard that did not mention masterclass at all.
+ *
+ * `WebhookLog` serves the system-scope error card and is read ONLY for a caller
+ * holding `dashboard_system`.
+ */
+import MasterclassRegistration from '@/models/MasterclassRegistration';
+import WebhookLog              from '@/models/WebhookLog';
 import { requireAdmin } from '@/lib/actions/auth';
-import {
-  buildStatusLabels,
-  INHOUSE_STATUS_VALUES,
-  storedValuesForFilter,
-} from '@/lib/registrations/statuses';
+import { buildDashboardMetrics } from '@/lib/dashboard/buildMetrics';
+import { dashboardScopes, hasNoDashboardScope } from '@/lib/dashboard/scopes';
 
 function serialize(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
 
+/** The real models, in the shape buildDashboardMetrics destructures. */
+const MODELS = {
+  RegisterPublic,
+  RegisterInhouse,
+  Banner,
+  Promotion,
+  Article,
+  FeaturedReview,
+  Recruit,
+  MasterclassRegistration,
+  WebhookLog,
+};
+
 /**
- * The public status labels for the donut, DERIVED.
+ * Fetch the dashboard metrics the caller is authorised to see.
  *
- * The chart colours live below because they are this chart's business and
- * belong to no other consumer; the LABELS are the shared vocabulary and are
- * not respelled here. 'ยืนยันแล้ว' had four copies across the admin and the
- * dashboard was one of them.
- */
-const PUBLIC_STATUS_LABEL = buildStatusLabels();
-
-/**
- * Compute the [start, end] Date range from a range key.
- * @param {'today'|'week'|'month'|'all'} range
- * @returns {{ from: Date|null, to: Date }}
- */
-function dateRange(range) {
-  const now = new Date();
-  const to = new Date(now);
-  to.setHours(23, 59, 59, 999);
-
-  if (range === 'today') {
-    const from = new Date(now);
-    from.setHours(0, 0, 0, 0);
-    return { from, to };
-  }
-  if (range === 'week') {
-    const from = new Date(now);
-    from.setDate(from.getDate() - 6);
-    from.setHours(0, 0, 0, 0);
-    return { from, to };
-  }
-  if (range === 'month') {
-    const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    return { from, to };
-  }
-  // 'all' — no start constraint
-  return { from: null, to };
-}
-
-/**
- * Fetch all dashboard metrics in a single server action.
- * @param {'today'|'week'|'month'|'all'} range - date filter for registration counts
+ * @param {'today'|'week'|'month'|'all'} range — date filter for the registration
+ *   counts. Client-supplied, and deliberately inert for a caller without
+ *   `dashboard_registrations`.
  */
 export async function getDashboardMetrics(range = 'today') {
-  await requireAdmin('dashboard');
+  const session = await requireAdmin('dashboard');
+  const scopes = dashboardScopes(session?.user);
+
+  /**
+   * ── NO SCOPE, NO CONNECTION ─────────────────────────────────────────────
+   * Returned BEFORE `dbConnect()`. `buildDashboardMetrics` with two false
+   * scopes already issues no query, so this is not what makes the read count
+   * zero — but opening a database handle to answer "you may see nothing" is
+   * work with no reader, and returning first says so in the shape of the code.
+   */
+  if (hasNoDashboardScope(scopes)) {
+    return serialize({ scopes });
+  }
+
   await dbConnect();
 
-  const { from, to } = dateRange(range);
-  const dateFilter = from ? { createdAt: { $gte: from, $lte: to } } : {};
-
-  // ── Registration counts ────────────────────────────────────────
-  const [
-    publicTotal,
-    publicPending,
-    publicConfirmed,
-    publicPaid,
-    publicCancelled,
-    inhouseTotal,
-    inhousePending,
-    inhouseQuoted,
-    inhouseCancelled,
-  ] = await Promise.all([
-    RegisterPublic.countDocuments(dateFilter),
-    RegisterPublic.countDocuments({ ...dateFilter, status: 'pending' }),
-    RegisterPublic.countDocuments({ ...dateFilter, status: 'confirmed' }),
-    RegisterPublic.countDocuments({ ...dateFilter, status: 'paid' }),
-    RegisterPublic.countDocuments({ ...dateFilter, status: 'cancelled' }),
-    RegisterInhouse.countDocuments(dateFilter),
-    /**
-     * THE THREE LIVE IN-HOUSE STATUSES, matched through `storedValuesForFilter`.
-     *
-     * These were `status: 'new'`, `'contacted'` and `'closed-won'` — three
-     * values round 2 retired. Left as they were, all three cards would read 0
-     * against a non-zero total the moment the migration ran, and the two cards
-     * `new`/`closed-won` link to would filter to nothing.
-     *
-     * The widening handles the OTHER side of the same window: before --apply
-     * the documents still hold the retired values, and a bare `status:
-     * 'pending'` would find none of them. Either way the cards agree with the
-     * total. See storedValuesForFilter in lib/registrations/statuses.js.
-     */
-    ...INHOUSE_STATUS_VALUES.map((value) =>
-      RegisterInhouse.countDocuments({ ...dateFilter, status: { $in: storedValuesForFilter(value, 'inhouse') } })
-    ),
-  ]);
-
-  // ── Content counts (live/active — not date-filtered) ──────────
-  const [
-    activeBanners,
-    activePromotions,
-    activeArticles,
-    activeReviews,
-    activeRecruits,
-  ] = await Promise.all([
-    Banner.countDocuments({ active: true }),
-    Promotion.countDocuments({ is_active: true }),
-    Article.countDocuments({ active: true }),
-    FeaturedReview.countDocuments({ active: true }),
-    Recruit.countDocuments({ active: true }),
-  ]);
-
-  // ── 7-day registrations trend (Public) — always last 7 days ──
-  // Returns array of { date: 'YYYY-MM-DD', count: number } for the chart
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-  sevenDaysAgo.setHours(0, 0, 0, 0);
-
-  const trendAgg = await RegisterPublic.aggregate([
-    { $match: { createdAt: { $gte: sevenDaysAgo } } },
-    {
-      $group: {
-        _id: {
-          $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: '+07:00' },
-        },
-        count: { $sum: 1 },
-      },
-    },
-    { $sort: { _id: 1 } },
-  ]);
-
-  // Fill in missing days with 0
-  const trendMap = Object.fromEntries(trendAgg.map((r) => [r._id, r.count]));
-  const trend = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(sevenDaysAgo);
-    d.setDate(d.getDate() + i);
-    const key = d.toISOString().slice(0, 10);
-    return { date: key, count: trendMap[key] ?? 0 };
-  });
-
-  // ── Status distribution for pie/donut (Public, range-filtered) ─
-  const statusDist = [
-    { status: 'pending',   label: PUBLIC_STATUS_LABEL.pending,   count: publicPending,   color: '#f59e0b' },
-    { status: 'confirmed', label: PUBLIC_STATUS_LABEL.confirmed, count: publicConfirmed, color: '#3b82f6' },
-    { status: 'paid',      label: PUBLIC_STATUS_LABEL.paid,      count: publicPaid,      color: '#10b981' },
-    { status: 'cancelled', label: PUBLIC_STATUS_LABEL.cancelled, count: publicCancelled, color: '#94a3b8' },
-  ];
-
-  return serialize({
-    range,
-    public: {
-      total: publicTotal,
-      pending: publicPending,
-      confirmed: publicConfirmed,
-      paid: publicPaid,
-      cancelled: publicCancelled,
-    },
-    /**
-     * KEYED BY THE STORED VALUE, like the public block above and like the
-     * summary strip. The old keys were `new` / `contacted` / `closedWon` — one
-     * of them camelCase against a hyphenated filter value, which is exactly the
-     * bridge-spelling that once made a card render 0 forever on the list
-     * screen. There is one spelling now, and it is the one in the URL.
-     */
-    inhouse: {
-      total: inhouseTotal,
-      pending: inhousePending,
-      quoted: inhouseQuoted,
-      cancelled: inhouseCancelled,
-    },
-    content: {
-      banners: activeBanners,
-      promotions: activePromotions,
-      articles: activeArticles,
-      reviews: activeReviews,
-      recruits: activeRecruits,
-    },
-    trend,         // [{date, count}] last 7 days
-    statusDist,    // [{status, label, count, color}]
-  });
+  return serialize(await buildDashboardMetrics({ scopes, range, models: MODELS }));
 }

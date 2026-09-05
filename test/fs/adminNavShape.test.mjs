@@ -73,6 +73,21 @@ export const NO_NAV_ITEM = Object.freeze([
   // profile edits are auditable) and the /admin/roles checkbox all come from
   // there; deleting it would revoke the page from every non-superadmin role.
   'profile',
+
+  // ── THE TWO DASHBOARD SCOPES — UNLINKED FOR A DIFFERENT REASON ────────────
+  // `profile` has a route and no nav row. These have NO ROUTE AT ALL: they are
+  // permissions over SECTIONS of /admin, which `dashboard` already links. Their
+  // registry rows carry `href: null`, so there is nothing a nav item could point
+  // at, and giving them one would offer the menu a 404.
+  //
+  // They are named here anyway, rather than left to fall out of the href-less
+  // case, because the assertion below is a SET EQUALITY: an unlisted registry
+  // key with no nav row fails it whatever the reason. Writing the reason down is
+  // the price of the exception, and that is the property this allowlist exists
+  // to keep — see the header note about a floor-style check waving `profile`
+  // through.
+  'dashboard_registrations',
+  'dashboard_system',
 ]);
 
 /** The NAV_GROUPS array literal, evaluated. Pure data, no identifiers. */
