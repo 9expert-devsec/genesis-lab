@@ -1063,7 +1063,7 @@ test("A: the accent hint is ONE string — it does not vary by type", () => {
   assert.deepEqual([...hints], [ROUND22_ACCENT_HINT]);
 });
 
-test("B: ความกว้าง is still offered on every one of the 27 types", () => {
+test("B: ความกว้าง is still offered on every one of the 28 types", () => {
   /**
    * The alternative was to stop offering it on the two card types — an ABSENT
    * cell instead of an IGNORED one. Rejected (see FIXED_CARD_WIDTH_TYPES), so
@@ -1074,7 +1074,7 @@ test("B: ความกว้าง is still offered on every one of the 27 typ
     fieldsIn(styleTab(t)).includes("ความกว้าง"),
   ).sort();
   assert.deepEqual(offering, [...ALL_SECTION_TYPES].sort());
-  assert.equal(offering.length, 27);
+  assert.equal(offering.length, 28);
 });
 
 test("B: exactly the two self-clamping types say their card width is fixed", () => {
@@ -1265,6 +1265,12 @@ test("C: the panel comment corrects the two fields this round made true, and sto
       "icon_card",
       "instructor_card",
       "price_card",
+      // Added with the type itself; the argument for it lives beside the same
+      // list in test/pure/sectionControlAudit and in
+      // docs/section-control-audit.md. This file re-derives the scan rather
+      // than importing across tiers, so BOTH copies move together or the two
+      // sweeps disagree about the same directory.
+      "promotion_bundle",
       "rich_text",
       "stat_card",
       "tabs",

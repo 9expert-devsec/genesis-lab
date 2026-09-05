@@ -422,6 +422,42 @@ mechanism — and a scan that reads prose would also have counted `heading.jsx`,
 whose docstring says the accent is _not_ applied, silently shrinking the finding
 by one. The tripwire in §9 counts the two routes separately for this reason.
 
+#### Addendum — `promotion_bundle`, and why it paints
+
+_Written because the tripwire in §9 demands it._ `test/pure/sectionControlAudit`
+asserts the direct-consumer set as an exact list, and its failure message says an
+ADDITION "asserts a type has an accent surface the audit says it does not: make
+that argument in `docs/section-control-audit.md` before extending this list."
+This is that argument, for the twelfth member.
+
+The set is no longer a gap closing — round 24 closed it — so it is now "closed;
+nothing joins or leaves without a deliberate decision". `promotion_bundle` joins,
+and the decision is **not a new claim about what an accent is for**. It is the
+existing claim applied to a type that did not exist when the eleven were counted:
+
+* **`--pb-accent-text` on ราคาสุทธิ.** Round 21 measured the accent as reaching
+  "icons, accent rules, buttons, links and **key figures**". A bundle's net price
+  is the key figure of the section — it is the number the whole panel exists to
+  state. `price_card`, the type this one is shaped like, already paints its
+  `price` with the same variable for the same reason, and the two would look
+  unrelated sitting on one page if this did not.
+* **`accentButtonClass` on คัดลอกรหัสส่วนลด.** The ordinary indirect route, via
+  `SECTION_STYLE_CAPS.promotion_bundle` declaring `buttonStyle`. Same as `cta`
+  and `price_card`; nothing new.
+
+So the union grows by exactly one (11 → 12), because this type is in **both**
+routes — the same shape as `price_card`. The complement, the types the audit
+records as having no accent surface at all, is **unchanged at 16**:
+`ALL_SECTION_TYPES` went 27 → 28 in the same commit, and the new member landed in
+the painting set rather than the complement.
+
+Two negative rules the existing consumers hold to, and this type holds to as
+well. The struck-through ราคาปกติ is **not** accented — it is secondary text, and
+body copy is never accented. The closed-state message is **not** accented either:
+it is a state, and semantic colour is never overridden by a chosen accent, which
+is the same rule that keeps `resolveScheduleBadge`'s open / nearly-full colours
+off the author's accent in `course_schedule`.
+
 **3. `ความกว้าง` is partially inert on `container`.** _1 cell, PARTIAL._
 Measured: 640, 768, 768, 768. `small` works; `medium`, `large` and `full` are
 indistinguishable, because `ContainerSection`'s own `max-w-3xl` wins. Same

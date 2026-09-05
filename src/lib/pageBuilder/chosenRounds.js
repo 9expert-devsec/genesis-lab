@@ -154,3 +154,46 @@ export function chooseRounds(rows, content, todayKey) {
   }
   return out;
 }
+
+/**
+ * ── THE SAME QUESTION, FOR ONE ROUND: a `promotion_bundle` ITEM ────────────
+ *
+ * A bundle item is one course plus ONE round of it. That is `chooseRounds` in
+ * manual mode over a single-element selection, so this DELEGATES rather than
+ * re-deciding: the three states, the snapshot fallback, the "never silently
+ * dropped" rule and the elapsed/missing distinction are all decided once, in
+ * the function above, and this adapts the call.
+ *
+ * Written as an adapter rather than as a second walk because the failure it
+ * avoids is specific. A hand-rolled `rows.find(r => r._id === item.roundId)`
+ * here would be four lines and would quietly lose two things: the snapshot
+ * fallback (so a rolled-off round would vanish from the card, shortening a
+ * bundle whose price was computed with it) and the elapsed-vs-missing split
+ * (so an ordinary end-of-life would read as an upstream fault). Those are
+ * exactly the two round 64 argued through, and there is no version of this
+ * type that wants a different answer.
+ *
+ * ── AN ITEM WITH NO ROUND IS `null`, NOT A ROW ────────────────────────────
+ * Distinct from the three states, and deliberately so: `missing` means "the
+ * author chose a round and the site cannot find it", which is a claim about
+ * upstream. An item whose `roundId` is empty is one the author has not
+ * finished, which is a claim about the document. The renderer draws the course
+ * without a date line for the second and marks the first.
+ *
+ * @param {Array<object>} rows the course's fetched rounds, from the resolver
+ * @param {object} item one entry of `content.items`
+ * @param {string} todayKey today in Asia/Bangkok, from `siteTodayKey()`
+ * @returns {{id: string, state: 'live'|'elapsed'|'missing', live: object|null,
+ *   dates: Array<string|Date>, type: string}|null}
+ */
+export function chooseItemRound(rows, item, todayKey) {
+  const id = typeof item?.roundId === 'string' ? item.roundId.trim() : '';
+  if (!id) return null;
+  const snapshot = item?.roundSnapshot;
+  const [chosen] = chooseRounds(
+    rows,
+    { source: 'manual', roundIds: [id], roundSnapshots: snapshot ? [snapshot] : [] },
+    todayKey,
+  );
+  return chosen ?? null;
+}

@@ -273,6 +273,20 @@ const CONTENT_FOR = {
     buttonLabel: "ซื้อ",
     buttonHref: "/x",
   },
+  /**
+   * Enough to reach BOTH accent routes on one render: `netPrice` paints
+   * `--pb-accent-text` directly, and `discountCode` is what makes the
+   * คัดลอกรหัสส่วนลด button render at all — without it the button is absent and
+   * the `accentButtonClass` half of this type would be untested here.
+   * `registrationOpen` is left absent on purpose: absent means OPEN, and the
+   * fixture should exercise the branch every stored bundle will take.
+   */
+  promotion_bundle: {
+    name: "แพ็กเกจ Claude AI",
+    netPrice: 32640,
+    listPrice: 40800,
+    discountCode: "EXP1",
+  },
   timeline: { items: [{ title: "ขั้นที่หนึ่ง", body: "รายละเอียด" }] },
   tabs: { items: [{ title: "แท็บ", body: "เนื้อหา" }] },
   accordion: { items: [{ title: "หัวข้อ", body: "เนื้อหา" }] },
@@ -294,6 +308,11 @@ const EXPECTED_ACCENT_TYPES = [
   "icon_card",
   "instructor_card",
   "price_card",
+  // The twelfth. It is in BOTH routes this scanner unions — `--pb-accent-text`
+  // on ราคาสุทธิ and `accentButtonClass` on คัดลอกรหัสส่วนลด — so it adds one
+  // member, not two. The argument for it is in docs/section-control-audit.md
+  // (finding 2's addendum), which test/pure/sectionControlAudit demands.
+  "promotion_bundle",
   "rich_text",
   "stat_card",
   "tabs",
@@ -301,7 +320,7 @@ const EXPECTED_ACCENT_TYPES = [
 ];
 
 /**
- * Which of the eleven actually PAINT from the fixture above — measured, not
+ * Which of the twelve actually PAINT from the fixture above — measured, not
  * predicted. Some need state a static render never reaches (the accordion's
  * open item) or upstream data the fixture has none of, and those are the render
  * tier's known limits rather than gaps in the feature. Named so the sweep's
@@ -312,6 +331,9 @@ const PAINTS_FROM_FIXTURE = [
   "cta",
   "icon_card",
   "price_card",
+  // Reachable statically, unlike the four above it in the list: a bundle needs
+  // no useState and no upstream data prop to draw its price and its button.
+  "promotion_bundle",
   "rich_text",
   "stat_card",
   "timeline",
@@ -331,7 +353,7 @@ const PAINTS_FROM_FIXTURE = [
  * is a resolved colour rather than a class string.
  */
 
-test("the accent-consuming set is the eleven the audit names, unchanged", () => {
+test("the accent-consuming set is the twelve the audit names, unchanged", () => {
   assert.deepEqual(
     accentPaintingTypes(),
     EXPECTED_ACCENT_TYPES,
@@ -339,7 +361,7 @@ test("the accent-consuming set is the eleven the audit names, unchanged", () => 
       "variables carry and nothing about which components read them — so this moving means " +
       "something else did. See docs/section-control-audit.md finding 2.",
   );
-  assert.equal(EXPECTED_ACCENT_TYPES.length, 11);
+  assert.equal(EXPECTED_ACCENT_TYPES.length, 12);
 });
 
 test("CONTROL: the consumer scan names a type when one is added", () => {
@@ -347,12 +369,12 @@ test("CONTROL: the consumer scan names a type when one is added", () => {
   const withExtra = [...accentPaintingTypes(), "heading"].sort();
   assert.throws(
     () => assert.deepEqual(withExtra, EXPECTED_ACCENT_TYPES),
-    "the comparison cannot see a twelfth consumer",
+    "the comparison cannot see a thirteenth consumer",
   );
   assert.equal(withExtra.includes("heading"), true);
 });
 
-test("a CUSTOM accent reaches every one of those eleven — and only by the same route", () => {
+test("a CUSTOM accent reaches every one of those twelve — and only by the same route", () => {
   /**
    * PER SURFACE, and this is the whole of D. The claim is not "a custom accent
    * works"; it is "a custom accent reaches EXACTLY the surfaces a preset

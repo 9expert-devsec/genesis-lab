@@ -86,8 +86,10 @@ test("the measurement is not vacuous — both lists are real and non-empty", () 
     RENDERABLE_SECTION_TYPES.length > 0,
     "RENDERABLE_SECTION_TYPES is empty",
   );
-  assert.equal(ALL_SECTION_TYPES.length, 27);
-  assert.equal(RENDERABLE_SECTION_TYPES.length, 27);
+  // 28 since `promotion_bundle` joined DYNAMIC_TYPES. Both numbers move
+  // together, always: the pair is what says every declared type is drawable.
+  assert.equal(ALL_SECTION_TYPES.length, 28);
+  assert.equal(RENDERABLE_SECTION_TYPES.length, 28);
 });
 
 test("CONTROL: the same function reddens on a type list that HAS an undrawable type", () => {

@@ -535,6 +535,21 @@ export const SECTION_STYLE_CAPS = {
   price_card: ["cardStyle", "buttonStyle"],
   stat_card: ["cardStyle"],
   icon_card: ["cardStyle"],
+  /**
+   * `promotion_bundle` takes BOTH, and it is price_card's pair rather than a
+   * new combination: the bundle draws a card SURFACE (a bordered/filled/promo
+   * panel holding the offer) and a BUTTON on it (คัดลอกรหัสส่วนลด). Those are
+   * the two things this declaration is about, and the section reads each one
+   * through the same public helper the other four use.
+   *
+   * The consequence is deliberate rather than incidental: declaring it here is
+   * what makes the panel OFFER the two controls, because SectionTypeFields
+   * derives its control list from this map. Reading a prop and offering a
+   * control for it are one act (2C.3) — so a bundle whose author picks
+   * `cardStyle: 'promo'` gets the promotion card treatment round 59 built for
+   * exactly this kind of panel.
+   */
+  promotion_bundle: ["cardStyle", "buttonStyle"],
 };
 
 /** Does `type` declare support for `prop`? The gate both helpers share. */

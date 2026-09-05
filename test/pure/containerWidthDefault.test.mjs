@@ -36,7 +36,8 @@ test('container starts at small; every other type starts at the base large', () 
   assert.equal(widthOf('container'), 'small');
 
   const others = ALL_SECTION_TYPES.filter((t) => t !== 'container');
-  assert.equal(others.length, 26);
+  // 27 since promotion_bundle joined the union (28 types, minus container).
+  assert.equal(others.length, 27);
   const distinct = [...new Set(others.map(widthOf))];
   assert.deepEqual(distinct, ['large'],
     `types other than container start at ${distinct.join(', ')} — the per-type default was meant `

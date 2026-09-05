@@ -204,10 +204,32 @@ test('E — still exactly one control for showPrice', () => {
   assert.equal((src.match(/content\?\.showPrice/g) ?? []).length, 1);
 });
 
-test('E — the shared primitive has exactly one caller, so its blast radius is this control', () => {
+test('E — the shared primitive has exactly TWO callers, and both want round 53’s presentation', () => {
   /**
-   * This round changed the SHARED Toggle rather than one usage, which is only
-   * safe because nothing else imports it. Counted, not assumed.
+   * Round 53 changed the SHARED Toggle rather than one usage, and the safety
+   * argument was that nothing else imported it. Counted, not assumed — which is
+   * why this went red the moment a second caller appeared.
+   *
+   * ── THE SECOND CALLER, AND WHY IT IS NOT A WIDENING TO WORRY ABOUT ───────
+   * `promotion_bundle`'s เปิดรับสมัครแพ็กเกจนี้. It is the same SHAPE of thing
+   * the first one is — one boolean, two named states, living in a content tab —
+   * which is what the primitive was built for; a hand-rolled switch beside it
+   * would be the fourth in this codebase and the first with no reason.
+   *
+   * Round 53's presentation decisions were re-checked against it rather than
+   * assumed to carry:
+   *   · the knob's on/off COLOUR difference — wanted; the bundle's two states
+   *     are as easy to misread as the price toggle's were.
+   *   · the STATE WORD beside it — supplied (เปิดรับสมัคร / ปิดรับสมัคร), and
+   *     these two do NOT have Thai's negation-by-prefix problem that this file
+   *     exists for: ปิด is not a prefix of เปิด, so a substring matcher would
+   *     work here. The word is given anyway, because the author reads the
+   *     control, not the matcher.
+   *   · the `role="switch"` + `data-state` pair — unchanged, and now read by
+   *     two sets of tests instead of one.
+   *
+   * So the blast radius is genuinely two controls now, and the count says two.
+   * A THIRD caller should re-run this same check rather than bump the number.
    *
    * NOT the only toggle in the codebase, which round 52 claimed in error: three
    * hand-rolled ones predate it, in the masterclass forms and the FAQ manager.
@@ -216,7 +238,7 @@ test('E — the shared primitive has exactly one caller, so its blast radius is 
    * admin surfaces this round has no business restyling.
    */
   const editor = readSource('src/components/pageBuilder/editor/SectionContentEditor.jsx').code;
-  assert.equal((editor.match(/<Toggle\b/g) ?? []).length, 1, 'a second caller of the shared Toggle appeared');
+  assert.equal((editor.match(/<Toggle\b/g) ?? []).length, 2, 'the shared Toggle’s caller count moved');
 
   const fields = readSource('src/components/pageBuilder/editor/fields.jsx').code;
   assert.equal((fields.match(/role="switch"/g) ?? []).length, 1, 'a second switch primitive appeared');

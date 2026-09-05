@@ -7,6 +7,13 @@ import {
   GraduationCap, UserRound, ListFilter, List, Package, CalendarClock,
   Square,
 } from 'lucide-react';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. `promotion_bundle`'s glyph: a ticket with a percent sign,
+// which is the discount this section is FOR. Deliberately not another box —
+// `Package` is `bundle_courses`, and the picker now offers both, so the two
+// must be tellable apart at a glance as well as by their labels.
+// Verified against lucide-react@0.454.0, like the names above it.
+import { TicketPercent } from 'lucide-react';
 
 /**
  * Leading icon per section type — a lucide-react component each.
@@ -53,6 +60,8 @@ export const SECTION_ICONS = {
   course_list:     List,
   bundle_courses:  Package,
   course_schedule: CalendarClock,
+
+  promotion_bundle: TicketPercent,
 };
 
 /**

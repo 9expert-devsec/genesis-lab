@@ -58,7 +58,7 @@ test('every section type in the union carries name, defaulted to the empty strin
   const nonEmpty = ALL_SECTION_TYPES.filter((t) => newSection(t).name !== '');
   assert.deepEqual(nonEmpty, [], 'a fresh section must start unnamed');
 
-  assert.equal(ALL_SECTION_TYPES.length, 27, 'the union size changed — recount before trusting the sweep above');
+  assert.equal(ALL_SECTION_TYPES.length, 28, 'the union size changed — recount before trusting the sweep above');
 });
 
 test('CONTROL: the sweep above is sensitive — a key that is NOT on the envelope is missing everywhere', () => {
