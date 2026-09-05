@@ -225,6 +225,133 @@ test('only PENDING public rows reach the buckets', async () => {
   assert.equal(data.ageTotal, 2, 'a non-pending or in-house row was counted as pending work');
 });
 
+/**
+ * ══ THE BUCKET EDGES, EVALUATED — THE ONE THING NOTHING ELSE HERE SEES ══════
+ *
+ * Every other test in this file hands `buildDashboardMetrics` rows that are
+ * ALREADY BUCKETED (`{_id: {bucket: '15+'}, n: 27}`), because that is what a
+ * `$group` returns. So they exercise the fold, the drawing and the scale — and
+ * NOT the expression that decides which bucket a record belongs to. That
+ * expression runs inside Mongo, no double evaluates it, and a `$gte` slipped to
+ * `$gt`, or an edge computed at the wrong multiple of a day, was invisible to
+ * all ten thousand tests in this suite.
+ *
+ * This closes that. It takes the pipeline the REAL code builds, pulls out the
+ * `$switch`, and classifies documents of known age with it.
+ *
+ * ── IT WAS OPENED BY A REPORT THAT TURNED OUT NOT TO BE A BUG ──────────────
+ * The histogram was reported as off by one: production shows 0–3 = 0 and
+ * 4–7 = 2, where round E1 measured 2 / 0 / 0 / 27. The edges are correct. The
+ * DATA AGED — E1 measured those two registrations when they were fresh, the
+ * newest is 2026-08-29T15:42:24Z, and the chart is relative to `now`, so at
+ * 2026-09-05 they are 6.51 days old and 6.51 belongs in 4–7. The last assertion
+ * below pins exactly that case so the next person does not re-open it.
+ *
+ * ── THE AGES ARE ABSOLUTE LITERALS, AND THAT IS THE POINT ─────────────────
+ * `AGE_BUCKETS` is NOT read here. Every age is a written-out number of days and
+ * every expected id is a written-out string. A fixture built from the constant
+ * — `now - AGE_BUCKETS[0].upTo * DAY_MS` — asserts that the code agrees with a
+ * second copy of its own arithmetic, which is satisfied by any edge at all,
+ * including a wrong one. Round E3 shipped that shape twice before it was
+ * caught. The values here are chosen to straddle each edge from both sides.
+ *
+ * ── THE EVALUATOR REFUSES WHAT IT DOES NOT UNDERSTAND ─────────────────────
+ * It handles exactly `{$gte: ['$createdAt', <Date>]}` and THROWS on anything
+ * else. That is deliberate: if someone changes the operator or the shape, this
+ * test must go red and be re-read, not silently start measuring something else.
+ * A permissive evaluator here would be a second implementation of the rule and
+ * would drift away from the one under test.
+ */
+test('each bucket edge classifies the ages either side of it, in days', async () => {
+  // Capture the FACETED pipeline the real code builds — not the activity read.
+  let captured = null;
+  const models = Object.fromEntries(MODEL_NAMES.map((n) => [n, {
+    collection: { name: COLLECTION_OF[n] },
+    countDocuments: () => Promise.resolve(0),
+    aggregate: (pipeline) => {
+      if (Array.isArray(pipeline) && pipeline.some((st) => st && '$facet' in st)) {
+        captured = pipeline;
+        return Promise.resolve([facetOf({ bounds: PRODUCTION_BOUNDS })]);
+      }
+      return Promise.resolve([]);
+    },
+  }]));
+  await buildDashboardMetrics({ scopes: REG, range: 'all', models, now: NOW });
+
+  assert.ok(captured, 'no faceted pipeline captured — every assertion below is vacuous');
+  const ages = captured.find((s) => s.$facet).$facet.ages;
+  assert.ok(ages, 'the facet has no ages branch');
+  const sw = ages.at(-1).$group._id.bucket.$switch;
+  assert.ok(sw, 'the ages branch does not classify with a $switch');
+
+  // $switch is ORDER-SENSITIVE: the first matching branch wins, so three
+  // branches in this order plus a default is part of the rule, not decoration.
+  assert.equal(sw.branches.length, 3, 'expected three edges and an open-ended default');
+  assert.deepEqual(sw.branches.map((b) => b.then), ['0-3', '4-7', '8-14']);
+  assert.equal(sw.default, '15+');
+
+  /** Run the captured expression over a document created `days` ago. */
+  const bucketAt = (days) => {
+    const createdAt = new Date(NOW.getTime() - days * 24 * 60 * 60 * 1000);
+    for (const branch of sw.branches) {
+      const ops = Object.keys(branch.case);
+      assert.deepEqual(ops, ['$gte'], `this test only evaluates $gte; the pipeline now uses ${ops.join(', ')} — re-read it`);
+      const [field, edge] = branch.case.$gte;
+      assert.equal(field, '$createdAt', `the switch classifies on ${field}, not the creation date`);
+      assert.ok(edge instanceof Date, 'an edge is not a Date — the clock is not being subtracted');
+      if (createdAt >= edge) return branch.then;
+    }
+    return sw.default;
+  };
+
+  // Literal ages in days -> the bucket each must land in. Both sides of every
+  // edge, and the exact edge itself, which is where a $gte/$gt slip shows.
+  const CASES = [
+    [0,       '0-3'],   // created this instant
+    [1,       '0-3'],
+    [2,       '0-3'],   // the two records E1 measured, on the day it measured them
+    [2.9,     '0-3'],
+    [3,       '0-3'],   // the edge itself is INSIDE the first bucket
+    [3.0001,  '4-7'],   // …and a hair past it is not
+    [3.9,     '4-7'],
+    [4,       '4-7'],
+    [6.51,    '4-7'],   // production's newest record, today
+    [7,       '4-7'],
+    [7.0001,  '8-14'],
+    [7.9,     '8-14'],
+    [8,       '8-14'],
+    [14,      '8-14'],
+    [14.0001, '15+'],
+    [14.1,    '15+'],
+    [30,      '15+'],
+    [135,     '15+'],   // the oldest of the 27, roughly
+  ];
+  for (const [days, want] of CASES) {
+    assert.equal(bucketAt(days), want, `a registration ${days} days old landed in ${bucketAt(days)}, not ${want}`);
+  }
+
+  // Exhaustive and non-overlapping: every case above resolved, and each bucket
+  // was actually reached — otherwise the table could pass while a branch was
+  // dead.
+  assert.deepEqual(
+    [...new Set(CASES.map(([d]) => bucketAt(d)))].sort(),
+    ['0-3', '15+', '4-7', '8-14'],
+    'a bucket is unreachable — some age range can never land in it',
+  );
+
+  /**
+   * THE REPORTED CASE, PINNED. The newest production registration is
+   * 2026-08-29T15:42:24Z (recorded in test/pure/dashboardFacet). Against
+   * NOW = 2026-09-05T04:00Z that is 6.51 days, which is 4–7 วัน and NOT 0–3.
+   * The histogram showing 0–3 = 0 and 4–7 = 2 is those records having aged out
+   * of the first bucket since E1 measured them, not an edge in the wrong place.
+   */
+  const NEWEST = new Date('2026-08-29T15:42:24Z');
+  const ageOfNewest = (NOW.getTime() - NEWEST.getTime()) / (24 * 60 * 60 * 1000);
+  assert.ok(Math.abs(ageOfNewest - 6.51) < 0.01, `the newest record is ${ageOfNewest} days old, not 6.51`);
+  assert.equal(bucketAt(ageOfNewest), '4-7', 'a 6.5-day-old registration must not be drawn as 0–3 วัน');
+});
+
 // ── 2. THE PROPORTIONAL BAR ─────────────────────────────────────────────────
 
 /** Production's split, written out: 29 pending, 8 paid, 3 quoted, 1 cancelled = 41. */
