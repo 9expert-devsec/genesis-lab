@@ -196,37 +196,83 @@ test('scopes: a missing session FAILS CLOSED — no section, not every section',
 
 // ── 3. THE READ COUNTS ──────────────────────────────────────────────────────
 
-test('reads: both scopes — 11 reads, 10 counts and 1 aggregate', async () => {
+test('reads: both scopes — 12 reads, 10 counts and 2 aggregates', async () => {
   /**
-   * ── E2 MEASURED 15. E3 IS 11, AND DRAWS NINE MORE FIGURES ───────────────
+   * ── E2 MEASURED 15. E3 WAS 11. E5 IS 12, AND DRAWS SIX MORE SECTIONS ────
    *
    * E2's fifteen were nine countDocuments for the registration cards, five for
    * the ภาพรวมระบบ strip, and one aggregate for the trend.
    *
-   * E3 folds those nine counts AND the trend into a single faceted aggregation
+   * E3 folded those nine counts AND the trend into a single faceted aggregation
    * that additionally returns the previous period, the in-house series and the
-   * corpus bounds — ten round trips become one. It then spends four counts on
+   * corpus bounds — ten round trips become one. It then spent four counts on
    * the registration action queue and one on the webhook queue.
    *
-   *   1  facet          registration cards, donut, trend, previous, bounds
+   * ── WHAT ROUND E5 ADDED, AND WHAT IT DID NOT ──────────────────────────────
+   * E5 draws four new things: the age histogram, the proportional bar, the
+   * per-card sparkline colours and รายการล่าสุด. THREE of them cost nothing.
+   * The histogram is one more BRANCH of the facet that was already running — the
+   * union is already materialised, so it walks the same rows again inside the
+   * same round trip. The bar and the colours are the same `statusDist` E3 built.
+   *
+   * รายการล่าสุด is the exception, and it is exactly ONE read. It cannot come
+   * off the facet: that pipeline projects every document down to
+   * `{createdAt, status, source}` before the union, deliberately, and this table
+   * needs the applicant name and the course name — two of the fields that
+   * projection exists to discard. Widening it would inflate the union over the
+   * whole corpus, for every branch, to label six rows.
+   *
+   *   1  facet          registration cards, status split, ages, trend, previous, bounds
+   *   1  aggregate      รายการล่าสุด — sorted, limited to 6, projected  ← E5
    *   4  counts         queue (a) (b) (c) (d)
    *   5  counts         the ภาพรวมระบบ strip, unchanged
    *   1  count          queue (e)
    *  ──
-   *  11
+   *  12
    */
   const { reads } = await run(BOTH);
-  assert.equal(reads.length, 11);
+  assert.equal(reads.length, 12);
   assert.equal(reads.filter((r) => r.op === 'countDocuments').length, 10, '4 queue + 5 content + 1 webhook');
-  assert.equal(reads.filter((r) => r.op === 'aggregate').length, 1, 'one facet for the whole registration half');
+  assert.equal(
+    reads.filter((r) => r.op === 'aggregate').length, 2,
+    'one facet for the registration half, one limited read for รายการล่าสุด',
+  );
 });
 
-test('reads: registration-only — 5 reads, and NOT ONE touches a content model', async () => {
+test('the E5 read is ONE read, limited and projected — not a second facet', async () => {
+  /**
+   * The count above says "two aggregates". This says the second one is small.
+   * A `$limit`-less or `$project`-less second pass over the same collection
+   * would satisfy the count and would be the cost this round promised not to
+   * add — and `$facet` appearing twice would mean someone answered the table by
+   * cloning the pipeline rather than by writing a narrow read.
+   */
   const { reads } = await run(REG);
-  assert.equal(reads.length, 5, 'one facet + the four queue counts');
-  assert.equal(reads.filter((r) => r.op === 'aggregate').length, 1);
+  const aggregates = reads.filter((r) => r.op === 'aggregate');
+  assert.equal(aggregates.length, 2);
+  const facets = aggregates.filter((r) => r.pipeline.some((st) => st && '$facet' in st));
+  assert.equal(facets.length, 1, 'the registration half runs more than one faceted pipeline');
+  const activity = aggregates.find((r) => !r.pipeline.some((st) => st && '$facet' in st));
+  assert.equal(activity.model, 'RegisterPublic', 'รายการล่าสุด reads the wrong collection');
+  const limit = activity.pipeline.find((st) => st && '$limit' in st);
+  assert.ok(limit, 'the activity read is unbounded — it would pull the whole collection');
+  assert.equal(limit.$limit, 6, 'the activity read does not fetch the six rows it draws');
+  assert.ok(
+    activity.pipeline.some((st) => st && '$sort' in st),
+    'the activity read does not sort — "newest first" would be collection order',
+  );
+  assert.ok(
+    activity.pipeline.some((st) => st && '$project' in st),
+    'the activity read is unprojected — invoice and payment fields would reach the page payload',
+  );
+});
+
+test('reads: registration-only — 6 reads, and NOT ONE touches a content model', async () => {
+  const { reads } = await run(REG);
+  assert.equal(reads.length, 6, 'one facet + รายการล่าสุด + the four queue counts');
+  assert.equal(reads.filter((r) => r.op === 'aggregate').length, 2);
   assert.equal(
-    reads.find((r) => r.op === 'aggregate').model, 'RegisterPublic',
+    reads.filter((r) => r.op === 'aggregate').every((r) => r.model === 'RegisterPublic'), true,
     'in-house arrives through $unionWith, not a second read',
   );
   const contentReads = reads.filter((r) => !REGISTRATION_MODELS.has(r.model));
@@ -456,9 +502,20 @@ test('range: the pipeline unions in-house rather than reading it separately', ()
   // The claim E3.3 makes about cost: the in-house series is one `$unionWith`,
   // not a second query per series. Asserted on the pipeline, because a second
   // read would show up in the read count and a second SERIES would not.
+  //
+  // ── IT WAS `aggregates.length === 1` UNTIL ROUND E5 ──────────────────────
+  // E5.3 added รายการล่าสุด, which is a second aggregate on the same model and
+  // made a bare count of aggregations the wrong instrument — it would have gone
+  // red on a change that costs one small limited read and adds no series at all.
+  // The CLAIM is unchanged and is about the FACET: exactly one faceted pipeline
+  // runs, and in-house reaches it through $unionWith. The read count itself is
+  // asserted where it belongs, in the three `reads:` tests above, which is where
+  // a genuine second series would be caught.
   return run(REG, 'week').then(({ reads }) => {
-    const aggregates = reads.filter((r) => r.op === 'aggregate');
-    assert.equal(aggregates.length, 1, 'more than one aggregation ran');
+    const aggregates = reads
+      .filter((r) => r.op === 'aggregate')
+      .filter((r) => r.pipeline.some((st) => st && '$facet' in st));
+    assert.equal(aggregates.length, 1, 'more than one faceted aggregation ran');
     const union = aggregates[0].pipeline.find((s) => s.$unionWith);
     assert.ok(union, 'no $unionWith in the pipeline — where does in-house come from?');
     assert.equal(

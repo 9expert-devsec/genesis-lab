@@ -13,6 +13,14 @@ import { buildStatusLabels, INHOUSE_STATUSES } from '@/lib/registrations/statuse
  */
 import { QUEUE_CARDS } from '@/lib/dashboard/actionQueue';
 import { DEFAULT_RANGE } from '@/lib/dashboard/ranges';
+/**
+ * The dashboard's status colours — the hexes the charts fill with and the chip
+ * classes the pills wear. ONE module since round E5, because four surfaces draw
+ * them now: the proportional bar, the age histogram, the sparklines and the
+ * รายการล่าสุด pills. See lib/dashboard/statusColors.js for why the palette is
+ * there and the vocabulary is still in lib/registrations/statuses.js.
+ */
+import { SERIES_COLOR, statusBadge, statusColor } from '@/lib/dashboard/statusColors';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -58,6 +66,41 @@ const THAI_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','�
  */
 const BUCKET_WORD = { hour: 'ชั่วโมง', day: 'วัน', month: 'เดือน' };
 
+/**
+ * ══ WHICH WAY IS GOOD, PER CARD ════════════════════════════════════════════
+ *
+ * The badge used to be green for any rise and red for any fall, on every card.
+ * That is one rule applied to eight cards that do not agree about what a rise
+ * MEANS: `ยกเลิก +40%` rendered in the same green as `ชำระแล้ว +40%`, which is
+ * not a formatting slip — it tells the reader that more cancellations is good
+ * news.
+ *
+ * So direction is a property of the CARD, and this is where each one declares
+ * it. Three values, and the third is the one that was decided rather than
+ * derived:
+ *
+ *   'up-good'   more is better — ชำระแล้ว, ส่งใบเสนอราคาแล้ว, and both ยอดรวม.
+ *   'up-bad'    more is worse  — ยกเลิก, and only ยกเลิก.
+ *   'neutral'   more is neither, and the badge stays grey in both directions.
+ *
+ * ── รอดำเนินการ IS NEUTRAL, DELIBERATELY ──────────────────────────────────
+ * The obvious reading is that a growing backlog is bad. It is not: a rise in
+ * รอดำเนินการ is mostly a rise in people signing up, which is the same event
+ * that makes ยอดรวม go up, and colouring it red would report a good week as a
+ * problem. What is actually bad about pending work is its AGE, and age is not
+ * something this percentage can see — it is what the อายุของงานที่ค้าง
+ * histogram answers. Grey here is the honest colour: the number is worth
+ * showing and is not worth judging.
+ *
+ * A card that names no direction gets `neutral`, so a new card cannot acquire
+ * a judgement nobody made by being added to the grid.
+ */
+const DELTA_DIRECTION = Object.freeze({
+  UP_GOOD: 'up-good',
+  UP_BAD:  'up-bad',
+  NEUTRAL: 'neutral',
+});
+
 /** A Buddhist-era date, for telling an admin when the last record actually was. */
 function fmtRecordDate(iso) {
   if (!iso) return null;
@@ -76,6 +119,36 @@ function fmtRecordDate(iso) {
  * the label back a day for every reader east of Greenwich — the same class of
  * timezone slip that BUCKET_TZ exists to end on the server side.
  */
+/**
+ * "3 นาทีที่แล้ว" / "5 วันที่แล้ว" — how long ago, in Thai.
+ *
+ * ── RELATIVE, AND IT STOPS BEING RELATIVE AFTER A MONTH ───────────────────
+ * "เมื่อสักครู่" is what a reader wants for something that just happened and
+ * is useless for something from April: "134 วันที่แล้ว" is arithmetic nobody
+ * asked for. Past 30 days it falls back to the absolute date the rest of the
+ * admin prints, Buddhist year and all.
+ *
+ * ── IT TAKES `now` AS AN ARGUMENT ─────────────────────────────────────────
+ * Not `Date.now()` inside. This renders on the server and hydrates on the
+ * client, and a function that reads the wall clock at each of those produces
+ * two different strings for one row — a hydration mismatch that appears only
+ * when the two happen to straddle a minute boundary, which is the worst kind
+ * of intermittent. The caller passes ONE timestamp for the whole table.
+ */
+function fmtRelativeThai(iso, nowMs) {
+  if (!iso) return '—';
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return '—';
+  const mins = Math.floor((nowMs - then) / 60000);
+  if (mins < 1) return 'เมื่อสักครู่';
+  if (mins < 60) return `${mins} นาทีที่แล้ว`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} ชั่วโมงที่แล้ว`;
+  const days = Math.floor(hours / 24);
+  if (days <= 30) return `${days} วันที่แล้ว`;
+  return fmtRecordDate(iso);
+}
+
 function fmtBucketShort(key) {
   const s = String(key ?? '');
   const hour = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})$/.exec(s);
@@ -395,6 +468,27 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, initia
         */}
         {registrationsEmpty && <EmptyRange corpus={data.corpus} />}
 
+        {/*
+          ══ WHY THERE IS NO PERCENTAGE, SAID OUT LOUD ══════════════════════
+
+          Round E3 decided that ทั้งหมด renders no change badge: there is no
+          period before everything, so there is nothing to divide by, and a
+          '0%' or a '—' would assert a measurement nobody made. That decision
+          is right and is unchanged.
+
+          What was missing is that the READER cannot see a decision. They see
+          eight cards that had percentages a moment ago and do not now, which
+          looks like the feature broke — several people have asked. One line
+          of copy is the whole fix, and it is keyed on `data.delta` being
+          ABSENT rather than on the range being 'all', so it appears exactly
+          when the badges do not, whatever produced that.
+        */}
+        {!data.delta && (
+          <p className="text-xs text-[var(--text-muted)]">
+            ช่วง “ทั้งหมด” ไม่มีช่วงก่อนหน้าให้เปรียบเทียบ จึงไม่แสดงเปอร์เซ็นต์การเปลี่ยนแปลง
+          </p>
+        )}
+
         {/* Public stats */}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
@@ -402,6 +496,8 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, initia
             value={data.public.total}
             delta={data.delta?.public?.total}
             series={data.sparklines?.public?.total}
+            seriesColor={SERIES_COLOR.public}
+            deltaDirection={DELTA_DIRECTION.UP_GOOD}
             href="/admin/registrations"
             accent="border-l-4 border-l-9e-action"
           />
@@ -410,6 +506,8 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, initia
             value={data.public.pending}
             delta={data.delta?.public?.pending}
             series={data.sparklines?.public?.pending}
+            seriesColor={statusColor('pending')}
+            deltaDirection={DELTA_DIRECTION.NEUTRAL}
             href="/admin/registrations?status=pending"
             badge={{ text: 'รอ', cls: 'bg-amber-100 text-amber-700' }}
           />
@@ -418,6 +516,8 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, initia
             value={data.public.confirmed}
             delta={data.delta?.public?.confirmed}
             series={data.sparklines?.public?.confirmed}
+            seriesColor={statusColor('confirmed')}
+            deltaDirection={DELTA_DIRECTION.UP_GOOD}
             href="/admin/registrations?status=confirmed"
             badge={{ text: 'ใบเสนอราคา', cls: 'bg-blue-100 text-blue-700' }}
           />
@@ -426,6 +526,8 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, initia
             value={data.public.paid}
             delta={data.delta?.public?.paid}
             series={data.sparklines?.public?.paid}
+            seriesColor={statusColor('paid')}
+            deltaDirection={DELTA_DIRECTION.UP_GOOD}
             href="/admin/registrations?status=paid"
             badge={{ text: 'ชำระ', cls: 'bg-emerald-100 text-emerald-700' }}
           />
@@ -434,6 +536,8 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, initia
             value={data.public.cancelled}
             delta={data.delta?.public?.cancelled}
             series={data.sparklines?.public?.cancelled}
+            seriesColor={statusColor('cancelled')}
+            deltaDirection={DELTA_DIRECTION.UP_BAD}
             href="/admin/registrations?status=cancelled"
             badge={{ text: 'ยกเลิก', cls: 'bg-slate-100 text-slate-500' }}
           />
@@ -446,6 +550,8 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, initia
             value={data.inhouse.total}
             delta={data.delta?.inhouse?.total}
             series={data.sparklines?.inhouse?.total}
+            seriesColor={SERIES_COLOR.inhouse}
+            deltaDirection={DELTA_DIRECTION.UP_GOOD}
             href="/admin/registrations?source=inhouse"
             accent="border-l-4 border-l-violet-400"
           />
@@ -466,6 +572,8 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, initia
             value={data.inhouse.pending}
             delta={data.delta?.inhouse?.pending}
             series={data.sparklines?.inhouse?.pending}
+            seriesColor={statusColor('pending')}
+            deltaDirection={DELTA_DIRECTION.NEUTRAL}
             href="/admin/registrations?source=inhouse&status=pending"
             badge={{ text: INHOUSE_STATUS_LABEL.pending, cls: 'bg-amber-100 text-amber-700' }}
           />
@@ -474,6 +582,8 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, initia
             value={data.inhouse.quoted}
             delta={data.delta?.inhouse?.quoted}
             series={data.sparklines?.inhouse?.quoted}
+            seriesColor={statusColor('quoted')}
+            deltaDirection={DELTA_DIRECTION.UP_GOOD}
             href="/admin/registrations?source=inhouse&status=quoted"
             badge={{ text: INHOUSE_STATUS_LABEL.quoted, cls: 'bg-blue-100 text-blue-700' }}
           />
@@ -481,13 +591,64 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, initia
       </section>}
 
       {/*
-        ── Section 2: Visualizations — REGISTRATION SCOPE ──
-        Both charts read registration figures: the bar chart is the 7-day Public
-        trend and the donut is the Public status split. E2.2 classifies them with
-        the counts they are drawn from, not with the ภาพรวมระบบ strip they sit
-        above.
+        ══ SECTION 2a: THE TWO STATUS VISUALS, SIDE BY SIDE ═══════════════════
+
+        Round E5.5 puts these ABOVE the trend chart. Both answer "what is the
+        state of the work right now" — the histogram by age, the bar by status
+        — and they are read together; the trend is a different question (how
+        did we get here) and now sits below them at full width rather than
+        sharing a row with one of them.
+
+        Registration scope, like the counts they are drawn from. E2.2
+        classifies these with those counts, not with the ภาพรวมระบบ strip.
       */}
       {scopes.registrations && <section className="grid gap-6 lg:grid-cols-2">
+        {/*
+          ══ E5.1 — อายุของงานที่ค้าง ═════════════════════════════════════════
+
+          Round E1 measured the shape this draws: 2 / 0 / 0 / 27. THE
+          LOPSIDEDNESS IS THE MESSAGE — 27 of the 29 pending registrations are
+          more than a fortnight old — so the axis is NOT normalised, capped or
+          log-scaled. The last bar being ~13x the first is the finding an admin
+          needs to see in one glance.
+        */}
+        <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
+          <p className="mb-1 text-sm font-bold text-[var(--text-primary)]">อายุของงานที่ค้าง</p>
+          <p className="mb-5 text-xs text-[var(--text-muted)]">
+            {rangeLabel} — {PUBLIC_STATUS_LABEL.pending} {data.ageTotal} รายการ
+          </p>
+          <AgeHistogram buckets={data.ageDist} total={data.ageTotal} />
+        </div>
+
+        {/*
+          ══ E5.2 — THE DONUT BECAME A PROPORTIONAL BAR ══════════════════════
+
+          A donut asks the reader to compare arc lengths around a circle, which
+          is the hardest comparison in charting and is why the 2% slice was
+          unreadable. One bar puts every segment on a common baseline.
+
+          THE TITLE AND SUBTITLE ARE UNCHANGED. `สัดส่วนสถานะ Public` names the
+          chart and the subtitle names the WINDOW and the TOTAL — a proportion
+          with no stated window is unreadable, and "71%" of an unnamed N is not
+          a figure. Only the drawing changed.
+        */}
+        <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
+          <p className="mb-1 text-sm font-bold text-[var(--text-primary)]">สัดส่วนสถานะ Public</p>
+          <p className="mb-5 text-xs text-[var(--text-muted)]">{rangeLabel} — {statusTotal} รายการ</p>
+          <ProportionalBar segments={data.statusDist} total={statusTotal} />
+        </div>
+      </section>}
+
+      {/*
+        ══ SECTION 2b: THE TREND, FULL WIDTH ══════════════════════════════════
+
+        It was half a two-column row beside the donut. At ทั้งหมด the axis runs
+        to 31 buckets, and 31 columns in half a card is the reason the bars were
+        14px wide with a horizontal scrollbar under them. The freed space is
+        E5.2’s doing: one 28px bar where a 100px donut and its legend used to
+        sit is roughly half the height, and this is where it goes.
+      */}
+      {scopes.registrations && <section className="grid gap-6">
 
         {/*
           ══ THE TITLE STATES THE WINDOW THAT WAS ACTUALLY DRAWN ═════════════
@@ -571,36 +732,23 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, initia
           )}
         </div>
 
-        {/* Donut chart: status distribution */}
-        <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
-          <p className="mb-1 text-sm font-bold text-[var(--text-primary)]">สัดส่วนสถานะ Public</p>
-          <p className="mb-5 text-xs text-[var(--text-muted)]">{rangeLabel} — {statusTotal} รายการ</p>
+      </section>}
 
-          <div className="flex items-center gap-6">
-            {/* SVG donut */}
-            <DonutChart segments={data.statusDist} total={statusTotal} />
+      {/*
+        ══ SECTION 3: รายการล่าสุด — REGISTRATION SCOPE ═══════════════════════
 
-            {/* Legend */}
-            <div className="flex flex-col gap-2 flex-1">
-              {data.statusDist.map((s) => (
-                <div key={s.status} className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: s.color }} />
-                    <span className="text-xs text-[var(--text-secondary)]">{s.label}</span>
-                  </div>
-                  <span className="text-xs font-semibold tabular-nums text-[var(--text-primary)]">
-                    {s.count}
-                    {statusTotal > 0 && (
-                      <span className="ml-1 font-normal text-[var(--text-muted)]">
-                        ({Math.round((s.count / statusTotal) * 100)}%)
-                      </span>
-                    )}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        Below the charts and above the system strip, because it is the most
+        specific thing on the page: the counts describe a window, the charts
+        describe a shape, and this describes six actual records an admin can
+        click into. It reads `data.latestActivity`, which is present only with
+        `dashboard_registrations` — the read never ran for anyone else.
+      */}
+      {scopes.registrations && <section className="space-y-3">
+        <SectionHeader
+          title="รายการล่าสุด"
+          subtitle="Public — ใหม่สุดก่อน ไม่กรองตามช่วงวันที่"
+        />
+        <ActivityTable rows={data.latestActivity} generatedAt={data.generatedAt} />
       </section>}
 
       {/*
@@ -794,14 +942,30 @@ function SectionHeader({ title, subtitle }) {
  * When it does render, the SIGN is part of the number — a bare "28%" beside a
  * count is ambiguous between a share and a change.
  */
-function DeltaBadge({ delta }) {
+function DeltaBadge({ delta, direction = DELTA_DIRECTION.NEUTRAL }) {
   if (typeof delta !== 'number' || !Number.isFinite(delta)) return null;
   const up = delta > 0;
   const flat = delta === 0;
+  /**
+   * ── THE SIGN IS THE MEASUREMENT; THE COLOUR IS THE JUDGEMENT ────────────
+   * They are computed separately on purpose. `+40%` is a fact and renders
+   * identically on every card. Whether that fact is GOOD is the card's
+   * business, and a card that has not claimed to know stays grey rather than
+   * defaulting to green — see DELTA_DIRECTION.
+   *
+   * Zero is grey under every direction: nothing moved, so there is nothing to
+   * approve or worry about.
+   */
+  const good = direction === DELTA_DIRECTION.UP_GOOD ? up
+    : direction === DELTA_DIRECTION.UP_BAD ? !up
+    : null;
+  const tone = flat || good === null
+    ? 'text-[var(--text-muted)]'
+    : good ? 'text-emerald-600' : 'text-red-600';
   return (
-    <span className={cn(
+    <span data-delta-direction={direction} className={cn(
       'mt-2 inline-block text-[11px] font-semibold tabular-nums',
-      flat ? 'text-[var(--text-muted)]' : up ? 'text-emerald-600' : 'text-red-600',
+      tone,
     )}>
       {up ? '+' : ''}{delta}% <span className="font-normal text-[var(--text-muted)]">เทียบช่วงก่อนหน้า</span>
     </span>
@@ -830,7 +994,7 @@ function DeltaBadge({ delta }) {
  * all. It is `focusable="false"` as well as aria-hidden — IE/Edge legacy SVG
  * takes a tab stop from the former and not the latter, and this costs nothing.
  */
-function Sparkline({ values }) {
+function Sparkline({ values, color }) {
   if (!Array.isArray(values) || values.length === 0) return null;
 
   const W = 96;
@@ -855,12 +1019,23 @@ function Sparkline({ values }) {
       preserveAspectRatio="none"
       aria-hidden="true"
       focusable="false"
+      /**
+       * ── THE COLOUR ARRIVES AS A PROP, AND `currentColor` IS THE FALLBACK ──
+       * Since round E5 each card's line is drawn in ITS OWN status colour, from
+       * lib/dashboard/statusColors.js — the same hex the proportional bar fills
+       * that status's segment with, so a reader who has learnt "amber is
+       * รอดำเนินการ" on one chart reads the other for free.
+       *
+       * `text-9e-action` stays as the CLASS so a caller that passes no colour
+       * still draws the blue line it always drew, rather than inheriting
+       * whatever colour the card's text happens to be.
+       */
       className="block overflow-visible text-9e-action"
     >
       <path
         d={d}
         fill="none"
-        stroke="currentColor"
+        stroke={color ?? 'currentColor'}
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -900,7 +1075,7 @@ function Sparkline({ values }) {
  * same slots in the same order. So the slots are named, and the test counts them
  * per card. What that cannot prove is the pixels, and the report says so.
  */
-function StatCard({ label, value, href, badge, accent = '', className, delta, series }) {
+function StatCard({ label, value, href, badge, accent = '', className, delta, series, seriesColor, deltaDirection }) {
   const inner = (
     <div
       data-slot="card"
@@ -941,70 +1116,257 @@ function StatCard({ label, value, href, badge, accent = '', className, delta, se
       */}
       {Array.isArray(series) && (
         <div data-slot="sparkline" className="mt-2 min-h-[24px]">
-          <Sparkline values={series} />
+          <Sparkline values={series} color={seriesColor} />
         </div>
       )}
 
       {/* The delta slot. `mt-auto` pins it to the card's baseline. */}
       <div data-slot="delta" className="mt-auto min-h-[17px] pt-2">
-        <DeltaBadge delta={delta} />
+        <DeltaBadge delta={delta} direction={deltaDirection} />
       </div>
     </div>
   );
   return href ? <Link href={href} className="block h-full">{inner}</Link> : inner;
 }
 
-function DonutChart({ segments, total }) {
-  const SIZE   = 100;
-  const R      = 36;
-  const CX     = SIZE / 2;
-  const CY     = SIZE / 2;
-  const STROKE = 14;
-  const CIRC   = 2 * Math.PI * R;
-
-  if (total === 0) {
+/**
+ * ══ THE AGE HISTOGRAM — FOUR BARS, ONE SCALE, NO FLATTERING ════════════════
+ *
+ * Horizontal because the labels are Thai phrases, not dates: four words down
+ * the left edge read at a glance, where four rotated captions under vertical
+ * bars do not.
+ *
+ * ── ONE SHARED SCALE, AND IT IS THE POINT ─────────────────────────────────
+ * Every bar is a percentage of the SAME `max` — the largest bucket — so the
+ * bars are comparable to each other and to nothing else. Round E1 measured
+ * 2 / 0 / 0 / 27, and E5.1 is explicit that this must not be normalised,
+ * capped or log-scaled: an admin needs to see that the oldest bucket is ~13x
+ * the newest, and every one of those transforms exists to hide exactly that.
+ *
+ * There is no `Math.max(pct, floor)` here either. The trend chart has one,
+ * deliberately, because a bar of ONE registration must be visible at all; this
+ * chart states its count in text beside every bar, so a floor would buy
+ * nothing and would cost the proportion that is the whole message.
+ *
+ * ── A ZERO BUCKET DRAWS NO TRACK ──────────────────────────────────────────
+ * Not a full-width empty rail. A rail behind a zero reads as "there is
+ * something here, and it is empty", which is the opposite of true — the two
+ * middle buckets hold nothing at all in production. The label and a plain `0`
+ * are the whole row.
+ *
+ * ── ONE COLOUR, AND IT IS รอดำเนินการ’S ───────────────────────────────────
+ * Including เกิน 14 วัน. These bars are a SUBSET of the pending card above, so
+ * they wear its amber and the eye connects them. Red would say "the system is
+ * broken" where the truth is "this work is old", and it would be the only red
+ * on a page where red already means a bad change.
+ */
+function AgeHistogram({ buckets, total }) {
+  const rows = Array.isArray(buckets) ? buckets : [];
+  if (rows.length === 0 || total === 0) {
     return (
-      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="flex-none">
-        <circle cx={CX} cy={CY} r={R} fill="none" stroke="var(--surface-muted)" strokeWidth={STROKE} />
-        <text x={CX} y={CY + 5} textAnchor="middle" fontSize="14" fontWeight="700" fill="var(--text-muted)">0</text>
-      </svg>
+      <p className="py-6 text-center text-xs text-[var(--text-muted)]">
+        ไม่มีงานที่ค้างอยู่ในช่วงนี้
+      </p>
     );
   }
-
-  let offset = 0;
-  const arcs = segments.map((s) => {
-    const pct  = s.count / total;
-    const dash = pct * CIRC;
-    const gap  = CIRC - dash;
-    const arc  = { ...s, dash, gap, offset };
-    offset += dash;
-    return arc;
-  });
-
+  const max = Math.max(...rows.map((b) => b.count), 0);
   return (
-    <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="flex-none -rotate-90">
-      {arcs.map((arc) => (
-        <circle
-          key={arc.status}
-          cx={CX} cy={CY} r={R}
-          fill="none"
-          stroke={arc.color}
-          strokeWidth={STROKE}
-          strokeDasharray={`${arc.dash} ${arc.gap}`}
-          strokeDashoffset={-arc.offset}
-        />
-      ))}
-      <text
-        x={CX} y={CY + 5}
-        textAnchor="middle"
-        fontSize="16"
-        fontWeight="700"
-        fill="currentColor"
-        className="rotate-90 origin-center"
-        style={{ transform: 'rotate(90deg)', transformOrigin: `${CX}px ${CY}px` }}
-      >
-        {total}
-      </text>
-    </svg>
+    <div data-chart="age-histogram" className="flex flex-col gap-3">
+      {rows.map((b) => {
+        // Against `max`, never against `total` and never against a cap.
+        const pct = max > 0 ? (b.count / max) * 100 : 0;
+        return (
+          <div key={b.id} data-age-bucket={b.id} className="flex items-center gap-3">
+            <span className="w-[68px] flex-none text-[11px] text-[var(--text-secondary)]">{b.label}</span>
+            <div className="flex flex-1 items-center gap-2">
+              {b.count > 0 && (
+                <div
+                  data-age-bar={b.id}
+                  className="h-[18px] rounded-9e-sm transition-all duration-300"
+                  style={{ width: `${pct}%`, background: statusColor('pending') }}
+                />
+              )}
+              <span className="text-[11px] font-semibold tabular-nums text-[var(--text-primary)]">
+                {b.count}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * ══ ONE BAR, FOUR SEGMENTS, AND A LEGEND THAT LEADS WITH THE COUNT ═════════
+ *
+ * Replaces the donut. Segments are laid out in the order the server sends
+ * them, which is a declared PRESENTATION order (see `statusDist` in
+ * lib/dashboard/buildMetrics.js) rather than the lifecycle order the
+ * transition table runs on.
+ *
+ * ── THE SLIVER IS LEFT AS A SLIVER ────────────────────────────────────────
+ * At N=41 one cancelled record is 2.4% of the bar, which is about 7px. There
+ * is no minimum-width floor, because a floor is the bar lying: it would draw
+ * one record the same size as three. The legend below is where a small segment
+ * becomes readable, and that is what the legend is for.
+ *
+ * ── RAW COUNT FIRST, PERCENTAGE SECOND ────────────────────────────────────
+ * `รอดำเนินการ 29 (71%)`. At N=41 a bare "2%" makes one record look like a
+ * measurement; the count says how many things were actually counted and the
+ * percentage qualifies it. The subtitle above states the window and the total,
+ * so the percentage has a stated denominator.
+ */
+function ProportionalBar({ segments, total }) {
+  const rows = Array.isArray(segments) ? segments : [];
+  if (total === 0) {
+    return (
+      <div>
+        <div className="h-[28px] w-full rounded-full bg-[var(--surface-muted)]" />
+        <p className="mt-4 text-center text-xs text-[var(--text-muted)]">ไม่มีรายการในช่วงนี้</p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      {/*
+        `overflow-hidden` on a `rounded-full` track is what rounds the two END
+        segments without rounding the joins between them. Four separately
+        rounded children would leave slivers of empty track showing between the
+        colours, which reads as a fifth, unlabelled category.
+      */}
+      <div data-chart="status-bar" className="flex h-[28px] w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
+        {rows.map((s) => (
+          <div
+            key={s.status}
+            data-segment={s.status}
+            className="h-full transition-all duration-300"
+            style={{ width: `${(s.count / total) * 100}%`, background: s.color }}
+            title={`${s.label} — ${s.count}`}
+          />
+        ))}
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {rows.map((s) => (
+          <div key={s.status} data-legend={s.status} className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: s.color }} />
+            <span className="flex-1 truncate text-xs text-[var(--text-secondary)]">{s.label}</span>
+            <span className="text-xs font-semibold tabular-nums text-[var(--text-primary)]">
+              {s.count}
+              <span className="ml-1 font-normal text-[var(--text-muted)]">
+                ({Math.round((s.count / total) * 100)}%)
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * ══ รายการล่าสุด — SIX ROWS, SIX TAB STOPS, NOT TWENTY-FOUR ════════════════
+ *
+ * ── THE ROW-AS-LINK PATTERN IS COPIED, NOT REINVENTED ─────────────────────
+ * Every cell holds its own <Link> to the same href, and every one but the
+ * first carries `tabIndex={-1}`. That is exactly the shape
+ * registrations/_components/tableParts.jsx `CellLink` uses, and the reasoning
+ * is recorded there in full: ONE stretched `position:absolute` link over a
+ * `position:relative` <tr> is tidier markup, but relative positioning on a
+ * table row was undefined in CSS 2.1, and if a browser declines, `inset: 0`
+ * resolves against the panel instead — so one row’s link covers the WHOLE
+ * table and every row navigates to that record. A silent, data-wrong failure
+ * no server-rendered test can see.
+ *
+ * The cost is four links per row instead of one, and `tabIndex={-1}` is what
+ * keeps the keyboard to ONE stop per row while leaving every cell genuinely
+ * clickable and middle-clickable.
+ *
+ * ── AND ONE FOCUS RING, ON THE ROW ────────────────────────────────────────
+ * `focus-within` on the <tr> rather than a ring on each anchor: four rings
+ * lighting up inside one row is four times the noise for one focus.
+ *
+ * ── THE EMPTY STATE IS A SENTENCE, NOT AN EMPTY TABLE ─────────────────────
+ * A header row over nothing reads as "the table failed to load". Six column
+ * headings with no rows beneath them say less than one line of text.
+ */
+function ActivityTable({ rows, generatedAt }) {
+  const items = Array.isArray(rows) ? rows : [];
+  if (items.length === 0) {
+    return (
+      <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
+        <p className="text-center text-xs text-[var(--text-muted)]">ยังไม่มีรายการลงทะเบียน</p>
+      </div>
+    );
+  }
+  /**
+   * THE SERVER’S CLOCK, NOT THIS ONE. `generatedAt` is the same `now` every
+   * other figure in the payload was computed against, so the string rendered
+   * on the server is the string the browser hydrates — see its note in
+   * lib/dashboard/buildMetrics.js. `Date.now()` here would be a hydration
+   * mismatch waiting for a minute boundary, and would put these strings
+   * beyond the reach of a test that fixes the clock.
+   *
+   * The fallback is this render’s clock, for the one case where a caller
+   * passes rows without a timestamp: a slightly stale relative time beats a
+   * column of dashes.
+   */
+  const nowMs = generatedAt ? new Date(generatedAt).getTime() : Date.now();
+  return (
+    <div className="overflow-x-auto rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)]">
+      <table data-table="latest-activity" className="w-full min-w-[520px] text-left">
+        <thead>
+          <tr className="border-b border-[var(--surface-border)]">
+            <th className="px-4 py-2 text-[11px] font-semibold text-[var(--text-muted)]">ชื่อผู้สมัคร</th>
+            <th className="px-4 py-2 text-[11px] font-semibold text-[var(--text-muted)]">หลักสูตร</th>
+            <th className="px-4 py-2 text-[11px] font-semibold text-[var(--text-muted)]">สถานะ</th>
+            <th className="px-4 py-2 text-right text-[11px] font-semibold text-[var(--text-muted)]">เวลา</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((row) => {
+            const href = `/admin/registrations/${row.id}`;
+            return (
+              <tr
+                key={row.id}
+                data-activity-row={row.id}
+                className="border-b border-[var(--surface-border)] last:border-b-0 hover:bg-[var(--surface-muted)] focus-within:bg-[var(--surface-muted)] focus-within:outline focus-within:outline-2 focus-within:outline-offset-[-2px] focus-within:outline-9e-action"
+              >
+                <td className="p-0">
+                  <Link href={href} className="block px-4 py-3 text-xs font-semibold text-[var(--text-primary)]">
+                    {row.name || '—'}
+                  </Link>
+                </td>
+                <td className="p-0">
+                  <Link href={href} tabIndex={-1} className="block px-4 py-3 text-xs text-[var(--text-secondary)]">
+                    <span className="line-clamp-1">{row.courseName || '—'}</span>
+                  </Link>
+                </td>
+                <td className="p-0">
+                  <Link href={href} tabIndex={-1} className="block px-4 py-3">
+                    <span
+                      data-status-pill={row.status}
+                      className={cn(
+                        'inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                        statusBadge(row.status),
+                      )}
+                    >
+                      {PUBLIC_STATUS_LABEL[row.status] ?? row.status}
+                    </span>
+                  </Link>
+                </td>
+                <td className="p-0">
+                  <Link href={href} tabIndex={-1} className="block px-4 py-3 text-right text-[11px] tabular-nums text-[var(--text-muted)]">
+                    {fmtRelativeThai(row.createdAt, nowMs)}
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }

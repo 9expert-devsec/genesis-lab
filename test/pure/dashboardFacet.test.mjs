@@ -32,13 +32,39 @@ const COLLECTION_OF = {
   MasterclassRegistration: 'masterclass_registrations', WebhookLog: 'webhook_logs',
 };
 
-/** Models whose registration aggregate returns `facet`, capturing the pipeline. */
+/**
+ * Models whose registration aggregate returns `facet`, capturing the pipeline.
+ *
+ * ── IT CAPTURES THE FACETED PIPELINE, NOT "THE LAST ONE" ───────────────────
+ * It was `seen.pipeline = pipeline` unconditionally, which was exact while the
+ * registration half ran exactly one aggregation. Round E5.3 added a second — the
+ * small sorted-and-limited read behind รายการล่าสุด — launched in the same
+ * `Promise.all`, and a last-writer-wins capture then handed every assertion in
+ * this file the WRONG pipeline: they would report "no $facet — this is not one
+ * aggregation" while the facet was running perfectly, one branch richer than
+ * before.
+ *
+ * The subject of this whole file is the FACET, so the double now says so. It is
+ * also returned in a shape that keeps the old failure loud: `seen.pipeline` is
+ * null unless a faceted pipeline really ran, so the first test's "no pipeline
+ * captured — every assertion below is vacuous" guard still does its job.
+ *
+ * The activity pipeline is not this file's subject; it is asserted in
+ * test/pure/dashboardScopes, beside the read counts it belongs to.
+ */
 function modelsReturning(facet) {
-  const seen = { pipeline: null };
+  const seen = { pipeline: null, others: [] };
   const models = Object.fromEntries(MODEL_NAMES.map((n) => [n, {
     collection: { name: COLLECTION_OF[n] },
     countDocuments: () => Promise.resolve(0),
-    aggregate: (pipeline) => { seen.pipeline = pipeline; return Promise.resolve([facet]); },
+    aggregate: (pipeline) => {
+      if (Array.isArray(pipeline) && pipeline.some((st) => st && '$facet' in st)) {
+        seen.pipeline = pipeline;
+        return Promise.resolve([facet]);
+      }
+      seen.others.push(pipeline);
+      return Promise.resolve([]);
+    },
   }]));
   return { models, seen };
 }

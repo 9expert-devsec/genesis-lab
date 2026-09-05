@@ -329,12 +329,90 @@ test('CONTROL: the argument-less form is what the default actually does', () => 
 
 // ── 4. The dashboard's two sites ───────────────────────────────────────────
 
-test('the dashboard donut derives its labels and keeps its own colours', () => {
+test('the dashboard status split derives its labels', () => {
   assert.match(DASH_ACT.code, /label:\s*PUBLIC_STATUS_LABEL\.confirmed/);
-  // The colours are this chart's business and belong to no other consumer, so
-  // they stay here. If they ever move into the module, this is the line that
-  // says the decision was reversed deliberately.
-  assert.match(DASH_ACT.code, /color:\s*'#3b82f6'/);
+});
+
+/**
+ * ══ THE COLOUR DECISION WAS REVERSED IN ROUND E5, DELIBERATELY ══════════════
+ *
+ * This block used to be one line inside the test above:
+ *
+ *     assert.match(DASH_ACT.code, /color:\s*'#3b82f6'/);
+ *
+ * with the note "the colours are this chart's business and belong to no other
+ * consumer, so they stay here — if they ever move into the module, this is the
+ * line that says the decision was reversed deliberately."
+ *
+ * They moved. THIS IS THAT LINE.
+ *
+ * ── WHAT CHANGED UNDERNEATH IT ─────────────────────────────────────────────
+ * The premise was "one chart, one consumer", and it was true through E4: four
+ * `color:` literals in `statusDist`, read by the donut and nothing else. E5
+ * makes it four consumers — the proportional bar that replaces the donut, the
+ * age histogram, the per-card sparklines, and the status pills in รายการล่าสุด.
+ * A literal beside its only consumer is a value written where it is used; the
+ * same literal beside four is the four-copy drift this whole file exists to
+ * catch, one property along from the label it already caught.
+ *
+ * ── WHAT THIS RECORDS, AND WHY IT IS NOT A LOOSENING ───────────────────────
+ * The assertion is NOT deleted and NOT weakened to "some colour is set". It is
+ * MOVED to follow the value, and it still names `#3b82f6` exactly — the same
+ * hex, in its new home. What is added is the other half, which the old
+ * single-file assertion could not express: that the dashboard's own sources no
+ * longer hand-write a chart colour at all. Deleting the line would have left
+ * "the palette moved" untested in both directions.
+ */
+test('the chart palette lives in ONE module, and still holds the same hexes', () => {
+  const PALETTE = readSource('src/lib/dashboard/statusColors.js');
+  // The exact colour the old line pinned, at its new address. Same value; if
+  // someone re-themes the quotation step, this still says so.
+  assert.match(PALETTE.code, /confirmed:\s*'#3b82f6'/, 'the quotation step lost its colour');
+  // …and the other three, so the move carried the whole palette rather than
+  // the one hex a guard happened to name.
+  assert.match(PALETTE.code, /pending:\s*'#f59e0b'/,   'pending lost its colour');
+  assert.match(PALETTE.code, /paid:\s*'#10b981'/,      'paid lost its colour');
+  assert.match(PALETTE.code, /cancelled:\s*'#94a3b8'/, 'cancelled lost its colour');
+});
+
+test('no dashboard source hand-writes a status chart colour any more', () => {
+  /**
+   * The half the old assertion could not state. `statusDist` is built in
+   * buildMetrics.js and drawn in DashboardClient.jsx, and BOTH now take every
+   * status colour through `statusColor(...)`. A hex typed into either is a
+   * fifth copy under a new name, which is precisely how this started.
+   *
+   * Matched by VALUE rather than by variable name, so a rename does not evade
+   * it — the same shape as the `status→'bg-` rule further up this file.
+   */
+  const PALETTE_HEXES = /#(f59e0b|3b82f6|10b981|94a3b8)/i;
+  for (const f of [DASH_ACT, DASH_CLI]) {
+    assert.ok(
+      !PALETTE_HEXES.test(f.code),
+      `${f.rel} hand-writes a status chart colour instead of importing it from `
+      + 'lib/dashboard/statusColors',
+    );
+  }
+});
+
+test('CONTROL: those hexes ARE findable this way when they are written out', () => {
+  // Proves the negative above is not passing because `code` cannot see hex
+  // literals — and points at the one file that is SUPPOSED to contain them.
+  const PALETTE = readSource('src/lib/dashboard/statusColors.js');
+  assert.match(PALETTE.code, /#(f59e0b|3b82f6|10b981|94a3b8)/i,
+    'the control is inert — a hand-written hex is invisible to this scan');
+});
+
+test('both dashboard sources reach the palette through the module', () => {
+  // Import-shaped, so a file that stopped drawing statuses entirely cannot pass
+  // the negative above by accident.
+  for (const f of [DASH_ACT, DASH_CLI]) {
+    assert.match(
+      f.withImports,
+      /from\s*'@\/lib\/dashboard\/statusColors'/,
+      `${f.rel} does not import the shared dashboard palette`,
+    );
+  }
 });
 
 test('the four dashboard stat cards derive their labels', () => {
