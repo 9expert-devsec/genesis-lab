@@ -27,123 +27,64 @@ export function InstructorQuote() {
 
   return (
     <motion.section
-      className="relative overflow-hidden"
+      className="relative overflow-hidden bg-[#0D1B2A]"
       variants={FADE_ONLY_VARIANTS}
       initial={shouldReduceMotion ? false : 'hidden'}
       whileInView="visible"
       viewport={{ once: true, amount: 0.3 }}
     >
-      {/* Circuit board background — gradient + traces + nodes. All
-          gradient/filter IDs are prefixed `instructor-` so they don't
-          collide with other SVGs on the page. */}
-      <svg
-        className="absolute inset-0 h-full w-full"
-        viewBox="0 0 680 320"
-        preserveAspectRatio="xMidYMid slice"
-        xmlns="http://www.w3.org/2000/svg"
+      {/* Background artwork — the wallpaper this section is dressed in.
+          It replaces the hand-drawn circuit-board SVG (a flat #0D1B2A base
+          rect, dot grids, traces and glowing junction nodes) that used to
+          paint this layer.
+
+          DELIVERY IS UNCHANGED IN KIND: still one absolutely-positioned,
+          full-bleed ELEMENT behind the content, not a CSS background and
+          deliberately not next/image — this is decoration, not content, and
+          the optimiser would re-encode an asset that was placed as-is.
+
+          `object-cover object-center` is the CSS spelling of the SVG's
+          `preserveAspectRatio="xMidYMid slice"`, so the crop rule the section
+          already had is carried over rather than reinvented: fill the band,
+          keep the aspect ratio, centre what does not fit. At desktop widths
+          the section is wider than the art's 3:1, so the full width shows and
+          the crop is vertical; at phone widths the section is taller than it
+          is wide and the crop is horizontal, onto the middle of the frame.
+
+          The SVG's base `<rect fill="#0D1B2A">` moves to the section itself
+          (below) so the band keeps exactly that colour while the PNG loads. */}
+      <img
+        src="/motto/wallpaper-motto.png"
+        alt=""
         aria-hidden="true"
-      >
-        <defs>
-          {/* ROUND HS-B: the light-mode-lightening "instructor-bg" radial
-              gradient (#EEF6FF/#DBEEFF) that used to sit here was never
-              actually applied to anything — no fill="url(#instructor-bg)"
-              existed anywhere in this file. The section's real background
-              was already only the flat #0D1B2A rect below; this def was
-              dead markup, removed rather than "neutralized" since there was
-              nothing live to neutralize. */}
-          <radialGradient id="instructor-ng1" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#005CFF" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#005CFF" stopOpacity="0" />
-          </radialGradient>
-          <radialGradient id="instructor-ng2" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#2486FF" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#2486FF" stopOpacity="0" />
-          </radialGradient>
-          <filter id="instructor-gl">
-            <feGaussianBlur stdDeviation="2" result="b" />
-            <feMerge>
-              <feMergeNode in="b" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
+      />
 
-        <rect width="680" height="320" fill="#0D1B2A" />
+      {/* Scrim between the artwork and the text, LIVE BELOW lg AND ONLY THERE.
 
-        {/* Dot grid top-right */}
-        <g opacity="0.20">
-          {[430, 444, 458, 472, 486, 500, 514, 528].flatMap((x) =>
-            [16, 30, 44].map((y) => (
-              <circle key={`tr-${x}-${y}`} cx={x} cy={y} r="1.3" fill="#005CFF" />
-            ))
-          )}
-        </g>
+          It is a crop problem, not a taste one. `object-cover object-center`
+          keeps the middle of a 3:1 frame, so which part of the art ends up
+          under the quote depends entirely on the band's shape:
 
-        {/* Dot column right */}
-        {/* <g opacity="0.18">
-          {[70, 84, 98, 112, 126, 140].flatMap((y) =>
-            [600, 616].map((x) => (
-              <circle key={`rc-${x}-${y}`} cx={x} cy={y} r="1.5" fill="#2486FF" />
-            ))
-          )}
-        </g> */}
+            · at lg and up the band is wider than 3:1, the crop is vertical,
+              the full width shows, and the text column sits on the empty space
+              at the left of the frame — measured DARKER than the flat #0D1B2A
+              this replaced (median white contrast 20.5:1 against 17.4:1). A
+              wash there would dull art that costs the text nothing, so at lg
+              the element goes back to `display: none`.
+            · below lg the band is taller than it is wide, the crop turns
+              horizontal, and only the middle ~14% of the frame survives —
+              which is the lit limb and two glowing network nodes. Behind the
+              stacked mobile text that measured p95 3.5:1 for white and about
+              2.9:1 for the lime, with the limb core far worse.
 
-        {/* Background traces — dim */}
-        <g fill="none" opacity="0.10">
-          <polyline points="0,80 60,80 100,120 220,120 220,160 340,160" stroke="#48B0FF" strokeWidth="1" />
-          <polyline points="0,180 50,180 90,220 200,220 200,260 300,260" stroke="#48B0FF" strokeWidth="1" />
-          <polyline points="120,0 120,50 180,50 180,90 280,90" stroke="#48B0FF" strokeWidth="1" />
-          <polyline points="680,180 620,180 620,230 560,230 560,280 480,280" stroke="#48B0FF" strokeWidth="1" />
-          <polyline points="680,280 640,280 640,320" stroke="#48B0FF" strokeWidth="1" />
-        </g>
-
-        {/* Foreground traces — bright */}
-        <g fill="none">
-          <polyline points="0,110 90,110 130,150 420,150 460,110 680,110" stroke="#48B0FF" strokeWidth="1.2" opacity="0.1" />
-          <polyline points="320,0 320,70 370,70 410,110 520,110 560,70 680,70" stroke="#48B0FF" strokeWidth="1" opacity="0.1" />
-          <polyline points="180,0 220,40 330,40 370,0" stroke="#48B0FF" strokeWidth="1" opacity="0.20" />
-          <polyline points="370,0 400,40 460,40 510,0" stroke="#48B0FF" strokeWidth="1" opacity="0.15" />
-          <polyline points="0,270 110,270 150,230 460,230 500,270 680,270" stroke="#48B0FF" strokeWidth="1.2" opacity="0.18" />
-          <line x1="320" y1="70" x2="320" y2="150" stroke="#48B0FF" strokeWidth="1" opacity="0.18" />
-          <line x1="460" y1="110" x2="460" y2="150" stroke="#48B0FF" strokeWidth="1" opacity="0.18" />
-          <line x1="150" y1="230" x2="150" y2="270" stroke="#48B0FF" strokeWidth="1" opacity="0.16" />
-          <line x1="500" y1="230" x2="500" y2="270" stroke="#48B0FF" strokeWidth="1" opacity="0.16" />
-          <line x1="90" y1="110" x2="90" y2="150" stroke="#48B0FF" strokeWidth="1" opacity="0.16" />
-        </g>
-
-        {/* Resistor components */}
-        {/* <g fill="none" opacity="0.22">
-          <rect x="122" y="143" width="16" height="14" rx="2" stroke="#005CFF" strokeWidth="0.9" />
-          <rect x="370" y="143" width="16" height="14" rx="2" stroke="#2486FF" strokeWidth="0.9" />
-          <rect x="312" y="62" width="16" height="16" rx="2" stroke="#2486FF" strokeWidth="0.9" />
-          <rect x="450" y="222" width="16" height="14" rx="2" stroke="#005CFF" strokeWidth="0.9" />
-        </g> */}
-
-        {/* Junction nodes */}
-        <g filter="url(#instructor-gl)">
-          {[
-            { cx: 90, cy: 110, r1: 5, r2: 2.8, grad: 'url(#instructor-ng1)', fill: '#48B0FF' },
-            { cx: 320, cy: 150, r1: 5, r2: 2.8, grad: 'url(#instructor-ng1)', fill: '#48B0FF' },
-            { cx: 460, cy: 150, r1: 5, r2: 2.8, grad: 'url(#instructor-ng2)', fill: '#48B0FF' },
-            { cx: 150, cy: 270, r1: 5, r2: 2.2, grad: 'url(#instructor-ng1)', fill: '#48B0FF' },
-            { cx: 500, cy: 270, r1: 5, r2: 2.2, grad: 'url(#instructor-ng2)', fill: '#48B0FF' },
-            { cx: 320, cy: 70, r1: 5, r2: 2.2, grad: 'url(#instructor-ng2)', fill: '#48B0FF' },
-            { cx: 460, cy: 110, r1: 5, r2: 2.2, grad: 'url(#instructor-ng1)', fill: '#48B0FF' },
-          ].map((n, i) => (
-            <g key={`node-${i}`}>
-              <circle cx={n.cx} cy={n.cy} r={n.r1} fill={n.grad} />
-              <circle cx={n.cx} cy={n.cy} r={n.r2} fill={n.fill} opacity="0.1" />
-            </g>
-          ))}
-        </g>
-      </svg>
-
-      {/* Dark mode overlay — keeps the light circuit SVG visible
-          underneath as a faint texture while shifting the dominant
-          tone toward the dark navy CI palette. */}
+          Hence one breakpoint rather than a blanket overlay: `lg:hidden` with
+          no base display class, so the div is block below lg and gone above.
+          The 80% #0a1628 lifts the same phone band to the numbers in the
+          round's report. Nothing else about the element changed. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-[1] hidden bg-[#0a1628]/80 "
+        className="pointer-events-none absolute inset-0 z-[1] lg:hidden bg-[#0a1628]/80 "
       />
 
       <div className="relative z-[2] mx-auto grid min-h-[400px] max-w-[1200px] grid-cols-1 lg:grid-cols-2  max-md:px-4">
