@@ -1,9 +1,9 @@
 import {
   attendanceModeBlock,
-  attendanceModeLabel,
   buildAttendeeBlocks,
   invoiceCountryLabel,
   invoiceTypeLabel,
+  scheduleTypeLabel,
   textBlock,
 } from './labels';
 import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
@@ -115,7 +115,7 @@ export function buildPublicRegistrationModel({
      * blank for two of the three); collapse into the label and the mail starts
      * announcing a choice on a schedule where nothing was chosen.
      */
-    training_type_label: trainingTypeLabel(data),
+    training_type_label: scheduleTypeLabel(data?.scheduleType, data?.attendanceMode),
     attendance_mode: attendanceModeBlock({
       attendanceMode: data?.attendanceMode,
       scheduleType: data?.scheduleType,
@@ -137,18 +137,12 @@ export function buildPublicRegistrationModel({
 }
 
 /**
- * scheduleType + attendanceMode → the one label the summary table always shows.
- *
- * `online` reports the Teams wording even though no choice was offered, because
- * the row answers "what is this course" and not "what did you pick".
+ * `trainingTypeLabel` HAS MOVED to ./labels.js as `scheduleTypeLabel`, because
+ * the bundle confirmation asks the same question once per COURSE. Behaviour is
+ * byte-identical — the exhaustive scheduleType × attendanceMode sweep in
+ * test/pure/emailTemplateModels covers every combination and is what makes that
+ * claim checkable rather than asserted.
  */
-function trainingTypeLabel(data) {
-  if (data?.scheduleType === 'online') return attendanceModeLabel('teams');
-  if (data?.scheduleType === 'hybrid') return attendanceModeLabel(data?.attendanceMode);
-  // classroom, or a record whose scheduleType never got set: a room booking is
-  // the correct fail-safe, matching the hard-coded template.
-  return attendanceModeLabel('classroom');
-}
 
 /**
  * The billing section, FLAT: a show/hide flag plus two mutually exclusive

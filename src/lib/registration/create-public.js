@@ -11,6 +11,7 @@ export {
   asRegistrationPointer,
   buildAttendees,
   buildInvoiceDisplay,
+  buildBundleTag,
   buildConsentRecord,
   buildQuoteRegistration,
   buildPaidRegistration,

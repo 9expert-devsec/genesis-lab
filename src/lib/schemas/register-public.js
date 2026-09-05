@@ -167,6 +167,48 @@ export const invoiceSchema = z
     data.branchType === 'head_office' && data.branchCode ? { ...data, branchCode: '' } : data
   );
 
+/**
+ * INVOICE DATA PRESENT WHILE THE FLAG SAYS NOBODY ASKED FOR IT.
+ *
+ * ══ THE DEFECT THIS EXISTS FOR, AND WHY ZOD LET IT THROUGH ═════════════════
+ *
+ * A real bundle quotation request stored a fully populated `invoice` — type,
+ * country, name, a 13-digit tax id and a complete Thai address — beside
+ * `requestInvoice: false`. Every reader of that pair gates on the FLAG:
+ * `InvoiceReadView` renders ไม่ได้ขอใบเสนอราคา, and the email's
+ * `buildFlatBillingBlocks` returns `document_requested: false`. So the customer's
+ * billing details were in the database, in the mail model, and visible to
+ * nobody — the sales team could not act on the request, and nothing errored.
+ *
+ * The schema did not catch it because the only rule was the OTHER direction:
+ * `requestInvoice && !invoice`. Flag set, data missing. The inverse — data
+ * present, flag clear — was an error condition that existed NOWHERE in the
+ * codebase, which is exactly why it shipped.
+ *
+ * ── WHY THIS IS SAFE TO ADD TO THE ORDINARY PATH ─────────────────────────
+ * Checked before adding it, because a rule that rejects a legitimate state is
+ * worse than the bug. `publicRegistrationSchema` is parsed in exactly two
+ * places — the quote route and the charge route — and the only UI that produces
+ * bodies for them is `RegisterWizard`, which hard-sets `requestInvoice: true` in
+ * its `defaultValues`. `InvoiceFields` renders unconditionally on both forms, so
+ * there is no flow that collects invoice data WITHOUT asking for a quotation.
+ * The admin path cannot produce the pair either: `updateRegistration` sets the
+ * flag and the data together in both directions, and clearing one clears both.
+ *
+ * A `null` or absent invoice is untouched — that is the ordinary
+ * no-quotation-wanted state and stays legal.
+ *
+ * ── ONE PREDICATE, TWO SCHEMAS ───────────────────────────────────────────
+ * `publicRegistrationSchema` and `bundleRegistrationSchema` each own a single
+ * `.superRefine()` with no seam to share, so the RULE is shared as a function
+ * rather than the refinement being restated. Same move as `isInvertedPrice` and
+ * `isBundleRegistrationOpen`: the value is not the expression, it is that the
+ * two cannot disagree about what is valid.
+ */
+export function invoiceContradictsFlag(data) {
+  return Boolean(data?.invoice) && !data?.requestInvoice;
+}
+
 // ── Consent schema (Omise pre-payment summary) ─────────────────────
 export const consentSchema = z.object({
   dataChecked:   z.boolean(),
@@ -225,6 +267,16 @@ export const publicRegistrationSchema = z
         path: ['invoice'],
         code: 'custom',
         message: 'กรุณากรอกข้อมูลใบเสนอราคา',
+      });
+    }
+
+    // …AND THE INVERSE, which is the direction that actually shipped a defect.
+    // See `invoiceContradictsFlag` for what it cost and why it is safe here.
+    if (invoiceContradictsFlag(data)) {
+      ctx.addIssue({
+        path: ['requestInvoice'],
+        code: 'custom',
+        message: 'มีข้อมูลใบเสนอราคาแต่ไม่ได้ระบุว่าขอใบเสนอราคา',
       });
     }
 

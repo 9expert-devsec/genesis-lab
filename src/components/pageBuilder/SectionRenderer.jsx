@@ -269,6 +269,7 @@ export function SectionRenderer({
   path = null,
   resolvedData = null,
   fillHeight = false,
+  pageId = null,
 }) {
   if (!section || typeof section !== "object") return null;
   if (section.enabled === false) return null;
@@ -324,6 +325,7 @@ export function SectionRenderer({
           path={path ? [...path, "content", slot, i] : null}
           resolvedData={resolvedData}
           fillHeight={FILLS_ITS_TRACK.has(section.type)}
+          pageId={pageId}
         />
       ));
     }
@@ -349,6 +351,24 @@ export function SectionRenderer({
   //              (resolveSectionData → resolvedData, keyed by the unique section
   //              id) so ONE sync renderer serves both the server page and the
   //              client canvas. undefined for a section with no resolved data.
+  //   pageId   — promotion_bundle's register link is keyed on (pageId,
+  //              sectionId) and NOT on sectionId alone, because
+  //              duplicatePageBuilderPage keeps section ids by design: two
+  //              bundles on a duplicated promotion page carry the same section
+  //              id, and a quotation keyed on that alone could not say which
+  //              page it came from. A section knows its own id and cannot know
+  //              its page's, so the page threads it — through the RECURSION as
+  //              well, since a bundle inside a two_column is an ordinary
+  //              promotion layout and would otherwise be handed null and draw
+  //              no button. Ignored by the other 25 types exactly as domId,
+  //              settings and data are. `null` for any caller that does not
+  //              pass one, which is every caller but PageBuilderView.
+  //   sectionId — the OTHER HALF of that pair. A section component is not
+  //              otherwise handed its own id, and the two travel together
+  //              because neither is usable alone: this is the id that is unique
+  //              only WITHIN a page. Not to be confused with `domId`, which is
+  //              `advanced.sectionId` — an author-set DOM anchor, a different
+  //              value with an unfortunately similar name.
   const inner = (
     <Component
       content={content}
@@ -358,6 +378,8 @@ export function SectionRenderer({
       inEditor={path != null}
       settings={settings}
       data={resolvedData ? resolvedData[section.id] : undefined}
+      pageId={pageId}
+      sectionId={section.id}
       {...childProps}
     />
   );

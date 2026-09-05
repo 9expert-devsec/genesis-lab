@@ -118,16 +118,63 @@ export function baseRegistration({ data, attendees, ipAddress = null }) {
 }
 
 /**
+ * The bundle tag for one leg, or `undefined` for an ordinary registration.
+ *
+ * ── IT IS BUILT HERE, FROM WHAT THE SERVER RESOLVED ───────────────────────
+ * NOT from the request body, and that is the whole point of it being a
+ * function rather than a passthrough. The (pageId, sectionId) pair arrives in
+ * a URL and is a lookup key; `resolveBundleRequest` turns it into a real
+ * section, and the tag is minted from THAT. A client cannot post a `bundle`
+ * object — `publicRegistrationSchema` has no such key and strips it — so no
+ * registration can be filed against a package the customer never opened.
+ *
+ * `undefined` rather than `null` for the absent case: the field's default on
+ * the model is `undefined`, so an ordinary registration writes no key at all
+ * rather than a null one, and `bundle == null` stays the whole test for "is
+ * this an ordinary row".
+ *
+ * All four values are stringified and trimmed here rather than trusted from
+ * their sources. `name` is DENORMALISED at this moment on purpose — see the
+ * field's note on the model — so an empty one is stored as empty and the
+ * readers decide what to draw.
+ */
+export function buildBundleTag({ pageId, sectionId, requestId, name } = {}) {
+  const page = String(pageId ?? '').trim();
+  const section = String(sectionId ?? '').trim();
+  const request = String(requestId ?? '').trim();
+  // The three IDENTITY fields are what make a leg traceable and groupable. A
+  // partial tag is worse than none, so anything short of all three writes no
+  // tag — matching the model, where those three are required inside the
+  // subdocument and `name` is not.
+  if (!page || !section || !request) return undefined;
+  return {
+    pageId: page,
+    sectionId: section,
+    requestId: request,
+    name: String(name ?? '').trim(),
+  };
+}
+
+/**
  * The document the quote route hands to RegisterPublic.create().
  *
  * `pricing` and `payment` stay unset: a quote has no charge. `consent` is
  * whatever the customer ticked on step 2, or null on the toggle-OFF path where
  * no checkbox is shown.
+ *
+ * ── ONE BUILDER FOR BOTH, AND A BUNDLE LEG IS A QUOTE ─────────────────────
+ * `bundle` is optional and a leg is otherwise an ORDINARY quote registration —
+ * same course scalars, same coordinator, same attendees, same invoice. That is
+ * the whole reason the several-rows shape survives every existing reader, so
+ * giving legs their own builder would be the first place the two could drift
+ * apart. It is spread conditionally so an ordinary registration writes no
+ * `bundle` key at all.
  */
-export function buildQuoteRegistration({ data, attendees, ipAddress = null }) {
+export function buildQuoteRegistration({ data, attendees, ipAddress = null, bundle = undefined }) {
   return {
     ...baseRegistration({ data, attendees, ipAddress }),
     consent: buildConsentRecord(data.consent, ipAddress),
+    ...(bundle ? { bundle } : {}),
   };
 }
 

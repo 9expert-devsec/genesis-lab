@@ -187,7 +187,7 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
                   round dates. The schedule chip has moved to its own column. */}
               <td className="p-0 align-top">
                 <CellLink href={href} style={pad(1)}>
-                  <CourseCell name={row.courseName} classDate={row.classDate} />
+                  <CourseCell name={row.courseName} classDate={row.classDate} bundle={row.bundle} />
                 </CellLink>
               </td>
 
@@ -269,13 +269,39 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
  * The lesson is the reason the old comment was written down rather than the
  * guard just being added: whether a guard is real depends on what else is in the
  * box, and that changes when columns move.
+ *
+ * ── THE BUNDLE LINE, AND WHY IT IS IN THIS CELL ──────────────────────────
+ * A bundle quotation request is stored as ONE ROW PER COURSE. Three rows, same
+ * coordinator, same minute, three different courses — and without this line
+ * they read as three unrelated people who happened to book on the same
+ * afternoon. Nothing else on the row could tell you otherwise.
+ *
+ * It goes in the COURSE cell rather than in a column of its own for the reason
+ * round 3 gave when it deleted four columns: the question this line answers is
+ * "what is this row about", which is what this cell is for, and a seventh
+ * column for a fact that is absent from almost every row would spend width the
+ * course name has already been measured to need.
+ *
+ * The chip is drawn even when the bundle has no NAME — an author may ship an
+ * unnamed bundle, the storage floor accepts it (see the model), and this is the
+ * reader that has to decide what to show. `แพ็กเกจ` alone still says the thing
+ * that matters: this row is one leg of several.
  */
-function CourseCell({ name, classDate }) {
+function CourseCell({ name, classDate, bundle }) {
+  const bundleName = String(bundle?.name ?? '').trim();
   return (
     <>
       <p className="truncate text-[15px] font-bold leading-[20px] text-[var(--text-primary)]">
         {name || '—'}
       </p>
+      {bundle ? (
+        <span
+          data-testid="bundle-leg-chip"
+          className="mt-0.5 inline-flex w-fit max-w-full items-center truncate rounded-9e-sm bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
+        >
+          {bundleName ? `แพ็กเกจ: ${bundleName}` : 'แพ็กเกจ'}
+        </span>
+      ) : null}
       {classDate ? (
         <div className="flex h-[32px] items-center">
           <span className="truncate text-[13px] leading-[15px] text-[var(--text-secondary)]">

@@ -1398,10 +1398,25 @@ function BundleItemRow({ item, index, total, courses, resolved, onPatch, onMove,
         hint="เลือกจากรายการ หรือพิมพ์รหัสเองถ้ายังไม่มีในรายการ"
         invalid={courseMissing}
       />
+      {/*
+        ── THE CONSEQUENCE GREW, SO THE SENTENCE DID ──────────────────────────
+        This warning used to end at "the card shows the code instead of the
+        course name, and the package price will not match what is shown". That
+        was the whole truth until the bundle register button shipped: a bundle
+        whose item cannot be resolved now REFUSES QUOTATION REQUESTS outright,
+        because a request the sales team cannot price, for a package the site
+        cannot name, is not a lead (see resolveBundleRequest).
+
+        An author reading the old wording would have taken this for a cosmetic
+        problem on a card. It is the difference between an ugly row and a
+        promotion that has silently stopped selling, and this warning is the
+        only place anyone is told — see docs/ticket-bundle-unavailable-invisible.md
+        for what is still missing.
+      */}
       {courseMissing && (
         <Warn tone="red">
           ไม่พบคอร์สรหัสนี้ — การ์ดจะแสดงรหัสพร้อมคำเตือนแทนชื่อคอร์ส
-          และราคาแพ็กเกจจะไม่ตรงกับคอร์สที่แสดง
+          ราคาแพ็กเกจจะไม่ตรงกับคอร์สที่แสดง และแพ็กเกจนี้จะไม่รับลงทะเบียน
         </Warn>
       )}
 
@@ -1414,8 +1429,13 @@ function BundleItemRow({ item, index, total, courses, resolved, onPatch, onMove,
       {noRounds && (
         <Warn>ไม่พบรอบที่เปิดรับสมัครของคอร์สนี้ตอนนี้ — เลือกรอบไม่ได้จนกว่าจะมีรอบเปิด</Warn>
       )}
+      {/* Same amendment, same reason as the course warning above: an item with
+          no round is one the quotation guard refuses the whole package for. */}
       {courseId !== '' && !String(item?.roundId ?? '').trim() && (
-        <Warn>ยังไม่ได้เลือกรอบ — การ์ดนี้จะไม่แสดงวันที่และไม่มีปุ่มลงทะเบียน</Warn>
+        <Warn>
+          ยังไม่ได้เลือกรอบ — การ์ดนี้จะไม่แสดงวันที่และไม่มีปุ่มลงทะเบียน
+          และแพ็กเกจนี้จะไม่รับลงทะเบียน
+        </Warn>
       )}
     </div>
   );

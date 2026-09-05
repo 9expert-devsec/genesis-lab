@@ -195,6 +195,44 @@ const ConsentSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * The bundle tag. See the `bundle` field below for what it is for, what each
+ * of these four is read by, and the cost the shape accepts.
+ *
+ * `_id: false` — a tag is identified by the document it sits on. Giving it one
+ * would be the first half of an API for editing it, which is not a thing:
+ * `pageId`/`sectionId` say which bundle this leg came from and are a matter of
+ * historical fact, and `requestId` is what makes the legs one request.
+ *
+ * The three IDENTITY fields are `required` INSIDE the subdocument while the
+ * subdocument itself defaults to `undefined`. That is the shape the tag needs:
+ * absent means "an ordinary registration", present means "this leg can be
+ * traced and grouped". A half-filled tag — a `requestId` with no `pageId` —
+ * would be a leg nothing could group and nothing could trace back to a bundle,
+ * which is worse than no tag at all.
+ *
+ * ── `name` IS THE EXCEPTION, AND IT IS THE STORAGE-FLOOR RULE AGAIN ───────
+ * `promotion_bundle.name` defaults to `''` and no publish rule demands one, so
+ * an author can legitimately ship an unnamed bundle. THIS SCHEMA IS THE
+ * STORAGE FLOOR (see the AttendeeSchema note at the top of this file, which
+ * makes the same argument at length): it must accept everything any legitimate
+ * writer may legitimately write, and `required: true` on a String rejects `''`
+ * — so an unnamed bundle would fail to create a registration at all, turning a
+ * cosmetic authoring gap into a customer who cannot submit a form.
+ *
+ * The readers handle the empty case instead, where an empty value is a display
+ * question rather than a storage one.
+ */
+const BundleSchema = new mongoose.Schema(
+  {
+    pageId:    { type: String, trim: true, required: true },
+    sectionId: { type: String, trim: true, required: true },
+    requestId: { type: String, trim: true, required: true },
+    name:      { type: String, trim: true, default: '' },
+  },
+  { _id: false }
+);
+
 const RegisterPublicSchema = new mongoose.Schema(
   {
     // Course / class references (upstream IDs as strings)
@@ -282,6 +320,144 @@ const RegisterPublicSchema = new mongoose.Schema(
      * so the annotation cannot quietly become a lookup.
      */
     supersedesRegistrationId: { type: String, default: null },
+
+    /**
+     * ══ THIS ROW IS ONE LEG OF A BUNDLE QUOTATION REQUEST ══════════════════
+     *
+     * ABSENT ON AN ORDINARY REGISTRATION. Presence IS the tag — there is no
+     * boolean beside it, because a boolean and a subdocument are two facts that
+     * can disagree, and the only thing a boolean could say is what `bundle !=
+     * null` already says.
+     *
+     * A customer asked for a package of several courses. One person attends all
+     * of them, so ONE FORM was filled in, and it produced **one row per
+     * course+round**, each an otherwise ordinary public registration, all
+     * carrying the same `requestId`.
+     *
+     * ══ WHY SEVERAL ROWS AND NOT ONE ROW HOLDING A LIST ════════════════════
+     *
+     * The alternative was one document with an array of course+round items. It
+     * was rejected, and the deciding argument is worth having here rather than
+     * in a commit message, because it is the argument that stops someone
+     * "simplifying" this later.
+     *
+     * Every field on this schema that names a course or a round is a SCALAR —
+     * `courseId`, `courseCode`, `courseName`, `classId`, `classDate`,
+     * `scheduleType`, `attendanceMode` — and nine of the fourteen readers of
+     * this collection read one of them. A row holding several courses breaks
+     * them. Six of those breaks are SILENT:
+     *
+     *   · `getRoundRegistrationSummary` (lib/actions/schedules.js) is the SEAT
+     *     ACCOUNTING. It is `find({classId})`, and its header records that the
+     *     join was measured exact against live data. A row holding several
+     *     rounds is visible to ONE of them, so every other round has a person
+     *     expected in the room whom nothing counted. No error. No empty state.
+     *     A number that is wrong and looks right.
+     *
+     *   · `course-rename-preview` reads `find({courseCode: from})` under a
+     *     regime declared EXACT, on the screen an admin uses to decide whether
+     *     a rename is safe. A course that appears only inside a nested list
+     *     would report ZERO affected rows.
+     *
+     *   · and `courseClause`, `getRegistrationCourseOptions`, the public
+     *     `searchClauses`, and the list projection all read the scalars too —
+     *     each of them returning FEWER rows rather than an error.
+     *
+     * Under one-row-per-leg every one of those keeps working untouched, and the
+     * seat accounting becomes CORRECT rather than merely unbroken: the person
+     * genuinely is attending round X of course A and round Y of course B, and
+     * each round's summary should count them.
+     *
+     * ══ THE COST WE ARE ACCEPTING. READ THIS BEFORE "FIXING" A COUNT. ══════
+     *
+     * COUNTS ACROSS THE REGISTRATION SCREENS MEAN **LEGS, NOT REQUESTS**.
+     *
+     * A three-course bundle is three rows. It adds three to the ทั้งหมด card,
+     * three to the source-toggle badge, three to the dashboard donut and three
+     * to the seven-day trend. One customer, one form, one email — three rows,
+     * and every number on those screens counts three.
+     *
+     * THAT IS DELIBERATE AND IT IS NOT A BUG. A future reader will meet the
+     * inflated number BEFORE they meet this paragraph, and the obvious repair —
+     * excluding rows where `bundle` exists, or counting `distinct requestId`
+     * inside the shared scope — is the wrong one twice over:
+     *
+     *   1. It would make the cards disagree with the TABLE BELOW THEM, which
+     *      lists legs because legs are what the collection holds. That exact
+     *      disagreement is what lib/registrations/listFilter.js exists to
+     *      prevent, and this screen has shipped it twice already (the date
+     *      chips filtering the cards and not the table; ทั้งหมด 6 over cards
+     *      summing to 5). A third would be this.
+     *   2. It would mean a bundle leg is a registration for the seat-accounting
+     *      and the course filter and the rename preview, but not for the count
+     *      — one row that is a registration to five readers and not to a sixth.
+     *
+     * The question a bundle-shaped count actually answers — "how many people
+     * asked for Bundle 1" — is `distinct('bundle.requestId', {…})`, one line,
+     * and it belongs wherever someone asks it rather than folded into a number
+     * that means something else.
+     *
+     * ── AND EVERY PER-ROW ADMIN EDIT IS ONE EDIT PER LEG ────────────────────
+     *
+     * MEASURED, the first time anyone met it: a bundle request whose
+     * `requestInvoice` flag was written wrong had to be corrected on the admin
+     * detail screen THREE TIMES — once per leg — because the invoice card, like
+     * every other editable card on that screen, edits ONE DOCUMENT.
+     *
+     * That is the same cost as the counts, arriving through a different door,
+     * and it applies to every field an admin can change: the status, the
+     * attendee roster, the coordinator, the invoice, an internal note. A
+     * three-course bundle is three records to a human as well as to a query.
+     *
+     * IT IS NOT A BUG AND MUST NOT BE "FIXED" BY MAKING ONE EDIT FAN OUT TO THE
+     * SIBLINGS. The legs are genuinely separate registrations — different
+     * courses, different rounds, different seats, and an admin may legitimately
+     * want to cancel one leg, move one leg to another round, or correct a name
+     * on one leg only. A cascading write would take that away and would do it
+     * silently, which is worse than the tedium it removes. If the repetition
+     * ever becomes worth addressing, the honest shape is a SEPARATE, EXPLICIT
+     * "apply to every leg of this request" action that says what it is about to
+     * touch — not a hidden widening of the edits that already exist.
+     *
+     * ══ EVERY FIELD HERE HAS A NAMED READER ════════════════════════════════
+     *
+     *   pageId + sectionId  the bundle's IDENTITY, and it is a PAIR by ruling.
+     *                       A section id is unique within a page and not
+     *                       globally — `duplicatePageBuilderPage` keeps section
+     *                       ids by design — so a duplicated promotion page
+     *                       mints two bundles a quotation could not tell apart
+     *                       on the id alone. Read by the form's
+     *                       `resolveBundleRequest` guard and by the detail
+     *                       screen's หลักสูตร card.
+     *   requestId           groups the legs. Read by `PublicTable`'s course
+     *                       cell (which marks them as one request), by the
+     *                       email (ONE send per request, not one per leg), and
+     *                       by `distinct` for the count above.
+     *   name                the bundle's name AS IT WAS AT SUBMISSION. Read by
+     *                       the list chip and the detail row.
+     *
+     * `name` is DENORMALISED on purpose, for the reason `courseName` already is
+     * on this schema: the page can be edited, unpublished or deleted, and an
+     * admin reading a six-month-old quotation must still see what was sold. A
+     * lookup would show today's answer to a question about last March.
+     *
+     * `itemCount` was considered and REJECTED — its only reader would be a
+     * chip that `name` already serves.
+     *
+     * ══ NOT CUSTOMER INPUT ═════════════════════════════════════════════════
+     *
+     * Deliberately absent from `publicRegistrationSchema`. The tag is derived
+     * SERVER-SIDE from the (pageId, sectionId) pair after the guard has
+     * resolved it, so a client cannot post a `bundle` object and file a
+     * registration under a package it never opened. The zod schema is what a
+     * customer may send; this is what the server concluded.
+     *
+     * Strings, not ObjectIds, and `requestId` in particular: it points at
+     * another RegisterPublic document (the first leg), and the type makes
+     * `.populate()` impossible so the pointer cannot quietly become a lookup —
+     * the same idiom, for the same reason, as `supersedesRegistrationId` above.
+     */
+    bundle: { type: BundleSchema, default: undefined },
 
     // Meta
     /**

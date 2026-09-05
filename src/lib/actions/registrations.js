@@ -168,8 +168,23 @@ export async function listRegistrations({
        * under the attendee count. Ruled out, and deriving one would have meant
        * adding `attendeesListProvided` and the `attendees` ARRAY — personal data
        * — to a list query, to render a three-way chip.
+       *
+       * ── `bundle` IS HERE BECAUSE THE TABLE DRAWS IT, AND IT MUST ─────────
+       * A bundle quotation request is stored as ONE ROW PER COURSE, so a
+       * three-course package is three rows sitting next to each other with the
+       * same coordinator and three different courses. Without the tag in this
+       * projection they render as three unrelated registrations that happen to
+       * share a name, and there is nothing on the screen — not one pixel — to
+       * say otherwise.
+       *
+       * That is the whole reason the field exists rather than being a fact only
+       * the database knows. See the note on `bundle` in models/RegisterPublic
+       * for the shape, its cost, and why the counts on this screen mean LEGS.
+       *
+       * It is a SUBDOCUMENT, and the rule this projection is held to is that it
+       * equals the render. Four short strings, on a page of twenty rows.
        */
-      .select('courseName classDate scheduleType attendanceMode coordinator attendeesCount status createdAt')
+      .select('courseName classDate scheduleType attendanceMode coordinator attendeesCount status createdAt bundle')
       .lean();
   }
 
@@ -1246,6 +1261,26 @@ export async function getRegistrationStatusCounts({
   const courseCodes = await inhouseCourseCodes({ q, source });
   const scope = buildRegistrationScope({ q, source, range, from, to, course, legacy, courseCodes });
   const Model = getModel(source);
+
+  /**
+   * ── THESE NUMBERS COUNT LEGS, NOT REQUESTS, AND THAT IS DELIBERATE ───────
+   *
+   * A bundle quotation request is stored as one row per course, so a
+   * three-course package adds THREE to every count below — and to the ทั้งหมด
+   * card, the toggle badge and the dashboard donut.
+   *
+   * If you have arrived here to "fix" that by excluding rows carrying a
+   * `bundle`, or by counting distinct `bundle.requestId`: DON'T, and read the
+   * note on the `bundle` field in models/RegisterPublic first. The short
+   * version is that these cards sit directly above a TABLE THAT LISTS LEGS,
+   * because legs are what the collection holds — so narrowing the count and not
+   * the table would make this screen answer one question two ways, which is the
+   * exact defect this module was created to end and which it has already
+   * shipped twice.
+   *
+   * "How many people asked for Bundle 1" is a different question and it has its
+   * own one-line answer: `distinct('bundle.requestId', …)`.
+   */
 
   if (source === 'inhouse') {
     /**

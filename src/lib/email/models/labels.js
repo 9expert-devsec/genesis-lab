@@ -41,6 +41,40 @@ export function attendanceModeLabel(attendanceMode) {
 }
 
 /**
+ * ประเภทการอบรม — the label EVERY registration mail shows, for every schedule
+ * type. One definition, two models.
+ *
+ * ── IT WAS LOCAL TO publicRegistrationModel UNTIL THE BUNDLE MAIL ─────────
+ * It is the same question there and in `bundleRegistrationModel`, asked once
+ * per registration in one and once per COURSE in the other, so it moved here
+ * rather than being copied. `labels.js` is where "every branch that used to
+ * live inside the hard-coded HTML" is resolved, and this is one of them.
+ *
+ * The signature takes the two VALUES rather than the payload object, because
+ * the bundle model has no payload to hand it — it has a round's `type`, per
+ * row. The public model's behaviour is byte-identical and the exhaustive
+ * scheduleType × attendanceMode sweep in test/pure/emailTemplateModels says so.
+ *
+ * ── DELIBERATELY NOT MERGED WITH `attendanceModeBlock` ───────────────────
+ * They answer different questions and merging loses one: this row says WHAT
+ * THIS COURSE IS and is always shown; that block says WHICH OPTION WAS PICKED
+ * and is hybrid-only. Collapsing into the block blanks the row on classroom and
+ * online schedules (which was the original bug); collapsing into the label
+ * starts announcing a choice on a schedule where nothing was chosen.
+ *
+ * `online` reports the Teams wording even though no choice was offered, because
+ * the row answers "what is this course" and not "what did you pick". A missing
+ * or unrecognised type falls back to Classroom, matching the hard-coded
+ * template it replaced: a room booking is the correct fail-safe for a record
+ * whose type never got set.
+ */
+export function scheduleTypeLabel(scheduleType, attendanceMode) {
+  if (scheduleType === 'online') return attendanceModeLabel('teams');
+  if (scheduleType === 'hybrid') return attendanceModeLabel(attendanceMode);
+  return attendanceModeLabel('classroom');
+}
+
+/**
  * The mode row is HYBRID-ONLY. On a classroom-only or online-only schedule the
  * mode carries no information (there is nothing to have chosen between) and the
  * templates omit the row entirely rather than state the obvious.

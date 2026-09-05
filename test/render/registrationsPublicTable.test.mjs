@@ -578,3 +578,108 @@ test('the column ratios are the measured shares, normalised', () => {
   // And they sum to 1, or the columns do not fill the table.
   assert.ok(Math.abs(ratios.reduce((a, b) => a + b, 0) - 1) < 1e-5, 'the ratios do not sum to 1');
 });
+
+// ── 8. A bundle leg says so, and an ordinary row does not ───────────────────
+
+/**
+ * ── WHY THESE ROWS RENDER THEIR OWN TABLE ──────────────────────────────────
+ * The fixtures above are shared by roughly thirty assertions — the column
+ * count, the anchor sweep, the empty-element sweep, the ratio arithmetic — and
+ * adding a fifth row to `ROWS` would perturb every one of them for the sake of
+ * two. These get their own render, and the empty-element sweep is repeated over
+ * it rather than assumed, because a chip with no text is exactly the failure
+ * that sweep exists to catch.
+ */
+const BUNDLE_LEG = {
+  _id: 'cccccccccccccccccccc0005',
+  courseName: 'Excel Level 1',
+  classDate: '20 - 21 ต.ค. 2569',
+  scheduleType: 'classroom',
+  attendanceMode: 'classroom',
+  coordinator: { firstName: 'สมหญิง', lastName: 'ดีใจ', email: 'somying@example.com' },
+  attendeesCount: 1,
+  status: 'pending',
+  createdAt: '2026-09-01T03:00:00.000Z',
+  bundle: {
+    pageId: '6500000000000000000000aa',
+    sectionId: 'sec-1',
+    requestId: 'cccccccccccccccccccc0005',
+    name: 'Data Analyst Starter',
+  },
+};
+
+/** The same request's second leg: same requestId, a different course. */
+const BUNDLE_LEG_2 = {
+  ...BUNDLE_LEG,
+  _id: 'dddddddddddddddddddd0006',
+  courseName: 'Power BI Level 1',
+  classDate: '3 - 4 พ.ย. 2569',
+};
+
+/** A bundle an author never named — the storage floor accepts it. */
+const UNNAMED_LEG = {
+  ...BUNDLE_LEG,
+  _id: 'eeeeeeeeeeeeeeeeeeee0007',
+  bundle: { ...BUNDLE_LEG.bundle, name: '' },
+};
+
+const bundleHtml = renderToStaticMarkup(createElement(PublicTable, {
+  items: [BUNDLE_LEG, BUNDLE_LEG_2, UNNAMED_LEG, FULL],
+  lastEdited: {},
+  detailHref: href,
+}));
+
+test('a bundle leg carries the แพ็กเกจ chip, naming the package', () => {
+  /**
+   * Three rows, one coordinator, three courses, three minutes apart. Without
+   * this chip they read as three unrelated people who happened to book on the
+   * same afternoon — and nothing else on the row could tell you otherwise.
+   */
+  const row = rowFor(bundleHtml, BUNDLE_LEG._id);
+  assert.match(row, /data-testid="bundle-leg-chip"/);
+  assert.match(row, /แพ็กเกจ: Data Analyst Starter/);
+});
+
+test('CONTROL: an ordinary registration carries NO chip', () => {
+  // Discrimination, not existence: without this the assertion above is
+  // satisfied by a table that chips every row.
+  const row = rowFor(bundleHtml, FULL._id);
+  assert.equal(/data-testid="bundle-leg-chip"/.test(row), false);
+  // …and the chip really is in the markup somewhere, so the false above is the
+  // row lacking it rather than the feature being absent.
+  assert.match(bundleHtml, /data-testid="bundle-leg-chip"/);
+});
+
+test('both legs of one request are chipped — the grouping is visible, not implied', () => {
+  for (const id of [BUNDLE_LEG._id, BUNDLE_LEG_2._id]) {
+    assert.match(rowFor(bundleHtml, id), /data-testid="bundle-leg-chip"/, `leg ${id} is unmarked`);
+  }
+});
+
+test('an UNNAMED bundle still says แพ็กเกจ rather than rendering a bare label', () => {
+  /**
+   * `promotion_bundle.name` defaults to '' and no publish rule demands one, so
+   * this is a state an author can ship. The word alone still says the thing
+   * that matters — this row is one leg of several — and a chip reading
+   * "แพ็กเกจ: " would read as a value that failed to load.
+   */
+  const row = rowFor(bundleHtml, UNNAMED_LEG._id);
+  assert.match(row, /data-testid="bundle-leg-chip"/);
+  assert.equal(/แพ็กเกจ:/.test(row), false, 'a trailing colon with nothing after it');
+  assert.match(row, /แพ็กเกจ</);
+});
+
+test('no bundle row emits an empty element either', () => {
+  // The sweep from section 3, over the rows that carry the new element. A chip
+  // rendered with no text is precisely what it is for.
+  const m = EMPTY_ELEMENT.exec(bundleHtml);
+  assert.equal(m, null, `an empty element rendered: ${m?.[0]}`);
+});
+
+test('the chip does not add a cell — the bundle row still matches the header', () => {
+  // It lives INSIDE the course cell. A seventh column would break the colSpan
+  // and the ratio arithmetic pinned above.
+  const headerCount = headerCells(bundleHtml).length;
+  const row = rowFor(bundleHtml, BUNDLE_LEG._id);
+  assert.equal((row.match(/<td\b/g) ?? []).length, headerCount);
+});
