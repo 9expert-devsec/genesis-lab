@@ -104,22 +104,46 @@ test('scope enforcement: the action reads the scopes off the session it guarded'
   );
 });
 
-test('scope enforcement: getDashboardMetrics accepts `range` AND NOTHING ELSE', () => {
-  /**
-   * The load-bearing assertion in this file. A `'use server'` export's arguments
-   * are client-supplied; `range` can only change WHICH rows are counted, never
-   * WHETHER they are. A second parameter is how that stops being true.
-   */
+/**
+ * Every parameter `getDashboardMetrics` is allowed to take, BY NAME.
+ *
+ * ── A NAMED LIST, NOT A COUNT — AND WHY IT CHANGED IN ROUND E4 ─────────────
+ * Round E2 pinned this at ONE parameter, reasoning that a `'use server'`
+ * export's arguments are client-supplied and that `range` can only change WHICH
+ * rows are counted, never WHETHER they are. E4's custom date range needs `from`
+ * and `to`, which are the same kind of value and carry the same guarantee.
+ *
+ * The count became a NAMED allowlist rather than being raised to three, because
+ * a count is satisfied by folding the three into one object — the letter of E2's
+ * rule with none of its point. Naming them means a FOURTH parameter, or a
+ * differently-named one, still fails here and still has to be argued for.
+ *
+ * What the rule was protecting is untouched: the SCOPES decide whether the
+ * registration half runs at all, they come from the session, and they are read
+ * before any of these three is looked at. A caller without
+ * `dashboard_registrations` can post any from/to they like and reach no read.
+ */
+const ALLOWED_ACTION_PARAMS = ['range', 'from', 'to'];
+
+test('scope enforcement: getDashboardMetrics accepts ONLY named window parameters', () => {
   const m = ACTION.code.match(/export async function getDashboardMetrics\(([^)]*)\)/);
   assert.ok(m, 'getDashboardMetrics was not found — has it been renamed?');
-  const params = m[1].split(',').map((s) => s.trim()).filter(Boolean);
-  assert.equal(
-    params.length, 1,
-    `getDashboardMetrics now takes ${params.length} parameters (${m[1]}). Every one `
-    + 'of them is a value a browser can post to this endpoint. If a second is '
-    + 'genuinely needed, it must not be able to widen what is read.',
+  const params = m[1].split(',').map((s) => s.trim()).filter(Boolean)
+    .map((p) => p.split('=')[0].trim());
+  assert.deepEqual(
+    params, ALLOWED_ACTION_PARAMS,
+    `getDashboardMetrics takes (${m[1]}). Every one is a value a browser can post `
+    + 'to this endpoint. A parameter not on this list must be argued for here '
+    + 'first — and it must not be able to widen what is read.',
   );
-  assert.match(params[0], /^range/, `the one parameter is '${params[0]}', not range`);
+});
+
+test('scope enforcement: the action VALIDATES the two date parameters itself', () => {
+  // `from` and `to` are untrusted strings that reach a Mongo $match. They are
+  // resolved in the action, where they arrive, so nothing downstream ever parses
+  // a date and there is one place to read to know what a bad one does.
+  assert.match(ACTION.withImports, /resolveCustomWindow/);
+  assert.match(ACTION.code, /const custom = resolveCustomWindow\(\{ from, to \}\)/);
 });
 
 test('scope enforcement: requirePage/requireAdmin on `dashboard` is NOT weakened', () => {
@@ -137,16 +161,31 @@ test('scope enforcement: the page derives scopes from its own guarded session', 
 
 test('scope enforcement: no scope is read from searchParams', () => {
   /**
-   * `sp` is the awaited searchParams object. It may be read for `range` and for
-   * nothing else — a `sp.scope`, `sp.scopes` or `sp.system` would be a
-   * permission a URL can grant.
+   * `sp` is the awaited searchParams object. It may be read for the WINDOW
+   * parameters and nothing else — a `sp.scope`, `sp.scopes` or `sp.system` would
+   * be a permission a URL can grant.
+   *
+   * `from` and `to` joined `range` in round E4. Same kind of value, same
+   * guarantee: they select rows, they cannot select a SECTION. The list is the
+   * same one the action allows, and it is named rather than counted for the
+   * reason given at ALLOWED_ACTION_PARAMS above.
    */
   const reads = [...PAGE.code.matchAll(/\bsp\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]);
   assert.ok(reads.length > 0, 'no sp.* read found at all — has the param been renamed?');
   assert.deepEqual(
-    [...new Set(reads)].sort(), ['range'],
-    'the page reads a search parameter other than `range`',
+    [...new Set(reads)].sort(), [...ALLOWED_ACTION_PARAMS].sort(),
+    'the page reads a search parameter that is not a window parameter',
   );
+});
+
+test('scope enforcement: the date parameters are scoped like the range is', () => {
+  /**
+   * A `from`/`to` in a system-only caller's URL must leave no trace. The page
+   * resolves them to '' without the scope — the same shape as `range`, which is
+   * resolved to null — so the payload carries no evidence a window was asked for.
+   */
+  assert.match(PAGE.code, /scopes\.registrations \? String\(sp\.from \?\? ''\) : ''/);
+  assert.match(PAGE.code, /scopes\.registrations \? String\(sp\.to\s+\?\? ''\) : ''/);
 });
 
 test('scope enforcement: DashboardClient is handed no scopes prop', () => {

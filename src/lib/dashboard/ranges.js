@@ -21,6 +21,43 @@
 export const RANGE_VALUES = Object.freeze(['today', 'week', 'month', 'all']);
 
 /**
+ * ══ THE DEFAULT RANGE — ทั้งหมด ═════════════════════════════════════════════
+ *
+ * It was วันนี้, and that is why an admin opening /admin saw a page of zeros.
+ * Round E1 measured the cause: the newest registration is weeks old, so วันนี้,
+ * 7 วัน and เดือนนี้ all hold nothing. The page was working exactly as designed
+ * and the first thing it told anyone was 0.
+ *
+ * ทั้งหมด is the only range guaranteed to contain data if any exists. A default
+ * that is usually empty trains the reader to distrust the screen, and E3's
+ * empty state — which now names the most recent record — is a repair for a
+ * situation the default should not have been creating in the first place.
+ *
+ * ── DECLARED ONCE, HERE ─────────────────────────────────────────────────────
+ * Three places need it: the page (normalising `?range=`), the server action (its
+ * parameter default) and the client (which range button is lit, and which value
+ * means "no query parameter"). A string repeated in three files is three places
+ * to change it and two places to forget — and the failure would be silent, since
+ * every one of them is a valid range on its own.
+ *
+ * `?range=today` still works and still means today. This changes what NO
+ * parameter means, not what a parameter means.
+ */
+export const DEFAULT_RANGE = 'all';
+
+/**
+ * A `?range=` value from a URL, narrowed to something safe to compute with.
+ *
+ * Anything unrecognised — absent, misspelt, an array, an injected object —
+ * becomes the default rather than reaching `dateRangeAt`. The page used to do
+ * this with an inline `['today','week','month','all'].includes(...)`, i.e. a
+ * fourth copy of RANGE_VALUES.
+ */
+export function normaliseRange(value) {
+  return RANGE_VALUES.includes(value) ? value : DEFAULT_RANGE;
+}
+
+/**
  * ══ THE BUCKET RULE ═════════════════════════════════════════════════════════
  *
  *   วันนี้     → HOUR    24 bars across one day
@@ -249,4 +286,216 @@ export const RANGE_WINDOW_LABEL = Object.freeze({
 /** The label for the window actually drawn. Unknown ranges get ทั้งหมด's. */
 export function windowLabel(range) {
   return RANGE_WINDOW_LABEL[range] ?? RANGE_WINDOW_LABEL.all;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// THE CUSTOM RANGE (E4.4)
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * ══ THE BUCKET RULE FOR AN ARBITRARY SPAN ═══════════════════════════════════
+ *
+ * The four presets each know their own bucket. A custom span does not, so the
+ * bucket is DERIVED FROM THE SPAN — a couple of days is not a month's worth of
+ * bars, and two years of daily bars is not a trend.
+ *
+ * ── HOW THE BANDS WERE DERIVED, NOT GUESSED ────────────────────────────────
+ * The target is a bar count a card-width chart can actually draw: enough to show
+ * a shape, few enough to stay legible. Roughly 3 at the low end and ~62 at the
+ * high end. Each band's upper bound is the span at which its bucket reaches that
+ * ceiling, and the next band's floor is chosen so it starts with at least three
+ * bars rather than one.
+ *
+ *   span <= 2 days     -> HOUR    24-48 bars
+ *   span <= 62 days    -> DAY      3-62 bars
+ *   span >  62 days    -> MONTH    3+ bars (63 days spans at least three months)
+ *
+ * ── THERE IS A DISCONTINUITY AT 62 DAYS, AND IT IS INHERENT ────────────────
+ * 62 days draws 62 daily bars; 63 draws three monthly ones. That jump is the
+ * price of having three bucket sizes and no fourth. A WEEK bucket would smooth
+ * it, and round E3 declined to add one for a reason that still holds: weekly has
+ * to pick a week-start convention, which is a second decision with no obviously
+ * right answer and no reader who cares. Stated rather than hidden.
+ */
+export const SPAN_BUCKET_BANDS = Object.freeze([
+  { maxDays: 2,  bucket: 'hour' },
+  { maxDays: 62, bucket: 'day' },
+]);
+export const SPAN_BUCKET_FALLBACK = 'month';
+
+/** 'hour' | 'day' | 'month', from the span between two instants. */
+export function bucketForSpan(from, to) {
+  const ms = new Date(to).getTime() - new Date(from).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return SPAN_BUCKET_FALLBACK;
+  const days = ms / 864e5;
+  for (const band of SPAN_BUCKET_BANDS) {
+    if (days <= band.maxDays) return band.bucket;
+  }
+  return SPAN_BUCKET_FALLBACK;
+}
+
+/**
+ * A `YYYY-MM-DD` string as the instant Bangkok midnight begins.
+ *
+ * ── THE PARSE IS STRICT, AND THE INSTANT IS BANGKOK'S ──────────────────────
+ * The strict regex plus the round-trip check is the pattern `parseDateInput` in
+ * lib/registrations/listFilter.js already uses, borrowed deliberately: it
+ * rejects `2026-02-31` (which `new Date` would roll into March), partials like
+ * `2026-08`, and anything that is not exactly ten characters of the right shape.
+ *
+ * What is NOT borrowed is that function's `new Date(y, m, d)`, which builds the
+ * instant in the SERVER's zone — UTC on Vercel. Round E3 found the chart
+ * grouping at +07:00 while enumerating in UTC and silently dropping the newest
+ * bucket; a picker whose dates were parsed in UTC would reintroduce exactly that
+ * for the first seven hours of every Bangkok day. These are Bangkok dates
+ * because the admin typing them is in Bangkok, and BUCKET_TZ is where that is
+ * written down.
+ *
+ * @returns {Date|null} null for anything that is not a real calendar date
+ */
+export function parseBangkokDate(value) {
+  const s = String(value ?? '').trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const [, y, mo, d] = m.map(Number);
+  const utcMidnight = Date.UTC(y, mo - 1, d);
+  const probe = new Date(utcMidnight);
+  // Round-trip, so 2026-02-31 is rejected rather than rolling into March.
+  if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== mo - 1 || probe.getUTCDate() !== d) {
+    return null;
+  }
+  return new Date(utcMidnight - TZ_OFFSET_MS);
+}
+
+/** The last instant of a Bangkok calendar day — `to` is INCLUSIVE. */
+export function bangkokEndOfDay(value) {
+  const start = parseBangkokDate(value);
+  return start ? new Date(start.getTime() + 864e5 - 1) : null;
+}
+
+/** A span nobody means: ten years. Beyond this the input is treated as junk. */
+export const MAX_CUSTOM_SPAN_DAYS = 3653;
+
+/**
+ * ══ THE VALIDATION RULE, IN ONE SENTENCE ════════════════════════════════════
+ *
+ * THE SERVER NEVER RENDERS A WINDOW THE ADMIN DID NOT ASK FOR. It either renders
+ * exactly what they asked for — repairing an input whose intent is unambiguous —
+ * or it falls back to the preset range and shows no custom window at all. It
+ * never invents a third window, and it never silently keeps half of a broken one.
+ *
+ * The cases, and which half of that sentence each lands in:
+ *
+ *   both absent            -> FALL BACK   no custom range was asked for
+ *   one half missing       -> FALL BACK   a one-ended span has no length, so no
+ *                                         bucket rule and no previous period
+ *   unparseable            -> FALL BACK   '2026-13-01', '05/09/2026', 'yesterday'
+ *   impossible date        -> FALL BACK   '2026-02-31' — right shape, no such day
+ *   from AFTER to          -> SWAP        unambiguous intent, and the sibling
+ *                                         registrations list already swaps rather
+ *                                         than showing an empty table
+ *   `to` in the future     -> CLAMP       to now; no data can exist after now, and
+ *                                         a title naming a window nobody can fill
+ *                                         is the E3 defect again
+ *   entirely in the future -> FALL BACK   after clamping there is no window left
+ *   span > 10 years        -> FALL BACK   not a range anyone means
+ *
+ * ORDER MATTERS, and is why this is one function rather than a chain of guards:
+ * parse -> swap -> clamp -> re-check. Clamping before swapping would turn a
+ * reversed future pair into a backwards window; swapping after clamping would
+ * hide that the window had already collapsed.
+ *
+ * @returns {{from: Date, to: Date}|null} null means "use the preset range"
+ */
+export function resolveCustomWindow({ from, to, now = new Date() } = {}) {
+  let start = parseBangkokDate(from);
+  let end = bangkokEndOfDay(to);
+  if (!start || !end) return null;
+
+  // from after to — the reader typed them the wrong way round.
+  if (start.getTime() > end.getTime()) {
+    start = parseBangkokDate(to);
+    end = bangkokEndOfDay(from);
+  }
+
+  // A `to` beyond now cannot contain data. Clamp rather than reject: the reader
+  // asked for "up to and including a date", and now is where that stops.
+  const ceiling = new Date(now);
+  if (end.getTime() > ceiling.getTime()) end = ceiling;
+
+  // Entirely in the future — after clamping there is nothing left to draw.
+  if (start.getTime() > end.getTime()) return null;
+
+  const days = (end.getTime() - start.getTime()) / 864e5;
+  if (days > MAX_CUSTOM_SPAN_DAYS) return null;
+
+  return { from: start, to: end };
+}
+
+/**
+ * The chart's title for a custom window — the DATES it actually drew, and the
+ * bucket it drew them in.
+ *
+ * The same rule E3 established for the four presets. Here the window came from
+ * the URL and may have been swapped or clamped on the way in, so naming what the
+ * admin TYPED would be the seven-day lie wearing new clothes. This names what
+ * was drawn, in Bangkok dates, via the same `bucketKey` the buckets use.
+ */
+export function customWindowLabel(from, to) {
+  const bucket = bucketForSpan(from, to);
+  const word = { hour: 'รายชั่วโมง', day: 'รายวัน', month: 'รายเดือน' }[bucket] ?? 'รายวัน';
+  return `${bucketKey(from, 'day')} – ${bucketKey(to, 'day')} — ${word}`;
+}
+
+/**
+ * ══ ONE WINDOW RESOLVER — PRESET OR CUSTOM ══════════════════════════════════
+ *
+ * Every consumer asks this and nothing else: the aggregation's `$match`, the
+ * bucket the series is grouped into, the axis the client draws, the title that
+ * names the window, and the previous period the percentage divides by. Before
+ * this they were five separate calls threaded through `readRegistrations`, and a
+ * custom range would have meant five branches — five chances for the chart to
+ * draw one window while the title named another, which is exactly the defect
+ * round E3 existed to end.
+ *
+ * ── THE CUSTOM PREVIOUS PERIOD IS THE EQUAL SPAN IMMEDIATELY PRECEDING ──────
+ * The same rule the presets use, and here it always exists — unlike ทั้งหมด,
+ * which has no period before everything. So a custom range gets its percentage
+ * normally, and that is a real difference between the two the report names.
+ *
+ * @param {object} args
+ * @param {string} args.range           one of RANGE_VALUES
+ * @param {{from: Date, to: Date}|null} args.custom  an ALREADY-VALIDATED window
+ *   from `resolveCustomWindow`. This function does not parse or validate: it is
+ *   pure arithmetic over instants, and the validation lives where the untrusted
+ *   strings arrive.
+ * @param {Date} args.now
+ */
+export function resolveWindow({ range, custom = null, now = new Date() } = {}) {
+  if (custom && custom.from && custom.to) {
+    const from = new Date(custom.from);
+    const to = new Date(custom.to);
+    const span = to.getTime() - from.getTime();
+    return {
+      from,
+      to,
+      custom: true,
+      bucket: bucketForSpan(from, to),
+      label: customWindowLabel(from, to),
+      previous: {
+        from: new Date(from.getTime() - 1 - span),
+        to: new Date(from.getTime() - 1),
+      },
+    };
+  }
+
+  const { from, to } = dateRangeAt(range, now);
+  return {
+    from,
+    to,
+    custom: false,
+    bucket: bucketForRange(range),
+    label: windowLabel(range),
+    previous: previousWindow(range, now),
+  };
 }

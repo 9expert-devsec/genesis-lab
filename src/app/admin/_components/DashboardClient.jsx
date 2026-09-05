@@ -12,6 +12,7 @@ import { buildStatusLabels, INHOUSE_STATUSES } from '@/lib/registrations/statuse
  * Mongo query come from one constant. See lib/dashboard/queueThresholds.js.
  */
 import { QUEUE_CARDS } from '@/lib/dashboard/actionQueue';
+import { DEFAULT_RANGE } from '@/lib/dashboard/ranges';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -105,7 +106,7 @@ function fmtBucketShort(key) {
  * component were replaced tomorrow by one that rendered `JSON.stringify(data)`,
  * no unauthorised number would appear.
  */
-export function DashboardClient({ data, openSchedulesCount, initialRange }) {
+export function DashboardClient({ data, openSchedulesCount, initialRange, initialFrom = '', initialTo = '' }) {
   const router   = useRouter();
   const pathname = usePathname();
   const sp       = useSearchParams();
@@ -113,8 +114,36 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
 
   const setRange = (val) => {
     const params = new URLSearchParams(sp.toString());
-    if (val === 'today') params.delete('range');
+    // The DEFAULT is the value that means "no query parameter". Hard-coding
+    // 'today' here after the default moved would leave /admin?range=all as the
+    // canonical URL for the default view — working, but a URL nobody would
+    // write, and one that disagrees with what the page does with no parameter.
+    if (val === DEFAULT_RANGE) params.delete('range');
     else params.set('range', val);
+    // Choosing a PRESET drops any custom window. Leaving from/to behind would
+    // make the server keep honouring them — the custom window wins — so the
+    // button would light and nothing would change, which is the worst of the
+    // three possible outcomes.
+    params.delete('from');
+    params.delete('to');
+    startTransition(() => router.push(`${pathname}?${params.toString()}`));
+  };
+
+  /**
+   * The custom window, submitted rather than navigated-on-change.
+   *
+   * Both halves are sent even when one is blank: the SERVER decides what a
+   * half-open range means (it falls back to the preset), and a client that
+   * silently dropped an empty half would be a second opinion about that.
+   */
+  const submitCustom = (e) => {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const params = new URLSearchParams(sp.toString());
+    const nextFrom = String(form.get('from') ?? '');
+    const nextTo = String(form.get('to') ?? '');
+    if (nextFrom) params.set('from', nextFrom); else params.delete('from');
+    if (nextTo) params.set('to', nextTo); else params.delete('to');
     startTransition(() => router.push(`${pathname}?${params.toString()}`));
   };
 
@@ -127,6 +156,17 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
   }
 
   const scopes = data.scopes ?? { registrations: false, system: false };
+
+  /**
+   * A CUSTOM window is reported by the SERVER, not inferred from the URL here.
+   *
+   * The dates in the query string may have been rejected — a reversed pair is
+   * swapped, an unparseable one falls back to the preset — so `initialFrom` being
+   * non-empty does not mean a custom window was drawn. `data.range === 'custom'`
+   * means it was, because the server sets it after validating. Reading the URL
+   * instead would light the button for a window nobody is looking at.
+   */
+  const isCustom = data.range === 'custom';
 
   /**
    * ── NEITHER SCOPE: A PAGE THAT RENDERS AND EXPLAINS ──────────────────────
@@ -164,7 +204,11 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
   // payload exists. Reading `data.trend` unconditionally would throw for a
   // system-only admin — which is the shape of the round: the absent half is
   // ABSENT, not empty, and every reader has to say which half it belongs to.
-  const rangeLabel  = RANGE_OPTIONS.find((r) => r.value === initialRange)?.label ?? 'วันนี้';
+  // The fallback is the DEFAULT's own label, derived rather than typed: a
+  // literal here would go on saying วันนี้ after the default moved, and it is
+  // the label of a range the page is not showing.
+  const rangeLabel  = RANGE_OPTIONS.find((r) => r.value === initialRange)?.label
+    ?? RANGE_OPTIONS.find((r) => r.value === DEFAULT_RANGE)?.label;
   // The bars are STACKED, so the axis has to scale against the stack rather than
   // against the taller of the two series — otherwise a bucket whose two halves
   // sum past the maximum overflows the plot area.
@@ -226,22 +270,73 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
           the action ignores `range` without the scope, so all three layers say
           the same thing.
         */}
-        {scopes.registrations && <div className="flex items-center rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface-muted)] p-1 gap-1">
-          {RANGE_OPTIONS.map((opt) => (
+        {scopes.registrations && <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface-muted)] p-1 gap-1">
+            {RANGE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setRange(opt.value)}
+                className={cn(
+                  'rounded-9e-md px-3 py-1.5 text-sm font-semibold transition-colors',
+                  // A CUSTOM window lights NO preset. The server reports
+                  // `range: 'custom'`, so `initialRange` matches none of the
+                  // four and the reader is not told two things at once.
+                  initialRange === opt.value && !isCustom
+                    ? 'bg-9e-navy text-9e-ice shadow-9e-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/*
+            ══ THE CUSTOM RANGE PICKER ═══════════════════════════════════════
+
+            NATIVE `<input type="date">`, and NO NEW DEPENDENCY. This is the
+            same control the registrations list's FilterPanel already uses —
+            same element, same `from`/`to` parameter names, same "both ends
+            optional" affordance — so an admin who has used the date filter
+            there already knows this one. A calendar widget would have been a
+            dependency, a bundle, and a second thing to learn.
+
+            SUBMITTED AS A FORM, not on every keystroke: a partially-typed date
+            is a date, and navigating on each one would fire a query per
+            character and land the reader on windows they never asked for.
+
+            The inputs are UNCONTROLLED with a `key` tied to their value — the
+            same pattern FilterPanel uses — so a navigation that changes the
+            dates re-seeds them, while typing does not fight the cursor.
+          */}
+          <form
+            onSubmit={submitCustom}
+            className="flex items-center gap-1.5 rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface-muted)] p-1"
+          >
+            <input
+              type="date" name="from" defaultValue={initialFrom} key={`from-${initialFrom}`}
+              aria-label="ตั้งแต่วันที่"
+              className="h-[30px] rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-2 text-[12px] text-[var(--text-primary)] focus-visible:outline-none focus-visible:border-9e-brand"
+            />
+            <span className="text-[12px] text-[var(--text-muted)]">–</span>
+            <input
+              type="date" name="to" defaultValue={initialTo} key={`to-${initialTo}`}
+              aria-label="ถึงวันที่"
+              className="h-[30px] rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-2 text-[12px] text-[var(--text-primary)] focus-visible:outline-none focus-visible:border-9e-brand"
+            />
             <button
-              key={opt.value}
-              type="button"
-              onClick={() => setRange(opt.value)}
+              type="submit"
               className={cn(
-                'rounded-9e-md px-3 py-1.5 text-sm font-semibold transition-colors',
-                initialRange === opt.value
+                'rounded-9e-md px-2.5 py-1 text-[12px] font-semibold transition-colors',
+                isCustom
                   ? 'bg-9e-navy text-9e-ice shadow-9e-sm'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               )}
             >
-              {opt.label}
+              กำหนดเอง
             </button>
-          ))}
+          </form>
         </div>}
       </div>
 
@@ -306,6 +401,7 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
             label="Public ทั้งหมด"
             value={data.public.total}
             delta={data.delta?.public?.total}
+            series={data.sparklines?.public?.total}
             href="/admin/registrations"
             accent="border-l-4 border-l-9e-action"
           />
@@ -313,6 +409,7 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
             label={PUBLIC_STATUS_LABEL.pending}
             value={data.public.pending}
             delta={data.delta?.public?.pending}
+            series={data.sparklines?.public?.pending}
             href="/admin/registrations?status=pending"
             badge={{ text: 'รอ', cls: 'bg-amber-100 text-amber-700' }}
           />
@@ -320,6 +417,7 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
             label={PUBLIC_STATUS_LABEL.confirmed}
             value={data.public.confirmed}
             delta={data.delta?.public?.confirmed}
+            series={data.sparklines?.public?.confirmed}
             href="/admin/registrations?status=confirmed"
             badge={{ text: 'ใบเสนอราคา', cls: 'bg-blue-100 text-blue-700' }}
           />
@@ -327,6 +425,7 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
             label={PUBLIC_STATUS_LABEL.paid}
             value={data.public.paid}
             delta={data.delta?.public?.paid}
+            series={data.sparklines?.public?.paid}
             href="/admin/registrations?status=paid"
             badge={{ text: 'ชำระ', cls: 'bg-emerald-100 text-emerald-700' }}
           />
@@ -334,6 +433,7 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
             label={PUBLIC_STATUS_LABEL.cancelled}
             value={data.public.cancelled}
             delta={data.delta?.public?.cancelled}
+            series={data.sparklines?.public?.cancelled}
             href="/admin/registrations?status=cancelled"
             badge={{ text: 'ยกเลิก', cls: 'bg-slate-100 text-slate-500' }}
           />
@@ -345,6 +445,7 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
             label="In-house ทั้งหมด"
             value={data.inhouse.total}
             delta={data.delta?.inhouse?.total}
+            series={data.sparklines?.inhouse?.total}
             href="/admin/registrations?source=inhouse"
             accent="border-l-4 border-l-violet-400"
           />
@@ -364,6 +465,7 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
             label={INHOUSE_STATUS_LABEL.pending}
             value={data.inhouse.pending}
             delta={data.delta?.inhouse?.pending}
+            series={data.sparklines?.inhouse?.pending}
             href="/admin/registrations?source=inhouse&status=pending"
             badge={{ text: INHOUSE_STATUS_LABEL.pending, cls: 'bg-amber-100 text-amber-700' }}
           />
@@ -371,6 +473,7 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
             label={INHOUSE_STATUS_LABEL.quoted}
             value={data.inhouse.quoted}
             delta={data.delta?.inhouse?.quoted}
+            series={data.sparklines?.inhouse?.quoted}
             href="/admin/registrations?source=inhouse&status=quoted"
             badge={{ text: INHOUSE_STATUS_LABEL.quoted, cls: 'bg-blue-100 text-blue-700' }}
           />
@@ -705,27 +808,150 @@ function DeltaBadge({ delta }) {
   );
 }
 
-function StatCard({ label, value, href, badge, accent = '', className, delta }) {
+/**
+ * ══ A CARD'S OWN SERIES, DRAWN AT CARD SIZE ═════════════════════════════════
+ *
+ * The values come from the SAME facet pass and the SAME bucket enumeration as
+ * the trend chart — one array per card, already aligned to the chart's buckets
+ * by construction (see `seriesFor` in lib/dashboard/buildMetrics.js). Nothing
+ * here decides a window or a bucket size; if it did, the card and the chart
+ * would be two implementations that agree until they do not.
+ *
+ * ── FLAT, NOT ABSENT, WHEN EVERY VALUE IS ZERO ─────────────────────────────
+ * The same ruling as E3's zero queue cards. A card with no registrations draws
+ * a flat line along the baseline; a card with no DATA draws nothing. An admin
+ * must be able to tell "none happened" from "no chart" — and at the default
+ * range, on a quiet week, "none happened" is the common case.
+ *
+ * ── DECORATIVE, IN THE ACCESSIBILITY SENSE ─────────────────────────────────
+ * `aria-hidden` and no tab stop. THE NUMBER IS THE FACT: it is stated in the
+ * card's value, in text, above this. The sparkline must never become the only
+ * place a value appears, because for a screen-reader user it is not a place at
+ * all. It is `focusable="false"` as well as aria-hidden — IE/Edge legacy SVG
+ * takes a tab stop from the former and not the latter, and this costs nothing.
+ */
+function Sparkline({ values }) {
+  if (!Array.isArray(values) || values.length === 0) return null;
+
+  const W = 96;
+  const H = 20;
+  const max = Math.max(...values, 0);
+  const n = values.length;
+
+  // A single bucket has no line to draw between two points, so it gets a dot's
+  // worth of flat segment rather than a zero-length path that renders nothing.
+  const x = (i) => (n === 1 ? W / 2 : (i / (n - 1)) * W);
+  // `max || 1` keeps an all-zero series on the baseline instead of dividing by
+  // zero — which is the flat line the header promises.
+  const y = (v) => H - (v / (max || 1)) * (H - 2) - 1;
+
+  const d = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      width="100%"
+      height={H}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+      className="block overflow-visible text-9e-action"
+    >
+      <path
+        d={d}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
+/**
+ * ══ ONE CARD SHELL, WITH EVERY OPTIONAL PART GIVEN A RESERVED SLOT ══════════
+ *
+ * "Public ทั้งหมด" and "In-house ทั้งหมด" did not match their neighbours in
+ * height. The neighbours carry a status chip and those two do not, so their
+ * content boxes differed by a chip's height while the grid stretched the
+ * anchors around them — the borders lined up and the contents did not.
+ *
+ * The fix is structural rather than a special case for the two. EVERY card
+ * renders EVERY slot; a slot with nothing in it still occupies its height. So
+ * the shell is identical whichever optional parts a caller passes, and adding a
+ * new optional part later means adding a slot to this one function rather than
+ * finding the cards that now disagree.
+ *
+ *   · `h-full` on both the <Link> and the card, so grid stretch reaches the
+ *     card itself. Without it the anchor stretches and the card inside does not,
+ *     which is what made the borders line up while the contents did not.
+ *   · `flex-col` + `mt-auto` on the last slot, so the delta sits on the baseline
+ *     of every card rather than floating under whatever content precedes it.
+ *   · `min-h` on the chip and delta slots — the reserved space. The values are
+ *     the rendered heights of the things that go in them, so a card with no chip
+ *     is exactly as tall as one with a chip.
+ *
+ * ── `data-slot` IS FOR THE TEST, AND IT IS THE HONEST WAY TO ASSERT THIS ────
+ * Equal HEIGHT is a pixel fact, and `renderToStaticMarkup` has no layout engine
+ * — a render test cannot measure it and would be lying if it claimed to. What a
+ * render test CAN assert is the property that produces it: every card emits the
+ * same slots in the same order. So the slots are named, and the test counts them
+ * per card. What that cannot prove is the pixels, and the report says so.
+ */
+function StatCard({ label, value, href, badge, accent = '', className, delta, series }) {
   const inner = (
     <div
+      data-slot="card"
       className={cn(
-        'rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-5 transition-shadow',
+        'flex h-full flex-col rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-5 transition-shadow',
         href && 'hover:shadow-9e-md cursor-pointer',
         accent,
         className
       )}
     >
-      <p className="text-xs font-medium text-[var(--text-secondary)]">{label}</p>
-      <p className="mt-1 text-3xl font-bold tabular-nums text-[var(--text-primary)]">{value}</p>
-      {badge && (
-        <span className={cn('mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold', badge.cls)}>
-          {badge.text}
-        </span>
+      <p data-slot="label" className="text-xs font-medium text-[var(--text-secondary)]">{label}</p>
+      <p data-slot="value" className="mt-1 text-3xl font-bold tabular-nums text-[var(--text-primary)]">{value}</p>
+
+      {/* The chip slot. Reserved whether or not a chip was passed. */}
+      <div data-slot="badge" className="mt-2 min-h-[19px]">
+        {badge && (
+          <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold', badge.cls)}>
+            {badge.text}
+          </span>
+        )}
+      </div>
+
+      {/*
+        The sparkline slot — reserved, and flat rather than absent at all-zero.
+
+        ── PRESENT WHEN THE CARD IS A SERIES-BEARING CARD, NOT ALWAYS ─────────
+        `StatCard` is also the ภาพรวมระบบ strip's card, and those six count LIVE
+        totals — active banners, open rounds — which have no per-bucket history
+        to draw and never will. Reserving 24px of empty chart on them would be
+        space spent on nothing.
+
+        The equal-height rule is a WITHIN-ROW property, and no row mixes the two
+        kinds: the eight registration cards all receive a series, the six system
+        cards all receive none. So each row stays uniform, which is what E4.2
+        actually requires. A registration card that lost its series would lose
+        its slot and shrink — the very defect E4.2 fixed — so the sparkline test
+        asserts all eight have one.
+      */}
+      {Array.isArray(series) && (
+        <div data-slot="sparkline" className="mt-2 min-h-[24px]">
+          <Sparkline values={series} />
+        </div>
       )}
-      <DeltaBadge delta={delta} />
+
+      {/* The delta slot. `mt-auto` pins it to the card's baseline. */}
+      <div data-slot="delta" className="mt-auto min-h-[17px] pt-2">
+        <DeltaBadge delta={delta} />
+      </div>
     </div>
   );
-  return href ? <Link href={href}>{inner}</Link> : inner;
+  return href ? <Link href={href} className="block h-full">{inner}</Link> : inner;
 }
 
 function DonutChart({ segments, total }) {

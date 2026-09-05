@@ -49,6 +49,7 @@ import WebhookLog              from '@/models/WebhookLog';
 import { requireAdmin } from '@/lib/actions/auth';
 import { buildDashboardMetrics } from '@/lib/dashboard/buildMetrics';
 import { dashboardScopes, hasNoDashboardScope } from '@/lib/dashboard/scopes';
+import { DEFAULT_RANGE, resolveCustomWindow } from '@/lib/dashboard/ranges';
 
 function serialize(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
 
@@ -68,11 +69,33 @@ const MODELS = {
 /**
  * Fetch the dashboard metrics the caller is authorised to see.
  *
- * @param {'today'|'week'|'month'|'all'} range — date filter for the registration
- *   counts. Client-supplied, and deliberately inert for a caller without
- *   `dashboard_registrations`.
+ * ══ THREE PARAMETERS, ALL OF THEM WINDOW PARAMETERS ═════════════════════════
+ *
+ * This is a `'use server'` export, so every argument is a value a browser can
+ * post. Round E2 pinned it at ONE parameter with the reasoning that `range` can
+ * change WHICH rows are counted and never WHETHER they are. `from` and `to`
+ * are the same kind of value and carry the same guarantee, so the guard in
+ * test/fs/dashboardScopeEnforcement is now a NAMED ALLOWLIST of exactly these
+ * three rather than a count — a count would have been satisfied by folding them
+ * into one object, which is the letter of the rule with none of its point.
+ *
+ * What still holds, and is what the rule was protecting: the SCOPES decide
+ * whether the registration half runs at all, and they come from the session
+ * before any of these is looked at. A caller without `dashboard_registrations`
+ * can post any `from`/`to` they like and reach no registration read.
+ *
+ * ── THE DATES ARE VALIDATED HERE, WHERE THE UNTRUSTED STRINGS ARRIVE ───────
+ * `resolveCustomWindow` is the one rule (see its header for the case table). It
+ * returns instants or null; nothing downstream ever parses a date, so there is
+ * one place a bad date can be handled and one place to read to know what happens
+ * to one.
+ *
+ * @param {'today'|'week'|'month'|'all'} range — preset window. Client-supplied,
+ *   and deliberately inert for a caller without `dashboard_registrations`.
+ * @param {string} [from] — 'YYYY-MM-DD', a BANGKOK date. Untrusted.
+ * @param {string} [to]   — 'YYYY-MM-DD', a BANGKOK date, INCLUSIVE. Untrusted.
  */
-export async function getDashboardMetrics(range = 'today') {
+export async function getDashboardMetrics(range = DEFAULT_RANGE, from = '', to = '') {
   const session = await requireAdmin('dashboard');
   const scopes = dashboardScopes(session?.user);
 
@@ -89,5 +112,13 @@ export async function getDashboardMetrics(range = 'today') {
 
   await dbConnect();
 
-  return serialize(await buildDashboardMetrics({ scopes, range, models: MODELS }));
+  /**
+   * Resolved AFTER the scope check and BEFORE any read. A caller without the
+   * registration scope never reaches a registration query whatever this returns,
+   * so the work is wasted for them and harmless — but it is also the only place
+   * these two strings are interpreted, which is the property worth having.
+   */
+  const custom = resolveCustomWindow({ from, to });
+
+  return serialize(await buildDashboardMetrics({ scopes, range, custom, models: MODELS }));
 }

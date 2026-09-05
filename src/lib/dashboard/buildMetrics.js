@@ -37,12 +37,9 @@ import {
 import {
   BUCKET_TZ,
   bucketFormat,
-  bucketForRange,
   dateRange,
-  dateRangeAt,
   enumerateBuckets,
-  previousWindow,
-  windowLabel,
+  resolveWindow,
 } from '@/lib/dashboard/ranges';
 import { readRegistrationQueue, readSystemQueue } from '@/lib/dashboard/actionQueue';
 
@@ -101,10 +98,8 @@ export { dateRange };
  * cheap indexed read (`createdAt_-1_status_1` already covers a `$max`) rather
  * than the window filter being reinstated.
  */
-function registrationPipeline({ inhouseCollection, range, now }) {
-  const { from, to } = dateRangeAt(range, now);
-  const prev = previousWindow(range, now);
-  const bucket = bucketForRange(range);
+function registrationPipeline({ inhouseCollection, window }) {
+  const { from, to, bucket, previous: prev } = window;
 
   /** A window as a `$match` stage list — empty for ทั้งหมด, which is unbounded. */
   const windowMatch = (win) => {
@@ -118,12 +113,30 @@ function registrationPipeline({ inhouseCollection, range, now }) {
 
   const facet = {
     current: [...windowMatch({ from, to }), byStatus],
+    /**
+     * ── GROUPED BY STATUS TOO, SINCE ROUND E4 ────────────────────────────────
+     *
+     * It was `{source, key}`, which answers the TREND CHART and nothing else.
+     * Round E3 specified a per-card sparkline and its commit plan had no commit
+     * that rendered one, so the requirement outlived the round — and when E4
+     * came to build it, the data was not there: the payload carried a series for
+     * "Public ทั้งหมด" and "In-house ทั้งหมด" and for none of the six status
+     * cards.
+     *
+     * Adding `status` to the grouping key is the whole fix. It is the SAME
+     * branch of the SAME facet in the SAME pass — no second query, no second
+     * bucket rule, and the read count does not move. The trend chart's two
+     * series are then a sum over statuses of the same rows, which is what makes
+     * "the sparkline and the chart agree" true by construction rather than by
+     * two implementations happening to match.
+     */
     series: [
       ...windowMatch({ from, to }),
       {
         $group: {
           _id: {
             source: '$source',
+            status: '$status',
             key: { $dateToString: { format: bucketFormat(bucket), date: '$createdAt', timezone: BUCKET_TZ } },
           },
           n: { $sum: 1 },
@@ -199,15 +212,16 @@ function deltaPercent(current, previous) {
  * Called only when the caller holds `dashboard_registrations`; there is no
  * filtering step anywhere downstream, because nothing was fetched to filter.
  */
-async function readRegistrations(models, range, now = new Date()) {
+async function readRegistrations(models, range, now = new Date(), custom = null) {
   const { RegisterPublic, RegisterInhouse } = models;
   const inhouseCollection = RegisterInhouse.collection.name;
-  const bucket = bucketForRange(range);
-  const { from, to } = dateRangeAt(range, now);
-  const prev = previousWindow(range, now);
+  // ONE resolver. The $match, the bucket, the axis, the title and the previous
+  // period all come from this object, so they cannot describe different windows.
+  const window = resolveWindow({ range, custom, now });
+  const { from, to, bucket, previous: prev } = window;
 
   const [facet] = await RegisterPublic.aggregate(
-    registrationPipeline({ inhouseCollection, range, now })
+    registrationPipeline({ inhouseCollection, window })
   );
 
   const current = facet?.current ?? [];
@@ -225,16 +239,57 @@ async function readRegistrations(models, range, now = new Date()) {
   const axisTo = to;
   const keys = enumerateBuckets(axisFrom, axisTo, bucket);
 
+  /**
+   * ══ ONE FOLD, TWO CONSUMERS — THE CHART AND THE SPARKLINES ══════════════════
+   *
+   * `bucket[source].total` and `bucket[source][status]` are accumulated in the
+   * same walk over the same rows, so the trend chart's bar for a bucket is the
+   * arithmetic sum of the sparkline values under it. They cannot disagree,
+   * because there is nothing for them to disagree BETWEEN.
+   *
+   * `effectiveStatus` again, for the same reason as the counts: an in-house
+   * document still storing the retired `contacted` has to appear in the
+   * `pending` sparkline, or the card's number and its little chart would tell
+   * different stories about the same rows.
+   */
   const seriesMap = { public: new Map(), inhouse: new Map() };
   for (const row of facet?.series ?? []) {
     const src = row?._id?.source;
-    if (seriesMap[src]) seriesMap[src].set(row._id.key, row.n ?? 0);
+    if (!seriesMap[src]) continue;
+    const key = row._id.key;
+    const n = row.n ?? 0;
+    const slot = seriesMap[src].get(key) ?? { total: 0 };
+    slot.total += n;
+    const live = effectiveStatus(row._id.status, src);
+    if (live) slot[live] = (slot[live] ?? 0) + n;
+    seriesMap[src].set(key, slot);
   }
+
   const trend = keys.map((key) => ({
     key,
-    publicCount: seriesMap.public.get(key) ?? 0,
-    inhouseCount: seriesMap.inhouse.get(key) ?? 0,
+    publicCount: seriesMap.public.get(key)?.total ?? 0,
+    inhouseCount: seriesMap.inhouse.get(key)?.total ?? 0,
   }));
+
+  /**
+   * The per-card series, ALIGNED TO `keys` BY CONSTRUCTION.
+   *
+   * Every array is built by mapping the same `keys` the trend chart maps, so
+   * "the sparkline uses the same buckets as the chart" is not a rule anyone has
+   * to remember — it is the only thing this code can produce. A card with no
+   * registrations at all still gets an array of zeros of the right length, which
+   * is what lets the UI draw a flat line rather than nothing.
+   */
+  const seriesFor = (source, statusKeys) => Object.fromEntries(
+    ['total', ...statusKeys].map((k) => [
+      k,
+      keys.map((key) => seriesMap[source].get(key)?.[k] ?? 0),
+    ])
+  );
+  const sparklines = {
+    public: seriesFor('public', PUBLIC_STATUS_VALUES),
+    inhouse: seriesFor('inhouse', INHOUSE_STATUS_VALUES),
+  };
 
   const statusDist = [
     { status: 'pending',   label: PUBLIC_STATUS_LABEL.pending,   count: publicNow.pending,   color: '#f59e0b' },
@@ -244,7 +299,13 @@ async function readRegistrations(models, range, now = new Date()) {
   ];
 
   const out = {
-    range,
+    // The RANGE the payload was built under. A custom window reports itself as
+    // such rather than as whichever preset was also in the URL, so the client
+    // lights no preset button and the reader is not told two things at once.
+    range: window.custom ? 'custom' : range,
+    custom: window.custom
+      ? { from: from.toISOString(), to: to.toISOString() }
+      : undefined,
     bucket,
     /**
      * WHAT THE CHART SHOULD SAY IT DREW.
@@ -254,7 +315,7 @@ async function readRegistrations(models, range, now = new Date()) {
      * hard-code "(7 วัน)" while the range control said something else — a title
      * written independently of the query is exactly how that survived.
      */
-    windowLabel: windowLabel(range),
+    windowLabel: window.label,
     window: {
       from: from ? from.toISOString() : null,
       to: to.toISOString(),
@@ -285,6 +346,11 @@ async function readRegistrations(models, range, now = new Date()) {
      */
     inhouse: inhouseNow,
     trend,
+    /**
+     * One array per stat card, every one the same length as `trend`. The cards
+     * read theirs by name; nothing has to look up a bucket rule to draw one.
+     */
+    sparklines,
     statusDist,
   };
 
@@ -319,9 +385,9 @@ async function readRegistrations(models, range, now = new Date()) {
  * content counts sat behind the nine registration counts for no reason but the
  * order the awaits were written in.
  */
-async function readRegistrationHalf(models, range, now) {
+async function readRegistrationHalf(models, range, now, custom) {
   const [metrics, queue] = await Promise.all([
-    readRegistrations(models, range, now),
+    readRegistrations(models, range, now, custom),
     readRegistrationQueue(models, now),
   ]);
   return { ...metrics, queue };
@@ -394,9 +460,15 @@ async function readSystem(models, now) {
  *   never on the `'use server'` export — a client-supplied clock would let a
  *   caller shift the window a figure was counted in.
  */
-export async function buildDashboardMetrics({ scopes, range, models, now = new Date() }) {
+export async function buildDashboardMetrics({ scopes, range, models, now = new Date(), custom = null }) {
   const [registrations, system] = await Promise.all([
-    scopes?.registrations ? readRegistrationHalf(models, range, now) : null,
+    /**
+     * `custom` is an ALREADY-VALIDATED {from, to} of Dates, or null. It reaches
+     * here only through the action, which resolves it from the raw query strings
+     * — so nothing below ever sees an untrusted date, and a system-only caller
+     * never reaches this branch at all whatever their URL says.
+     */
+    scopes?.registrations ? readRegistrationHalf(models, range, now, custom) : null,
     scopes?.system ? readSystem(models, now) : null,
   ]);
 

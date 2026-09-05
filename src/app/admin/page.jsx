@@ -2,6 +2,7 @@ import { getDashboardMetrics } from '@/lib/actions/dashboard';
 import { ADMIN_SCHEDULE_STATUSES, getAllSchedules } from '@/lib/api/schedules';
 import { requirePage } from '@/lib/rbac/guard';
 import { dashboardScopes } from '@/lib/dashboard/scopes';
+import { DEFAULT_RANGE, normaliseRange } from '@/lib/dashboard/ranges';
 import { DashboardClient } from './_components/DashboardClient';
 
 export const metadata = { title: 'แดชบอร์ด' };
@@ -30,9 +31,18 @@ export default async function Page({ searchParams }) {
    * PAYLOAD too — a system-only admin's page carries no evidence that a range
    * was ever asked for.
    */
-  const range = scopes.registrations
-    ? (['today', 'week', 'month', 'all'].includes(sp.range) ? sp.range : 'today')
-    : null;
+  const range = scopes.registrations ? normaliseRange(sp.range) : null;
+
+  /**
+   * THE CUSTOM DATES BELONG TO THE REGISTRATION SCOPE, like the range control.
+   *
+   * Read as RAW STRINGS and passed on untouched — the action validates them,
+   * where they arrive, and this page must not become a second place that decides
+   * what a date is. Resolved to '' for a caller without the scope so a from/to
+   * in their URL leaves no trace in the payload, exactly as `range` does.
+   */
+  const from = scopes.registrations ? String(sp.from ?? '') : '';
+  const to   = scopes.registrations ? String(sp.to   ?? '') : '';
 
   /**
    * The open-rounds tile is part of the ภาพรวมระบบ strip, so its upstream fetch
@@ -56,7 +66,11 @@ export default async function Page({ searchParams }) {
    * what `status: all` was added to stop.
    */
   const [metrics, schedulesRes] = await Promise.allSettled([
-    getDashboardMetrics(range ?? 'today'),
+    // `?? DEFAULT_RANGE` for the system-only caller, whose `range` is null. The
+    // value is inert for them — the action decides which halves run from the
+    // session before it looks at its argument — but it must be a VALID range
+    // rather than undefined, and it must not be a second copy of the default.
+    getDashboardMetrics(range ?? DEFAULT_RANGE, from, to),
     scopes.system
       ? getAllSchedules({ status: ADMIN_SCHEDULE_STATUSES, includeStarted: true })
       : Promise.resolve(null),
@@ -79,6 +93,8 @@ export default async function Page({ searchParams }) {
       data={data}
       openSchedulesCount={openSchedulesCount}
       initialRange={range}
+      initialFrom={from}
+      initialTo={to}
     />
   );
 }

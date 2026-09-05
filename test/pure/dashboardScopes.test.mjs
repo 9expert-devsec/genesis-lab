@@ -115,6 +115,13 @@ const run = (scopes, range = 'today') => {
   return buildDashboardMetrics({ scopes, range, models, now: NOW }).then((data) => ({ data, reads }));
 };
 
+/** Same, with a custom window — E4.4's second way of asking for a window. */
+const runWindow = (scopes, range, custom) => {
+  const { models, reads } = spyModels();
+  return buildDashboardMetrics({ scopes, range, custom, models, now: NOW })
+    .then((data) => ({ data, reads }));
+};
+
 const BOTH   = { registrations: true,  system: true  };
 const REG    = { registrations: true,  system: false };
 const SYS    = { registrations: false, system: true  };
@@ -364,6 +371,55 @@ test('range: a system-only caller gets byte-identical output for every range', a
   }
   // And the range never appears in the payload at all for them.
   assert.equal(first.wire.includes('"range"'), false);
+});
+
+test('range: a CUSTOM window changes nothing for a system-only caller either', async () => {
+  /**
+   * E4.4's scope requirement, and test 8. The custom range is a second way to
+   * ask for a window, so it is a second way the range control could have leaked
+   * into a half it does not own.
+   *
+   * Compared against the SAME caller with no window at all — byte-identical
+   * payload AND the same read count — rather than against an expectation typed
+   * out here, so the assertion is that the parameter is inert rather than that
+   * the output happens to match a string somebody wrote down.
+   *
+   * The reversed and absurd pairs are included deliberately: a system-only
+   * caller must reach neither the happy path nor the validation's fallback, and
+   * both must cost the same nothing.
+   */
+  const baseline = await runWindow(SYS, 'all', null);
+
+  for (const custom of [
+    { from: new Date('2026-08-01T00:00:00Z'), to: new Date('2026-08-31T00:00:00Z') },
+    { from: new Date('2026-01-01T00:00:00Z'), to: new Date('2026-09-05T00:00:00Z') },
+  ]) {
+    const withWindow = await runWindow(SYS, 'all', custom);
+    assert.equal(
+      JSON.stringify(withWindow.data), JSON.stringify(baseline.data),
+      'the payload moved for a caller who cannot see registrations',
+    );
+    assert.equal(
+      withWindow.reads.length, baseline.reads.length,
+      'the READ COUNT moved — a registration query fired for a system-only caller',
+    );
+    assert.deepEqual(
+      withWindow.reads.map((r) => r.filter), baseline.reads.map((r) => r.filter),
+      'a query filter moved',
+    );
+  }
+});
+
+test('range: a registration-only caller DOES see a custom window take effect', async () => {
+  // The other direction, so the test above is about the SCOPE rather than about
+  // `custom` being ignored everywhere.
+  const preset = await runWindow(REG, 'all', null);
+  const custom = await runWindow(REG, 'all', {
+    from: new Date('2026-08-01T00:00:00Z'), to: new Date('2026-08-31T00:00:00Z'),
+  });
+  assert.notEqual(JSON.stringify(custom.data), JSON.stringify(preset.data));
+  assert.equal(custom.data.range, 'custom', 'the payload does not report the custom window');
+  assert.equal(preset.data.range, 'all');
 });
 
 /** The `$match` a facet branch applies, or null when the branch is unbounded. */
