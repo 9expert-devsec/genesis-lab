@@ -219,11 +219,27 @@ test('the internal field is NOT called `notes` on either model', () => {
 });
 
 test('the public customer note is STILL a plain capped String', () => {
-  // The other side: `notes` must not have been quietly repurposed. It is the
-  // customer's, it is capped at 500, and 31 live documents hold one.
+  /**
+   * The other side: `notes` must not have been quietly repurposed. It is the
+   * CUSTOMER'S, it is a plain capped String, and 31 live documents hold one.
+   *
+   * ── THE CAP MOVED 500 → 2000, AND THE CLAIM HERE DID NOT ─────────────────
+   * The legacy Drupal import became a writer of this field and carries customer
+   * text up to 559 characters, so the STORAGE FLOOR was widened to 2000 (the
+   * same limit RegisterInhouse.message already had). The 500 was incidental to
+   * what this test is actually about — that `notes` is still a String and has
+   * not become an InternalNoteSchema array like `adminNotes`.
+   *
+   * The 500 itself is NOT unguarded. It moved to where it belongs: the wizard's
+   * zod still caps a customer's typing at 500, and test/pure/legacyImportDedup
+   * asserts the floor and the wizard TOGETHER so neither can be tidied into
+   * agreement with the other.
+   */
   const code = readSource('src/models/RegisterPublic.js').code;
-  assert.match(code, /notes:\s*\{\s*type:\s*String[^}]*maxlength:\s*500/,
+  assert.match(code, /notes:\s*\{\s*type:\s*String[^}]*maxlength:\s*2000/,
     'register_public.notes is no longer a capped String — the customer note changed shape');
+  assert.doesNotMatch(code, /notes:\s*\{\s*type:\s*\[/,
+    'register_public.notes became an ARRAY — that is `adminNotes`, and it must never reach the customer');
 });
 
 test('the in-house customer note is still `message`, not renamed into the internal one', () => {

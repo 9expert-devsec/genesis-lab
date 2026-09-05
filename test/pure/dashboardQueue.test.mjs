@@ -44,6 +44,17 @@ function matches(doc, filter) {
         if (op === '$lt') return v != null && v < operand;
         if (op === '$gte') return v != null && v >= operand;
         if (op === '$in') return operand.some((x) => (x === null ? v == null : v === x));
+        /**
+         * `$exists`, added deliberately for the legacy-import predicate.
+         *
+         * `get` walks with `a == null ? a : a[k]`, so a NULL PARENT short-circuits
+         * and yields null rather than throwing — which is what makes
+         * `legacy: null` (the schema default on every non-imported document)
+         * read as "legacy.sid does not exist", exactly as Mongo treats it. An
+         * evaluator that returned true here would make (c) and (f) overlap
+         * silently, which is the one thing this pair of cards must not do.
+         */
+        if (op === '$exists') return (v != null) === operand;
         throw new Error(`the evaluator does not know ${op} — add it deliberately`);
       });
     }
@@ -129,6 +140,30 @@ const PUBLIC_DOCS = [
   // (c) stale pending — the match, and the one-day near-miss
   { status: 'pending', createdAt: d(20) },  // ✓ (also counted by nothing else)
   { status: 'pending', createdAt: d(NEAR_MISS_STALE_DAYS) },  // ✗ inside the window
+
+  /**
+   * (f) IMPORTED FROM DRUPAL — and THE OVERLAP FIXTURE for (c).
+   *
+   * This document qualifies for (c) on every condition (c) had before the
+   * legacy-import round: pending, and far older than fourteen days. Only the
+   * `legacy.sid` predicate keeps it out. That makes it the one fixture that can
+   * tell "(c) excludes imported rows" from "(c) happens not to have any" — and
+   * it is why the control below deletes that predicate rather than asserting a
+   * filter shape.
+   *
+   * `createdAt` is 400 days back because every imported row IS old: its date is
+   * whatever Drupal recorded, all of it before cutover. A fixture dated inside
+   * the fortnight would be a row the import cannot produce.
+   */
+  { status: 'pending', createdAt: d(400), legacy: { sid: 8801, webformId: 'registration_public' } }, // ✓ (f), ✗ (c)
+  // ✗ (f) — imported, but already dealt with. Status is the other half of (f),
+  // and without this row `legacyImportPending` would pass for a query that
+  // counted every imported document regardless of state.
+  { status: 'paid', createdAt: d(400), legacy: { sid: 8802, webformId: 'registration_public' }, payment: { omiseStatus: 'successful', receiptSentAt: d(399) } },
+  // ✗ (f) — `legacy: null` is the schema default and means "born here". It is
+  // the shape 41 of 41 production documents hold, and the one an evaluator that
+  // mishandled `$exists` would wrongly count.
+  { status: 'pending', createdAt: d(NEAR_MISS_STALE_DAYS), legacy: null },
 ];
 
 const MC_DOCS = [
@@ -225,6 +260,92 @@ test('queue: a queue with nothing in it returns 0, not undefined or absent', asy
   }
 });
 
+// ── 2b. (c) AND (f) DO NOT OVERLAP ──────────────────────────────────────────
+//
+// ══ THE ONE THING THIS PAIR OF CARDS MUST NOT DO ═══════════════════════════
+//
+// Every imported row arrives `pending` with a pre-cutover createdAt, so all
+// ~2,427 of them clear (c)'s fourteen-day threshold on day one. If (c) does not
+// exclude them, the morning after the import it reads ~460 and the 3 or 4
+// genuinely stale registrations — the ones a human has actually failed to move —
+// are invisible inside it, while (f) counts the same rows again beside it. One
+// row, two cards, and the number an admin should act on hidden in the larger.
+
+test('queue: a pending IMPORTED row is counted by (f) and NOT by (c)', async () => {
+  const { models } = queueModels();
+  const q = await readRegistrationQueue(models, NOW);
+
+  assert.equal(q.legacyImportPending, 1,
+    '(f) does not count the imported pending row — or it counts the imported PAID one too, '
+    + 'which would make it "every imported document" rather than a queue');
+  assert.equal(q.stalePublicPending, 1,
+    '(c) counted the imported row: it is pending and 400 days old, so only the legacy '
+    + 'predicate can be keeping it out');
+
+  // The property itself, stated as a sum rather than as two separate numbers:
+  // there are exactly two pending documents in the fixture that either card
+  // could claim, and each is claimed once.
+  assert.equal(q.stalePublicPending + q.legacyImportPending, 2,
+    'the two cards do not partition their rows — some row is counted twice or not at all');
+});
+
+test('CONTROL: without the legacy predicate, (c) counts the imported row TOO', async () => {
+  /**
+   * ══ THE CONTROL, AND WHY IT DELETES THE PREDICATE RATHER THAN ASSERTING IT ══
+   *
+   * `stalePublicPending === 1` above passes both for a query that excludes
+   * imported rows and for a fixture that happens to contain none. Only removing
+   * the predicate can tell those apart. So the SAME fixture is run through the
+   * SAME (c) query with `'legacy.sid': { $exists: false }` taken out, and the
+   * imported row is shown to appear in both counts at once — which is the exact
+   * double-count the predicate exists to prevent.
+   *
+   * It is written against the collection double rather than by editing the
+   * source, so the assertion is about the query's SHAPE mattering, not about
+   * this test file's ability to patch a module.
+   */
+  const { models } = queueModels();
+  const real = await readRegistrationQueue(models, NOW);
+
+  // (c) exactly as it is written, minus the one predicate.
+  const withoutPredicate = await models.RegisterPublic.countDocuments({
+    status: 'pending',
+    createdAt: { $lt: daysAgo(STALE_PENDING_DAYS, NOW) },
+  });
+
+  assert.equal(withoutPredicate, 2,
+    'the control changes nothing — then the fixture holds no imported row that (c) could '
+    + 'have counted, and the assertion above is proving nothing');
+  assert.equal(withoutPredicate, real.stalePublicPending + real.legacyImportPending,
+    'the row (c) would have picked up is exactly the row (f) claims — the two cards would '
+    + 'be counting the same document');
+  assert.notEqual(withoutPredicate, real.stalePublicPending,
+    'removing the predicate left (c) unchanged, so the predicate is doing nothing');
+});
+
+test('queue: (f) is ZERO before the import runs, and renders rather than vanishing', async () => {
+  /**
+   * The same rule (e) is held to. Today nothing has been imported, so this card
+   * is 0 — and an admin who cannot tell "nothing imported yet" from "the card is
+   * broken" has learned nothing. A card that appeared out of nowhere on cutover
+   * night would be indistinguishable from a bug on the one night nobody can
+   * afford to debug it.
+   *
+   * `legacy: null` is the shape all 41 production documents hold — the schema
+   * default — so this is the production-shaped case, not an empty-collection one.
+   */
+  const { models } = queueModels({
+    pub: [
+      { status: 'pending', createdAt: d(20), legacy: null },
+      { status: 'paid', createdAt: d(3), legacy: null, payment: { omiseStatus: 'successful', receiptSentAt: d(2) } },
+    ],
+  });
+  const q = await readRegistrationQueue(models, NOW);
+  assert.equal(q.legacyImportPending, 0, 'a null `legacy` was counted as imported');
+  assert.equal(typeof q.legacyImportPending, 'number', 'a card cannot render that calmly');
+  assert.equal(q.stalePublicPending, 1, 'and (c) still sees the ordinary stale row');
+});
+
 test('queue: (e) is ZERO against production-shaped data, and that is the point', async () => {
   // All 987 webhook_logs are `ok` and none has ever been an error. The card must
   // survive that, because an admin who cannot tell "no errors" from "the card is
@@ -235,10 +356,25 @@ test('queue: (e) is ZERO against production-shaped data, and that is the point',
 
 // ── 3. SCOPE: the reads do not run without it ───────────────────────────────
 
-test('queue: the five cards are split 4 registration / 1 system', () => {
-  assert.equal(QUEUE_CARDS.length, 5, 'exactly the five E1 measured — no sixth card crept in');
+test('queue: the six cards are split 5 registration / 1 system', () => {
+  /**
+   * WAS FIVE, AND THE NUMBER MOVED DELIBERATELY. The five E1 measured are still
+   * exactly those five; `legacyImportPending` is a SIXTH, added when the Drupal
+   * import gave register_public a kind of row it had never held. The count stays
+   * exact rather than becoming a floor, so a seventh still has to be argued for
+   * here — which is the whole function of this assertion.
+   */
+  assert.equal(QUEUE_CARDS.length, 6, 'a card appeared or vanished without its reason being written down');
+  /**
+   * ORDER IS CARD ORDER ON THE PAGE, so this is not an arbitrary list.
+   * `legacyImportPending` sits immediately after `stalePublicPending` because
+   * the two partition one collection between them — reading them apart, with
+   * the masterclass queue in between, is how someone concludes the numbers
+   * overlap.
+   */
   assert.deepEqual(queueIdsForScope('registrations'), [
-    'stalledPayments', 'receiptsNotSent', 'stalePublicPending', 'staleMasterclassPending',
+    'stalledPayments', 'receiptsNotSent', 'stalePublicPending', 'legacyImportPending',
+    'staleMasterclassPending',
   ]);
   assert.deepEqual(queueIdsForScope('system'), ['webhookErrors']);
   // Every card belongs to a scope that exists. A card with a third scope would
@@ -290,6 +426,14 @@ test('queue: each card carries the threshold phrase it was counted under', () =>
   // (b) has no age rule: an unsent receipt is overdue immediately, and inventing
   // a threshold for it would be a rule nobody decided.
   assert.equal(byId.receiptsNotSent.threshold, null);
+  /**
+   * (f) has no age rule either, for a DIFFERENT reason worth keeping distinct
+   * from (b)'s. Every imported row is old by definition — its createdAt is
+   * whatever Drupal recorded, all of it before cutover — so an age rule would
+   * filter nothing AND would imply that some imported rows are "not yet due",
+   * a state that cannot occur.
+   */
+  assert.equal(byId.legacyImportPending.threshold, null);
 });
 
 // ── THE LINKS ───────────────────────────────────────────────────────────────
@@ -304,7 +448,9 @@ test('queue: every link uses a parameter the destination list actually reads', (
    * with no link, so every parameter is checked against the list that receives it.
    */
   const READS = {
-    '/admin/registrations': new Set(['source', 'status', 'q', 'range', 'from', 'to', 'course', 'page']),
+    // `legacy` joined the list's parameters in the legacy-import round — see
+    // PER_SOURCE_PARAMS and `legacyClause` in lib/registrations/listFilter.
+    '/admin/registrations': new Set(['source', 'status', 'q', 'range', 'from', 'to', 'course', 'page', 'legacy']),
     '/admin/masterclass/registrations': new Set(['status', 'q', 'range', 'courseId', 'batchId', 'licenseScope', 'page', 'ppp']),
     '/admin/webhook-logs': new Set(['page', 'event', 'status']),
   };
@@ -337,10 +483,56 @@ test('queue: a card whose list cannot express its condition SAYS so', () => {
       `${card.id} admits its link is not filtered but does not say what the list shows`,
     );
   }
-  assert.equal(
-    QUEUE_CARDS.every((c) => c.linkFiltered === false), true,
-    'a card claims an exactly-filtered link — check the destination really reads it',
-  );
+
+  /**
+   * ══ THIS WAS `every(c => c.linkFiltered === false)` UNTIL THE LEGACY ROUND ══
+   *
+   * That blanket was correct while no destination could express any card's full
+   * condition, and it stopped being correct the moment one could. Replacing it
+   * with a weaker check — dropping it, or asserting only that the flag is a
+   * boolean — would remove the thing it was for: the flag must stay MANDATORY
+   * and ARGUED, not decorative.
+   *
+   * So the claim is now per-card and by name. Exactly one card may say `true`,
+   * and this is where a second one has to justify itself.
+   */
+  const filtered = QUEUE_CARDS.filter((c) => c.linkFiltered).map((c) => c.id);
+  assert.deepEqual(filtered, ['legacyImportPending'],
+    'a card claims an exactly-filtered link — check the destination really reads every '
+    + 'parameter its condition needs, and that no condition is left over');
+});
+
+test('queue: the ONE exactly-filtered link really is exact, and the others say what is missing', () => {
+  const byId = Object.fromEntries(QUEUE_CARDS.map((c) => [c.id, c]));
+
+  /**
+   * (f) counts `status: 'pending'` AND `legacy.sid` exists — two conditions, and
+   * the list reads a parameter for each. `legacy=only` maps to the SAME
+   * `$exists: true` predicate the query uses (lib/registrations/listFilter
+   * `legacyClause`), so the destination shows the counted set and nothing else.
+   */
+  const f = new URLSearchParams(byId.legacyImportPending.href.split('?')[1]);
+  assert.equal(f.get('status'), 'pending');
+  assert.equal(f.get('legacy'), 'only', 'the exactly-filtered card does not ask for imported rows');
+  assert.equal(byId.legacyImportPending.threshold, null,
+    'an exactly-filtered link cannot carry an age rule — the list has no parameter for one');
+
+  /**
+   * (c) counts three things and the list can express two. `legacy=exclude` is
+   * the one this round added; the ROLLING AGE remains inexpressible, because
+   * `from`/`to` take calendar dates and this threshold moves with the clock.
+   * That is why (c) stays `linkFiltered: false` even though its link got
+   * strictly more honest.
+   */
+  const c = new URLSearchParams(byId.stalePublicPending.href.split('?')[1]);
+  assert.equal(c.get('status'), 'pending');
+  assert.equal(c.get('legacy'), 'exclude',
+    '(c) excludes imported rows from its COUNT but not from its LINK — the destination would '
+    + 'hold the ~460 rows the card deliberately did not count');
+  assert.equal(byId.stalePublicPending.linkFiltered, false,
+    '(c) claims an exact link while its 14-day threshold is not in the href');
+  assert.ok(byId.stalePublicPending.linkNote.includes('ไม่รวมข้อมูลนำเข้า'),
+    'the note does not tell the reader the destination excludes imported rows');
 });
 
 // ── the queue does not move with the range ──────────────────────────────────

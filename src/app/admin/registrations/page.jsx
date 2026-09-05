@@ -86,6 +86,20 @@ export default async function Page({ searchParams }) {
   const course = active.course;
 
   /**
+   * IMPORTED FROM DRUPAL, OR BORN HERE — read raw, degraded by the CLAUSE.
+   *
+   * Same treatment as `course` and the dates rather than as `status`: the two
+   * real values are 'only' and 'exclude', and `legacyClause` adds no clause for
+   * anything else, so an unrecognised value shows the unfiltered list. A second
+   * literal list here would be a second opinion about what the query did.
+   *
+   * It arrives from the dashboard's two queue cards, which link with
+   * `?legacy=only` and `?legacy=exclude` so that each one lands on the set it
+   * counted instead of on a list that quietly holds the other card's rows too.
+   */
+  const legacy = active.legacy;
+
+  /**
    * THE SAME TREATMENT `source` AND `range` ALREADY GET, and it was the one
    * param not getting it.
    *
@@ -125,7 +139,7 @@ export default async function Page({ searchParams }) {
     // date chips filtered the summary cards and left the table below them
     // showing everything — see buildRegistrationFilter in
     // src/lib/registrations/listFilter.js.
-    listRegistrations({ page, status, q, source, range, from, to, course }),
+    listRegistrations({ page, status, q, source, range, from, to, course, legacy }),
     /**
      * ── `q` REACHES THESE TWO NOW, AND IT NEVER DID BEFORE ──────────────────
      *
@@ -145,7 +159,7 @@ export default async function Page({ searchParams }) {
      * The two sources search DIFFERENT fields — `buildRegistrationScope` picks
      * them from `source`, so each badge counts what its own table would show.
      */
-    getRegistrationStatusCounts({ q, range, source, from, to, course }),
+    getRegistrationStatusCounts({ q, range, source, from, to, course, legacy }),
     /**
      * ══ THE OTHER SIDE'S BADGE NOW COUNTS UNDER THE OTHER SIDE'S FILTERS ══════
      *
@@ -179,6 +193,7 @@ export default async function Page({ searchParams }) {
       from:   other.from,
       to:     other.to,
       course: other.course,
+      legacy: other.legacy,
     }),
     source === 'inhouse' ? buildCourseNameMap() : Promise.resolve(null),
     /**

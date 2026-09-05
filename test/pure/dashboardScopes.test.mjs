@@ -196,7 +196,7 @@ test('scopes: a missing session FAILS CLOSED — no section, not every section',
 
 // ── 3. THE READ COUNTS ──────────────────────────────────────────────────────
 
-test('reads: both scopes — 12 reads, 10 counts and 2 aggregates', async () => {
+test('reads: both scopes — 13 reads, 11 counts and 2 aggregates', async () => {
   /**
    * ── E2 MEASURED 15. E3 WAS 11. E5 IS 12, AND DRAWS SIX MORE SECTIONS ────
    *
@@ -222,17 +222,29 @@ test('reads: both scopes — 12 reads, 10 counts and 2 aggregates', async () => 
    * projection exists to discard. Widening it would inflate the union over the
    * whole corpus, for every branch, to label six rows.
    *
+   * ── WHAT THE LEGACY-IMPORT ROUND ADDED: EXACTLY ONE COUNT ────────────────
+   * Queue (f) — the Drupal registrations still waiting to be placed. It is a
+   * `countDocuments` on register_public, the fifth queue count, and the reason
+   * this number moved from 12 to 13.
+   *
+   * IT CANNOT COME OFF THE FACET, and that is worth stating because "fold it in"
+   * is the obvious suggestion. The facet's pipeline projects every document down
+   * to `{createdAt, status, source}` before the union — deliberately, so the
+   * union stays narrow over the whole corpus — and `legacy.sid` is not among
+   * those three. Widening the projection to carry it would inflate every branch
+   * of the facet, over both collections, to serve one card.
+   *
    *   1  facet          registration cards, status split, ages, trend, previous, bounds
    *   1  aggregate      รายการล่าสุด — sorted, limited to 6, projected  ← E5
-   *   4  counts         queue (a) (b) (c) (d)
+   *   5  counts         queue (a) (b) (c) (d) (f)                        ← (f) new
    *   5  counts         the ภาพรวมระบบ strip, unchanged
    *   1  count          queue (e)
    *  ──
-   *  12
+   *  13
    */
   const { reads } = await run(BOTH);
-  assert.equal(reads.length, 12);
-  assert.equal(reads.filter((r) => r.op === 'countDocuments').length, 10, '4 queue + 5 content + 1 webhook');
+  assert.equal(reads.length, 13);
+  assert.equal(reads.filter((r) => r.op === 'countDocuments').length, 11, '5 queue + 5 content + 1 webhook');
   assert.equal(
     reads.filter((r) => r.op === 'aggregate').length, 2,
     'one facet for the registration half, one limited read for รายการล่าสุด',
@@ -267,9 +279,11 @@ test('the E5 read is ONE read, limited and projected — not a second facet', as
   );
 });
 
-test('reads: registration-only — 6 reads, and NOT ONE touches a content model', async () => {
+test('reads: registration-only — 7 reads, and NOT ONE touches a content model', async () => {
   const { reads } = await run(REG);
-  assert.equal(reads.length, 6, 'one facet + รายการล่าสุด + the four queue counts');
+  // 6 until the legacy-import round; queue (f) is the seventh. See the read
+  // budget above for why it is a count of its own and not a facet branch.
+  assert.equal(reads.length, 7, 'one facet + รายการล่าสุด + the five queue counts');
   assert.equal(reads.filter((r) => r.op === 'aggregate').length, 2);
   assert.equal(
     reads.filter((r) => r.op === 'aggregate').every((r) => r.model === 'RegisterPublic'), true,

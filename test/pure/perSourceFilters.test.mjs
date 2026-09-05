@@ -73,8 +73,12 @@ test('a bare /admin/registrations leaves BOTH sides unfiltered', () => {
   // The settled question: no parameters at all means no filters anywhere, so
   // switching finds nothing left over from a previous visit.
   for (const source of SOURCE_VALUES) {
+    // `legacy: ''` is "both kinds" — an imported row and a born-here row are
+    // both shown when nobody has asked. It joined PER_SOURCE_PARAMS with the
+    // Drupal import; the two real values are 'only' and 'exclude'.
     assert.deepEqual(readSourceFilters({}, source), {
       status: 'all', q: '', range: 'all', from: '', to: '', course: '', page: '1',
+      legacy: '',
     });
   }
 });

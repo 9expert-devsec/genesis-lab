@@ -1,0 +1,467 @@
+{
+  "source": "9experttraining.com Drupal 10.5.8 — node_field_data, referenced by webform_submission_data.name='course'",
+  "measuredAt": "2026-09-06",
+  "note": "nid 2256 and nid 8 have no node row any more (deleted); drupalTitle is null and they cannot be matched by title. 1 submission each, both in-house.",
+  "totals": {
+    "distinctCourses": 65,
+    "publicSubmissions": 1841,
+    "inhouseSubmissions": 586
+  },
+  "courses": [
+    {
+      "nid": 2757,
+      "drupalTitle": "Claude Cowork for Business",
+      "inhouseSubmissions": 127,
+      "publicSubmissions": 246,
+      "totalSubmissions": 373
+    },
+    {
+      "nid": 2205,
+      "drupalTitle": "Power BI Desktop for Business Analytics",
+      "inhouseSubmissions": 28,
+      "publicSubmissions": 177,
+      "totalSubmissions": 205
+    },
+    {
+      "nid": 2188,
+      "drupalTitle": "Microsoft Excel Advanced",
+      "inhouseSubmissions": 50,
+      "publicSubmissions": 129,
+      "totalSubmissions": 179
+    },
+    {
+      "nid": 2239,
+      "drupalTitle": "Microsoft 365 Copilot for Business Professionals",
+      "inhouseSubmissions": 64,
+      "publicSubmissions": 97,
+      "totalSubmissions": 161
+    },
+    {
+      "nid": 2187,
+      "drupalTitle": "Microsoft Excel Intermediate",
+      "inhouseSubmissions": 28,
+      "publicSubmissions": 71,
+      "totalSubmissions": 99
+    },
+    {
+      "nid": 2206,
+      "drupalTitle": "Power Apps for Business",
+      "inhouseSubmissions": 7,
+      "publicSubmissions": 92,
+      "totalSubmissions": 99
+    },
+    {
+      "nid": 2244,
+      "drupalTitle": "Power Automate (Cloud) for Business Automation",
+      "inhouseSubmissions": 9,
+      "publicSubmissions": 79,
+      "totalSubmissions": 88
+    },
+    {
+      "nid": 2192,
+      "drupalTitle": "Microsoft Excel Power Query",
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 72,
+      "totalSubmissions": 73
+    },
+    {
+      "nid": 2235,
+      "drupalTitle": "Canva Pro for Smart Working",
+      "inhouseSubmissions": 13,
+      "publicSubmissions": 56,
+      "totalSubmissions": 69
+    },
+    {
+      "nid": 2255,
+      "drupalTitle": "Power Automate (Desktop) for Business Automation",
+      "inhouseSubmissions": 8,
+      "publicSubmissions": 55,
+      "totalSubmissions": 63
+    },
+    {
+      "nid": 2241,
+      "drupalTitle": "Generative AI for Business Transformation",
+      "inhouseSubmissions": 37,
+      "publicSubmissions": 25,
+      "totalSubmissions": 62
+    },
+    {
+      "nid": 2232,
+      "drupalTitle": "Python Programming",
+      "inhouseSubmissions": 3,
+      "publicSubmissions": 54,
+      "totalSubmissions": 57
+    },
+    {
+      "nid": 2240,
+      "drupalTitle": "AI Agents with Microsoft Copilot Studio",
+      "inhouseSubmissions": 16,
+      "publicSubmissions": 39,
+      "totalSubmissions": 55
+    },
+    {
+      "nid": 2797,
+      "drupalTitle": "Microsoft Excel AI for Business",
+      "inhouseSubmissions": 10,
+      "publicSubmissions": 45,
+      "totalSubmissions": 55
+    },
+    {
+      "nid": 2223,
+      "drupalTitle": "Power BI Advanced Visualization and AI",
+      "inhouseSubmissions": 6,
+      "publicSubmissions": 39,
+      "totalSubmissions": 45
+    },
+    {
+      "nid": 2189,
+      "drupalTitle": "Microsoft Excel Macro and VBA",
+      "inhouseSubmissions": 2,
+      "publicSubmissions": 43,
+      "totalSubmissions": 45
+    },
+    {
+      "nid": 2245,
+      "drupalTitle": "Advanced Power Automate (Cloud)",
+      "inhouseSubmissions": 9,
+      "publicSubmissions": 30,
+      "totalSubmissions": 39
+    },
+    {
+      "nid": 2290,
+      "drupalTitle": "Workflow Automation with n8n",
+      "inhouseSubmissions": 6,
+      "publicSubmissions": 32,
+      "totalSubmissions": 38
+    },
+    {
+      "nid": 2190,
+      "drupalTitle": "Microsoft Excel Advanced PivotTable and PivotChart",
+      "inhouseSubmissions": 5,
+      "publicSubmissions": 32,
+      "totalSubmissions": 37
+    },
+    {
+      "nid": 2835,
+      "drupalTitle": "Build Business Apps with Claude Code",
+      "inhouseSubmissions": 3,
+      "publicSubmissions": 32,
+      "totalSubmissions": 35
+    },
+    {
+      "nid": 2225,
+      "drupalTitle": "Power BI Advanced Power Query",
+      "inhouseSubmissions": 3,
+      "publicSubmissions": 29,
+      "totalSubmissions": 32
+    },
+    {
+      "nid": 2250,
+      "drupalTitle": "Advanced Power Apps for Business",
+      "inhouseSubmissions": 4,
+      "publicSubmissions": 26,
+      "totalSubmissions": 30
+    },
+    {
+      "nid": 2736,
+      "drupalTitle": "AI Content Creator for Business",
+      "inhouseSubmissions": 11,
+      "publicSubmissions": 17,
+      "totalSubmissions": 28
+    },
+    {
+      "nid": 2243,
+      "drupalTitle": "AI Builder in Power Platform for Business",
+      "inhouseSubmissions": 4,
+      "publicSubmissions": 24,
+      "totalSubmissions": 28
+    },
+    {
+      "nid": 2224,
+      "drupalTitle": "Data Analysis Expression (DAX) for Power BI",
+      "inhouseSubmissions": 2,
+      "publicSubmissions": 26,
+      "totalSubmissions": 28
+    },
+    {
+      "nid": 2320,
+      "drupalTitle": "Canva AI for Business Accelerator",
+      "inhouseSubmissions": 4,
+      "publicSubmissions": 21,
+      "totalSubmissions": 25
+    },
+    {
+      "nid": 2872,
+      "drupalTitle": "Microsoft 365 Copilot Cowork for Productivity",
+      "inhouseSubmissions": 13,
+      "publicSubmissions": 11,
+      "totalSubmissions": 24
+    },
+    {
+      "nid": 2836,
+      "drupalTitle": "Build AI Multi-Agent with Claude Code",
+      "inhouseSubmissions": 5,
+      "publicSubmissions": 19,
+      "totalSubmissions": 24
+    },
+    {
+      "nid": 2233,
+      "drupalTitle": "Machine Learning using Python",
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 22,
+      "totalSubmissions": 23
+    },
+    {
+      "nid": 2265,
+      "drupalTitle": "Querying Data with T-SQL",
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 20,
+      "totalSubmissions": 21
+    },
+    {
+      "nid": 2266,
+      "drupalTitle": "SQL Server Programming - Stored Procedure",
+      "inhouseSubmissions": 4,
+      "publicSubmissions": 16,
+      "totalSubmissions": 20
+    },
+    {
+      "nid": 2191,
+      "drupalTitle": "Microsoft Excel Business Intelligence",
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 15,
+      "totalSubmissions": 16
+    },
+    {
+      "nid": 2257,
+      "drupalTitle": "Advanced Power Automate (Desktop)",
+      "inhouseSubmissions": 4,
+      "publicSubmissions": 11,
+      "totalSubmissions": 15
+    },
+    {
+      "nid": 2356,
+      "drupalTitle": "GitHub Copilot for Developer",
+      "inhouseSubmissions": 2,
+      "publicSubmissions": 13,
+      "totalSubmissions": 15
+    },
+    {
+      "nid": 2262,
+      "drupalTitle": "Microsoft SQL Server Database Administration",
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 14,
+      "totalSubmissions": 15
+    },
+    {
+      "nid": 2249,
+      "drupalTitle": "ASP.NET Core Web API & Security",
+      "inhouseSubmissions": 0,
+      "publicSubmissions": 15,
+      "totalSubmissions": 15
+    },
+    {
+      "nid": 2236,
+      "drupalTitle": "Microsoft PowerPoint Advanced",
+      "inhouseSubmissions": 4,
+      "publicSubmissions": 10,
+      "totalSubmissions": 14
+    },
+    {
+      "nid": 2799,
+      "drupalTitle": "Manus AI for Marketing Mastery",
+      "inhouseSubmissions": 4,
+      "publicSubmissions": 9,
+      "totalSubmissions": 13
+    },
+    {
+      "nid": 2865,
+      "drupalTitle": "Multi-Agent with Microsoft Copilot Studio",
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 12,
+      "totalSubmissions": 13
+    },
+    {
+      "nid": 2261,
+      "drupalTitle": "Microsoft SQL Server Essential",
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 12,
+      "totalSubmissions": 13
+    },
+    {
+      "nid": 2798,
+      "drupalTitle": "Manus AI for Exclusive Owner Business",
+      "inhouseSubmissions": 3,
+      "publicSubmissions": 9,
+      "totalSubmissions": 12
+    },
+    {
+      "nid": 2230,
+      "drupalTitle": "Microsoft 365 for Business",
+      "inhouseSubmissions": 11,
+      "publicSubmissions": 0,
+      "totalSubmissions": 11
+    },
+    {
+      "nid": 2246,
+      "drupalTitle": "Microsoft Fabric Essential for Business",
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 10,
+      "totalSubmissions": 11
+    },
+    {
+      "nid": 2226,
+      "drupalTitle": "Data Model for Power BI",
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 10,
+      "totalSubmissions": 11
+    },
+    {
+      "nid": 2263,
+      "drupalTitle": "Microsoft SQL Server Performance Tuning",
+      "inhouseSubmissions": 2,
+      "publicSubmissions": 8,
+      "totalSubmissions": 10
+    },
+    {
+      "nid": 2248,
+      "drupalTitle": "ASP.NET Core MVC",
+      "inhouseSubmissions": 2,
+      "publicSubmissions": 7,
+      "totalSubmissions": 9
+    },
+    {
+      "nid": 2242,
+      "drupalTitle": "AI Automation Agent with Make.com",
+      "inhouseSubmissions": 7,
+      "publicSubmissions": 0,
+      "totalSubmissions": 7
+    },
+    {
+      "nid": 2186,
+      "drupalTitle": "Microsoft Excel Powerful Functions",
+      "inhouseSubmissions": 7,
+      "publicSubmissions": 0,
+      "totalSubmissions": 7
+    },
+    {
+      "nid": 2227,
+      "drupalTitle": "Microsoft Access Intermediate",
+      "inhouseSubmissions": 3,
+      "publicSubmissions": 4,
+      "totalSubmissions": 7
+    },
+    {
+      "nid": 2254,
+      "drupalTitle": ".NET MAUI : การพัฒนา Native Cross-platform Apps ด้วย C#",
+      "inhouseSubmissions": 6,
+      "publicSubmissions": 0,
+      "totalSubmissions": 6
+    },
+    {
+      "nid": 2234,
+      "drupalTitle": "Microsoft Project Managing Projects",
+      "inhouseSubmissions": 6,
+      "publicSubmissions": 0,
+      "totalSubmissions": 6
+    },
+    {
+      "nid": 2258,
+      "drupalTitle": "UiPath for Business Automation",
+      "inhouseSubmissions": 5,
+      "publicSubmissions": 0,
+      "totalSubmissions": 5
+    },
+    {
+      "nid": 2185,
+      "drupalTitle": "Microsoft Excel Advanced for Financial",
+      "inhouseSubmissions": 5,
+      "publicSubmissions": 0,
+      "totalSubmissions": 5
+    },
+    {
+      "nid": 2260,
+      "drupalTitle": "Build Power Apps with Power Automate",
+      "inhouseSubmissions": 5,
+      "publicSubmissions": 0,
+      "totalSubmissions": 5
+    },
+    {
+      "nid": 2259,
+      "drupalTitle": "Innovation Anywhere with Microsoft Power Platform",
+      "inhouseSubmissions": 4,
+      "publicSubmissions": 0,
+      "totalSubmissions": 4
+    },
+    {
+      "nid": 2193,
+      "drupalTitle": "Microsoft Excel VBA Programming",
+      "inhouseSubmissions": 4,
+      "publicSubmissions": 0,
+      "totalSubmissions": 4
+    },
+    {
+      "nid": 2237,
+      "drupalTitle": "Microsoft PowerPoint Design in Action",
+      "inhouseSubmissions": 4,
+      "publicSubmissions": 0,
+      "totalSubmissions": 4
+    },
+    {
+      "nid": 2426,
+      "drupalTitle": "Agentic AI Development With Google ADK And Python",
+      "inhouseSubmissions": 2,
+      "publicSubmissions": 2,
+      "totalSubmissions": 4
+    },
+    {
+      "nid": 2247,
+      "drupalTitle": "Programming in C# with Visual Studio",
+      "inhouseSubmissions": 0,
+      "publicSubmissions": 3,
+      "totalSubmissions": 3
+    },
+    {
+      "nid": 2238,
+      "drupalTitle": "Infographics & Digital Media with Advanced Microsoft PowerPoint",
+      "inhouseSubmissions": 2,
+      "publicSubmissions": 0,
+      "totalSubmissions": 2
+    },
+    {
+      "nid": 2256,
+      "drupalTitle": null,
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 0,
+      "totalSubmissions": 1
+    },
+    {
+      "nid": 8,
+      "drupalTitle": null,
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 0,
+      "totalSubmissions": 1
+    },
+    {
+      "nid": 2267,
+      "drupalTitle": "Database Concept and Design",
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 0,
+      "totalSubmissions": 1
+    },
+    {
+      "nid": 2231,
+      "drupalTitle": "Microsoft Word Professional",
+      "inhouseSubmissions": 1,
+      "publicSubmissions": 0,
+      "totalSubmissions": 1
+    },
+    {
+      "nid": 2264,
+      "drupalTitle": "ETL with SQL Server Integration Service (SSIS)",
+      "inhouseSubmissions": 0,
+      "publicSubmissions": 1,
+      "totalSubmissions": 1
+    }
+  ]
+}

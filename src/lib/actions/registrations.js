@@ -89,7 +89,7 @@ function entityForSource(source) {
 
 export async function listRegistrations({
   page = 1, status = 'all', q = '', source = 'public', range = 'all',
-  from = '', to = '', course = '',
+  from = '', to = '', course = '', legacy = '',
 } = {}) {
   await requireAdmin('registrations');
   await dbConnect();
@@ -107,7 +107,7 @@ export async function listRegistrations({
    * that applies to one and not the other is no longer expressible.
    */
   const courseCodes = await inhouseCourseCodes({ q, source });
-  const filter = buildRegistrationFilter({ status, q, source, range, from, to, course, courseCodes });
+  const filter = buildRegistrationFilter({ status, q, source, range, from, to, course, legacy, courseCodes });
 
   const skip  = (Math.max(1, page) - 1) * PAGE_SIZE;
   const total = await Model.countDocuments(filter);
@@ -1113,7 +1113,7 @@ export async function deleteRegistration(id, source = 'public') {
  * which is what the ทั้งหมด chip is for.
  */
 export async function getRegistrationTotal({
-  q = '', range = 'all', source = 'public', from = '', to = '', course = '',
+  q = '', range = 'all', source = 'public', from = '', to = '', course = '', legacy = '',
 } = {}) {
   await requireAdmin('registrations');
   await dbConnect();
@@ -1140,7 +1140,7 @@ export async function getRegistrationTotal({
   const courseCodes = await inhouseCourseCodes({ q, source });
 
   return getModel(source).countDocuments(
-    buildRegistrationScope({ q, source, range, from, to, course, courseCodes }),
+    buildRegistrationScope({ q, source, range, from, to, course, legacy, courseCodes }),
   );
 }
 
@@ -1227,7 +1227,7 @@ export async function getRegistrationCourseOptions({ source = 'public' } = {}) {
 // ── Status counts for stat strip ──────────────────────────────────
 
 export async function getRegistrationStatusCounts({
-  q = '', range = 'all', source = 'public', from = '', to = '', course = '',
+  q = '', range = 'all', source = 'public', from = '', to = '', course = '', legacy = '',
 } = {}) {
   await requireAdmin('registrations');
   await dbConnect();
@@ -1244,7 +1244,7 @@ export async function getRegistrationStatusCounts({
    * on. `scope` is what it is.
    */
   const courseCodes = await inhouseCourseCodes({ q, source });
-  const scope = buildRegistrationScope({ q, source, range, from, to, course, courseCodes });
+  const scope = buildRegistrationScope({ q, source, range, from, to, course, legacy, courseCodes });
   const Model = getModel(source);
 
   if (source === 'inhouse') {

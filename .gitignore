@@ -50,3 +50,21 @@ Thumbs.db
 .vercel
 .env*
 scratchpad/
+
+# Legacy Drupal webform export — PERSONAL DATA, NEVER COMMITTED
+#
+# Base64 exports of the legacy site's webform_submission rows, pulled locally
+# for the one-time registration import (register_public / register_inhouse).
+# They carry REAL CUSTOMER DATA in the clear once decoded: names, email
+# addresses, phone numbers and tax IDs.
+#
+# They are working files for a migration that runs twice — a bulk pass and a
+# catch-up on cutover night — and then never again. Nothing in the application
+# reads them, so there is no version of this repo that needs them, and the only
+# thing committing them could achieve is putting customer PII in every clone and
+# every fork of the history permanently.
+#
+# The three OTHER files in docs/legacy/ stay tracked, deliberately:
+# legacy-courses.json, course-match-report.tsv and course-match-map.json are
+# course titles, ids and submission COUNTS — no personal data in any of them.
+docs/legacy/*.b64

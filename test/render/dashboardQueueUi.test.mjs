@@ -73,7 +73,7 @@ const SYS_N = 828282;
 const LOADED = { RegisterPublic: REG_N, MasterclassRegistration: REG_N, WebhookLog: SYS_N };
 
 // ── the render is asserted before anything is concluded from it ─────────────
-test('queue ui: the section renders, with all five cards for a both-scopes caller', async () => {
+test('queue ui: the section renders, with all six cards for a both-scopes caller', async () => {
   const { html } = await render(BOTH, LOADED);
   assert.ok(html.includes('รอดำเนินการ'), 'the queue section header is missing');
   for (const card of QUEUE_CARDS) {
@@ -198,8 +198,20 @@ test('queue ui: the threshold text is DERIVED — it is not a hard-coded number'
 
 test('queue ui: every card links to its list, and says what the list will show', async () => {
   const { html } = await render(BOTH, LOADED);
+
+  /**
+   * ── `&` COMES BACK AS `&amp;`, AND THAT IS THE MARKUP BEING CORRECT ───────
+   * Every href was single-parameter until the legacy-import round, so this
+   * assertion could compare the raw string and did. `?status=pending&legacy=only`
+   * is the first with two, and React escapes the separator on the way out — so
+   * a raw comparison would fail on a perfectly good link. Escaping the
+   * EXPECTATION rather than unescaping the html keeps the assertion about what
+   * the browser receives.
+   */
+  const asRendered = (href) => href.replace(/&/g, '&amp;');
+
   for (const card of QUEUE_CARDS) {
-    assert.ok(html.includes(`href="${card.href}"`), `${card.id} has no link to ${card.href}`);
+    assert.ok(html.includes(`href="${asRendered(card.href)}"`), `${card.id} has no link to ${card.href}`);
     if (!card.linkFiltered) {
       assert.ok(
         html.includes(card.linkNote),
