@@ -302,20 +302,49 @@ export function StatusBar({ dotClassName, label, name, description, primary, ove
 }
 
 /**
- * The 100x38 primary action.
+ * The primary action: 100x38, or 140x38 when `wide`.
  *
  * `title` is the FULL wording of the action. The visible label is the short form
  * the measured width can hold, and a control whose text has been abbreviated to
  * fit should still be able to say what it does in full on a hover.
+ *
+ * ══ `wide` EXISTS BECAUSE ABBREVIATING WAS THE WRONG FIX ═══════════════════
+ *
+ * The public screen's primary action moves a registration to
+ * ส่งใบเสนอราคาแล้ว, and it used to read `บันทึกส่งแล้ว` — a label invented to
+ * fit 100px, which then said something the action does not do ("save") and
+ * matched neither the ขั้นตอนถัดไป line directly beneath it nor the badge that
+ * appears after the click.
+ *
+ * MEASURED IN A BROWSER, not inferred: the correct wording renders 105px wide
+ * against a content box of 100 − 12 = 88px. The label was not what was wrong.
+ * The box was.
+ *
+ * ── TWO LITERAL CLASSES, NOT AN ASSEMBLED ONE ─────────────────────────────
+ * `w-[${n}px]` would produce correct-looking markup and NO CSS AT ALL —
+ * Tailwind cannot see a class that does not exist as a literal in the source.
+ * That is what test/fs/tailwindArbitraryValueRules exists to catch, and it is
+ * why this is a ternary between two real classes rather than a computed one.
+ * Both are therefore compiled, and both are greppable — which matters, because
+ * the render tier locates this button BY its width class.
+ *
+ * ── DEFAULT NARROW, SO THE IN-HOUSE SCREEN IS UNTOUCHED ───────────────────
+ * `InhouseDetailClient` renders this same component and was not part of the
+ * decision to widen. Omitting the prop leaves its markup byte-identical, which
+ * is what keeps its own locator and its render assertions binding. Its short
+ * form (`ส่งใบเสนอฯ`, 9 advancing glyphs) still fits 100px comfortably.
  */
-export function PrimaryAction({ children, title, onClick, disabled, busy }) {
+export function PrimaryAction({ children, title, onClick, disabled, busy, wide = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="inline-flex h-[38px] w-[100px] items-center justify-center gap-[5px] rounded-9e-md bg-9e-navy px-[6px] text-[12px] font-semibold text-9e-ice transition-opacity hover:opacity-90 disabled:opacity-40"
+      className={cn(
+        'inline-flex h-[38px] items-center justify-center gap-[5px] rounded-9e-md bg-9e-navy px-[6px] text-[12px] font-semibold text-9e-ice transition-opacity hover:opacity-90 disabled:opacity-40',
+        wide ? 'w-[140px]' : 'w-[100px]',
+      )}
     >
       {busy ? <Loader2 aria-hidden="true" className="h-[13px] w-[13px] shrink-0 animate-spin" /> : null}
       <span className="truncate">{children}</span>

@@ -65,12 +65,25 @@ const textOf = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim(
 /**
  * The primary action button's inner markup, or null when the slot is empty.
  *
- * Located by `w-[100px]`, the measured width from the geometry — it is on no
+ * Located by `w-[140px]`, the measured width from the geometry — it is on no
  * other element in this render, and keying on it means the probe follows the
  * button rather than the wording, which is the half that changes.
+ *
+ * ── 100px → 140px, AND THE IN-HOUSE SCREEN KEPT 100 ───────────────────────
+ * The public primary action moves a registration to ส่งใบเสนอราคาแล้ว and now
+ * SAYS so, word for word, instead of the `บันทึกส่งแล้ว` that was invented to
+ * fit the old box and read as "save". The label measures 105px in a browser
+ * against a 100px button's 88px content box, so the button was widened rather
+ * than the wording abbreviated.
+ *
+ * `PrimaryAction` is shared with InhouseDetailClient, which was not part of
+ * that decision — so the width is a PROP defaulting to narrow, in-house markup
+ * is byte-identical, and test/render/inhouseCancelledReadOnly still locates its
+ * button by `w-[100px]`. The two literals are therefore a real discriminator
+ * between the two screens, not a copy.
  */
 function primaryButton(markup) {
-  const m = /<button[^>]*w-\[100px\][^>]*>([\s\S]*?)<\/button>/.exec(markup);
+  const m = /<button[^>]*w-\[140px\][^>]*>([\s\S]*?)<\/button>/.exec(markup);
   return m ? m[1] : null;
 }
 
@@ -125,7 +138,7 @@ function allMenuItems(markup) {
  * imported them could not tell a screen that renders nothing from a screen whose
  * maps are empty.
  */
-const ACTION_BUTTON = { confirmed: 'บันทึกส่งแล้ว',            cancelled: 'ยกเลิก' };
+const ACTION_BUTTON = { confirmed: 'ส่งใบเสนอราคาแล้ว',        cancelled: 'ยกเลิก' };
 const ACTION_MENU   = { confirmed: 'บันทึกส่งใบเสนอราคาแล้ว', cancelled: 'ยกเลิกการสมัคร' };
 
 function offeredTargets(markup) {
@@ -195,7 +208,10 @@ test('a cancelled document renders NO status action button', () => {
   assert.deepEqual(offeredTargets(cancelled), [], 'a cancelled record must offer no status move at all');
   // And the retired wordings, by name, in case a slot is added that neither
   // probe above knows about.
-  for (const label of ['ยกเลิกการสมัคร', 'บันทึกส่งใบเสนอราคาแล้ว', 'บันทึกส่งแล้ว', 'คืนสถานะ รอดำเนินการ']) {
+  // The retired `บันทึกส่งแล้ว` is kept in this list alongside its replacement:
+  // a cancelled record must offer neither, and if the old wording ever comes
+  // back it must not come back HERE.
+  for (const label of ['ยกเลิกการสมัคร', 'บันทึกส่งใบเสนอราคาแล้ว', 'ส่งใบเสนอราคาแล้ว', 'บันทึกส่งแล้ว', 'คืนสถานะ รอดำเนินการ']) {
     assert.ok(!showsExactly(cancelled, label), `cancelled must not offer "${label}"`);
   }
 });
@@ -298,7 +314,7 @@ test('a pending document offers both of its transitions', () => {
   // The forward move is the PRIMARY button and the cancellation is in the menu —
   // which is the slot claim, and it is derived rather than named. See
   // fs/registrationActionsDerived.
-  assert.equal(textOf(primaryButton(pending)), 'บันทึกส่งแล้ว');
+  assert.equal(textOf(primaryButton(pending)), 'ส่งใบเสนอราคาแล้ว');
   assert.deepEqual(menuItems(pending).map(textOf), ['ยกเลิกการสมัคร', 'ลบใบสมัครนี้']);
 });
 
@@ -401,7 +417,7 @@ test('CONTROL: the element probes can tell the status NAME from the action', () 
   assert.deepEqual(offeredTargets(cancelled), [], 'and no probe mistook it for the cancel action');
 
   // The probes are not simply blind: on a pending record they find both slots.
-  assert.equal(textOf(primaryButton(pending)), 'บันทึกส่งแล้ว');
+  assert.equal(textOf(primaryButton(pending)), 'ส่งใบเสนอราคาแล้ว');
   assert.ok(menuItems(pending).length >= 2);
 
   // And the boundary helper still discriminates where it is used above.

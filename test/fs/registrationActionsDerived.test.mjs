@@ -6,6 +6,10 @@ import {
   INHOUSE_STATUS_TRANSITIONS,
   PUBLIC_STATUS_VALUES,
   INHOUSE_STATUS_VALUES,
+  // For resolving a DERIVED short form — see the note on `entries` below. The
+  // primary button's wording is the status label rather than a second copy of
+  // it, so measuring its width means asking the vocabulary what it says.
+  statusLabel,
 } from '@/lib/registrations/statuses';
 
 /**
@@ -171,13 +175,63 @@ test('ACTION_LABEL, ACTION_VARIANT and ACTION_SHORT name the same targets', () =
     'a target with a menu label but no short form renders an EMPTY primary button');
 });
 
+/**
+ * THE WIDTH OF THE PUBLIC SCREEN'S PRIMARY BUTTON, read from the component.
+ *
+ * `PrimaryAction` picks between two literal classes — `w-[100px]` by default
+ * and `w-[140px]` when `wide` — because an assembled `w-[${n}px]` compiles to
+ * no CSS at all. The public screen passes `wide`; the in-house screen does not,
+ * and its markup is byte-identical to before.
+ *
+ * Both facts are asserted: the literal is PINNED (so a change is deliberate and
+ * shows up in a diff here) and the budget above is COMPUTED from it (so the
+ * guard stays live rather than failing on correct code).
+ */
+const SHELL = readSource('src/app/admin/registrations/_components/detailShell.jsx');
+const WIDE_BUTTON_PX = 140;
+
+test('the primary button has two literal widths, and the public screen takes the wide one', () => {
+  assert.match(SHELL.code, /wide \? 'w-\[140px\]' : 'w-\[100px\]'/,
+    'PrimaryAction no longer chooses between two LITERAL width classes — an assembled '
+    + 'arbitrary value would render correct markup and emit no CSS at all');
+  assert.equal(WIDE_BUTTON_PX, 140, 'the pinned width and the class have drifted apart');
+
+  // The public screen asks for it; the in-house screen must not have been
+  // widened by a decision that was only about the public one.
+  assert.match(DETAIL.code, /<PrimaryAction\s+wide\b/,
+    'the public screen no longer takes the wide button — its label will overflow');
+  const INHOUSE = readSource('src/app/admin/registrations/inhouse/_components/InhouseDetailClient.jsx');
+  assert.ok(!/<PrimaryAction\s+wide\b/.test(INHOUSE.code),
+    'the in-house screen was widened too — that was not part of this decision');
+});
+
+test('CONTROL: the width probe reads the component, and could fail', () => {
+  // Without this, "the class is there" passes for any file at all.
+  assert.ok(SHELL.code.includes('PrimaryAction'), 'the shell slice is not the shell');
+  assert.equal(/wide \? 'w-\[999px\]'/.test(SHELL.code), false);
+});
+
 test('the short forms are genuinely shorter, and are not the canonical labels', () => {
   // Otherwise the third map is a copy of the second and the split is decoration.
   // Counted in ADVANCING glyphs, because Thai combining marks take zero advance
   // and a naive `.length` would call 'บันทึกส่งแล้ว' thirteen characters wide.
   const grab = (name) => [...DETAIL.code.matchAll(new RegExp(String.raw`const ${name}\s*=\s*\{([^}]*)\}`, 'g'))][0][1];
+  /**
+   * ── A VALUE MAY BE DERIVED, AND MUST STILL BE MEASURED ────────────────────
+   *
+   * `ACTION_SHORT.confirmed` is `statusLabel('confirmed')`, not a literal: the
+   * button's wording IS the status label and fs/publicStatusLabelSources
+   * forbids pasting a second copy of it into this screen.
+   *
+   * A parser that only understands quoted literals would silently SKIP that
+   * entry — the key-set test above would still pass, and the width assertion
+   * below would quietly stop checking the one label that actually changed. So
+   * a `statusLabel('x')` value is resolved through the real function, and the
+   * measurement is made on the string the button will really render.
+   */
   const entries = (s) => Object.fromEntries(
-    [...s.matchAll(/(\w[\w-]*)\s*:\s*'([^']*)'/g)].map((m) => [m[1], m[2]])
+    [...s.matchAll(/(\w[\w-]*)\s*:\s*(?:'([^']*)'|statusLabel\('([^']*)'\))/g)]
+      .map((m) => [m[1], m[2] !== undefined ? m[2] : statusLabel(m[3])])
   );
   const labels = entries(grab('ACTION_LABEL'));
   const shorts = entries(grab('ACTION_SHORT'));
@@ -190,13 +244,26 @@ test('the short forms are genuinely shorter, and are not the canonical labels', 
       `${target}: the "short" form ${JSON.stringify(short)} is not shorter than `
       + `${JSON.stringify(labels[target])} — then the split buys nothing`
     );
-    // The 100px button, minus its 12px of padding, at the same 0.65em advance
-    // this repo's other width assertion states. Not a claim that it FITS — that
-    // needs a layout engine — but a claim that nobody has put a sentence in it.
+    /**
+     * The button, minus its 12px of padding, at the same 0.65em advance this
+     * repo's other width assertion states. Not a claim that it FITS — that needs
+     * a layout engine — but a claim that nobody has put a sentence in it.
+     *
+     * ── THE BUDGET IS READ FROM THE COMPONENT, NOT HARDCODED ───────────────
+     * It was `100 - 12`. The public screen's button is 140px now, because the
+     * correct wording for its action measures 105px in a browser and did not
+     * fit the old box — the label was not what was wrong. A hardcoded 100 would
+     * have made this assertion fail on correct code, and "relax the number
+     * until it passes" is exactly how a width guard stops guarding.
+     *
+     * So the width comes from `PrimaryAction`'s own `wide` class, and the
+     * literal is pinned separately below: the budget follows the component, and
+     * a change to the component is still a deliberate, visible edit here.
+     */
     assert.ok(
-      advancing(short) * 12 * 0.65 <= 100 - 12,
+      advancing(short) * 12 * 0.65 <= WIDE_BUTTON_PX - 12,
       `${target}: ${JSON.stringify(short)} is ${advancing(short)} advancing glyphs, which does not fit `
-      + 'a 100px button at a stated 0.65em advance'
+      + `a ${WIDE_BUTTON_PX}px button at a stated 0.65em advance`
     );
   }
 });
