@@ -205,24 +205,35 @@ export const QUEUE_CARDS = Object.freeze([
     linkFiltered: false,
     linkNote: 'รายการทั้งหมดที่รอดำเนินการ',
   },
-  {
-    id: 'webhookErrors',
-    /**
-     * SYSTEM scope, not registration. It is operational rather than commercial,
-     * and Webhook Logs already lives under ระบบ in the page registry — so the
-     * admin who can act on this is the one who can already open that screen.
-     */
-    scope: 'system',
-    label: 'Webhook ผิดพลาด',
-    threshold: THRESHOLD_LABEL.webhookWindow,
-    href: '/admin/webhook-logs?status=error',
-    // The ONE card whose status filter is exact. The 24-hour window is not
-    // expressible — that page reads page/event/status and no date at all — so
-    // the list shows every error ever, which for this collection means every
-    // error inside the 30-day TTL.
-    linkFiltered: false,
-    linkNote: 'ข้อผิดพลาดทั้งหมดที่ยังเก็บอยู่',
-  },
+  /**
+   * ── (e) HIDDEN ON REQUEST 2026-09-06 ───────────────────────────────────
+   * The `webhookErrors` card descriptor below is commented out because
+   * general admins should not see it. Uncomment the entry to restore the
+   * card; nothing else has to change.
+   *
+   * The underlying metric is UNTOUCHED: `readSystemQueue()` at the foot of
+   * this file still runs its count and `buildMetrics` still returns it as
+   * `systemQueue.webhookErrors`. Only the descriptor is gone, so
+   * DashboardClient has no card to render for that count.
+   */
+  // {
+    // id: 'webhookErrors',
+    // /**
+     // * SYSTEM scope, not registration. It is operational rather than commercial,
+     // * and Webhook Logs already lives under ระบบ in the page registry — so the
+     // * admin who can act on this is the one who can already open that screen.
+     // */
+    // scope: 'system',
+    // label: 'Webhook ผิดพลาด',
+    // threshold: THRESHOLD_LABEL.webhookWindow,
+    // href: '/admin/webhook-logs?status=error',
+    // // The ONE card whose status filter is exact. The 24-hour window is not
+    // // expressible — that page reads page/event/status and no date at all — so
+    // // the list shows every error ever, which for this collection means every
+    // // error inside the 30-day TTL.
+    // linkFiltered: false,
+    // linkNote: 'ข้อผิดพลาดทั้งหมดที่ยังเก็บอยู่',
+  // },
 ]);
 
 /** The ids belonging to one scope, in card order. */
