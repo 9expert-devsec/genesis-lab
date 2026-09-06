@@ -28,10 +28,12 @@ import { CoordinatorFields } from "@/components/registration/CoordinatorFields";
 import { AttendeesList } from "@/components/registration/AttendeesList";
 import { InvoiceFields } from "@/components/registration/InvoiceFields";
 import { ReviewAndPayStep } from "@/components/registration/ReviewAndPayStep";
+import { RegistrationStepper } from "@/components/registration/RegistrationStepper";
 import {
   AttendeeListView,
   InvoiceView,
   ReadOnlyRow,
+  Section,
 } from "@/components/registration/PreviewRows";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -316,9 +318,16 @@ export function RegisterWizard({
 
   return (
     <div>
-      <Stepper
+      {/*
+        `takesPayment`, not `omisePaymentEnabled`: the shared stepper's prop is
+        named for the RULE it decides — whether step 2 leads to a charge, and
+        therefore whether its label may promise one — rather than for the vendor
+        that happens to implement the charge here. This wizard's answer is the
+        Omise toggle; the bundle quotation's answer is always no.
+      */}
+      <RegistrationStepper
         currentStep={currentStep}
-        omisePaymentEnabled={omisePaymentEnabled}
+        takesPayment={omisePaymentEnabled}
       />
 
       {currentStep === 1 && hydrated && (
@@ -366,49 +375,24 @@ export function RegisterWizard({
   );
 }
 
-function Stepper({ currentStep, omisePaymentEnabled = false }) {
-  const steps = [
-    { n: 1, label: "กรอกข้อมูล" },
-    { n: 2, label: omisePaymentEnabled ? "ตรวจสอบและดำเนินการ" : "ตรวจสอบ" },
-    { n: 3, label: "สำเร็จ" },
-  ];
-  return (
-    <ol className="mb-8 flex items-center justify-center text-sm">
-      {steps.map((s, i) => (
-        <li key={s.n} className="flex items-center ">
-          <div className="flex flex-col items-center gap-2 md:flex-row">
-            <span
-              className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold",
-                currentStep === s.n
-                  ? "border-9e-brand bg-9e-brand text-9e-ice"
-                  : currentStep > s.n
-                    ? "border-9e-brand bg-9e-brand/10 text-9e-action"
-                    : "border-[var(--surface-border)] text-[var(--text-muted)]",
-              )}
-            >
-              {currentStep > s.n ? <CheckCircle2 className="h-4 w-4" /> : s.n}
-            </span>
-            <span
-              className={cn(
-                "font-medium",
-                currentStep >= s.n
-                  ? "text-[var(--text-primary)]"
-                  : "text-[var(--text-muted)]",
-              )}
-            >
-              {s.label}
-            </span>
-          </div>
-
-          {i < steps.length - 1 && (
-            <span className="mx-2 h-px w-8 bg-[var(--surface-border)]" />
-          )}
-        </li>
-      ))}
-    </ol>
-  );
-}
+/*
+ * `Stepper` MOVED to components/registration/RegistrationStepper.jsx and is
+ * imported at the top of this file.
+ *
+ * It moved because the BUNDLE quotation needs the same three-step indicator,
+ * and this repo already carries FOUR unexported step indicators — the shape
+ * that cost it eleven classroom literals and five round-date formatters. A
+ * fifth copy was the one outcome not worth having.
+ *
+ * The markup went across UNCHANGED and the rendered stepper is byte-identical
+ * to what this file produced. The only difference at the call site is the
+ * prop's NAME: it is `takesPayment` now, because a component shared with a
+ * quotation flow should not be asking callers about Omise.
+ *
+ * The other three indicators — in-house, career-path, masterclass — are
+ * deliberately NOT migrated. They are different DESIGNS, not different
+ * spellings of this one, and that module's header names each and says why.
+ */
 
 // ── Step 1: Form ─────────────────────────────────────────────────
 
@@ -1261,7 +1245,39 @@ export function StepPreview({ data, onBack, onConfirm, submitting, error }) {
 
 // ── Step 3: Thank-you ────────────────────────────────────────────
 
-export function StepComplete({ result, email }) {
+/**
+ * ── THE THREE OPTIONAL PROPS, AND WHY THEY DEFAULT THE WAY THEY DO ─────────
+ *
+ * `title`, `showReference` and `closing` exist so the BUNDLE quotation can use
+ * this screen instead of keeping a fourth success panel of its own. Every one
+ * of them is optional and every default reproduces exactly what this component
+ * rendered before they existed, so the public wizard and anything else calling
+ * `<StepComplete result={…} email={…} />` is byte-for-byte unchanged. That is
+ * asserted, not intended: test/render/stepCompleteOptionalProps compares a
+ * no-new-props render against markup captured from this file before the props
+ * were added.
+ *
+ * `showReference` DEFAULTS TO FALSE, which keeps the reference number hidden on
+ * the public and in-house flows. Those two have the number COMMENTED OUT in
+ * their markup — deliberately, by someone, on two live paths — and nobody in
+ * this round knows why. Un-commenting them as a side effect of a bundle change
+ * is exactly the kind of edit that gets discovered by a customer, so the
+ * commented block below is left exactly as it was and the bundle opts IN
+ * instead. A bundle customer needs the number: it is the only handle they have
+ * on a quotation request that is answered by a human two days later.
+ *
+ * The props affect the QUOTE branch only. The paid branch is untouched — it is
+ * a card/PromptPay receipt, the bundle can never reach it (a quotation carries
+ * no paymentMethod and no omiseToken at all), and widening it would be scope
+ * this round has no reason to take.
+ */
+export function StepComplete({
+  result,
+  email,
+  title = null,
+  showReference = false,
+  closing = null,
+}) {
   const referenceNumber = result?.referenceNumber;
 
   // ── Paid variant (card / PromptPay) ──────────────────────────────
@@ -1317,7 +1333,7 @@ export function StepComplete({ result, email }) {
     <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-10 text-center shadow-9e-md">
       <SuccessPulseIcon className="mx-auto" />
       <h2 className="mt-6 text-2xl font-bold text-[var(--text-primary)]">
-        ขอบคุณสำหรับการลงทะเบียน
+        {title ?? "ขอบคุณสำหรับการลงทะเบียน"}
       </h2>
       {/* <p className="mt-3 text-sm text-[var(--text-secondary)]">
         เลขอ้างอิง:{" "}
@@ -1325,6 +1341,24 @@ export function StepComplete({ result, email }) {
           {referenceNumber}
         </span>
       </p> */}
+      {/*
+        LEFT COMMENTED, ON PURPOSE — see the note on this component's props.
+        The block above is the public/in-house reference line and it stays
+        exactly as someone left it. A caller that needs the number opts in with
+        `showReference`, which renders the line below instead; that is why this
+        is an addition beside the commented block rather than an edit to it.
+      */}
+      {showReference && referenceNumber && (
+        <p className="mt-3 text-sm text-[var(--text-secondary)]">
+          เลขอ้างอิง{" "}
+          <span
+            data-testid="step-complete-ref"
+            className="font-en font-bold text-[var(--text-primary)]"
+          >
+            {referenceNumber}
+          </span>
+        </p>
+      )}
       {email && (
         <p className="mt-4 text-sm text-[var(--text-secondary)]">
           ทาง 9Expert ได้ส่งอีเมลยืนยันไปที่{" "}
@@ -1334,10 +1368,12 @@ export function StepComplete({ result, email }) {
           เรียบร้อย
         </p>
       )}
-      <p className="mt-2 text-sm text-[var(--text-secondary)]">
-        ทั้งนี้ ทางบริษัทจะดำเนินการจัดส่งใบเสนอราคาเป็นเอกสาร PDF ให้ท่านทางอีเมลภายใน 3 วันทำการ <br />
+      {closing ?? (
+        <p className="mt-2 text-sm text-[var(--text-secondary)]">
+          ทั้งนี้ ทางบริษัทจะดำเนินการจัดส่งใบเสนอราคาเป็นเอกสาร PDF ให้ท่านทางอีเมลภายใน 3 วันทำการ <br />
 หากไม่พบกรุณาตรวจสอบใน Junk Mail, Spam Mail อีกครั้ง
-      </p>
+        </p>
+      )}
       <div className="mt-8">
         <Button asChild variant="outline">
           <Link href="/training-course">ดูคอร์สอื่นเพิ่มเติม</Link>
@@ -1349,16 +1385,17 @@ export function StepComplete({ result, email }) {
 
 // ── Shared atoms ────────────────────────────────────────────────
 
-function Section({ title, children }) {
-  return (
-    <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
-      <h2 className="mb-4 text-base font-bold text-[var(--text-primary)]">
-        {title}
-      </h2>
-      <div className="space-y-3">{children}</div>
-    </section>
-  );
-}
+/*
+ * `Section` MOVED to components/registration/PreviewRows.jsx and is imported at
+ * the top of this file, beside `ReadOnlyRow`, `AttendeeListView` and
+ * `InvoiceView` — the three atoms that had already moved there, for the reason
+ * that file's header gives.
+ *
+ * It moved because the BUNDLE quotation's review step renders the same titled
+ * panel, and reaching back into this module for it would be the circular import
+ * PreviewRows was created to avoid. The body went across unchanged, so every
+ * `<Section>` on the step-2 preview renders exactly what it rendered before.
+ */
 
 /**
  * Walks the react-hook-form errors tree and collects only the user-facing

@@ -1,7 +1,7 @@
 /**
- * Read-only row + list renderers shared by the two step-2 screens:
- * `StepPreview` (toggle OFF, quote-only) and `ReviewAndPayStep`
- * (toggle ON, review + payment).
+ * Read-only row + list renderers shared by the step-2 review screens:
+ * `StepPreview` (toggle OFF, quote-only), `ReviewAndPayStep`
+ * (toggle ON, review + payment), and the bundle quotation's review step.
  *
  * Moved out of RegisterWizard.jsx unchanged so ReviewAndPayStep can use
  * them without importing back into the wizard (which would be circular).
@@ -10,6 +10,33 @@
 import { formatBillingAddress } from "@/lib/address/formatBillingAddress";
 import { formatInvoiceBranchLabel } from "@/lib/registration/branchLabel";
 import { orNotSpecified } from "@/lib/orNotSpecified";
+
+/**
+ * The card every review-screen group sits in: a titled panel with its rows
+ * spaced inside.
+ *
+ * MOVED HERE FROM RegisterWizard.jsx, BODY UNCHANGED, for the reason stated in
+ * this file's header — it is the fourth thing `StepPreview` and the bundle's
+ * review step both need, and the other three were already here. Importing it
+ * back out of the wizard is the circular dependency this file exists to avoid.
+ *
+ * NOT to be confused with `ReviewAndPayStep`'s own `Section`, which is a
+ * different component with the same name: that one is COLLAPSIBLE (it takes
+ * `collapsible`/`open`/`onToggle` and renders a toggle header) because the
+ * review+pay screen stacks five groups beside a payment panel and has to fold
+ * them. This one has no such state and must not grow it to "unify" the two —
+ * a non-collapsible caller passing no toggle props would render a dead chevron.
+ */
+export function Section({ title, children }) {
+  return (
+    <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
+      <h2 className="mb-4 text-base font-bold text-[var(--text-primary)]">
+        {title}
+      </h2>
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
+}
 
 export function ReadOnlyRow({ label, value }) {
   return (

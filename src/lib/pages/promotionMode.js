@@ -41,6 +41,52 @@ export function isPromotionPage(page) {
 }
 
 /**
+ * WHERE a Genesis page lives publicly: `/promotions/<slug>` for a promotion
+ * page, the bare `/<slug>` for everything else.
+ *
+ * ── THE TWO URLS ARE NOT INTERCHANGEABLE, AND THE ROUTE ENFORCES IT ───────
+ * A promotion page is DIVERTED off its bare slug — `/<slug>` answers 308 for
+ * one, and only `/promotions/<slug>` renders it. So "just use the slug" is
+ * wrong for exactly the pages most likely to carry a bundle, and picking the
+ * wrong one sends a customer to a redirect at best and a 404 at worst. The
+ * discrimination is `isPromotionPage`, which this module already owns, so the
+ * href belongs here beside it rather than being spelled out at each call site.
+ *
+ * ── IT ANSWERS `null` RATHER THAN A BROKEN URL ────────────────────────────
+ * Two refusals, and both are cases where a string would be a lie:
+ *
+ *   · NO SLUG. `/promotions/` and `/` are both real pages that are not this
+ *     one, so an empty slug must not be concatenated into a link that silently
+ *     goes somewhere else.
+ *   · NOT PUBLICLY VISIBLE. Status alone is not the destination's gate — both
+ *     public routes run `isPubliclyVisible`, which also enforces the
+ *     publish WINDOW. A page that is `status: 'published'` but past its
+ *     `publishEndDate`, or before its `publishStartDate`, renders NOTHING at
+ *     either URL. That gap is reachable rather than theoretical: readers that
+ *     select on status alone (getPublishedPageBuilderPageById does) will hand
+ *     this function a document whose own detail page 404s, and an expired
+ *     promotion is the single most likely page for a bundle to sit on.
+ *
+ * A caller that gets `null` must render no link. That is a decided outcome, not
+ * a degraded one: a link that 404s is worse than no link, because it spends the
+ * customer's click before failing.
+ *
+ * Pure, and deliberately takes the whole PAGE rather than a slug — the caller
+ * cannot supply the two facts (pageType, visibility) by accident, and cannot
+ * skip the second one.
+ *
+ * @param {object|null|undefined} page a PageBuilder or CustomPage document
+ * @param {number} [now] injected clock, as isPubliclyVisible takes one
+ * @returns {string|null} the public path, or null when there is no honest one
+ */
+export function publicPageHref(page, now = Date.now()) {
+  const slug = String(page?.slug ?? '').trim();
+  if (!slug) return null;
+  if (!isPubliclyVisible(page, now)) return null;
+  return isPromotionPage(page) ? `/promotions/${slug}` : `/${slug}`;
+}
+
+/**
  * A promotion page with NO MSDB link → Genesis-originated / standalone.
  * A CustomPage promotion carries no `promotionId` field, so it is always
  * standalone by this rule — the same answer its schema gives, reached the same
@@ -171,6 +217,19 @@ export function selectVisiblePromotionPages(pages, now = Date.now()) {
 export function promotionPageToCard(page, source) {
   return {
     key: `${source}:${page?._id ?? page?.slug ?? ''}`,
+    /**
+     * DELIBERATELY NOT `publicPageHref`, though the two produce the same string
+     * for every page that legitimately reaches here.
+     *
+     * The contracts differ. This function adapts a page ALREADY KNOWN VISIBLE —
+     * `selectVisiblePromotionPages` filtered it — into a card, so a visibility
+     * check here would be re-asking a settled question. `publicPageHref` exists
+     * to answer "is there an honest link at all", and it returns null when there
+     * is not. Wiring this line to it was tried and reverted: it turns a card
+     * builder into a card refuser, and four existing tests that call it directly
+     * with unpublished fixtures went red — correctly, because they are exercising
+     * the mapping and not the gate.
+     */
     href: `/promotions/${page?.slug ?? ''}`,
     title: page?.title ?? '',
     cover: page?.promotionCover ?? '',

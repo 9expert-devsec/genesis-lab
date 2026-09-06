@@ -1,17 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { discountPercent, isInvertedPrice } from '@/lib/pageBuilder/bundlePricing';
+import {
+  discountAmount,
+  discountPercent,
+  isInvertedPrice,
+} from '@/lib/pageBuilder/bundlePricing';
 import { publishBlockers } from '@/lib/pageBuilder/publishReadiness';
 
 /**
- * The derived percentage, the inverted-price rule, and the publish refusal
- * built on it.
+ * The derived percentage, the derived amount, the inverted-price rule, and the
+ * publish refusal built on it.
  *
- * Both functions have two readers each and the pairs must not be able to
- * disagree — the renderer's chip with the editor's preview, and the editor's
- * warning with `publishBlockers`. That is why they are one module and why the
- * refusal is asserted here beside the predicate rather than in isolation.
+ * The answers must not be able to disagree — the renderer's chip with the
+ * editor's preview, the editor's warning with `publishBlockers`, and the price
+ * panel's three lines with each other. That is why they are one module and why
+ * the refusal is asserted here beside the predicate rather than in isolation.
  */
 
 // ── the percentage ────────────────────────────────────────────────────────
@@ -74,6 +78,110 @@ test('equal prices are 0%, which is honest — and distinct from null', () => {
 test('CONTROL: the function is not simply returning null, or a constant', () => {
   assert.notEqual(discountPercent(40800, 32640), null);
   assert.notEqual(discountPercent(40800, 32640), discountPercent(1000, 900));
+});
+
+// ── the amount ────────────────────────────────────────────────────────────
+
+test('the reference pair gives exactly the amount the design shows', () => {
+  // The real bundle behind the design: page 6a9c18cc…, section 6dc9e817…,
+  // 40,800 → 32,640. The panel's middle line reads -฿8,160.
+  assert.equal(discountAmount(40800, 32640), 8160);
+  // Positive. The minus sign is the PANEL's, not the number's — a caller that
+  // formats a negative would print "-฿-8,160".
+  assert.ok(discountAmount(40800, 32640) > 0);
+});
+
+test('the three lines ADD UP, for pairs where the rounded percentage would not', () => {
+  /**
+   * THE REASON THIS FUNCTION EXISTS, asserted rather than only argued in the
+   * comment beside it.
+   *
+   * 40,000 → 32,100 is 19.75%, which the chip rounds to 20%. An amount derived
+   * from that chip would be 8,000 and the panel would read
+   * 40,000 − 8,000 = 32,100, which is false by 100 baht on screen.
+   */
+  const list = 40000;
+  const net = 32100;
+
+  assert.equal(list - discountAmount(list, net), net, 'ราคาปกติ − ส่วนลด must equal ราคาสุทธิ');
+
+  // CONTROL: the naive derivation really does break here, so the assertion
+  // above is discriminating between two live options rather than restating
+  // arithmetic. If this control ever passes, the hazard has gone away and the
+  // test above has stopped being about anything.
+  const fromPercent = Math.round((discountPercent(list, net) / 100) * list);
+  assert.equal(fromPercent, 8000);
+  assert.notEqual(fromPercent, discountAmount(list, net));
+  assert.notEqual(list - fromPercent, net, 'the control: the naive panel does NOT add up');
+});
+
+test('the panel adds up across a spread of pairs, not just the one that breaks', () => {
+  const pairs = [[40800, 32640], [40000, 32100], [1000, 804], [3, 2], [55700, 38990], [100, 100]];
+  for (const [l, n] of pairs) {
+    assert.equal(l - discountAmount(l, n), n, `(${l}, ${n}) does not add up`);
+  }
+  // CONTROL: the spread contains at least one pair where the rounded
+  // percentage disagrees with the exact amount, so the loop is not a set of
+  // cases that happen to round cleanly.
+  assert.ok(
+    pairs.some(([l, n]) => Math.round((discountPercent(l, n) / 100) * l) !== discountAmount(l, n)),
+    'every pair rounds cleanly — the loop proves nothing',
+  );
+});
+
+test('null for every pair that cannot honestly produce an amount', () => {
+  assert.equal(discountAmount(null, 32640), null, 'unset list');
+  assert.equal(discountAmount(40800, null), null, 'unset net');
+  assert.equal(discountAmount(null, null), null);
+  assert.equal(discountAmount(undefined, undefined), null);
+  assert.equal(discountAmount(10000, 12000), null, 'no negative discount');
+});
+
+test('the two functions refuse the SAME pairs — including the case only one needs', () => {
+  /**
+   * `listPrice <= 0` is in `discountAmount` for no arithmetic reason: `0 - 0`
+   * is a fine 0 and there is no division to be undefined. It is there so the
+   * pair of functions cannot answer differently about one pair, which is what
+   * a caller drawing the panel on the amount and the label on the percentage
+   * would trip over.
+   */
+  const pairs = [
+    [40800, 32640], [40000, 32100], [10000, 12000], [10000, 10000],
+    [null, 32640], [40800, null], [null, null], [undefined, undefined],
+    [0, 0], [0, 100], [100, 0], [1000, 804], [3, 2],
+  ];
+  for (const [l, n] of pairs) {
+    assert.equal(
+      discountAmount(l, n) === null,
+      discountPercent(l, n) === null,
+      `the amount and the percentage disagree about whether (${l}, ${n}) is showable`,
+    );
+  }
+  // CONTROL: the grid holds both answers, so the loop is not comparing two
+  // constant nulls — and specifically holds the 0-list case that motivates it.
+  assert.ok(pairs.some(([l, n]) => discountAmount(l, n) !== null), 'no showable pair in the grid');
+  assert.ok(pairs.some(([l, n]) => discountAmount(l, n) === null), 'no refused pair in the grid');
+  assert.equal(discountAmount(0, 0), null, 'the 0-list case specifically');
+  assert.equal(discountPercent(0, 0), null);
+});
+
+test('equal prices are an amount of 0 — honest, and distinct from null', () => {
+  /**
+   * Mirrors the percentage's own 0-versus-null ruling. The caller's `> 0`
+   * branch is what declines to draw a `-฿0` line; a `!amount` check would
+   * collapse "no discount" into "cannot say", which is the same collapse the
+   * chip's `> 0` guard exists to avoid.
+   */
+  assert.equal(discountAmount(10000, 10000), 0);
+  assert.notEqual(discountAmount(10000, 10000), discountAmount(null, null));
+  // The two functions agree that this pair is showable-but-zero.
+  assert.equal(discountPercent(10000, 10000), 0);
+});
+
+test('CONTROL: the amount is not a constant, and not simply the list price', () => {
+  assert.notEqual(discountAmount(40800, 32640), null);
+  assert.notEqual(discountAmount(40800, 32640), discountAmount(55700, 38990));
+  assert.notEqual(discountAmount(40800, 32640), 40800);
 });
 
 // ── the inverted-price rule ───────────────────────────────────────────────

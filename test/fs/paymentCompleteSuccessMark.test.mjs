@@ -25,6 +25,13 @@ const read = (p) => readFileSync(path.join(ROOT, p), 'utf8');
 const IN_SCOPE = read('src/app/(public)/registration/payment/complete/page.jsx');
 const OUT_OF_SCOPE = read('src/app/(public)/masterclass/payment/complete/page.jsx');
 const WIZARD = read('src/components/registration/RegisterWizard.jsx');
+/**
+ * The step indicator LEFT RegisterWizard.jsx. It is its own component now,
+ * shared with the bundle quotation, and it took the CheckCircle2 step glyph
+ * with it — so the guard below follows the glyph rather than continuing to
+ * assert a location that stopped being true.
+ */
+const STEPPER = read('src/components/registration/RegistrationStepper.jsx');
 
 test('the 3DS return page renders the new mark on its paid branch', () => {
   assert.match(IN_SCOPE, /import \{ SuccessPulseIcon \} from '@\/components\/ui\/SuccessPulseIcon'/);
@@ -56,13 +63,44 @@ test('CONTROL: the masterclass 3DS page did NOT get the new mark', () => {
   assert.ok(!OUT_OF_SCOPE.includes('SuccessPulseIcon'));
 });
 
-test('the wizard keeps CheckCircle2 for its OTHER, unrelated roles', () => {
-  // The icon is also an inline step-indicator glyph and a mode-card tick in the
-  // same file. Those are a different role and were left alone; a blanket
-  // find-and-replace across the file is the way that gets broken.
+test('CheckCircle2 keeps its OTHER, unrelated roles — in both files it now lives in', () => {
+  /**
+   * The icon is a success mark in ONE role and a bullet glyph in two others:
+   * the step indicator's "this step is done" tick, and the attendance-mode
+   * card's "this card is selected" tick. Those two were left alone by the
+   * SuccessPulseIcon swap, and a blanket find-and-replace is how that gets
+   * broken.
+   *
+   * THE STEP GLYPH MOVED FILES. It used to sit in RegisterWizard.jsx beside the
+   * mode-card tick, and this test used to assert both against that one source.
+   * The step indicator is now RegistrationStepper.jsx — extracted so the bundle
+   * quotation could render the same three steps instead of a fifth copy — so
+   * the glyph is asserted where it actually is. The property under guard is
+   * unchanged; only its address moved, and the assertion follows it rather than
+   * being relaxed to accommodate the move.
+   */
+  // The wizard still imports the icon, because the mode-card tick is still here.
   assert.match(WIZARD, /import \{\s*ArrowRight,\s*CheckCircle2,/);
-  assert.match(WIZARD, /currentStep > s\.n \? <CheckCircle2 className="h-4 w-4" \/> : s\.n/);
   assert.match(WIZARD, /\{active && <CheckCircle2 className="h-4 w-4 text-9e-brand" \/>\}/);
+
+  // …and the step glyph, at its new address, unchanged in form.
+  assert.match(STEPPER, /import \{ CheckCircle2 \} from "lucide-react"/);
+  assert.match(STEPPER, /currentStep > s\.n \? <CheckCircle2 className="h-4 w-4" \/> : s\.n/);
+});
+
+test('CONTROL: the step glyph is in the stepper and NOT still in the wizard', () => {
+  /**
+   * Discrimination, so the test above cannot pass by the glyph having been
+   * duplicated into both files — which is the failure a move is most likely to
+   * produce and the one a pair of independent `match` assertions would miss.
+   */
+  const probe = /currentStep > s\.n \? <CheckCircle2 className="h-4 w-4" \/> : s\.n/g;
+  assert.equal((STEPPER.match(probe) || []).length, 1, 'the stepper must hold it exactly once');
+  assert.equal((WIZARD.match(probe) || []).length, 0, 'the wizard must not hold it any more');
+
+  // …and the wizard did not simply lose CheckCircle2 altogether, which would
+  // make the first half of this test vacuous.
+  assert.ok(WIZARD.includes('CheckCircle2'));
 });
 
 test('CONTROL: the wizard success screens no longer use the 16x16 lucide mark', () => {
