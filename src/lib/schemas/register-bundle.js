@@ -136,11 +136,16 @@ export const bundleRegistrationSchema = z
  * `publicRegistrationDefaults.requestInvoice` is `false` — and the ordinary
  * wizard then OVERRIDES it to `true` inside its own `useForm({ defaultValues })`
  * (RegisterWizard.jsx, ~line 701), far from the defaults object it is
- * correcting. `BundleRegisterForm` spread these defaults and did not repeat that
+ * correcting. The bundle form spread these defaults and did not repeat that
  * override, so a real submission stored a complete invoice beside
  * `requestInvoice: false`. Every reader gates on the flag: the admin card
  * rendered ไม่ได้ขอใบเสนอราคา and the confirmation email dropped its entire
  * billing section, while the data sat in the document untouched.
+ *
+ * (That form was `BundleRegisterForm.jsx` when the defect shipped. It is
+ * `BundleWizard.jsx` now — same schema, same defaults, split across three
+ * steps — and the name is corrected here so the next reader can open the file
+ * this paragraph is actually about.)
  *
  * ── WHY `true` IS THE ONLY LEGITIMATE VALUE FOR THIS FORM ────────────────
  * The bundle form renders `InvoiceFields` UNCONDITIONALLY and has no path that

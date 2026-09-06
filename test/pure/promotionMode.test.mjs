@@ -10,7 +10,12 @@ import {
   selectVisiblePromotionPages,
   promotionPageToCard,
   orderedPromotionCards,
+  publicPageHref,
 } from '@/lib/pages/promotionMode';
+// The predicate BOTH public routes gate on. Imported so the agreement test
+// below compares publicPageHref against the real rule rather than a restatement
+// of it — a second copy here could drift into agreeing with a bug.
+import { isPubliclyVisible } from '@/lib/pageBuilder/visibility';
 
 // Promotion mode Phase 1 — the pure discriminator + slug-collision rule. No DB.
 
@@ -146,6 +151,112 @@ test('control: gate excludes a visible non-promotion AND an invisible promotion'
   assert.equal(selectVisiblePromotionPages([visibleLanding], NOW).length, 0);
   assert.equal(selectVisiblePromotionPages([draftPromo], NOW).length, 0);
   assert.equal(selectVisiblePromotionPages([promoPage({ slug: 'ok' })], NOW).length, 1);
+});
+
+// ── publicPageHref: where a Genesis page lives, or nowhere ──────────────────
+
+/**
+ * Read by the bundle quotation's footer link. The two public URLs are not
+ * interchangeable — a promotion page is 308'd off its bare slug and only
+ * `/promotions/<slug>` renders it — and the destination's gate is
+ * `isPubliclyVisible`, not status alone.
+ */
+test('publicPageHref: a promotion page lives at /promotions/<slug>, never the bare slug', () => {
+  const page = { slug: 'songkran', pageType: 'promotion', status: 'published' };
+  assert.equal(publicPageHref(page, NOW), '/promotions/songkran');
+  assert.notEqual(publicPageHref(page, NOW), '/songkran');
+});
+
+test('publicPageHref: a NON-promotion page lives at the bare slug', () => {
+  const page = { slug: 'about-us', pageType: 'landing', status: 'published' };
+  assert.equal(publicPageHref(page, NOW), '/about-us');
+  // CONTROL: the two page types genuinely take different branches, so the pair
+  // of assertions above is a discrimination and not one rule written twice.
+  assert.notEqual(
+    publicPageHref({ slug: 'x', pageType: 'promotion', status: 'published' }, NOW),
+    publicPageHref({ slug: 'x', pageType: 'landing', status: 'published' }, NOW),
+  );
+});
+
+test('publicPageHref: null for a page whose own URL would 404 — the reachable gap', () => {
+  /**
+   * THE CASE THIS FUNCTION EXISTS FOR. `getPublishedPageBuilderPageById`
+   * selects on `status: 'published'` ALONE, so the bundle route happily renders
+   * a quotation form for a page that is published but outside its publish
+   * window — while both public routes, which run `isPubliclyVisible`, 404 it.
+   * An expired promotion is the likeliest page for a bundle to sit on.
+   */
+  const expired = {
+    slug: 'songkran', pageType: 'promotion', status: 'published',
+    publishStartDate: within.start, publishEndDate: '2000-01-02T00:00:00.000Z',
+  };
+  assert.equal(publicPageHref(expired, NOW), null, 'expired page must not be linked');
+
+  const future = {
+    slug: 'songkran', pageType: 'promotion', status: 'published',
+    publishStartDate: '2999-01-01T00:00:00.000Z',
+  };
+  assert.equal(publicPageHref(future, NOW), null, 'not-yet-live page must not be linked');
+
+  // CONTROL: the SAME page, inside its window, does produce a link — so the
+  // nulls above are the window rule firing and not the fixture being unusable.
+  assert.equal(
+    publicPageHref({ ...expired, publishEndDate: within.end }, NOW),
+    '/promotions/songkran',
+  );
+  // …and the status check alone would NOT have caught either of them, which is
+  // the whole reason this is not `status === 'published' ? href : null`.
+  assert.equal(expired.status, 'published');
+  assert.equal(future.status, 'published');
+});
+
+test('publicPageHref: null for draft/closed/archived, and for a missing slug', () => {
+  for (const status of ['draft', 'closed', 'archived']) {
+    assert.equal(
+      publicPageHref({ slug: 's', pageType: 'promotion', status }, NOW),
+      null,
+      `${status} was linked`,
+    );
+  }
+  // An empty slug must never be concatenated: `/promotions/` and `/` are both
+  // real pages that are not this one.
+  assert.equal(publicPageHref({ slug: '', pageType: 'promotion', status: 'published' }, NOW), null);
+  assert.equal(publicPageHref({ slug: '   ', pageType: 'landing', status: 'published' }, NOW), null);
+  assert.equal(publicPageHref(null, NOW), null);
+  assert.equal(publicPageHref(undefined, NOW), null);
+});
+
+test('CONTROL: publicPageHref is not simply always null', () => {
+  assert.equal(
+    publicPageHref({ slug: 'ok', pageType: 'promotion', status: 'published' }, NOW),
+    '/promotions/ok',
+  );
+});
+
+test('publicPageHref agrees with the predicate the destination routes use', () => {
+  /**
+   * Behavioural, over a grid, rather than by reading imports: whatever
+   * `isPubliclyVisible` admits is exactly what gets a link, or a customer meets
+   * one without the other.
+   */
+  const pages = [
+    { slug: 'a', pageType: 'promotion', status: 'published' },
+    { slug: 'b', pageType: 'landing', status: 'published' },
+    { slug: 'c', pageType: 'promotion', status: 'draft' },
+    { slug: 'd', pageType: 'promotion', status: 'published', publishEndDate: '2000-01-02T00:00:00.000Z' },
+    { slug: 'e', pageType: 'promotion', status: 'scheduled', publishStartDate: within.start },
+    { slug: 'f', pageType: 'promotion', status: 'published', publishStartDate: '2999-01-01T00:00:00.000Z' },
+  ];
+  for (const p of pages) {
+    assert.equal(
+      publicPageHref(p, NOW) !== null,
+      shouldRenderPromotionPage(p, NOW) || (isPubliclyVisible(p, NOW) && !isPromotionPage(p)),
+      `disagreement about ${p.slug}`,
+    );
+  }
+  // CONTROL: the grid holds both answers.
+  assert.ok(pages.some((p) => publicPageHref(p, NOW) !== null));
+  assert.ok(pages.some((p) => publicPageHref(p, NOW) === null));
 });
 
 test('promotionPageToCard: maps to the card shape, link is /promotions/<slug> (NOT bare)', () => {
