@@ -30,7 +30,12 @@
  * `withListQuery` — see lib/adminListQuery.
  */
 
-export { withListQuery } from '@/lib/adminListQuery';
+// Bound then re-exported, not `export { x } from '…'` — see the note on the
+// same line in lib/courses/adminListQuery for why the two forms are not
+// interchangeable as far as test/fs/libImportsResolved is concerned.
+import { withListQuery } from '@/lib/adminListQuery';
+
+export { withListQuery };
 
 /** The only param that belongs to the article list's URL state. */
 export const ARTICLE_LIST_PARAMS = ['page'];

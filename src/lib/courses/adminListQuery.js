@@ -59,5 +59,15 @@ export function courseListQuery(searchParams) {
  * note in that file for why the params lists did NOT move with it. Every
  * existing importer of this module is unaffected on purpose: the point of the
  * move was one definition, not a migration of every call site.
+ *
+ * BOUND LOCALLY AND THEN RE-EXPORTED, rather than `export { x } from '…'`.
+ * The two forms are identical to a bundler; they are not identical to
+ * test/fs/libImportsResolved, whose scanner strips IMPORT statements and then
+ * looks for identifiers with no binding in scope. A bare re-export is not an
+ * import statement, so it survived the strip and read as a use of an
+ * unimported name — a false positive, but one that costs nothing to avoid and
+ * would otherwise be re-litigated by whoever next saw the guard go red.
  */
-export { withListQuery } from '../adminListQuery';
+import { withListQuery } from '../adminListQuery';
+
+export { withListQuery };
