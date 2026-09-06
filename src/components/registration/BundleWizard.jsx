@@ -118,8 +118,14 @@ const RESULT_KEY = 'registration-bundle-result-v1';
 export function BundleWizard({
   pageId,
   sectionId,
-  bundleName = '',
-  courseCount = 0,
+  /*
+    `bundleName` and `courseCount` USED TO BE HERE. Their only reader was the
+    bundle-specific `closing` on the success screen, and that closing is gone —
+    so they are gone with it rather than left as props nobody reads. An unused
+    prop is a field with no reader, which is the thing this project keeps out;
+    and a prop that is still threaded from the server page reads, to the next
+    person, as a fact this component needs.
+  */
   step = 1,
   basePath = '/registration/bundle',
   summary = null,
@@ -423,23 +429,39 @@ export function BundleWizard({
       )}
 
       {currentStep === 3 && result && (
-        <StepComplete
-          result={result}
-          email={formData?.coordinator?.email}
-          title="ได้รับคำขอใบเสนอราคาแล้ว"
-          // The one thing the customer needs. A quotation is answered by a
-          // human days later, and the reference number is their only handle on
-          // it — see the note on StepComplete's props for why this is opt-in
-          // rather than un-commented for everybody.
-          showReference
-          closing={
-            <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              ทีมขายจะติดต่อกลับพร้อมใบเสนอราคาสำหรับ
-              {bundleName ? ` “${bundleName}” ` : ' แพ็กเกจนี้ '}
-              ({courseCount} หลักสูตร)
-            </p>
-          }
-        />
+        /*
+          ── NO REFERENCE NUMBER, AND NO BUNDLE-SPECIFIC CLOSING ─────────────
+          This screen renders StepComplete's DEFAULTS: the
+          PDF-within-3-working-days closing, and no reference line.
+
+          THIS REVERSES AN EARLIER DECISION IN THIS SAME FILE'S HISTORY, on the
+          product owner's ruling, and the old argument is written out here so it
+          is not acted on again. That argument was: "a quotation is answered by
+          a human days later, and the reference number is the customer's only
+          handle on it". The premise is FALSE — the confirmation email carries
+          the reference number, and the email is the copy a customer keeps. The
+          screen was never the only source, so showing it here bought nothing
+          that mattered and made this flow's success screen diverge from every
+          other one for no reason that survives being stated.
+
+          `showReference` NO LONGER EXISTS. This was its only caller, so once it
+          stopped being passed it was a prop with no reader and was removed from
+          StepComplete altogether. Putting the number back is therefore not a
+          one-word edit here: it is a change to a shared component with two
+          other live consumers, and it belongs to every flow at once rather than
+          to this one alone. The reasoning about why the reference line stays
+          commented out on those flows now lives at that block, in
+          RegisterWizard's quote branch — read it there first.
+
+          DO NOT RE-ADD `closing` HERE on the strength of the earlier reasoning
+          either.
+
+          `title` STAYS. The ruling named `closing` and `showReference`; the
+          heading is not one of them, and ได้รับคำขอใบเสนอราคาแล้ว is a true
+          sentence about a quotation request where the public flow's
+          ขอบคุณสำหรับการลงทะเบียน would describe a registration.
+        */
+        <StepComplete result={result} email={formData?.coordinator?.email} title="ได้รับคำขอใบเสนอราคาแล้ว" />
       )}
     </div>
   );

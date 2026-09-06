@@ -1246,39 +1246,38 @@ export function StepPreview({ data, onBack, onConfirm, submitting, error }) {
 // ── Step 3: Thank-you ────────────────────────────────────────────
 
 /**
- * ── THE THREE OPTIONAL PROPS, AND WHY THEY DEFAULT THE WAY THEY DO ─────────
+ * ── THE TWO OPTIONAL PROPS, AND WHY THEY DEFAULT THE WAY THEY DO ───────────
  *
- * `title`, `showReference` and `closing` exist so the BUNDLE quotation can use
- * this screen instead of keeping a fourth success panel of its own. Every one
- * of them is optional and every default reproduces exactly what this component
- * rendered before they existed, so the public wizard and anything else calling
+ * `title` and `closing` exist so the BUNDLE quotation can use this screen
+ * instead of keeping a fourth success panel of its own. Both are optional and
+ * both defaults reproduce exactly what this component rendered before they
+ * existed, so the public wizard and anything else calling
  * `<StepComplete result={…} email={…} />` is byte-for-byte unchanged. That is
  * asserted, not intended: test/render/stepCompleteOptionalProps compares a
  * no-new-props render against markup captured from this file before the props
  * were added.
  *
- * `showReference` DEFAULTS TO FALSE, which keeps the reference number hidden on
- * the public and in-house flows. Those two have the number COMMENTED OUT in
- * their markup — deliberately, by someone, on two live paths — and nobody in
- * this round knows why. Un-commenting them as a side effect of a bundle change
- * is exactly the kind of edit that gets discovered by a customer, so the
- * commented block below is left exactly as it was and the bundle opts IN
- * instead. A bundle customer needs the number: it is the only handle they have
- * on a quotation request that is answered by a human two days later.
+ * THERE WAS A THIRD, `showReference`, AND IT IS GONE. It let a caller opt in to
+ * the reference number; the bundle was its only user and stopped passing it, so
+ * it became a prop with no caller — a field with no reader, which this codebase
+ * keeps out whether the field is a Mongo key or a React prop.
  *
- * The props affect the QUOTE branch only. The paid branch is untouched — it is
- * a card/PromptPay receipt, the bundle can never reach it (a quotation carries
- * no paymentMethod and no omiseToken at all), and widening it would be scope
- * this round has no reason to take.
+ * Deleting it took nothing with it. The reasoning it used to carry — why the
+ * reference line stays commented out on the public and in-house flows — was
+ * always a fact about THAT BLOCK rather than about a prop, and it now lives at
+ * the block, in the quote branch below. Look there before restoring anything.
+ *
+ * `title` and `closing` affect the QUOTE branch only. The paid branch is
+ * untouched — it is a card/PromptPay receipt, the bundle can never reach it (a
+ * quotation carries no paymentMethod and no omiseToken at all), and widening it
+ * would be scope nobody has asked for.
  */
 export function StepComplete({
   result,
   email,
   title = null,
-  showReference = false,
   closing = null,
 }) {
-  const referenceNumber = result?.referenceNumber;
 
   // ── Paid variant (card / PromptPay) ──────────────────────────────
   if (result?.kind === "paid") {
@@ -1296,6 +1295,12 @@ export function StepComplete({
             {referenceNumber}
           </span>
         </p> */}
+        {/*
+          Commented out deliberately, like its twin on the quote branch below,
+          and for the same unknown reason — see the longer note there. It reads
+          `referenceNumber`, a local that went when its last live reader did, so
+          restoring this block means restoring that const too.
+        */}
         {result.amount != null && (
           <p className="mt-4 text-sm text-[var(--text-secondary)]">
             ยอดชำระ:{" "}
@@ -1342,23 +1347,34 @@ export function StepComplete({
         </span>
       </p> */}
       {/*
-        LEFT COMMENTED, ON PURPOSE — see the note on this component's props.
-        The block above is the public/in-house reference line and it stays
-        exactly as someone left it. A caller that needs the number opts in with
-        `showReference`, which renders the line below instead; that is why this
-        is an addition beside the commented block rather than an edit to it.
+        ── THE REFERENCE LINE ABOVE IS COMMENTED OUT ON PURPOSE ──────────────
+        This note used to live on a prop and pointed here; it is written out
+        HERE now, because it was always a fact about THIS BLOCK rather than
+        about any prop, and the prop it hung on is gone.
+
+        WHAT IS KNOWN: someone commented this line out deliberately, on the
+        public and in-house quote flows, both of which are live. WHAT IS NOT
+        KNOWN: why. Nobody working on this has found the reason.
+
+        SO IT STAYS AS IT IS. Un-commenting it would put a reference number back
+        in front of every public and in-house customer as a side effect of
+        whatever change happened to be passing — and a change nobody can
+        motivate, on two live paths, is the kind that gets discovered by a
+        customer rather than in review. Restoring it is a decision about what a
+        success screen owes a customer, taken deliberately and for all flows at
+        once; it is not a tidy-up.
+
+        A BUNDLE ONCE OPTED IN, VIA A `showReference` PROP, on the argument that
+        a quotation is answered by a human days later and the number was the
+        customer's only handle on it. That argument was WITHDRAWN: the
+        confirmation email carries the number and is the copy a customer keeps.
+        The prop had no callers left and was removed.
+
+        IF YOU DO RESTORE THIS BLOCK: it reads `referenceNumber`, a local that
+        went when its last live reader did. Bring back
+        `const referenceNumber = result?.referenceNumber;` at the top of this
+        component, or read `result.referenceNumber` here directly.
       */}
-      {showReference && referenceNumber && (
-        <p className="mt-3 text-sm text-[var(--text-secondary)]">
-          เลขอ้างอิง{" "}
-          <span
-            data-testid="step-complete-ref"
-            className="font-en font-bold text-[var(--text-primary)]"
-          >
-            {referenceNumber}
-          </span>
-        </p>
-      )}
       {email && (
         <p className="mt-4 text-sm text-[var(--text-secondary)]">
           ทาง 9Expert ได้ส่งอีเมลยืนยันไปที่{" "}

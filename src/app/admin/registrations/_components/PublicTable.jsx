@@ -268,8 +268,11 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
                   {multi ? (
                     <>
                       {/*
-                        Matches the แพ็กเกจ chip's block in the course cell so
+                        Matches the Bundle chip's block in the course cell so
                         the first course line starts level in both columns.
+                        (The chip read `แพ็กเกจ: <name>` when this was written;
+                        only its TEXT changed, and the 24px block it occupies —
+                        which is what this spacer mirrors — did not.)
                         `aria-hidden` because it is spacing, not content — and
                         the empty-element guard excludes exactly that.
                       */}
@@ -388,13 +391,26 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
  * column for a fact that is absent from almost every row would spend width the
  * course name has already been measured to need.
  *
- * The chip is drawn even when the bundle has no NAME — an author may ship an
- * unnamed bundle, the storage floor accepts it (see the model), and this is the
- * reader that has to decide what to show. `แพ็กเกจ` alone still says the thing
- * that matters: this row is one leg of several.
+ * ── IT READS "Bundle", AND NAMES NO PACKAGE ────────────────────────────────
+ *
+ * It used to read `แพ็กเกจ: <name>`, falling back to `แพ็กเกจ` alone when the
+ * bundle had none — an author may ship an unnamed bundle and the storage floor
+ * accepts it, so the fallback was load-bearing. Both are now the SAME string,
+ * which makes that whole branch disappear: named and unnamed bundles chip
+ * identically, and there is no "value that failed to load" case left to guard.
+ *
+ * THE CONSEQUENCE IS ACCEPTED, NOT OVERLOOKED. With several bundle requests in
+ * the list, every chip reads the same, so this table no longer says WHICH
+ * package a row belongs to — only THAT it belongs to one. That was the product
+ * owner's call. The package name is still on the detail screen, in its own
+ * แพ็กเกจ row and in the header subtitle, both of which are deliberately
+ * untouched and are where a reader goes to find out which package this is.
+ *
+ * The course COUNT stays on the folded chip. It is a different fact, it was
+ * added to close a filed defect (see below), and nothing about dropping the
+ * name argues for dropping it.
  */
 function CourseCell({ name, classDate, bundle, legs = [] }) {
-  const bundleName = String(bundle?.name ?? '').trim();
 
   /**
    * ── THE FOLDED CASE: EVERY COURSE THE REQUEST ASKED FOR ──────────────────
@@ -420,7 +436,7 @@ function CourseCell({ name, classDate, bundle, legs = [] }) {
             data-testid="bundle-leg-chip"
             className="inline-flex w-fit max-w-full items-center truncate rounded-9e-sm bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
           >
-            {bundleName ? `แพ็กเกจ: ${bundleName}` : 'แพ็กเกจ'} · {legs.length} หลักสูตร
+            Bundle · {legs.length} หลักสูตร
           </span>
         </div>
         {legs.map((leg) => (
@@ -454,7 +470,7 @@ function CourseCell({ name, classDate, bundle, legs = [] }) {
           data-testid="bundle-leg-chip"
           className="mt-0.5 inline-flex w-fit max-w-full items-center truncate rounded-9e-sm bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
         >
-          {bundleName ? `แพ็กเกจ: ${bundleName}` : 'แพ็กเกจ'}
+          Bundle
         </span>
       ) : null}
       {classDate ? (
