@@ -89,11 +89,47 @@ export const TERMINAL_STATUSES = Object.freeze(['cancelled']);
  * The LIVE ladder, most consequential first. Read top-down; the first member
  * present among the non-terminal legs is the request's status.
  *
- * Deliberately NOT `PUBLIC_STATUS_VALUES` with `cancelled` filtered out: that
- * array is in PIPELINE order (pending → confirmed → paid → cancelled), which is
- * the order work moves through, and this is the reverse question — which state
- * WINS. Deriving one from the other by reversing would be a clever line that
- * breaks silently the day a value is inserted in the middle.
+ * ══ IF YOU ARE HERE TO PUT `cancelled` AT THE TOP: IT WAS PROPOSED, AND IT
+ *    WAS RULED AGAINST. READ THIS FIRST. ══════════════════════════════════════
+ *
+ * "A request with any cancelled leg is cancelled" is the obvious ordering and
+ * it is the one that was asked for. It is wrong in THIS codebase for two
+ * reasons that are about what the word already means here, not about taste:
+ *
+ *   1. `cancelled` IS A LOCK, NOT A STAGE. Look at `updateRegistration`: a
+ *      cancelled record is excluded by the update filter, every field is
+ *      frozen, and the detail screen withholds every แก้ไข. So filing a request
+ *      under ยกเลิก because ONE of its three legs was cancelled makes the card
+ *      assert that lock over two legs that are still fully editable. The screen
+ *      would be claiming something about the record that the record does not
+ *      honour — and an admin who clicked ยกเลิก expecting finished work would
+ *      find live work behind it.
+ *
+ *   2. IT HIDES LIVE WORK. A three-course request with one course cancelled and
+ *      two still awaiting a quotation is, to the team that has to produce that
+ *      quotation, an OUTSTANDING REQUEST. Cancelled-wins moves it out of
+ *      รอดำเนินการ — the card they work from — and the work disappears from the
+ *      screen while still existing. That is the same class of defect as a count
+ *      that silently excludes rows.
+ *
+ * A request is therefore cancelled only when there is NOTHING LEFT OF IT, which
+ * is also the only reading under which the ยกเลิก card means what an admin
+ * thinks it means: click it and you get requests that are over.
+ *
+ * Nothing is hidden by this either — `mixed` travels beside `status` and the
+ * row draws a sub-line naming every status present, so a request filed under
+ * รอดำเนินการ with a cancelled course says so.
+ *
+ * ── AND AMONG THE LIVE LEGS, THE MOST ADVANCED WINS ───────────────────────
+ * `paid` over `confirmed` over `pending`. Money first: `paid` is
+ * system-assigned by the Omise webhook rather than chosen (see `isSystemSet`),
+ * and it is the state whose misfiling costs the most.
+ *
+ * ── NOT DERIVED FROM `PUBLIC_STATUS_VALUES` ───────────────────────────────
+ * That array is in PIPELINE order (pending → confirmed → paid → cancelled),
+ * which is the order work moves THROUGH, and this is the reverse question:
+ * which state WINS. Deriving one from the other by reversing would be a clever
+ * line that breaks silently the day a value is inserted in the middle.
  */
 export const REQUEST_STATUS_PRECEDENCE = Object.freeze(['paid', 'confirmed', 'pending']);
 

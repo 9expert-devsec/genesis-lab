@@ -284,3 +284,61 @@ test('the seat count that KEEPS legs says so where it is rendered', () => {
   // …and the word the render tier pins is still there.
   assert.match(panel.code, /ทั้งหมด/, 'the pinned total label was renamed');
 });
+
+// ── 7. THE PRECEDENCE RULING LIVES BESIDE THE ARRAY ─────────────────────────
+
+/**
+ * ══ WHY A TEST GUARDS A COMMENT ════════════════════════════════════════════
+ *
+ * `cancelled` is NOT at the top of `REQUEST_STATUS_PRECEDENCE`, and that is
+ * the least obvious decision in this whole area. "A request with any cancelled
+ * leg is cancelled" is what anyone reaches for first — it was proposed, and it
+ * was ruled against because `cancelled` is a LOCK in this codebase rather than
+ * a stage, and because it would move outstanding work off the card the team
+ * works from.
+ *
+ * The next person to reorder that array will read THE ARRAY, not the commit
+ * history. So the ruling has to be at the array, and a comment is the only
+ * mechanism that can put it there — which means a test is the only mechanism
+ * that can keep it there. Same reasoning as the schema note in
+ * test/fs/bundleTagReaders.
+ *
+ * Asserted against RAW source, because the subject IS a comment: reading
+ * `.code` here would strip the thing being checked.
+ */
+test('the cancelled-wins ruling is recorded AT the precedence array', () => {
+  const mod = readSource('src/lib/registrations/requestStatus.js');
+  const at = mod.raw.indexOf('export const REQUEST_STATUS_PRECEDENCE');
+  assert.notEqual(at, -1, 'the precedence array is gone');
+
+  // The note ABOVE the declaration — bounded by the previous export, so this
+  // reads the array's own docblock and not the whole file.
+  const prev = mod.raw.lastIndexOf('export const', at - 1);
+  assert.notEqual(prev, -1, 'the bound is wrong — nothing precedes the array');
+  const note = mod.raw.slice(prev, at);
+
+  // Matched on a CONTIGUOUS fragment: the sentence this came from wraps across
+  // a comment line ("IT WAS PROPOSED, AND IT" / "WAS RULED AGAINST"), and a
+  // probe spanning the break fails on prose that plainly satisfies it.
+  assert.ok(note.includes('WAS RULED AGAINST'),
+    'the note does not say the obvious ordering was considered and rejected — a reader will assume nobody thought of it');
+  assert.ok(note.includes('LOCK, NOT A STAGE'),
+    'the first reason (cancelled is a lock) is no longer recorded');
+  assert.ok(note.includes('HIDES LIVE WORK'),
+    'the second reason (it hides outstanding work) is no longer recorded');
+  assert.ok(note.includes('updateRegistration'),
+    'the note no longer points at the code that makes cancelled a lock');
+});
+
+test('CONTROL: the note bound is the array’s own docblock, not the file', () => {
+  const mod = readSource('src/lib/registrations/requestStatus.js');
+  const at = mod.raw.indexOf('export const REQUEST_STATUS_PRECEDENCE');
+  const prev = mod.raw.lastIndexOf('export const', at - 1);
+  const note = mod.raw.slice(prev, at);
+
+  assert.ok(note.length > 400 && note.length < 4000, `the note slice is ${note.length} chars`);
+  // It must NOT reach the generated-expression note further down the file, or
+  // "the note says X" is really "the file says X somewhere".
+  assert.equal(note.includes('WHY THIS IS GENERATED AND NOT WRITTEN OUT'), false,
+    'the slice has run past the array into requestStatusExpr’s docblock');
+});
