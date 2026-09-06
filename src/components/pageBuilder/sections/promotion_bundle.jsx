@@ -3,7 +3,18 @@ import Link from 'next/link';
 import { GraduationCap } from 'lucide-react';
 
 import { cn, formatPrice, courseHref } from '@/lib/utils';
-import { cardSurfaceClass, accentButtonClass } from '@/lib/pageBuilder/presets';
+/**
+ * `backgroundClass` and `ratioClass` are REUSED rather than re-spelt. Both are
+ * single-source maps this module already owns for the two_column type, and
+ * writing `bg-[var(--pb-bg-soft-gray)]` or `lg:grid-cols-[3fr_7fr]` by hand here
+ * would be a second copy of a value that is allowed to change in one place.
+ */
+import {
+  cardSurfaceClass,
+  accentButtonClass,
+  backgroundClass,
+  ratioClass,
+} from '@/lib/pageBuilder/presets';
 import { discountPercent } from '@/lib/pageBuilder/bundlePricing';
 // The ONE definition of "is this bundle taking registrations". Imported rather
 // than spelled here, because the bundle quotation form has to answer the same
@@ -11,7 +22,6 @@ import { discountPercent } from '@/lib/pageBuilder/bundlePricing';
 // accepts a submission is a closed bundle registerable through a stale link.
 import { BUNDLE_CLOSED_MESSAGE, isBundleRegistrationOpen } from '@/lib/pageBuilder/bundleRegistration';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
-import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';
 import { resolveDerivedRoundBadge } from '@/lib/scheduleStatus';
 import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
 import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
@@ -100,29 +110,46 @@ import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
  * and the editor warns in red. Same rule round 64 settled for a chosen round —
  * never silently dropped — applied where the consequence is larger.
  *
- * ── THE TWO LINKS ARE BUILT BY THE ONE BUILDER EACH ──────────────────────
- * `scheduleRegistrationHref` for ลงทะเบียน (it owns the `&class=` parameter
- * that skips the wizard's round-confirm step, AND the refusal that makes a full
- * round unclickable) and `courseHref` for รายละเอียดหลักสูตร. Neither is
- * re-templated here; round 81 deleted the last local copy of the first one and
- * test/fs/registrationEntryPointClassParam refuses a second.
+ * ── ONE LINK NOW, AND IT IS NOT THE REGISTRATION ONE ─────────────────────
+ * The card used to carry TWO: `scheduleRegistrationHref` for a per-course
+ * ลงทะเบียน, and `courseHref` for รายละเอียดหลักสูตร. THE FIRST IS GONE — this
+ * panel sells a package, and a button offering one course of it at its own
+ * price competed with the bundle's own register button and gave a customer a
+ * cheaper-looking way out of the offer. The card describes what is in the
+ * package; it is not a second till.
  *
- * A round that is `elapsed` or `missing` gets NO registration link at all —
- * `/registration/public?class=<id>` for an id upstream does not have renders a
- * blank step 1 — and no status chip, because a status is the seats-left signal
- * and cannot be true about a round nobody can fetch. The snapshot schema strips
- * both, so there is nothing here to draw them from even by mistake.
+ * `courseHref` remains and is not re-templated here.
+ * `scheduleRegistrationHref` is untouched as a module and still has five other
+ * callers (/schedule, /search, the training-course card, course_schedule); what
+ * went is this file's import of it.
+ *
+ * A round that is `elapsed` or `missing` still gets no status chip, because a
+ * status is the seats-left signal and cannot be true about a round nobody can
+ * fetch — the snapshot schema strips it, so there is nothing to draw from even
+ * by mistake. It draws the DERIVED badge instead. The clause that used to sit
+ * here about such a round getting "no registration link either" is gone with
+ * the link: no round of any state has one now.
  */
 function BundleItemCard({ entry, item, todayKey, currentYear }) {
   const course = entry?.course ?? null;
   const code = String(entry?.courseId ?? item?.courseId ?? '').trim();
   const round = chooseItemRound(entry?.rounds, item, todayKey);
 
+  /**
+   * `isLive` SURVIVED the per-course button's removal, and `round.live` did
+   * not — the two used to go together and only one of them was about the link.
+   *
+   * `registerHref` was the sole reader of `round.live` in this file, so
+   * `scheduleRegistrationHref` and its import went with the button. `isLive`
+   * stays because the DERIVED BADGE below is keyed on it: a round that is
+   * `elapsed` or `missing` still has to say so.
+   *
+   * `chooseItemRound` still RETURNS `live` and that is not now a field with no
+   * reader — four other call sites take it (the bundle route's `emailCourses`,
+   * `bundleLegs`' round fields, the bundle page's summary, and
+   * `course_schedule`). What went is this card's use of it, not the field.
+   */
   const isLive = round?.state === 'live';
-  // `isLive &&` guards the builder for the same reason course_schedule does:
-  // the derived states have no upstream row to hand it, and the builder is
-  // about a round that exists.
-  const registerHref = isLive ? scheduleRegistrationHref(round.live, code) : null;
   // A derived state has no upstream status to resolve and must not be handed
   // one — resolveDerivedRoundBadge is for exactly this call site.
   const derived = round && !isLive ? resolveDerivedRoundBadge(round.state) : null;
@@ -152,7 +179,23 @@ function BundleItemCard({ entry, item, todayKey, currentYear }) {
       data-course={code}
       data-round-state={round?.state ?? 'none'}
       data-resolved={course ? 'yes' : 'no'}
-      className="flex flex-col overflow-hidden rounded-9e-md border border-[var(--surface-border)]"
+      /*
+        THE SITE'S ORDINARY CARD SURFACE, taken rather than invented:
+        `bg-[var(--surface)]` is what `src/components/ui/card.jsx` paints the
+        `Card` primitive with, and `Card` is what the shared course card
+        (`src/components/course/CourseCard.jsx`) is built on. Its own note says
+        why it is a variable: #FFFFFF in light, #132638 in dark, so one card
+        renders correctly in both themes.
+
+        These cards had NO background at all and showed the panel's grey
+        through, which was fine while the panel was transparent and stopped
+        being fine when it became grey. The border was already
+        `--surface-border`, the same half of the `Card` pair, so this completes
+        a match that was half made.
+
+        The PANEL's own soft-grey and the ROUND BOX's cream are untouched.
+      */
+      className="flex flex-col overflow-hidden rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)]"
     >
       <div className="relative aspect-video w-full bg-9e-ice dark:bg-9e-navy">
         {cover ? (
@@ -168,7 +211,7 @@ function BundleItemCard({ entry, item, todayKey, currentYear }) {
 
       <div className="flex flex-1 flex-col gap-2 p-4">
         {course ? (
-          <h4 className="line-clamp-2 text-sm font-bold text-[var(--text-primary)]">{title}</h4>
+          <h4 className="line-clamp-2 h-10 text-sm font-bold text-[var(--text-primary)]">{title}</h4>
         ) : (
           /**
            * THE MARKED ROW. The course code is what the author stored and the
@@ -183,10 +226,40 @@ function BundleItemCard({ entry, item, todayKey, currentYear }) {
           </p>
         )}
 
+        {/*
+          ── THE ROUND BOX ────────────────────────────────────────────────
+          The label and the date on two lines inside a bordered, pale-warm
+          box, where they used to be one muted sentence.
+
+          THE COLOUR IS THE VAR FORM, NOT `bg-9e-orange-900`, AND THAT IS THE
+          WHOLE POINT. The Tailwind token compiles to the LIGHT hex (#FFF4E9)
+          in both themes — tailwind.config.js says so where the accent scales
+          are declared: those hexes are light-mode and the dark adaptation
+          lives only in the `--9e-<name>-<step>` vars. Taking the token here
+          would paint a cream slab on a dark page, which is exactly the defect
+          presets.js records shipping once. `courseStatusBadge` already builds
+          a soft tinted box this way (`border-[var(--9e-green-800)]
+          bg-[var(--9e-green-900)]`); this is that construction in orange.
+
+          `formatRoundDays` is UNCHANGED and no second formatter was added —
+          the date string is the same one this card already rendered; only the
+          box around it is new.
+        */}
         {dateLabel && dateLabel !== '-' && (
-          <p data-testid="bundle-item-dates" className="text-xs text-[var(--text-secondary)]">
-            รอบอบรม {dateLabel}
-          </p>
+          <div
+            data-testid="bundle-round-box"
+            className="rounded-9e-md border border-[var(--9e-orange-800)] bg-[var(--9e-orange-900)] px-3 py-2"
+          >
+            <span className="block text-[11px] font-bold text-[var(--text-secondary)]">
+              รอบอบรม
+            </span>
+            <span
+              data-testid="bundle-item-dates"
+              className="block text-xs font-bold text-[var(--text-primary)]"
+            >
+              {dateLabel}
+            </span>
+          </div>
         )}
         {derived && (
           <span
@@ -197,34 +270,39 @@ function BundleItemCard({ entry, item, todayKey, currentYear }) {
           </span>
         )}
 
-        <div className="mt-auto flex flex-wrap gap-2 pt-2">
-          {/*
-            ── THIS BUTTON IS NOT GOVERNED BY THE BUNDLE'S SWITCH ───────────
-            `registrationOpen` closes the BUNDLE's own registration. This one
-            points at an ordinary round of an ordinary course, and a promotion
-            ending does not close a course's rounds. `BundleItemCard` is not
-            passed the switch at all, which is what makes that structural
-            rather than a rule someone has to remember.
-          */}
-          {registerHref && (
-            <Link
-              href={registerHref}
-              data-testid="bundle-item-register"
-              className="inline-flex flex-1 items-center justify-center rounded-9e-md bg-9e-action px-3 py-2 text-xs font-bold text-white hover:bg-9e-brand"
-            >
-              ลงทะเบียน
-            </Link>
-          )}
-          {detailHref && (
+        {/*
+          ── ONE BUTTON, AND THE ลงทะเบียน ONE IS NOT COMING BACK ───────────
+          THIS PANEL SELLS A PACKAGE. A per-course ลงทะเบียน button took the
+          customer to register for ONE course at its own price — competing with
+          the bundle's own register button a column away, and offering a
+          cheaper-looking way out of the offer the page exists to make. A card
+          here is a description of what is IN the package, not a second place to
+          buy one piece of it.
+
+          The earlier design had the pair, and a previous round argued at length
+          that the bundle's `registrationOpen` switch must NOT reach these
+          buttons. That argument was right and is now moot: there is no
+          per-course button for the switch to reach or spare. See the note on
+          `registrationOpen` in lib/schemas/sections/dynamic.js, which was
+          rewritten in the same commit rather than left describing a control
+          that no longer exists.
+
+          รายละเอียดหลักสูตร takes the FULL WIDTH the pair used to share —
+          `w-full` in place of the two `flex-1`s. A single button left at half
+          width would leave a visibly empty half-row, which reads as a button
+          that failed to render rather than as a deliberate one.
+        */}
+        {detailHref && (
+          <div className="mt-auto pt-2">
             <Link
               href={detailHref}
               data-testid="bundle-item-detail"
-              className="inline-flex flex-1 items-center justify-center rounded-9e-md border border-[var(--surface-border)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] hover:border-9e-action/40 hover:text-9e-action"
+              className="inline-flex w-full items-center justify-center rounded-9e-md border border-[var(--surface-border)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] hover:border-9e-action/40 hover:text-9e-action"
             >
               รายละเอียดหลักสูตร
             </Link>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </li>
   );
@@ -233,6 +311,12 @@ function BundleItemCard({ entry, item, todayKey, currentYear }) {
 export function PromotionBundleSection({ content, data, style, pageId = null, sectionId = '' }) {
   const name = typeof content?.name === 'string' ? content.name.trim() : '';
   const blurb = typeof content?.blurb === 'string' ? content.blurb.trim() : '';
+  /**
+   * The short label — the pill, and the word inside the course-list heading.
+   * Trimmed like every other string here, so a label of spaces is absent rather
+   * than an empty pill: `'   '` is truthy and would otherwise draw one.
+   */
+  const label = typeof content?.label === 'string' ? content.label.trim() : '';
   const code = typeof content?.discountCode === 'string' ? content.discountCode.trim() : '';
 
   // `== null` catches both null and an absent key, and — deliberately — NOT 0.
@@ -246,11 +330,12 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
   /**
    * The BUNDLE-LEVEL register link, or null when this render cannot build one.
    *
-   * Named apart from `BundleItemCard`'s `registerHref` deliberately: that one
-   * is a per-COURSE link into the ordinary wizard for one round, built by
-   * `scheduleRegistrationHref`, and it is NOT governed by this bundle's switch.
-   * Two links, two audiences, two rules — and one shared name would have been
-   * the first step to someone applying one rule to both.
+   * IT IS NOW THE ONLY REGISTRATION LINK ON THIS SECTION. It used to be named
+   * apart from `BundleItemCard`'s `registerHref` deliberately — two links, two
+   * audiences, two rules, and one shared name would have been the first step to
+   * someone applying one rule to both. That per-course link is gone, so the
+   * distinction the name was defending no longer exists; the name stays because
+   * it is accurate, not because there is a second thing to tell it from.
    *
    * `pageId` is absent on the editor canvas (which renders SectionRenderer
    * directly) and on any caller that does not thread it, and a link missing
@@ -304,92 +389,147 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
   return (
     <div
       data-pb-bundle=""
-      className={cn('flex flex-col gap-4 rounded-9e-lg p-6', cardSurfaceClass('promotion_bundle', style))}
+      className={cn(
+        'grid grid-cols-1 gap-6 rounded-9e-lg p-6',
+        // A THIRD AND THE REST, and it stacks below `lg` — which is the mobile
+        // order the round asked for, for free: one column, LEFT BLOCK FIRST, so
+        // a customer on a phone meets the price and the button before the course
+        // list, exactly as the desktop reading order does.
+        ratioClass('30-70'),
+        backgroundClass('soft_gray'),
+        cardSurfaceClass('promotion_bundle', style),
+      )}
     >
+      {/*
+        ── THE LEFT COLUMN: the offer ────────────────────────────────────────
+        Pill, headline, discount chip, struck-through list price, the large net
+        price, the VAT footnote, then the button. Ordered exactly as they are
+        read, so the DOM order and the visual order are the same thing and the
+        stacked layout needs no reordering rule.
+      */}
+      <div data-testid="bundle-left" className="flex flex-col gap-3">
+      {/*
+        ── THE SHORT LABEL, ABOVE THE HEADLINE ───────────────────────────────
+        Rendered only when the author typed one. ABSENT DRAWS NOTHING — not an
+        empty pill, not a placeholder, and not a number derived from this
+        section's position among its siblings. "Bundle 1" looks like an index
+        and is not one; reordering the page must not rename anything.
+
+        `w-fit` rather than an inline-block: this is a flex column, so a bare
+        <span> would stretch to the full width and read as a bar.
+      */}
+      {label && (
+        <span
+          data-testid="bundle-label"
+          className="w-fit rounded-9e-sm bg-9e-navy px-2.5 py-1 text-xs font-bold text-9e-lime"
+        >
+          {label}
+        </span>
+      )}
       {name && <h3 className="font-heading text-xl font-bold text-[var(--text-primary)]">{name}</h3>}
       {blurb && <p className="text-sm text-[var(--text-secondary)]">{blurb}</p>}
 
-      {items.length > 0 && (
-        <ul
-          data-testid="bundle-items"
-          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      {/*
+        ── DERIVED, NEVER STORED ──────────────────────────────────────────
+        The two prices are what must match a real quotation; this is display.
+        `discountPercent` answers null for every pair that cannot honestly
+        produce a number — either price unset, a zero list price, or a net
+        price ABOVE the list — so there is no path here that draws `ลด -8%`.
+
+        `> 0` on top of that, because 0 IS an honest answer (a bundle sold at
+        its list price) and "ลด 0%" is a chip that advertises nothing.
+
+        ON ITS OWN LINE now, and painted with the orange TOKEN rather than the
+        accent var it used to take. `9e-orange-50` is #FF9124 in BOTH themes —
+        globals.css declares it identically in the light and `.dark` blocks —
+        so unlike the -900 step used by the round box, the token is safe here
+        and no var indirection is needed.
+      */}
+      {discount != null && discount > 0 && (
+        <span
+          data-testid="bundle-discount"
+          className="w-fit rounded-9e-sm bg-9e-orange-50 px-2 py-0.5 text-xs font-bold text-white"
         >
-          {items.map((it, i) => (
-            /**
-             * Keyed by the ITEM'S OWN id, never by index and never by course
-             * code: the same course can appear twice in one bundle, so a code
-             * key would collide, and an index key would carry a card's identity
-             * to its neighbour when the author reorders. The id is required by
-             * the schema for exactly this. `|| i` is the last resort for a
-             * document written before the id existed — there are none today,
-             * and a React key warning is a better failure than a crash.
-             */
-            <BundleItemCard
-              key={it?.id || `item-${i}`}
-              item={it}
-              entry={resolved[i] ?? null}
-              todayKey={todayKey}
-              currentYear={currentYear}
-            />
-          ))}
-        </ul>
-      )}
-
-      {(listPrice != null || netPrice != null) && (
-        <p data-testid="bundle-prices" className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          {netPrice != null && (
-            <span
-              data-testid="bundle-net-price"
-              className="font-heading text-3xl font-bold text-[var(--pb-accent-text)]"
-            >
-              {formatPrice(netPrice)}
-            </span>
-          )}
-          {listPrice != null && (
-            <span
-              data-testid="bundle-list-price"
-              className="text-sm text-9e-slate-dp-50 line-through dark:text-[#94a3b8]"
-            >
-              {formatPrice(listPrice)}
-            </span>
-          )}
-          {/*
-            ── DERIVED, NEVER STORED ────────────────────────────────────────
-            The two prices are what must match a real quotation; this is
-            display. `discountPercent` answers null for every pair that cannot
-            honestly produce a number — either price unset, a zero list price,
-            or a net price ABOVE the list — so there is no path here that draws
-            `ลด -8%`.
-
-            `> 0` on top of that, because 0 IS an honest answer (a bundle sold
-            at its list price) and "ลด 0%" is a chip that advertises nothing.
-          */}
-          {discount != null && discount > 0 && (
-            <span
-              data-testid="bundle-discount"
-              className="rounded-9e-sm bg-[color:var(--pb-accent-fill)]/10 px-1.5 py-0.5 text-xs font-bold text-[var(--pb-accent-text)]"
-            >
-              ลด {discount}%
-            </span>
-          )}
-        </p>
+          ลด {discount}%
+        </span>
       )}
 
       {/*
-        ── THE BUNDLE-LEVEL AFFORDANCE, AND THE ONE THING IT MUST NOT REACH ──
-        This block is the whole of what `registrationOpen` controls. The
-        per-course ลงทะเบียน buttons live in the ITEM CARDS below and point at
-        ordinary rounds through `scheduleRegistrationHref`, which has its own
-        `full` refusal — a promotion ending does not close a course's rounds, so
-        closing a bundle must leave those alone.
+        ── THE PRICE: THREE LINES, AND THE BIG ONE IS THE ANCHOR ───────────
+        ราคาปกติ <struck-through> บาท, then the net price large and red with a
+        small dark บาท on the same baseline, then the VAT footnote.
 
-        The two sit in one component, so nothing structural keeps them apart.
-        This comment is the statement and test/render/promotionBundle is the
-        enforcement; if the switch is ever widened, that test says so.
+        `items-baseline` is what puts บาท ON the price's baseline rather than
+        centred against a 36px number — the two are different type sizes and
+        centring them reads as a mistake.
+
+        Red comes from Tailwind's own palette with a dark pairing, which is
+        what this codebase already does for red everywhere else; there is no
+        9e red token to take.
+      */}
+      {(listPrice != null || netPrice != null) && (
+        <div data-testid="bundle-prices" className="flex flex-col gap-1">
+          {listPrice != null && (
+            <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              ราคาปกติ{' '}
+              <span data-testid="bundle-list-price" className="line-through">
+                {formatPrice(listPrice)}
+              </span>{' '}
+              บาท
+            </p>
+          )}
+          {netPrice != null && (
+            <p className="flex items-baseline gap-2">
+              <span
+                data-testid="bundle-net-price"
+                className="font-heading text-4xl font-bold text-red-600 dark:text-red-400"
+              >
+                {formatPrice(netPrice)}
+              </span>
+              <span className="text-base font-bold text-[var(--text-primary)]">บาท</span>
+            </p>
+          )}
+          <p data-testid="bundle-vat-note" className="text-xs text-[var(--text-secondary)]">
+            * ราคาดังกล่าวยังไม่รวม VAT 7%
+          </p>
+        </div>
+      )}
+
+
+
+      {/*
+        ── THE BUNDLE-LEVEL AFFORDANCE, AND THE WHOLE OF WHAT THE SWITCH DOES ─
+        This block is all `registrationOpen` controls, and now that is a plain
+        statement rather than a boundary anyone has to hold.
+
+        IT USED TO BE A BOUNDARY. The item cards carried their own per-course
+        ลงทะเบียน buttons into ordinary rounds, and the rule was that closing a
+        bundle must leave those alone — a promotion ending does not close a
+        course's rounds. Two kinds of button in one component, nothing
+        structural keeping them apart, and a comment plus a test doing the work.
+
+        THAT BUTTON IS GONE (this panel sells a package; see the note in
+        `BundleItemCard`). So the switch has nothing to over-reach into: the
+        cards contain one link each, to a course DETAIL page, which is not a
+        registration affordance in any state. The test that pinned the old
+        distinction was rewritten in the same commit rather than deleted — it
+        now asserts the cards carry no registration link at all, which is the
+        stronger claim and the one that would catch the button coming back.
       */}
       {open
         ? (bundleRegisterHref || code) && (
-            <div data-testid="bundle-offer" className="flex flex-wrap items-center gap-3">
+            /*
+              A COLUMN now, not a row. The button takes the full width of the
+              left column — it is the panel's call to action, and a 102px link
+              floating under a 36px price read as an afterthought — and the code
+              chip sits under it rather than beside it, where a `flex-wrap` row
+              would have put it at some widths and not others.
+
+              A PLAIN BLOCK COMMENT, not the braced JSX form: this position is
+              inside the `&& (` expression, not JSX children, and a braced
+              comment there parses as an object literal.
+            */
+            <div data-testid="bundle-offer" className="mt-1 flex flex-col items-start gap-3">
               {/*
                 ── THE REGISTER BUTTON, AND WHAT IT REPLACED ──────────────────
                 Until this commit the bundle-level affordance was a
@@ -405,6 +545,15 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
                 this chip is it, along with the editor's own input and
                 `sectionRendersEmpty`'s guard. Deleting the chip too would have
                 left the field read by nothing.
+
+                THE LABEL SAYS สมัคร; THE FLOW IS STILL A QUOTATION REQUEST.
+                Only the wording changed here — the href, the switch that
+                removes it and everything downstream are untouched. Worth
+                knowing because the confirmation mail this produces still opens
+                "เราได้รับคำขอใบเสนอราคาสำหรับ …", so button and mail describe
+                the same act in two registers. That is the wording the round
+                asked for; if the mail should follow, it is its own decision and
+                its own commit.
 
                 THE LINK CARRIES (pageId, sectionId) AND NOT sectionId ALONE.
                 `duplicatePageBuilderPage` keeps section ids by design, so two
@@ -427,9 +576,22 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
                 <Link
                   href={bundleRegisterHref}
                   data-testid="bundle-register"
-                  className={accentButtonClass('promotion_bundle', style)}
+                  /**
+                   * THE PRESET PAINTS IT; THIS SIZES IT.
+                   * `BUTTON_STYLE_CLASS` carries colour and hover ONLY — no
+                   * display, no padding, no radius — so a call site that passes
+                   * it alone gets a bare 24px-tall text link, which is what this
+                   * button was. The per-course ลงทะเบียน buttons in the cards
+                   * below already spell their own box the same way; this is that
+                   * construction one step larger, because it is the panel's
+                   * primary call to action rather than one of a pair.
+                   */
+                  className={cn(
+                    'inline-flex w-full items-center justify-center rounded-9e-md px-4 py-3 text-sm font-bold',
+                    accentButtonClass('promotion_bundle', style),
+                  )}
                 >
-                  ขอใบเสนอราคาแพ็กเกจนี้
+                  สมัคร Bundle นี้
                 </Link>
               )}
               {code && (
@@ -443,13 +605,133 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
             </div>
           )
         : (
-          <p
+          /*
+            ── THE CLOSED STATE IS BUTTON-SHAPED, AND INERT ─────────────────
+            It sits where the live button sits and matches its box exactly —
+            `w-full`, the same `rounded-9e-md px-4 py-3 text-sm font-bold`, the
+            same `inline-flex items-center justify-center`. Only the surface and
+            the cursor differ. A left-aligned sentence in a bordered box read as
+            an error notice rather than as the button's disabled twin.
+
+            ── WHY A <span>, AND NOT THE TWO OBVIOUS ALTERNATIVES ───────────
+            NOT a `<button disabled>`: a real button is a control, and a control
+            that exists in order to do nothing is a promise the page cannot
+            keep. Screen readers announce it as a dimmed button, which invites
+            the question "how do I enable it" that this element cannot answer.
+
+            NOT an `<a>` without an href: that is not a link at all — it is a
+            placeholder anchor with no role, which some readers still announce
+            and which is exactly the dead stop the round asked to avoid.
+
+            A `<span>` is neither. It has no implicit role, takes no tab stop
+            (no href, no tabindex, not a form control), and cannot be activated
+            — so a keyboard user tabs from the price straight past it to the
+            course links, which is where anything actionable actually is. The
+            sentence is still read in document order by a screen reader, because
+            it is ordinary text; it simply is not offered as a control.
+
+            `select-none` because it is chrome rather than copyable content, and
+            `cursor-default` so a mouse never shows the pointer that would
+            suggest it does something. No hover state, deliberately: a hover
+            that changes nothing is the same false promise in another form.
+
+            NO BORDER, AND THAT IS A MEASUREMENT RATHER THAN A PREFERENCE. It
+            had one and was 46px tall against the live button's 44px — the
+            accent button is a filled box with no border, so a 1px border here
+            added 2px and the two boxes did not line up. The muted fill already
+            delineates the shape. Measured again after: 328.8×44 at 1440 and
+            311×44 at 375, identical to the button in both.
+
+            ONE SHAPE, TWO TEXTS. The same element carries the expiry wording
+            when that state can reach a panel — see the note beside the message
+            constants. Today only the switch reaches it, because a page past its
+            publish window 404s before any section renders.
+          */
+          <span
             data-testid="bundle-closed"
-            className="rounded-9e-md border border-[var(--surface-border)] px-4 py-3 text-sm font-bold text-9e-slate-dp-50 dark:text-[#94a3b8]"
+            aria-disabled="true"
+            className="inline-flex w-full cursor-default select-none items-center justify-center rounded-9e-md bg-[var(--surface-muted)] px-4 py-3 text-center text-sm font-bold text-9e-slate-dp-50 dark:text-[#94a3b8]"
           >
             {BUNDLE_CLOSED_MESSAGE}
-          </p>
+          </span>
         )}
+      </div>
+
+      {/*
+        ── THE RIGHT COLUMN: what is in the package ────────────────────────
+        The heading, then one card per item side by side. It was built in the
+        single column last commit and MOVED here rather than duplicated — the
+        heading has exactly one definition, and its label-less form travelled
+        with it unchanged.
+
+        `min-w-0` is a PRECAUTION, and the measurement says so rather than the
+        other way round. A grid track is `min-content` at its floor, so a child
+        whose content cannot shrink can push a track past its fr share; this is
+        the standard guard against that.
+
+        IT IS NOT LOAD-BEARING ON TODAY'S CONTENT, and the first draft of this
+        note claimed it was. Stripping the class from the live page at 1440 and
+        re-measuring gave an identical column width (767.2px) and no horizontal
+        overflow either way — the card grid's own tracks already constrain this
+        column, so nothing here is currently relying on it. Kept because the
+        content is authored and a long unbroken course title is exactly the case
+        it exists for; described honestly because a comment claiming a measured
+        fact it does not have is worse than no comment.
+      */}
+      <div
+        data-testid="bundle-right"
+        className="flex min-w-0 flex-col gap-3 lg:border-l lg:border-[var(--surface-border)] lg:pl-6"
+      >
+        {items.length > 0 && (
+          <>
+            {/*
+                  ── THE COURSE-LIST HEADING, AND ITS LABEL-LESS FORM ────────────────
+                  With a label:    หลักสูตรที่ร่วมรายการ Bundle 1 (2 คอร์ส)
+                  Without one:     หลักสูตรที่ร่วมรายการ (2 คอร์ส)
+
+                  The label AND ITS SPACE drop together — the alternative was a
+                  stand-in word like "แพ็กเกจ", which invents a name the author
+                  declined to type and is the opposite of "absent renders nothing".
+                  One string with one optional interpolation, so the two forms cannot
+                  drift into two sentences.
+
+                  The count is `items.length` — what the DOCUMENT says — and not the
+                  resolved length. A course that no longer resolves still draws its
+                  marked card, and a heading that counted only the resolvable ones
+                  would disagree with the cards directly beneath it.
+                */}
+                <h4
+                  data-testid="bundle-items-heading"
+                  className="font-heading text-base font-bold text-[var(--text-primary)]"
+                >
+                  {`หลักสูตรที่ร่วมรายการ${label ? ` ${label}` : ''} (${items.length} คอร์ส)`}
+                </h4>
+                <ul
+                  data-testid="bundle-items"
+                  className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                >
+                  {items.map((it, i) => (
+                    /**
+                     * Keyed by the ITEM'S OWN id, never by index and never by course
+                     * code: the same course can appear twice in one bundle, so a code
+                     * key would collide, and an index key would carry a card's
+                     * identity to its neighbour when the author reorders. The id is
+                     * required by the schema for exactly this. `|| i` is the last
+                     * resort for a document written before the id existed — there are
+                     * none today, and a React key warning is better than a crash.
+                     */
+                    <BundleItemCard
+                      key={it?.id || `item-${i}`}
+                      item={it}
+                      entry={resolved[i] ?? null}
+                      todayKey={todayKey}
+                      currentYear={currentYear}
+                    />
+                  ))}
+                </ul>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -82,14 +82,17 @@ test('a pair naming nothing is refused SILENTLY — there is no true sentence to
 });
 
 test('CONTROL: the spoken refusals are NOT silent, so the split is doing work', () => {
-  for (const r of ['page_not_public', 'section_disabled', 'closed', 'unresolved_items']) {
+  // `page_expired` joined this list when expiry was split out of
+  // `page_not_public`: an ended promotion has a true sentence to say, so it
+  // must never 404.
+  for (const r of ['page_not_public', 'page_expired', 'section_disabled', 'closed', 'unresolved_items']) {
     assert.equal(isSilentRefusal(r), false, `${r} would 404 a visitor who deserves a sentence`);
   }
   // …and the two lists together are the whole enumeration, so a reason added
   // later cannot quietly fall into neither.
   assert.deepEqual(
     [...BUNDLE_REFUSAL_REASONS].sort(),
-    [...SILENT_REFUSALS, 'page_not_public', 'section_disabled', 'closed', 'unresolved_items'].sort(),
+    [...SILENT_REFUSALS, 'page_not_public', 'page_expired', 'section_disabled', 'closed', 'unresolved_items'].sort(),
   );
 });
 
@@ -108,21 +111,68 @@ test('a hand-edited section id is refused as MISSING, not as unavailable', () =>
 // ── visibility ────────────────────────────────────────────────────────────
 
 test('an unpublished, expired or not-yet-live page is refused', () => {
+  /**
+   * ── THE REASONS SPLIT; THE REFUSAL DID NOT ─────────────────────────────
+   * Expiry now answers `page_expired` rather than `page_not_public`, because
+   * the two say different things to a visitor: "not yet, try later" is honest
+   * about an unpublished page and a lie about a promotion whose end date has
+   * passed. Every case here still REFUSES — that is the property this test has
+   * always been about, and it is asserted first, on `ok`, so the reason split
+   * cannot mask a case that started being accepted.
+   */
   const cases = [
-    ['draft', { status: 'draft' }],
-    ['closed', { status: 'closed' }],
-    ['archived', { status: 'archived' }],
-    ['expired', { publishEndDate: '2026-09-01T00:00:00.000Z' }],
-    ['scheduled, still future', { status: 'scheduled', publishStartDate: '2027-01-01T00:00:00.000Z' }],
-    ['published, start in future', { publishStartDate: '2027-01-01T00:00:00.000Z' }],
+    ['draft', { status: 'draft' }, 'page_not_public'],
+    ['closed', { status: 'closed' }, 'page_not_public'],
+    ['archived', { status: 'archived' }, 'page_not_public'],
+    ['expired', { publishEndDate: '2026-09-01T00:00:00.000Z' }, 'page_expired'],
+    ['scheduled, still future', { status: 'scheduled', publishStartDate: '2027-01-01T00:00:00.000Z' }, 'page_not_public'],
+    ['published, start in future', { publishStartDate: '2027-01-01T00:00:00.000Z' }, 'page_not_public'],
   ];
-  for (const [label, over] of cases) {
-    assert.equal(
-      resolveBundleRequest({ ...OK_ARGS, page: page([bundle()], over) }).reason,
-      'page_not_public',
-      `${label} was accepted`,
-    );
+  for (const [label, over, reason] of cases) {
+    const out = resolveBundleRequest({ ...OK_ARGS, page: page([bundle()], over) });
+    assert.equal(out.ok, false, `${label} was ACCEPTED`);
+    assert.equal(out.reason, reason, `${label} refused with the wrong reason`);
   }
+});
+
+test('expiry is the ONLY one of those that answers page_expired', () => {
+  /**
+   * The discrimination the split lives or dies by. Without it, a guard that
+   * answered `page_expired` for everything invisible would satisfy the test
+   * above's expired row while telling every draft page its promotion had ended.
+   */
+  const reasons = [
+    { status: 'draft' },
+    { status: 'closed' },
+    { status: 'archived' },
+    { status: 'scheduled', publishStartDate: '2027-01-01T00:00:00.000Z' },
+    { publishStartDate: '2027-01-01T00:00:00.000Z' },
+  ].map((over) => resolveBundleRequest({ ...OK_ARGS, page: page([bundle()], over) }).reason);
+
+  assert.equal(reasons.includes('page_expired'), false, `a non-expired state claimed expiry: ${reasons}`);
+  // …and the expired case really does produce it, so the negative above is not
+  // a probe that can never fire.
+  assert.equal(
+    resolveBundleRequest({
+      ...OK_ARGS,
+      page: page([bundle()], { publishEndDate: '2026-09-01T00:00:00.000Z' }),
+    }).reason,
+    'page_expired',
+  );
+});
+
+test('an end date STILL IN THE FUTURE is not expiry — the boundary is the predicate’s', () => {
+  /**
+   * The window arithmetic is `isPubliclyVisible`'s and the reason is
+   * `invisibleReason`'s; this file must not restate either. What it can check is
+   * that a page inside its window is not refused at all — which is what would
+   * break if a second, sloppier date comparison were ever written here.
+   */
+  const out = resolveBundleRequest({
+    ...OK_ARGS,
+    page: page([bundle()], { publishEndDate: '2099-01-01T00:00:00.000Z' }),
+  });
+  assert.equal(out.ok, true, `a page inside its window was refused: ${out.reason}`);
 });
 
 test('the guard reads isPubliclyVisible rather than a second opinion about status', () => {
@@ -142,15 +192,35 @@ test('the guard reads isPubliclyVisible rather than a second opinion about statu
     { publishStartDate: '2027-01-01T00:00:00.000Z' },
     { status: 'archived' },
   ];
+  /**
+   * ── THE VISIBILITY REFUSAL IS NOW TWO REASONS, SO THE PROBE TAKES BOTH ──
+   * It compared against `page_not_public` alone. Expiry answers `page_expired`
+   * now, and left as it was this loop would have read an expired page as
+   * ACCEPTED — the exact disagreement it exists to catch, inverted into a
+   * false green. The set is derived from the two names rather than spelled as a
+   * boolean, so a third visibility reason has one place to be added.
+   */
+  const VISIBILITY_REFUSALS = ['page_not_public', 'page_expired'];
   for (const over of overrides) {
     const p = page([bundle()], over);
-    const accepted = resolveBundleRequest({ ...OK_ARGS, page: p }).reason !== 'page_not_public';
+    const accepted = !VISIBILITY_REFUSALS.includes(
+      resolveBundleRequest({ ...OK_ARGS, page: p }).reason,
+    );
     assert.equal(
       accepted,
       isPubliclyVisible(p, NOW),
       `the guard and isPubliclyVisible disagree about ${JSON.stringify(over)}`,
     );
   }
+  // CONTROL: the expired row in the grid really does take the new reason, so
+  // the widened set is doing work rather than papering over it.
+  assert.equal(
+    resolveBundleRequest({
+      ...OK_ARGS,
+      page: page([bundle()], { publishEndDate: '2026-09-01T00:00:00.000Z' }),
+    }).reason,
+    'page_expired',
+  );
   // CONTROL: the grid holds both answers, so the loop is not comparing two
   // constant trues.
   assert.equal(overrides.some((o) => isPubliclyVisible(page([], o), NOW)), true);

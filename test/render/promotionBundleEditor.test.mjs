@@ -52,7 +52,13 @@ test('the tab offers every stored field, and nothing that is not stored', () => 
    * round 18's defect. The schema's key list is the other half of the pair.
    */
   const d = panel({ items: [] }, undefined);
+  /**
+   * `ป้ายสั้น` leads, because it draws ABOVE the headline on the page and a
+   * panel whose field order contradicts the rendered order is a panel an author
+   * has to translate.
+   */
   assert.deepEqual(labels(d), [
+    'ป้ายสั้น',
     'ชื่อแพ็กเกจ',
     'คำโปรย',
     'ราคาปกติ (บาท)',
@@ -67,8 +73,43 @@ test('the tab offers every stored field, and nothing that is not stored', () => 
     sectionSchema.parse({ id: 's', type: 'promotion_bundle' }).content,
   ).sort();
   assert.deepEqual(keys, [
-    'blurb', 'discountCode', 'items', 'listPrice', 'name', 'netPrice', 'registrationOpen',
+    'blurb', 'discountCode', 'items', 'label', 'listPrice', 'name', 'netPrice', 'registrationOpen',
   ]);
+});
+
+test('the two name fields are told apart by their hints, not just their labels', () => {
+  /**
+   * `ป้ายสั้น` and `ชื่อแพ็กเกจ` both ask for a name, and the หัวข้อ hint used
+   * to offer "Bundle 1" as an example NAME — which is now the example LABEL.
+   * Left alone the two fields would read as alternatives and an author would
+   * type the headline into neither.
+   */
+  const d = panel({ items: [] }, undefined);
+  const hints = [...d.querySelectorAll('label')].map((l) => text(l));
+  const pill = hints.find((h) => h.startsWith('ป้ายสั้น'));
+  const headline = hints.find((h) => h.startsWith('ชื่อแพ็กเกจ'));
+
+  assert.ok(pill.includes('Bundle 1'), 'the pill field lost its example');
+  assert.equal(
+    headline.includes('Bundle 1'),
+    false,
+    'the headline field still offers "Bundle 1" — the two fields read as alternatives',
+  );
+  // The headline says where it actually goes, which the pill must not claim.
+  assert.ok(headline.includes('ใบเสนอราคา'), 'the headline no longer says it reaches the quotation');
+  assert.equal(pill.includes('ใบเสนอราคา'), false, 'the pill claims to reach the quotation');
+});
+
+test('CONTROL: the hint reader sees real text, and discriminates', () => {
+  // Without this, both `.includes` checks above would pass on an empty string.
+  const d = panel({ items: [] }, undefined);
+  const hints = [...d.querySelectorAll('label')].map((l) => text(l));
+  assert.ok(hints.length >= 7, `the hint reader found ${hints.length} labels`);
+  assert.ok(hints.every((h) => h.length > 0), 'a label read back empty');
+  assert.notEqual(
+    hints.find((h) => h.startsWith('ป้ายสั้น')),
+    hints.find((h) => h.startsWith('ชื่อแพ็กเกจ')),
+  );
 });
 
 test('CONTROL: the label reader is not returning a constant', () => {

@@ -1,5 +1,5 @@
 import { slotsOf } from '@/lib/pageBuilder/containerSlots';
-import { isPubliclyVisible } from '@/lib/pageBuilder/visibility';
+import { isPubliclyVisible, invisibleReason } from '@/lib/pageBuilder/visibility';
 import { isBundleRegistrationOpen } from '@/lib/pageBuilder/bundleRegistration';
 import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
 
@@ -46,18 +46,23 @@ import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
  *   section_missing   no section with that id on it
  *   wrong_type        that section id is not a promotion_bundle
  *
- * Two of them ARE spoken, and they are deliberately different sentences:
+ * THREE of them ARE spoken, and they are deliberately different sentences:
  *
- *   closed            the author turned this bundle's registration off. Final
- *                     for this promotion. BUNDLE_CLOSED_MESSAGE — the same
- *                     string the section itself renders in place of its button,
- *                     so the page and the form cannot say two things.
+ *   closed            the author turned this bundle's registration off. A
+ *                     DECISION, reversible on Monday. BUNDLE_CLOSED_MESSAGE —
+ *                     the same string the section itself renders in place of
+ *                     its button, so the page and the form cannot say two
+ *                     things.
  *
- *   unavailable       the bundle is not closed, but the site cannot assemble
- *                     it: the page is unpublished / expired / not yet live, the
- *                     section is disabled, or an item's course or round no
- *                     longer resolves. A fault on our side, possibly fixed
- *                     within the hour. BUNDLE_UNAVAILABLE_MESSAGE.
+ *   expired           the page's own publish WINDOW has passed. Not a fault and
+ *                     not temporary: the offer had an end date and the date is
+ *                     behind us. BUNDLE_EXPIRED_MESSAGE.
+ *
+ *   unavailable       the bundle is not closed and has not expired, but the
+ *                     site cannot assemble it: the page is unpublished or not
+ *                     yet live, the section is disabled, or an item's course or
+ *                     round no longer resolves. A fault on our side, possibly
+ *                     fixed within the hour. BUNDLE_UNAVAILABLE_MESSAGE.
  *
  * `page_not_public`, `section_disabled` and `unresolved_items` are three
  * distinct reasons that all SPEAK as `unavailable`. They are kept apart in the
@@ -65,6 +70,14 @@ import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
  * tell them apart — see docs/ticket-bundle-unavailable-invisible.md, which
  * files the fact that today nothing tells an author their bundle has stopped
  * accepting registrations.
+ *
+ * ── `page_expired` WAS ONE OF THOSE THREE, AND WAS SPLIT OUT ──────────────
+ * The list above used to read "the page is unpublished / expired / not yet
+ * live" under `unavailable`, and that conflation was the defect: an expired
+ * promotion was told "ขณะนี้ยังไม่สามารถ…" — at this time, not YET — which
+ * invites a customer to come back to a page that will never reopen. The
+ * REFUSAL was always correct; only the sentence was wrong. See the note at the
+ * check itself for why `invisibleReason` decides it rather than a second test.
  *
  * ══ ORDER MATTERS, AND IT IS THE CHEAPEST-TRUEST FIRST ══════════════════════
  *
@@ -89,6 +102,7 @@ export const BUNDLE_REFUSAL_REASONS = Object.freeze([
   'section_missing',
   'wrong_type',
   'page_not_public',
+  'page_expired',
   'section_disabled',
   'closed',
   'unresolved_items',
@@ -233,7 +247,28 @@ export function resolveBundleRequest({ page, sectionId, resolved, todayKey, now 
    * unavailable" for a section id nobody ever authored would send the visitor
    * to ring the sales team about a bundle that never existed.
    */
-  if (!isPubliclyVisible(page, now)) return { ok: false, reason: 'page_not_public' };
+  /**
+   * ── EXPIRED IS SPLIT OUT OF `page_not_public`, AND NOT BY A SECOND TEST ──
+   * `invisibleReason` is `isPubliclyVisible`'s own companion in the SAME
+   * module — it exists to answer "and why not", and the publish dialog already
+   * reads it. Asking it here is reusing the destination's answer, not writing a
+   * second visibility rule that could disagree about a boundary date.
+   *
+   * The split is about what the visitor is told, and it matters in both
+   * directions. `page_not_public` speaks as "ขณะนี้ยังไม่สามารถ…" — a fault
+   * that may be fixed within the hour — which is honest for an unpublished page
+   * and a lie about a promotion whose end date has passed. That customer is
+   * being told to wait for a page that will never reopen.
+   *
+   * Both still refuse, identically and at the same point. Only the sentence
+   * differs.
+   */
+  if (!isPubliclyVisible(page, now)) {
+    return {
+      ok: false,
+      reason: invisibleReason(page, now) === 'expired' ? 'page_expired' : 'page_not_public',
+    };
+  }
 
   /**
    * A disabled section draws NOTHING — `SectionRenderer` returns null before it

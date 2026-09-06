@@ -72,17 +72,45 @@ export function isBundleRegistrationOpen(content) {
  *                reason.)
  *   UNAVAILABLE  the bundle is still open as far as its switch is concerned,
  *                but the site cannot presently assemble it — the page has been
- *                unpublished or has expired, the section is disabled, or one
- *                of its courses or rounds no longer resolves. That is a fault
- *                on our side and it may well be fixed within the hour, so the
- *                sentence says "ขณะนี้" and points at the sales team rather
- *                than telling the visitor the offer is over.
+ *                unpublished, the section is disabled, or one of its courses or
+ *                rounds no longer resolves. That is a fault on our side and it
+ *                may well be fixed within the hour, so the sentence says
+ *                "ขณะนี้" and points at the sales team rather than telling the
+ *                visitor the offer is over.
+ *
+ *   EXPIRED      the promotion's own publish window has PASSED. This one is not
+ *                a fault and is not temporary: the offer had an end date and
+ *                the date is behind us.
  *
  * Collapsing them would make an unpublished page read as a cancelled
  * promotion, which is a claim we have no business making, and would leave the
  * visitor with no reason to call.
+ *
+ * ── WHY EXPIRED IS ITS OWN STRING, AND WHAT IT WAS BEFORE ─────────────────
+ * It used to be folded into UNAVAILABLE, and the paragraph above used to list
+ * "or has expired" among that message's causes. That was wrong in the mirror
+ * image of the way CLOSED was once wrong.
+ *
+ * UNAVAILABLE opens with "ขณะนี้ยังไม่สามารถ…" — AT THIS TIME we cannot YET —
+ * which promises the visitor a fix and invites them to come back. For an
+ * unpublished page or an unresolved round that is honest. For a promotion whose
+ * `publishEndDate` has passed it is not: nothing is going to be fixed, the offer
+ * ended on a date the business chose, and telling that customer to wait sends
+ * them to keep checking a page that will never reopen.
+ *
+ * So EXPIRED states the ending plainly and still points at the sales team,
+ * because "this offer ended" and "there is nothing for you" are different
+ * sentences and only the first one is true — there may well be a current
+ * promotion, and the person who knows is on the phone.
+ *
+ * It is NOT the CLOSED wording either. CLOSED is a DECISION someone took with
+ * the switch and may reverse on Monday; EXPIRED is a DATE that has passed. An
+ * admin reading "ปิดรับสมัคร" would go looking for a switch to flip and find it
+ * already on, which is the confusion this third string exists to prevent.
  */
 export const BUNDLE_CLOSED_MESSAGE = 'โปรโมชันนี้ปิดรับสมัครแล้ว';
 
 export const BUNDLE_UNAVAILABLE_MESSAGE =
   'ขณะนี้ยังไม่สามารถรับลงทะเบียนแพ็กเกจนี้ได้ กรุณาติดต่อทีมขายเพื่อสอบถามรายละเอียด';
+
+export const BUNDLE_EXPIRED_MESSAGE = 'โปรโมชันนี้สิ้นสุดแล้ว';

@@ -1494,7 +1494,17 @@ function PromotionBundleEditor({ content, patch, resolved, courses }) {
 
   return (
     <>
-      <Field label="ชื่อแพ็กเกจ" hint='เช่น "Bundle 1" หรือ "แพ็กเกจ Claude AI ครบชุด"'>
+      {/*
+        ── TWO NAME FIELDS, AND THE HINTS ARE WHAT KEEP THEM APART ────────────
+        `ป้ายสั้น` is the dark pill; `ชื่อแพ็กเกจ` is the headline underneath it.
+        The หัวข้อ hint used to offer "Bundle 1" as an example NAME, which is
+        now the example LABEL — left as it was, the two fields would read as
+        alternatives and an author would type the headline into neither.
+      */}
+      <Field label="ป้ายสั้น" hint='ป้ายเหนือหัวข้อ เช่น "Bundle 1" — ไม่บังคับ ถ้าเว้นว่างจะไม่แสดงป้าย'>
+        <TextInput value={content?.label} onChange={(v) => patch({ label: v })} />
+      </Field>
+      <Field label="ชื่อแพ็กเกจ" hint='หัวข้อเต็ม เช่น "ดีลสุดคุ้ม! จับคู่ 2 คอร์ส…" — ใช้ในใบเสนอราคาและอีเมล'>
         <TextInput value={content?.name} onChange={(v) => patch({ name: v })} />
       </Field>
       <Field label="คำโปรย" hint="ประโยคสั้น ๆ ใต้ชื่อแพ็กเกจ — ไม่บังคับ">

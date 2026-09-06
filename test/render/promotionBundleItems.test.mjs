@@ -6,6 +6,12 @@ import { JSDOM } from 'jsdom';
 
 import { PromotionBundleSection } from '@/components/pageBuilder/sections/promotion_bundle';
 import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule here. The round-box test compares the rendered date against the SAME
+// formatter call the component makes, so "no second date formatter" is checked
+// against the real one rather than against a literal that could drift.
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+import { siteCurrentYear } from '@/lib/articlePublishTime';
 
 /**
  * `promotion_bundle`'s ITEM CARDS — one course, one round of it.
@@ -53,7 +59,7 @@ const bundle = (items, data) => doc({ name: 'Bundle 1', items }, data);
 
 // ── the ordinary card ─────────────────────────────────────────────────────
 
-test('a resolved item draws its cover, title, round dates and both links', () => {
+test('a resolved item draws its cover, title, round dates and its ONE link', () => {
   const d = bundle([item()], [entry()]);
   const card = d.querySelector('[data-testid="bundle-item"]');
   assert.notEqual(card, null);
@@ -73,10 +79,138 @@ test('a resolved item draws its cover, title, round dates and both links', () =>
   // they collapse to a range with the month on the last token.
   assert.match(text(card.querySelector('[data-testid="bundle-item-dates"]')), /20\s*-\s*21 ส\.ค\./);
 
-  const register = card.querySelector('[data-testid="bundle-item-register"]');
+  /**
+   * ── ONE LINK, AND IT IS THE DETAIL PAGE ────────────────────────────────
+   * The per-course ลงทะเบียน button was removed: this panel sells a package,
+   * and a button offering one course of it at its own price competed with the
+   * bundle's own register button. The card describes what is in the package.
+   */
   const detail = card.querySelector('[data-testid="bundle-item-detail"]');
-  assert.match(register.getAttribute('href'), /^\/registration\/public\?course=mse-l1&class=6500000000000000000000a1$/);
   assert.match(detail.getAttribute('href'), /^\/mse-l1-training-course$/);
+  assert.equal(
+    card.querySelector('[data-testid="bundle-item-register"]'),
+    null,
+    'the per-course register button is back',
+  );
+
+  /**
+   * IT TAKES THE FULL WIDTH THE PAIR SHARED. Both buttons were `flex-1`; the
+   * survivor is `w-full`, because one `flex-1` child in a row leaves a visibly
+   * empty half that reads as a button which failed to render.
+   *
+   * Pinned as a CLASS because width is geometry jsdom does not compute — the
+   * browser tier measures the pixels (311px at 375, 204.7px at 1440); this
+   * catches the class being changed back.
+   */
+  const cls = detail.getAttribute('class');
+  assert.ok(cls.includes('w-full'), `the detail button is not full width: ${cls}`);
+  assert.equal(cls.includes('flex-1'), false, 'the detail button is back to sharing a row');
+});
+
+test('CONTROL: the width probe reads the button and can answer false', () => {
+  // Without this, both checks above would pass on any class string that
+  // happened to contain `w-full`, or on an element that was never found.
+  const d = bundle([item()], [entry()]);
+  const detail = d.querySelector('[data-testid="bundle-item-detail"]');
+  assert.notEqual(detail, null, 'the probe found no button at all');
+  assert.equal('inline-flex flex-1 items-center'.includes('w-full'), false);
+  assert.equal('inline-flex flex-1 items-center'.includes('flex-1'), true);
+});
+
+test('the card takes the site card surface, and the round box keeps its own', () => {
+  /**
+   * `bg-[var(--surface)]` is what `components/ui/card.jsx` paints the `Card`
+   * primitive with, and `Card` is what the shared course card is built on — so
+   * a bundle card and a course card elsewhere on the site are the same colour,
+   * in both themes, from one definition.
+   *
+   * The card had NO background and showed the panel's grey through. That was
+   * fine while the panel was transparent and stopped being fine when it became
+   * grey. The border was already the other half of the `Card` pair.
+   *
+   * A CLASS assertion, unusually — the colour is a CSS variable, so jsdom
+   * resolves it to nothing and a computed-style check would read empty for both
+   * the correct and the broken case. The browser tier measures the actual
+   * pixel; this pins which token was chosen.
+   */
+  const d = bundle([item()], [entry()]);
+  const card = d.querySelector('[data-testid="bundle-item"]');
+  const cls = card.getAttribute('class');
+  assert.ok(cls.includes('bg-[var(--surface)]'), `the card surface is not the Card token: ${cls}`);
+  assert.ok(cls.includes('border-[var(--surface-border)]'), 'the card lost the matching border');
+
+  // The round box keeps its OWN cream — the two must not collapse into one.
+  const box = card.querySelector('[data-testid="bundle-round-box"]');
+  const boxCls = box.getAttribute('class');
+  assert.ok(boxCls.includes('bg-[var(--9e-orange-900)]'), `the round box lost its cream: ${boxCls}`);
+  assert.equal(
+    boxCls.includes('bg-[var(--surface)]'),
+    false,
+    'the round box took the card surface — the two backgrounds collapsed',
+  );
+});
+
+test('CONTROL: the class probe discriminates between the two surfaces', () => {
+  // Without this, both `includes` checks would pass on a class string that
+  // happened to contain everything, and the negative one proves the probe can
+  // answer false.
+  const d = bundle([item()], [entry()]);
+  const card = d.querySelector('[data-testid="bundle-item"]');
+  const box = card.querySelector('[data-testid="bundle-round-box"]');
+  assert.notEqual(card.getAttribute('class'), box.getAttribute('class'));
+  assert.equal(card.getAttribute('class').includes('bg-[var(--9e-orange-900)]'), false);
+});
+
+// ── the round box ─────────────────────────────────────────────────────────
+
+test('the round sits in a BOX, with its label and its date on separate lines', () => {
+  /**
+   * It was one muted sentence — "รอบอบรม 20 - 21 ส.ค. 69" — and is now a
+   * bordered pale box with the label above the date. The date element keeps its
+   * testid, so every assertion about the DATE elsewhere in this file is
+   * unchanged; what is new is the box around it and the label being its own
+   * node rather than a prefix on the same string.
+   */
+  const d = bundle([item()], [entry()]);
+  const box = d.querySelector('[data-testid="bundle-round-box"]');
+  assert.notEqual(box, null, 'the card has no round box');
+  assert.match(text(box), /รอบอบรม/);
+
+  const date = box.querySelector('[data-testid="bundle-item-dates"]');
+  assert.notEqual(date, null, 'the date is not inside the box');
+  assert.match(text(date), /20\s*-\s*21 ส\.ค\./);
+  assert.equal(
+    text(date).includes('รอบอบรม'),
+    false,
+    'the label ran back into the date string',
+  );
+});
+
+test('the date in the box is still formatRoundDays — no second formatter', () => {
+  /**
+   * The round asked for the box, not for a new date format. Compared against
+   * the SAME call the component makes rather than against a literal, so a
+   * change to the formatter moves both together and a second formatter
+   * introduced here would diverge immediately.
+   */
+  const d = bundle([item()], [entry()]);
+  const rendered = text(d.querySelector('[data-testid="bundle-item-dates"]'));
+  const expected = formatRoundDays(LIVE_ROUND.dates, {
+    showMonth: true,
+    showYear: 'auto',
+    currentYear: siteCurrentYear(),
+  });
+  assert.equal(rendered, expected);
+});
+
+test('CONTROL: no round, no box — never a bordered rectangle with a bare label', () => {
+  // An item whose course resolves but whose round does not: the card still
+  // draws (a bundle never silently loses a row), and the box must be absent.
+  const d = bundle([item({ roundId: 'gone' })], [entry({ rounds: [] })]);
+  const card = d.querySelector('[data-testid="bundle-item"]');
+  assert.notEqual(card, null, 'the card itself vanished');
+  assert.equal(card.querySelector('[data-testid="bundle-round-box"]'), null);
+  assert.equal(card.querySelector('[data-testid="bundle-item-dates"]'), null);
 });
 
 test('CONTROL: the same probes come back empty on an item with nothing resolved', () => {
@@ -192,38 +326,75 @@ test('a FULL round is shown but not clickable — the builder’s refusal is hon
   assert.equal(card.querySelector('[data-testid="bundle-item-register"]'), null, 'a sold-out round was linkable');
 });
 
-test('CONTROL: the same fixture with an OPEN status IS linkable', () => {
-  // Without this, "no register link" could be a card that never links.
+test('CONTROL: the card still links SOMEWHERE — the detail page', () => {
+  /**
+   * ── THIS CONTROL'S PREMISE CHANGED WITH THE BUTTON ─────────────────────
+   * It used to read "the same fixture with an OPEN status IS linkable", and
+   * guarded against "no register link" being a card that never links at all.
+   * There is no register link in any state now, so that comparison is gone.
+   *
+   * The residual risk is the same shape and still worth covering: the null
+   * above must be the REGISTER button being absent, not the card having failed
+   * to render its buttons at all. So the control asserts the detail link IS
+   * there on the identical fixture.
+   */
   const d = bundle([item()], [entry()]);
-  assert.notEqual(
-    d.querySelector('[data-testid="bundle-item"]').querySelector('[data-testid="bundle-item-register"]'),
-    null,
-  );
+  const card = d.querySelector('[data-testid="bundle-item"]');
+  assert.notEqual(card.querySelector('[data-testid="bundle-item-detail"]'), null);
+  assert.equal(card.querySelector('[data-testid="bundle-item-register"]'), null);
 });
 
-// ── 2. the switch does NOT reach the per-course buttons ───────────────────
+// ── 2. the cards carry NO registration affordance, in any state ───────────
 
-test('closing the bundle leaves every per-course ลงทะเบียน button exactly as it was', () => {
+test('no card offers registration — not open, not closed, not for any round', () => {
   /**
-   * The decided rule, asserted rather than only commented. `registrationOpen`
-   * closes THIS BUNDLE's registration; the item buttons point at ordinary
-   * rounds of ordinary courses, and a promotion ending does not close a
-   * course's rounds.
+   * ── THIS REPLACES THE OLD DISTINCTION, AND IS STRICTLY STRONGER ─────────
+   * It used to assert that closing the bundle left every per-course ลงทะเบียน
+   * button EXACTLY as it was — comparing the two href sets, because a promotion
+   * ending does not close a course's rounds. That rule was right and is now
+   * moot: the buttons are gone, so there is nothing for the switch to spare.
    *
-   * Compared as a SET of hrefs rather than as a boolean, so a change that kept
-   * a button but pointed it somewhere else would be caught too.
+   * Asserting "closing changes nothing" over an empty set would be vacuous and
+   * would pass for ever. So the claim moved up: there is NO registration link
+   * on a card in either switch position, and the only link a card carries goes
+   * to a course detail page. That is what catches the button coming back —
+   * which the old test, comparing two empty lists, no longer would.
    */
   const items = [item(), item({ id: 'i2', courseId: 'MSE-L1' })];
   const data = [entry(), entry({ id: 'i2' })];
-  const hrefs = (registrationOpen) =>
-    [...doc({ name: 'B', discountCode: 'EXP1', items, registrationOpen }, data)
-      .querySelectorAll('[data-testid="bundle-item-register"]')]
-      .map((a) => a.getAttribute('href'));
 
-  const whenOpen = hrefs(true);
-  const whenClosed = hrefs(false);
-  assert.equal(whenOpen.length, 2, 'the fixture drew no per-course buttons — the comparison would be vacuous');
-  assert.deepEqual(whenClosed, whenOpen, 'closing the bundle changed the per-course registration links');
+  for (const registrationOpen of [true, false]) {
+    const d = doc({ name: 'B', discountCode: 'EXP1', items, registrationOpen }, data);
+    const cards = [...d.querySelectorAll('[data-testid="bundle-item"]')];
+    assert.equal(cards.length, 2, 'the fixture drew no cards — every assertion below would be vacuous');
+
+    for (const card of cards) {
+      assert.equal(
+        card.querySelector('[data-testid="bundle-item-register"]'),
+        null,
+        `a per-course register button rendered with registrationOpen=${registrationOpen}`,
+      );
+      // Stronger than the testid: ANY link into the registration wizard,
+      // however it were spelt or named, would fail this.
+      const hrefs = [...card.querySelectorAll('a')].map((a) => a.getAttribute('href') ?? '');
+      assert.equal(
+        hrefs.some((h) => h.includes('/registration')),
+        false,
+        `a card links into /registration with registrationOpen=${registrationOpen}: ${hrefs.join(' ')}`,
+      );
+      // …and it does link somewhere, so the absence above is the register link
+      // being gone rather than the card rendering no links at all.
+      assert.ok(hrefs.some((h) => h.endsWith('-training-course')), 'the card lost its detail link too');
+    }
+  }
+});
+
+test('CONTROL: the /registration sweep would see a link if one were there', () => {
+  // The sweep above is a `.some()` over hrefs; without this, a typo in the
+  // needle or an empty href list would make it pass on anything.
+  const planted = ['/mse-l1-training-course', '/registration/public?course=mse-l1'];
+  assert.equal(planted.some((h) => h.includes('/registration')), true);
+  assert.equal(['/mse-l1-training-course'].some((h) => h.includes('/registration')), false);
 });
 
 test('CONTROL: the same switch DOES remove the bundle-level button, so it is wired at all', () => {
