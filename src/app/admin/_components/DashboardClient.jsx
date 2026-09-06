@@ -428,18 +428,49 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, initia
         The cards a caller sees follow the SCOPE their reads ran under: a–d for
         `dashboard_registrations`, (e) for `dashboard_system`. A caller with one
         scope has no count for the other half, because it was never queried.
+
+        ══ THE SECTION IS GATED ON THE SCOPE, NOT ON THE CARD COUNT ══════════
+
+        It used to be `queueCards.length > 0 &&`, and that is how a permission
+        change removed a whole section from four people's dashboards without
+        leaving a mark. `webhookErrors` was the only card scoped to `system`;
+        when its descriptor was commented out, a `dashboard_system`-only caller
+        resolved zero cards and the heading, the subtitle and the section went
+        with them. Nothing rendered, so nothing looked wrong — it read as a
+        dashboard that simply had no queue.
+
+        Gating on the scope instead means the reader who is ENTITLED to this
+        section always gets its heading, and an empty one says so in words.
+
+        ── WHAT AN EMPTY BOX ACTUALLY MEANS, FOR WHOEVER SEES IT NEXT ────────
+        Not "all clear". Every scope that has cards yields at least one of them
+        regardless of the counts — zero is a rendered result, not a dropped
+        card — so `queueCards` can only come back empty if the descriptors and
+        the scopes have got out of step, or the server sent a payload without
+        the half this caller was authorised for. The calm line below is for the
+        reader; the fact that the heading appeared at all is the signal for
+        whoever is debugging. An empty รอดำเนินการ means go and look at
+        QUEUE_CARDS and the scope keys, not that the work is done.
       */}
-      {queueCards.length > 0 && (
+      {(scopes.registrations || scopes.system) && (
         <section className="space-y-3">
           <SectionHeader
             title="รอดำเนินการ"
             subtitle="สถานะปัจจุบัน — ไม่กรองตามช่วงวันที่"
           />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {queueCards.map(({ card, count }) => (
-              <QueueCard key={card.id} card={card} count={count} />
-            ))}
-          </div>
+          {queueCards.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              {queueCards.map(({ card, count }) => (
+                <QueueCard key={card.id} card={card} count={count} />
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center rounded-9e-md border border-dashed border-[var(--surface-border)] px-4 py-6 text-center">
+              <p className="text-sm text-[var(--text-secondary)]">
+                ไม่มีรายการที่ต้องดำเนินการ
+              </p>
+            </div>
+          )}
         </section>
       )}
 

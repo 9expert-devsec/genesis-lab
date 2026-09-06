@@ -206,34 +206,46 @@ export const QUEUE_CARDS = Object.freeze([
     linkNote: 'รายการทั้งหมดที่รอดำเนินการ',
   },
   /**
-   * ── (e) HIDDEN ON REQUEST 2026-09-06 ───────────────────────────────────
-   * The `webhookErrors` card descriptor below is commented out because
-   * general admins should not see it. Uncomment the entry to restore the
-   * card; nothing else has to change.
+   * ── (e) SCOPED TO `system`, WHICH IS WHY IT IS BACK ────────────────────
+   * This card was commented out on 2026-09-06 to keep it away from general
+   * admins. That was too blunt a tool: removing the descriptor did not hide
+   * it from registration-facing admins, it deleted the ONLY card in the
+   * `system` scope, and `queueIdsForScope('system')` then returned []. The
+   * roles that hold `dashboard_system` WITHOUT `dashboard_registrations` —
+   * Intern, Editor and HR, four admins between them — opened /admin and got
+   * no รอดำเนินการ section at all.
    *
-   * The underlying metric is UNTOUCHED: `readSystemQueue()` at the foot of
-   * this file still runs its count and `buildMetrics` still returns it as
-   * `systemQueue.webhookErrors`. Only the descriptor is gone, so
-   * DashboardClient has no card to render for that count.
+   * The scope was always the mechanism the original request needed. A holder
+   * of `dashboard_registrations` alone never receives this count from the
+   * server (buildMetrics puts `systemQueue` in the payload only for
+   * `dashboard_system`), so the card cannot reach them whether the descriptor
+   * exists or not. Keeping the entry and keeping its scope is what separates
+   * "general admins do not see it" from "nobody sees it".
+   *
+   * ── IT IS THE ONLY CARD IN THIS SCOPE, AND THAT IS LOAD-BEARING ────────
+   * Deleting this entry, or moving it to `registrations`, empties the system
+   * half of the queue and takes the whole section down for those roles again.
+   * If a second system card is ever added, this stops being a single point of
+   * failure; until then, treat the scope on this one entry as structural.
    */
-  // {
-    // id: 'webhookErrors',
-    // /**
-     // * SYSTEM scope, not registration. It is operational rather than commercial,
-     // * and Webhook Logs already lives under ระบบ in the page registry — so the
-     // * admin who can act on this is the one who can already open that screen.
-     // */
-    // scope: 'system',
-    // label: 'Webhook ผิดพลาด',
-    // threshold: THRESHOLD_LABEL.webhookWindow,
-    // href: '/admin/webhook-logs?status=error',
-    // // The ONE card whose status filter is exact. The 24-hour window is not
-    // // expressible — that page reads page/event/status and no date at all — so
-    // // the list shows every error ever, which for this collection means every
-    // // error inside the 30-day TTL.
-    // linkFiltered: false,
-    // linkNote: 'ข้อผิดพลาดทั้งหมดที่ยังเก็บอยู่',
-  // },
+  {
+    id: 'webhookErrors',
+    /**
+     * SYSTEM scope, not registration. It is operational rather than commercial,
+     * and Webhook Logs already lives under ระบบ in the page registry — so the
+     * admin who can act on this is the one who can already open that screen.
+     */
+    scope: 'system',
+    label: 'Webhook ผิดพลาด',
+    threshold: THRESHOLD_LABEL.webhookWindow,
+    href: '/admin/webhook-logs?status=error',
+    // The ONE card whose status filter is exact. The 24-hour window is not
+    // expressible — that page reads page/event/status and no date at all — so
+    // the list shows every error ever, which for this collection means every
+    // error inside the 30-day TTL.
+    linkFiltered: false,
+    linkNote: 'ข้อผิดพลาดทั้งหมดที่ยังเก็บอยู่',
+  },
 ]);
 
 /** The ids belonging to one scope, in card order. */
