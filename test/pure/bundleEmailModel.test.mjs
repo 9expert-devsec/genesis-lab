@@ -45,8 +45,10 @@ const model = (over = {}) =>
     coverImage: COVER,
     courses: COURSES,
     discount: 20,
-    priceLabelNet: '฿32,640',
-    priceLabelList: '฿40,800',
+    // BARE, as the route now passes them: `formatBaht`, not `formatPrice`.
+    // The mail writes บาท itself, so a ฿ here would be the unit twice.
+    priceLabelNet: '32,640',
+    priceLabelList: '40,800',
     data: DATA,
     attendees: [{ firstName: 'สมหญิง', lastName: 'ดีใจ', email: '', phone: '' }],
     ...over,
@@ -188,8 +190,8 @@ test('the price block is TWO ROWS — net_text, and list_text as a block', () =>
    */
   const m = model();
   assert.deepEqual(m.package_price, {
-    net_text: '฿32,640',
-    list_text: { text: '฿40,800' },
+    net_text: '32,640',
+    list_text: { text: '40,800' },
   });
 });
 
@@ -198,7 +200,7 @@ test('list_text is FALSE when there is no list price — the row disappears', ()
   // heading. The block form is what removes the row itself.
   const m = model({ priceLabelList: '' });
   assert.equal(m.package_price.list_text, false);
-  assert.equal(m.package_price.net_text, '฿32,640');
+  assert.equal(m.package_price.net_text, '32,640');
   // And that is the ONLY change: the net row is untouched by the list row going.
   assert.deepEqual(Object.keys(m.package_price), ['net_text', 'list_text']);
 });
@@ -249,7 +251,7 @@ test('no NET price hides the whole block as FALSE, even when a list price exists
    * identically rather than merely its falsiness.
    */
   assert.equal(model({ priceLabelNet: '', priceLabelList: '' }).package_price, false);
-  assert.equal(model({ priceLabelNet: '', priceLabelList: '฿40,800' }).package_price, false);
+  assert.equal(model({ priceLabelNet: '', priceLabelList: '40,800' }).package_price, false);
   assert.equal(
     model({ priceLabelNet: '' }).package_price === null,
     false,
@@ -310,8 +312,8 @@ test('the fallback’s HTML and TEXT list identical courses', () => {
     firstName: 'สมหญิง',
     bundleName: 'Data Analyst Starter',
     courses: COURSES.map((c) => ({ courseName: c.courseName, dates: c.dates, typeLabel: scheduleTypeLabel(c.type) })),
-    priceLabelNet: '฿32,640',
-    priceLabelList: '฿40,800',
+    priceLabelNet: '32,640',
+    priceLabelList: '40,800',
   });
   for (const c of COURSES) {
     assert.ok(msg.html.includes(c.courseName), `HTML is missing ${c.courseName}`);
@@ -328,7 +330,7 @@ test('the fallback’s HTML and TEXT list identical courses', () => {
   assert.ok(msg.html.includes('ABCD1234'));
   assert.ok(msg.text.includes('ABCD1234'));
   // The price, and the "no payment yet" sentence, in both.
-  assert.ok(msg.html.includes('฿32,640') && msg.text.includes('฿32,640'));
+  assert.ok(msg.html.includes('32,640') && msg.text.includes('32,640'));
   assert.ok(msg.html.includes('ยังไม่มีการชำระเงิน') && msg.text.includes('ยังไม่มีการชำระเงิน'));
 });
 
@@ -352,17 +354,29 @@ test('the fallback draws the SAME three columns the model feeds the template', (
   assert.equal((bodyRow.match(/<td/g) ?? []).length, 3, 'the row is not three cells');
 });
 
-test('the fallback shows both price rows and NO percentage', () => {
+test('the fallback price is ONE row, with บาท and no ฿', () => {
+  /**
+   * ราคา 32,640 บาท จากปกติ 40,800 บาท — one line, the struck-through styling
+   * on the half it belongs to. It was two stacked table rows.
+   *
+   * The labels arrive BARE (`formatBaht`, not `formatPrice`), because the body
+   * writes บาท itself and `฿32,640 บาท` said the unit twice.
+   */
   const msg = bundleConfirmationEmail({
     referenceNumber: 'X', firstName: 'ก', bundleName: 'B',
     courses: [{ courseName: 'C', dates: 'd', typeLabel: 'Classroom' }],
-    priceLabelNet: '฿32,640',
-    priceLabelList: '฿40,800',
+    priceLabelNet: '32,640',
+    priceLabelList: '40,800',
   });
-  // Full price struck through, package price beside it.
-  assert.ok(msg.html.includes('<s>฿40,800</s>'), 'the full price is not struck through');
-  assert.ok(msg.html.includes('฿32,640'));
-  assert.ok(msg.text.includes('฿40,800') && msg.text.includes('฿32,640'));
+  assert.ok(msg.html.includes('<s>40,800 บาท</s>'), 'the full price is not struck through');
+  assert.ok(msg.html.includes('32,640 บาท'));
+  assert.ok(msg.html.includes('จากปกติ'), 'the one-row wording is gone');
+  assert.equal(msg.text.includes('ราคา 32,640 บาท จากปกติ 40,800 บาท'), true);
+
+  // NO ฿ ANYWHERE, in either body — the rule this round is about.
+  assert.equal(msg.html.includes('฿'), false, 'the HTML body still prints ฿');
+  assert.equal(msg.text.includes('฿'), false, 'the text body still prints ฿');
+
   // …and nothing about a saving, in EITHER body. The old fallback appended
   // "— ลด 20%" here; the template states no percentage, so neither does this.
   for (const banned of ['ลด ', '%', 'ประหยัด']) {
@@ -371,17 +385,29 @@ test('the fallback shows both price rows and NO percentage', () => {
   assert.equal(msg.html.includes('ลด '), false, 'the HTML body still advertises a discount');
 });
 
+test('CONTROL: the ฿ probe fires when a symbol IS present', () => {
+  // The two `includes('฿') === false` assertions above would pass on a body
+  // that rendered nothing at all, or on a needle that could never match.
+  const msg = bundleConfirmationEmail({
+    referenceNumber: 'X', firstName: 'ก', bundleName: 'B',
+    courses: [{ courseName: 'C', dates: 'd', typeLabel: 'Classroom' }],
+    priceLabelNet: '฿32,640',
+  });
+  assert.equal(msg.html.includes('฿'), true, 'the probe cannot see a ฿ that is there');
+  assert.equal(msg.text.includes('฿'), true);
+});
+
 test('CONTROL: the struck-through row goes when there is no list price', () => {
   // Proves the assertion above reads the list row specifically, and that the
   // fallback gates it the same way the model gates `list_text`.
   const msg = bundleConfirmationEmail({
     referenceNumber: 'X', firstName: 'ก', bundleName: 'B',
     courses: [{ courseName: 'C', dates: 'd', typeLabel: 'Classroom' }],
-    priceLabelNet: '฿32,640',
+    priceLabelNet: '32,640',
   });
   assert.equal(msg.html.includes('<s>'), false, 'a struck-through row with nothing in it');
-  assert.equal(msg.html.includes('ราคาปกติ'), false);
-  assert.ok(msg.html.includes('฿32,640'), 'the package price went with it');
+  assert.equal(msg.html.includes('จากปกติ'), false, 'the comparison half stayed behind');
+  assert.ok(msg.html.includes('32,640'), 'the package price went with it');
 });
 
 test('CONTROL: the fallback probe can miss — a course NOT in the list is absent', () => {
@@ -409,16 +435,48 @@ test('an unpriced fallback omits the price line rather than printing an empty on
     referenceNumber: 'X', firstName: 'ก', bundleName: 'B',
     courses: [{ courseName: 'C', dates: 'd', typeLabel: 'Classroom' }],
   });
-  assert.equal(msg.html.includes('ราคาแพ็กเกจ'), false);
-  assert.equal(msg.text.includes('ราคาแพ็กเกจ'), false);
+  // The label is 'ราคา' now, not 'ราคาแพ็กเกจ' — the two rows became one.
+  assert.equal(msg.html.includes('ราคา '), false);
+  assert.equal(msg.text.includes('ราคา '), false);
+  assert.equal(msg.html.includes('จากปกติ'), false, 'a dangling จากปกติ with no price');
 });
 
 test('CONTROL: the priced fallback DOES print it', () => {
   const msg = bundleConfirmationEmail({
     referenceNumber: 'X', firstName: 'ก', bundleName: 'B',
     courses: [{ courseName: 'C', dates: 'd', typeLabel: 'Classroom' }],
-    priceLabelNet: '฿1,000',
+    priceLabelNet: '1,000',
   });
-  assert.ok(msg.html.includes('ราคาแพ็กเกจ'));
-  assert.ok(msg.text.includes('ราคาแพ็กเกจ'));
+  assert.ok(msg.html.includes('ราคา '));
+  assert.ok(msg.text.includes('ราคา '));
+});
+
+test('a NET price with NO list price leaves no dangling จากปกติ', () => {
+  /**
+   * The requirement stated in the round: the row must read just the price. The
+   * `จากปกติ` half goes with the figure it introduces — a preposition
+   * pointing at nothing is worse than no comparison at all.
+   */
+  const msg = bundleConfirmationEmail({
+    referenceNumber: 'X', firstName: 'ก', bundleName: 'B',
+    courses: [{ courseName: 'C', dates: 'd', typeLabel: 'Classroom' }],
+    priceLabelNet: '1,000',
+  });
+  assert.equal(msg.text.trim().includes('ราคา 1,000 บาท'), true);
+  assert.equal(msg.text.includes('จากปกติ'), false);
+  assert.equal(msg.html.includes('จากปกติ'), false);
+  assert.equal(msg.html.includes('<s>'), false, 'a struck-through span with nothing in it');
+});
+
+test('CONTROL: with a list price the จากปกติ half IS there', () => {
+  // Without this, the three negatives above would pass on a body that never
+  // renders the comparison at all.
+  const msg = bundleConfirmationEmail({
+    referenceNumber: 'X', firstName: 'ก', bundleName: 'B',
+    courses: [{ courseName: 'C', dates: 'd', typeLabel: 'Classroom' }],
+    priceLabelNet: '1,000',
+    priceLabelList: '1,500',
+  });
+  assert.ok(msg.text.includes('จากปกติ 1,500 บาท'));
+  assert.ok(msg.html.includes('<s>1,500 บาท</s>'));
 });

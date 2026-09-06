@@ -67,11 +67,23 @@ export function bundleConfirmationEmail({
   const pkg = bundleName || 'แพ็กเกจอบรม';
 
   /**
-   * THE SAME TWO ROWS THE TEMPLATE SHOWS, AND NO THIRD.
+   * THE SAME ONE ROW THE TEMPLATE SHOWS, AND NO SECOND.
+   *
+   *     ราคา 38,990 บาท จากปกติ 55,700 บาท
+   *
+   * It was two stacked rows in a table. One line carries the same two numbers,
+   * and the struck-through styling stayed with the half it belonged to.
    *
    * Gated on the NET price alone and hidden entirely without it — the model's
    * `package_price` makes exactly the same call, because a list price with no
-   * package price is a struck-through figure above an empty row.
+   * package price is a struck-through figure with nothing to compare it to.
+   * When there IS a net price but no list price the row reads just "ราคา N
+   * บาท": the `จากปกติ` half goes with the figure it introduces, never leaving
+   * a preposition pointing at nothing.
+   *
+   * THE NUMBERS ARRIVE BARE and this body writes บาท, because the caller now
+   * formats with `formatBaht` rather than `formatPrice` — `฿38,990 บาท` said
+   * the unit twice.
    *
    * No percentage and no amount saved: the full price and the package price,
    * with the gap left to speak. This used to append "— ลด N%" and no longer
@@ -92,8 +104,11 @@ export function bundleConfirmationEmail({
     ...(showPrice
       ? [
           '',
-          ...(priceLabelList ? [`ราคาปกติ: ${priceLabelList}`] : []),
-          `ราคาแพ็กเกจ: ${priceLabelNet}`,
+          // ONE line, and the `จากปกติ …` half goes entirely when there is no
+          // list price — never a dangling preposition. Same rule as the HTML
+          // body below and as `list_text` in the TemplateModel.
+          `ราคา ${priceLabelNet} บาท` +
+            (priceLabelList ? ` จากปกติ ${priceLabelList} บาท` : ''),
         ]
       : []),
     ...(notes ? ['', `หมายเหตุของคุณ: ${notes}`] : []),
@@ -129,19 +144,11 @@ export function bundleConfirmationEmail({
   </table>
 
   ${showPrice ? `
-  <table style="margin-top:20px;font-size:15px">
-    <tbody>
-      ${priceLabelList ? `
-      <tr>
-        <td style="padding:2px 12px 2px 0;color:#475569">ราคาปกติ</td>
-        <td style="padding:2px 0;color:#475569"><s>${esc(priceLabelList)}</s></td>
-      </tr>` : ''}
-      <tr>
-        <td style="padding:2px 12px 2px 0">ราคาแพ็กเกจ</td>
-        <td style="padding:2px 0"><strong>${esc(priceLabelNet)}</strong></td>
-      </tr>
-    </tbody>
-  </table>` : ''}
+  <p style="margin-top:20px;font-size:15px">ราคา <strong>${esc(priceLabelNet)} บาท</strong>${
+    priceLabelList
+      ? ` <span style="color:#475569">จากปกติ <s>${esc(priceLabelList)} บาท</s></span>`
+      : ''
+  }</p>` : ''}
   ${notes ? `<p style="margin-top:16px;color:#475569">หมายเหตุของคุณ: ${esc(notes)}</p>` : ''}
 
   <p style="margin-top:24px;color:#475569;font-size:13px">

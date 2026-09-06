@@ -50,6 +50,51 @@ export function formatPrice(n) {
 }
 
 /**
+ * The SAME number, WITHOUT the ฿ — for call sites that write บาท themselves.
+ *
+ * `formatPrice` above emits `฿38,990`, and a surface that then writes บาท after
+ * it says the unit twice: `฿38,990 บาท`. This is that number with the symbol
+ * left off, so the Thai unit can be the only one on screen.
+ *
+ * ── ONE PLACE, AND WHY IT IS THIS ONE ─────────────────────────────────────
+ * It sits beside `formatPrice` deliberately: they are the same number under two
+ * conventions, and a reader choosing between them should meet both in one
+ * place. The alternative — `toLocaleString('th-TH')` at each call site — is how
+ * this repo would acquire three formatters that drift on grouping or on what
+ * they do with null.
+ *
+ * ── WHY NOT ONE OF THE THREE THAT ALREADY EXIST ──────────────────────────
+ * Checked before adding a fourth:
+ *
+ *   `formatTHB` (lib/pricing.js) is bare, and is ALREADY paired with บาท on the
+ *     masterclass and admin screens — but it is fixed at TWO fraction digits
+ *     (`22,084.80`), because it exists for VAT arithmetic. A bundle price is
+ *     whole baht and would read `38,990.00`.
+ *
+ *   `coursePriceLabel` (lib/coursePriceLabel.js) formats bare at zero digits
+ *     and is the closest fit numerically — but it answers 0 / null with
+ *     `Inhouse Only`, which is a real fact about a course with no public seat
+ *     price and a lie about a bundle. promotion_bundle.jsx's own header already
+ *     records that refusal at length; reusing it here would be that argument
+ *     lost rather than re-decided.
+ *
+ *   `formatTHB`'s neighbours in lib/pricing.js are all VAT machinery.
+ *
+ * So there is no existing bare, zero-digit, semantics-free formatter, and this
+ * is it.
+ *
+ * `'-'` for a null, matching `formatPrice` exactly: the two must not disagree
+ * about the empty case, or a surface that switches between them changes what an
+ * unset price looks like as a side effect.
+ */
+export function formatBaht(n) {
+  if (n == null || Number.isNaN(Number(n))) return '-';
+  return new Intl.NumberFormat('th-TH', {
+    maximumFractionDigits: 0,
+  }).format(Number(n));
+}
+
+/**
  * Build a course URL. Legacy pattern: /<slug>-training-course.
  *
  * Idempotent: `slug` may or may not already include the '-training-course'

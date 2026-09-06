@@ -175,11 +175,36 @@ export function buildBundleRegistrationModel({
     /**
      * THE PRICE — an object-or-`false`, like every other conditional here.
      *
-     * ── TWO ROWS, AND NO THIRD ─────────────────────────────────────────────
-     * The mail states the full price and the package price, and NOTHING about a
-     * percentage or an amount saved. The template strikes `list_text` through
-     * and sets `net_text` beside it; the size of the gap is the offer, and the
-     * customer can see it.
+     * ── ONE ROW NOW, AND NO PERCENTAGE ─────────────────────────────────────
+     *
+     *     ราคา 38,990 บาท จากปกติ 55,700 บาท
+     *
+     * It was two stacked rows (ราคาปกติ struck through, then ราคาแพ็กเกจ). One
+     * line says the same thing in a mail, where a two-row table for two numbers
+     * is more scaffolding than content. The struck-through styling went with the
+     * half it belonged to: the `จากปกติ` figure.
+     *
+     * THE SHAPE DID NOT HAVE TO CHANGE FOR THAT, and that is worth saying rather
+     * than rediscovering: `list_text` was already a BLOCK, so
+     * `{{#list_text}}…{{/list_text}}` hides the entire "จากปกติ …" fragment and
+     * the row degrades to "ราคา 38,990 บาท" with no dangling preposition. The
+     * two-row template needed exactly the same key to hide a whole row.
+     *
+     * The mail still states the full price and the package price and NOTHING
+     * about a percentage or an amount saved; the size of the gap is the offer,
+     * and the customer can see it.
+     *
+     * ── THE NUMBERS ARE BARE; บาท IS THE TEMPLATE'S ────────────────────────
+     * `net_text` is `38,990`, not `฿38,990` and not `38,990 บาท`. The caller
+     * formats with `formatBaht` (lib/utils) rather than `formatPrice`, because
+     * the row writes บาท itself and the symbol made the unit appear twice.
+     *
+     * The unit is left to the TEMPLATE rather than baked in here, unlike every
+     * label in this model — and the distinction is real: labels are resolved
+     * here because Mustachio cannot map a value to one. บาท maps nothing. It is
+     * static prose exactly like ราคา and จากปกติ on either side of it, and a
+     * person editing the wording in the Postmark dashboard should be able to
+     * change all three in the same place.
      *
      * So there is deliberately NO discount key. `discountPercent` still drives
      * the promotion section's ลด N% chip and `discountAmount` still drives the
@@ -198,8 +223,13 @@ export function buildBundleRegistrationModel({
      * ── `list_text` IS A BLOCK, NOT A STRING ───────────────────────────────
      * `textBlock`, exactly as `billing_tax_id` uses it: `{ text }` when there is
      * a list price, `false` when there is not, so `{{#list_text}}…{{/list_text}}`
-     * hides the whole struck-through row. An empty string would render an empty
-     * cell inside a row the template had already opened.
+     * hides the whole `จากปกติ …` fragment. An empty string would leave the
+     * preposition on screen with nothing after it — "ราคา 38,990 บาท จากปกติ
+     *  บาท" — which is the failure this shape exists to prevent.
+     *
+     * THE TEMPLATE THIS MODEL IS WRITTEN FOR:
+     *
+     *   ราคา {{net_text}} บาท{{#list_text}} จากปกติ <s>{{text}} บาท</s>{{/list_text}}
      */
     package_price: priceLabelNet
       ? {

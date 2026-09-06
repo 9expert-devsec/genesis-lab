@@ -15,7 +15,7 @@ import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
-import { formatPrice } from '@/lib/utils';
+import { formatBaht } from '@/lib/utils';
 import { refNo } from '@/lib/refNo';
 
 /**
@@ -292,15 +292,20 @@ export async function POST(req) {
        * leaving it unused is the part that keeps this true: an unused import is
        * an invitation to wire the value back in.
        *
-       * `formatPrice` is the site's own money formatter and the SAME call
+       * `formatBaht` is the site's bare-number formatter and the SAME call
        * promotion_bundle.jsx makes for these two numbers, so the mail and the
        * card cannot spell one price two ways. There is no second formatter.
+       *
+       * BARE, because the mail writes บาท itself: this was `formatPrice`, which
+       * emits `฿38,990`, and the row reads "ราคา … บาท" — so the unit appeared
+       * twice. The MODEL therefore carries the number alone and the template
+       * supplies บาท, which is static prose like ราคา and จากปกติ beside it.
        *
        * '' when the author set no price — the model turns that into a
        * `package_price: false` and the whole table drops.
        */
-      priceLabelNet: typeof gate.content.netPrice === 'number' ? formatPrice(gate.content.netPrice) : '',
-      priceLabelList: typeof gate.content.listPrice === 'number' ? formatPrice(gate.content.listPrice) : '',
+      priceLabelNet: typeof gate.content.netPrice === 'number' ? formatBaht(gate.content.netPrice) : '',
+      priceLabelList: typeof gate.content.listPrice === 'number' ? formatBaht(gate.content.listPrice) : '',
       data,
       attendees,
       invoiceCountry: data.invoice?.country ?? 'TH',

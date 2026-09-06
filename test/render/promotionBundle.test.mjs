@@ -430,6 +430,39 @@ test('the price block is three lines: ราคาปกติ, the net price, t
   assert.notEqual(d.querySelector('[data-testid="bundle-list-price"]'), null);
 });
 
+test('the price lines print บาท and NO ฿ — the unit is said once', () => {
+  /**
+   * They read `ราคาปกติ ฿55,700 บาท` and `฿38,990 บาท`: the panel writes บาท
+   * after a number `formatPrice` had already prefixed with ฿, so the unit
+   * appeared twice. `formatBaht` is that number with the symbol left off.
+   */
+  const d = doc({ ...FULL, items: [ITEM] });
+  const prices = d.querySelector('[data-testid="bundle-prices"]');
+  assert.equal(
+    prices.textContent.includes('฿'),
+    false,
+    `a ฿ survived in the price block: ${text(prices)}`,
+  );
+  assert.equal(text(d.querySelector('[data-testid="bundle-list-price"]')), '40,800');
+  assert.equal(text(d.querySelector('[data-testid="bundle-net-price"]')), '32,640');
+  // …and บาท is still there, once per figure — the symbol went, the unit did not.
+  assert.equal((text(prices).match(/บาท/g) ?? []).length, 2);
+});
+
+test('CONTROL: the ฿ probe fires on a panel that still carries one', () => {
+  /**
+   * The negative above would pass on a panel that rendered no prices at all.
+   * There is no way to make the component emit a ฿ any more, so the control
+   * proves the PROBE instead: the same read over a string that has one, and
+   * over the real panel to show it is not empty.
+   */
+  const d = doc({ ...FULL, items: [ITEM] });
+  const prices = d.querySelector('[data-testid="bundle-prices"]');
+  assert.notEqual(prices, null, 'the price block did not render at all');
+  assert.ok(text(prices).length > 0, 'the price block is empty — the negative is vacuous');
+  assert.equal('ราคาปกติ ฿55,700 บาท'.includes('฿'), true, 'the probe cannot see a ฿');
+});
+
 test('CONTROL: the VAT note goes with the price block, not the panel', () => {
   // An unpriced bundle must not print a footnote about a price it does not
   // state — which is what a note rendered outside the block would do.

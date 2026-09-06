@@ -5,7 +5,7 @@ import {
   discountAmount,
   discountPercent,
 } from "@/lib/pageBuilder/bundlePricing";
-import { formatPrice } from "@/lib/utils";
+import { formatBaht } from "@/lib/utils";
 
 /**
  * WHAT THE CUSTOMER IS REQUESTING — the courses, their rounds, and the price.
@@ -73,7 +73,9 @@ export function BundleSummary({
    * with `discountPercent`'s, which is why `percent` can be interpolated into
    * the middle line's label without a second null check. `> 0` on top of that
    * is the same guard the ลด N% chip has always carried: a bundle sold at list
-   * price has a discount of nothing, and a `-฿0` line advertises nothing.
+   * price has a discount of nothing, and a `-0 บาท` line advertises nothing.
+   * (It read `-฿0` until the ฿ came off these three rows; the guard is the
+   * same, only the shape of the line it prevents has changed.)
    *
    * Everything else — one price set and not the other, an inverted pair, a
    * free bundle — falls to the single net line below, which is what this block
@@ -165,7 +167,7 @@ export function BundleSummary({
               ราคาปกติ (รวม {lines.length} หลักสูตร)
             </dt>
             <dd className="font-en text-sm text-[var(--text-secondary)]">
-              {formatPrice(listPrice)}
+              {formatBaht(listPrice)} บาท
             </dd>
           </div>
           <div className="flex items-baseline justify-between gap-4">
@@ -179,9 +181,27 @@ export function BundleSummary({
               three lines add up for every pair, in front of a customer who can
               do the subtraction in their head. The minus sign belongs to the
               LINE, not to the number: discountAmount returns a positive.
+
+              ── THE MINUS SURVIVED THE SYMBOL, AND THAT WAS A DECISION ──────
+              It read `-฿16,710`, where the sign sat against the ฿ and the whole
+              thing was plainly one negative money token. With the symbol gone
+              and บาท trailing, the sign has to attach to something else, and
+              three readings were available:
+
+                -16,710 บาท     the sign stays on the NUMBER, unit follows
+                −16,710 บาท     the same with a true minus (U+2212)
+                ลด 16,710 บาท   the sign becomes a word
+
+              TAKEN: the first. It keeps the rule the note above already states —
+              the sign belongs to the line and `discountAmount` stays positive —
+              and changes only what sits to the right of the number. U+2212 was
+              rejected because nothing else in this codebase uses it and one
+              character that looks like a hyphen but is not is a search-and-
+              replace trap. `ลด` was rejected because the row's own <dt> already
+              reads ส่วนลด, and the value would then say the label again.
             */}
             <dd className="font-en text-sm font-bold text-9e-brand">
-              -{formatPrice(amount)}
+              -{formatBaht(amount)} บาท
             </dd>
           </div>
           <div className="flex items-baseline justify-between gap-4 border-t border-[var(--surface-border)] pt-3">
@@ -189,7 +209,7 @@ export function BundleSummary({
               ราคาสุทธิ
             </dt>
             <dd className="font-heading text-2xl font-bold text-[var(--text-primary)]">
-              {formatPrice(netPrice)}
+              {formatBaht(netPrice)} บาท
             </dd>
           </div>
         </dl>
@@ -202,12 +222,12 @@ export function BundleSummary({
         >
           {netPrice != null && (
             <span className="font-heading text-2xl font-bold text-[var(--text-primary)]">
-              {formatPrice(netPrice)}
+              {formatBaht(netPrice)} บาท
             </span>
           )}
           {listPrice != null && (
             <span className="text-sm text-9e-slate-dp-50 line-through dark:text-[#94a3b8]">
-              {formatPrice(listPrice)}
+              {formatBaht(listPrice)} บาท
             </span>
           )}
         </p>
