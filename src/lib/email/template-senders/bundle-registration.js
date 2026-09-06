@@ -57,8 +57,12 @@ import { scheduleTypeLabel } from '@/lib/email/models/labels';
 export async function sendBundleRegistrationEmail({
   referenceNumber,
   bundleName = '',
+  // Read by the ROUTE off the page it already loaded — the model is pure and
+  // does no I/O, exactly as `sendPublicRegistrationEmails` states for its own
+  // `courseImage`. Absent or '' is a supported state: the template hides the
+  // <img> entirely, and the HTML fallback below has no image at all.
+  coverImage = '',
   courses = [],
-  discount = null,
   priceLabelNet = '',
   priceLabelList = '',
   data,
@@ -78,8 +82,8 @@ export async function sendBundleRegistrationEmail({
         templateModel: buildBundleRegistrationModel({
           referenceNumber,
           bundleName,
+          coverImage,
           courses,
-          discount,
           priceLabelNet,
           priceLabelList,
           data,
@@ -123,7 +127,6 @@ export async function sendBundleRegistrationEmail({
       })),
       priceLabelNet,
       priceLabelList,
-      discount,
       notes: data.notes ?? '',
     });
 
