@@ -35,38 +35,46 @@ import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
  *
  *   bundle_name    the package, which is what the customer thinks they bought
  *   courses        a REPEATING section: one row per course+round. This is the
- *                  whole reason for the new template.
- *   course_count   Mustachio cannot count a section, so the number is resolved
- *                  here — the sentence "3 หลักสูตร" is not expressible in the
- *                  template otherwise.
- *   price block    a bundle is quoted at a package price, and the two prices
- *                  plus the derived percentage are the substance of the offer.
- *                  `publicRegistrationModel` omits price entirely on the
- *                  grounds that "a registration confirmation predates payment";
- *                  a bundle confirmation is ABOUT the price, and still predates
- *                  payment, which the template says in words.
+ *                  whole reason for the new template. `{ count, items }`, the
+ *                  same shape `attendee_list` uses — the count travels with the
+ *                  rows, so the heading can say "3 หลักสูตร" from inside the
+ *                  block that owns them and there is no second idiom to learn.
+ *   package_price  a bundle is quoted at a package price, and TWO PRICES are
+ *                  the substance of the offer: the full price, struck through,
+ *                  and what the package costs. `publicRegistrationModel` omits
+ *                  price entirely on the grounds that "a registration
+ *                  confirmation predates payment"; a bundle confirmation is
+ *                  ABOUT the price, and still predates payment, which the
+ *                  template says in words.
  *
- * ── THE PERCENTAGE AND THE MONEY ARRIVE PRE-RESOLVED ─────────────────────
- * `discount` and the two price LABELS are computed by the caller and passed in,
- * not derived here. Both need something this module deliberately does not
- * have: `discountPercent` is the shared derivation the page and the editor also
- * read (so the mail cannot disagree with the chip the customer just saw), and
- * `formatPrice` is `Intl` currency formatting, which is locale machinery rather
- * than a label decision. Keeping them out is what leaves this file pure and
- * exercisable without either.
+ * ── NO PERCENTAGE, AND NO AMOUNT SAVED ───────────────────────────────────
+ * The mail shows the two figures and lets the gap between them speak. It does
+ * not compute a percentage, and it does not compute a saving. `discountPercent`
+ * (the promotion section's ลด N% chip) and `discountAmount` (the web quotation
+ * panel's three-line breakdown) both still exist and are both still read — by
+ * the SCREEN. Neither reaches this model, and this builder takes no `discount`
+ * argument, so wiring one back in is an API change rather than a one-line
+ * addition that looks like it belongs.
  *
- * The percentage is still never STORED — it is derived at every read, here as
- * on the page, from the two prices that must match a real quotation.
+ * ── THE MONEY ARRIVES PRE-RESOLVED ───────────────────────────────────────
+ * The two price LABELS are formatted by the caller and passed in as strings,
+ * not derived here: `formatPrice` (lib/utils) is `Intl` th-TH currency
+ * formatting, which is locale machinery rather than a label decision, and it is
+ * the SAME call the promotion section makes for these same two numbers — so the
+ * mail and the card cannot spell one price two ways. Keeping it out is what
+ * leaves this file pure and exercisable without it.
  *
- * PURE: no env, no db, no network, no `new Date()`.
+ * PURE: no env, no db, no network, no `new Date()`. `coverImage` is read by the
+ * CALLER (src/app/api/registration/bundle/route.js) off the page it has already
+ * loaded, and passed in — the same division the course model states for its own
+ * `courseImage`.
  *
  * @param {object}   p
  * @param {string}   p.referenceNumber
  * @param {string}   p.bundleName
+ * @param {string}   p.coverImage     the promotion page's cover URL, or '' —
+ *   see the note on `course_image` below.
  * @param {Array<{courseName: string, dates: string, type: string}>} p.courses
- * @param {number|null} p.listPrice
- * @param {number|null} p.netPrice
- * @param {number|null} p.discount   whole percent, or null for no chip
  * @param {string}   p.priceLabelNet   pre-formatted currency, or ''
  * @param {string}   p.priceLabelList  pre-formatted currency, or ''
  * @param {object}   p.data           the validated bundle payload
@@ -77,8 +85,8 @@ import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 export function buildBundleRegistrationModel({
   referenceNumber,
   bundleName = '',
+  coverImage = '',
   courses = [],
-  discount = null,
   priceLabelNet = '',
   priceLabelList = '',
   data,
@@ -108,36 +116,95 @@ export function buildBundleRegistrationModel({
     coordinator_phone: coordinator.phone ?? '',
 
     bundle_name: bundleName || 'แพ็กเกจอบรม',
+
     /**
-     * ONE ROW PER COURSE, iterated with `{{#courses}}…{{/courses}}`.
+     * THE PROMOTION PAGE'S COVER — a PLAIN STRING, empty when the page carries
+     * none.
+     *
+     * The key is `course_image` and not `bundle_cover`, deliberately: it is the
+     * same vocabulary the course and in-house templates already use for the
+     * same thing, so a person editing two templates in the Postmark dashboard
+     * is not translating dialects. That is the rule the whole key list follows
+     * — `ref_no`, `coordinator_*`, `attendee_list` are all here for it.
+     *
+     * The template gates the <img> on `{{#course_image}}`, and an empty string
+     * is falsy to Mustachio, so the whole <img> disappears rather than
+     * rendering a broken-image icon at a `src=""`. Never null: Mustachio
+     * renders a null section as an empty one, which is visually identical to a
+     * correct hide reached by a different path.
+     */
+    course_image: coverImage || '',
+
+    /**
+     * THE COURSE TABLE — `{ count, items } | false`, iterated with
+     * `{{#courses}}…{{#each items}}…{{/each}}…{{/courses}}`.
+     *
+     * ── THIS IS `attendee_list`'S SHAPE, AND THAT IS THE POINT ──────────────
+     * It was a bare array beside a separate `course_count`, which made this
+     * model speak two idioms for one job: the attendee table already carried
+     * its own count INSIDE its block, and a reader of this file had to learn
+     * both. One idiom, and the count travels with the rows it counts.
+     *
+     * `course_count` is retired by the same change. It existed because
+     * Mustachio cannot count a section and the heading needs the number — still
+     * true, and now answered by `{{#courses}}({{count}} หลักสูตร){{/courses}}`,
+     * which reads the number from inside the block that owns it.
+     *
+     * ── `false`, NOT AN EMPTY BLOCK ────────────────────────────────────────
+     * No courses hides the HEADING as well as the table, rather than announcing
+     * "0 หลักสูตร" over an empty one. Same rule, same reason as every other
+     * conditional here: an object or the boolean `false`, never null, because
+     * Mustachio renders a null section as an empty one and the two failures
+     * then look identical.
      *
      * Every row is fully resolved — the training-type label is a string, not an
      * enum for the template to branch on — because Mustachio cannot map a value
      * to a label. Same rule the whole `labels.js` module exists for.
      */
-    courses: rows.map((c) => ({
-      course_name: c.courseName || c.courseId || '',
-      course_date: c.dates || 'ตามรอบที่กำหนด',
-      training_type_label: scheduleTypeLabel(c.type),
-    })),
-    // Mustachio cannot count a section. The sentence needs the number.
-    course_count: rows.length,
+    courses: rows.length
+      ? {
+          count: rows.length,
+          items: rows.map((c) => ({
+            course_name: c.courseName || c.courseId || '',
+            course_date: c.dates || 'ตามรอบที่กำหนด',
+            training_type_label: scheduleTypeLabel(c.type),
+          })),
+        }
+      : false,
 
     /**
-     * The price block, as an object-or-`false` like every other conditional
-     * here. `false` when neither price is set — an unpriced bundle should not
-     * mail a heading with nothing under it, which is the exact failure the flat
-     * billing shape was introduced to fix.
+     * THE PRICE — an object-or-`false`, like every other conditional here.
      *
-     * `discount_chip` is separately `false` at 0%, because a bundle sold at its
-     * list price is honest and "ลด 0%" advertises nothing — the same `> 0` rule
-     * the section's own chip applies.
+     * ── TWO ROWS, AND NO THIRD ─────────────────────────────────────────────
+     * The mail states the full price and the package price, and NOTHING about a
+     * percentage or an amount saved. The template strikes `list_text` through
+     * and sets `net_text` beside it; the size of the gap is the offer, and the
+     * customer can see it.
+     *
+     * So there is deliberately NO discount key. `discountPercent` still drives
+     * the promotion section's ลด N% chip and `discountAmount` still drives the
+     * web quotation panel's three-line breakdown — both stay, both are for the
+     * SCREEN, and neither reaches this model. The builder does not take a
+     * `discount` argument at all, which is what stops one being wired back in
+     * as a plausible-looking addition.
+     *
+     * ── GATED ON THE NET PRICE ALONE ───────────────────────────────────────
+     * `false` when there is no net price, even if a list price exists. A list
+     * price by itself is a number with nothing to compare it to, and rendering
+     * a table for it would put a struck-through figure above an empty row — the
+     * same "heading with nothing under it" the flat billing shape exists to
+     * prevent. The whole table drops instead.
+     *
+     * ── `list_text` IS A BLOCK, NOT A STRING ───────────────────────────────
+     * `textBlock`, exactly as `billing_tax_id` uses it: `{ text }` when there is
+     * a list price, `false` when there is not, so `{{#list_text}}…{{/list_text}}`
+     * hides the whole struck-through row. An empty string would render an empty
+     * cell inside a row the template had already opened.
      */
-    package_price: priceLabelNet || priceLabelList
+    package_price: priceLabelNet
       ? {
-          net_price: priceLabelNet,
-          list_price: textBlock(priceLabelList),
-          discount_chip: discount != null && discount > 0 ? { percent: String(discount) } : false,
+          net_text: priceLabelNet,
+          list_text: textBlock(priceLabelList),
         }
       : false,
 

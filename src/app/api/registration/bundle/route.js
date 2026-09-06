@@ -12,7 +12,6 @@ import { buildBundleLegs, orderLegsMarkerLast } from '@/lib/registration/bundleL
 import { buildAttendees, buildBundleTag } from '@/lib/registration/build-public';
 import { sendBundleRegistrationEmail } from '@/lib/email/template-senders/bundle-registration';
 import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
-import { discountPercent } from '@/lib/pageBuilder/bundlePricing';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
@@ -242,11 +241,64 @@ export async function POST(req) {
     await sendBundleRegistrationEmail({
       referenceNumber: refNo(requestId),
       bundleName: gate.content.name ?? '',
+      /**
+       * THE COVER IS READ FROM THE PAGE, AND IT IS NOT STORED ON THE LEGS.
+       *
+       * `page` is the one already loaded at the top of this handler, and
+       * `getPublishedPageBuilderPageById` selects `-draft` — which excludes the
+       * draft subtree and nothing else — so `promotionCover` is in hand here
+       * with NO SECOND READ. Not a new query, not a new field: the value was
+       * fetched before the gate ran and is being used a few lines later.
+       *
+       * ── WHY NO `bundle.cover` ON THE DOCUMENT ─────────────────────────────
+       * Denormalising it at submit was proposed and is unnecessary, because the
+       * premise it rests on is false ON THIS PATH. There is exactly ONE send,
+       * it happens inside this POST twenty lines after the write, and
+       * test/fs/bundleEmailWiring.test.mjs FORBIDS a second call site. So
+       * "captured at submit" and "read now" name the same instant, and a stored
+       * copy would have no reader — a schema field with no reader, which is the
+       * one thing this repo does not add.
+       *
+       * The mail is built from the LIVE RESOLVE throughout, not from the rows:
+       * `bundleName` above is `gate.content.name` rather than the leg's
+       * denormalised `bundle.name`, and `emailCourses` re-projects the courses
+       * for the reason its own header gives. The leg fields are the copy the
+       * ADMIN screens read. These are two different audiences, and this is the
+       * page-facing one.
+       *
+       * ── WHAT WOULD EARN THE FIELD ─────────────────────────────────────────
+       * A RE-SEND path — an admin resending a confirmation weeks later, when
+       * the page may have been edited, re-covered, or unpublished. That round
+       * is the one that earns a stored cover, and it would owe the COURSES too,
+       * for the same reason and by the same argument: everything this mail
+       * states about the package would have to be frozen together, or the
+       * resend would mix a stored name with today's rounds. Adding the cover
+       * alone, now, would be half of a feature nobody has asked for.
+       *
+       * '' is a supported value and the normal one for a page with no cover
+       * upload — the template gates the <img> on `{{#course_image}}`.
+       */
+      coverImage: page.promotionCover ?? '',
       courses: emailCourses(gate.content, resolved, todayKey),
-      discount: discountPercent(
-        typeof gate.content.listPrice === 'number' ? gate.content.listPrice : null,
-        typeof gate.content.netPrice === 'number' ? gate.content.netPrice : null,
-      ),
+      /**
+       * TWO PRICE LABELS, AND NO DISCOUNT.
+       *
+       * The mail states the full price and the package price and lets the gap
+       * speak; it says nothing about a percentage or an amount saved. So no
+       * `discount` is computed here, and `discountPercent` is no longer imported
+       * by this file — it and `discountAmount` remain what they were, the
+       * promotion section's ลด N% chip and the web quotation panel's three-line
+       * breakdown. Both are for the SCREEN. Removing the import rather than
+       * leaving it unused is the part that keeps this true: an unused import is
+       * an invitation to wire the value back in.
+       *
+       * `formatPrice` is the site's own money formatter and the SAME call
+       * promotion_bundle.jsx makes for these two numbers, so the mail and the
+       * card cannot spell one price two ways. There is no second formatter.
+       *
+       * '' when the author set no price — the model turns that into a
+       * `package_price: false` and the whole table drops.
+       */
       priceLabelNet: typeof gate.content.netPrice === 'number' ? formatPrice(gate.content.netPrice) : '',
       priceLabelList: typeof gate.content.listPrice === 'number' ? formatPrice(gate.content.listPrice) : '',
       data,

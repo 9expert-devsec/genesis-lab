@@ -7,6 +7,22 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const read = (p) => readFileSync(path.join(ROOT, p), 'utf8');
 
+/**
+ * Source with comments removed — the standing rule in this suite, and here it
+ * is load-bearing twice over.
+ *
+ * Every guard below that slices a WINDOW around a call site was measuring raw
+ * source, so a doc block added at that call site pushed the code it was looking
+ * for out of the window and reddened a correct file. That happened: the cover's
+ * reasoning note sits inside the send call and moved `catch (err)` past 1600
+ * characters. The window was never meant to measure prose length.
+ *
+ * `[^:]` spares the `//` in a URL literal.
+ */
+function scrub(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
 const ROUTE = 'src/app/api/registration/bundle/route.js';
 const SENDER = 'src/lib/email/template-senders/bundle-registration.js';
 const PUBLIC_SENDER = 'src/lib/email/template-senders/public-registration.js';
@@ -72,7 +88,9 @@ test('a failed email does NOT fail the request — the rows are already saved', 
    * turn a saved request into a 500 that invites the customer to submit again,
    * because that second submission would write a SECOND complete bundle.
    */
-  const code = read(ROUTE);
+  // SCRUBBED: the window is a claim about how much CODE sits between the send
+  // and its catch, and prose inside the call must not count toward it.
+  const code = scrub(read(ROUTE));
   const at = code.indexOf('sendBundleRegistrationEmail(');
   const after = code.slice(at, at + 1600);
   assert.match(after, /catch \(err\)/, 'the send is unguarded — an outage would 500 a saved request');
@@ -158,6 +176,81 @@ test('nothing passes a bcc — the internal list is one env var, merged by postm
 
 test('CONTROL: the bcc probe would see one', () => {
   assert.equal(/\bbcc:/.test('await sendEmail({ to, bcc: process.env.X, subject });'), true);
+});
+
+/**
+ * ── THE COVER: READ FROM THE PAGE, STORED NOWHERE ──────────────────────────
+ *
+ * Both halves are seam properties. The model is pure and cannot see where its
+ * `coverImage` came from; the schema cannot see that nothing writes a cover to
+ * it. What CAN be read is the source: which expression the route passes, how
+ * many page reads it makes, and whether the tag grew a field.
+ *
+ * The call site carries a long note explaining the decision, and that note
+ * NAMES every token these guards match on. So they read SCRUBBED source — the
+ * standing rule in this suite, earned repeatedly — and the control below proves
+ * the scrubber is what makes the match a claim about code.
+ */
+
+test('the cover is the page the route ALREADY loaded — not a second read', () => {
+  /**
+   * `getPublishedPageBuilderPageById` selects `-draft`, which excludes the
+   * draft subtree and nothing else, so `promotionCover` is already in hand from
+   * the read at the top of the handler. A second read here would be a query
+   * added to every bundle submission for a value the route is holding.
+   */
+  const code = scrub(read(ROUTE));
+  assert.match(
+    code,
+    /coverImage:\s*page\.promotionCover/,
+    'the send no longer passes the page cover',
+  );
+  assert.equal(
+    [...code.matchAll(/getPublishedPageBuilderPageById\(/g)].length,
+    1,
+    'the route reads the page more than once — the cover should reuse the first read',
+  );
+});
+
+test('CONTROL: scrubbing is what makes that a claim about CODE, not about prose', () => {
+  /**
+   * The direction that matters: a comment MENTIONING the expression must not
+   * satisfy the guard. Unscrubbed, this fixture matches; scrubbed, it must not.
+   */
+  const prose = '// the send passes coverImage: page.promotionCover, and here is why\nconst x = 1;';
+  assert.match(prose, /coverImage:\s*page\.promotionCover/, 'the fixture is not what this control needs');
+  assert.equal(
+    /coverImage:\s*page\.promotionCover/.test(scrub(prose)),
+    false,
+    'the scrubber leaves comment text behind — every guard above is reading prose',
+  );
+  // …and it spares real code, so the guards cannot pass by scrubbing everything.
+  assert.match(scrub('const y = 2; // trailing note\n'), /const y = 2;/);
+  assert.match(scrub("const u = 'https://x.test/a.png';\n"), /https:\/\/x\.test/);
+});
+
+test('NO cover is stored — the bundle tag is still its four identity fields', () => {
+  /**
+   * A schema field with no reader is the one thing this repo does not add, and
+   * a stored cover would have none: there is ONE send, inside the POST, and the
+   * call-site guard above forbids a second. The round that builds a RE-SEND is
+   * the round that earns the field — and it would owe the courses too.
+   */
+  for (const file of [
+    'src/models/RegisterPublic.js',
+    'src/lib/registration/build-public.js',
+    'src/lib/registration/bundleLegs.js',
+  ]) {
+    assert.equal(
+      /cover/i.test(scrub(read(file))),
+      false,
+      `${file} grew a cover field — nothing reads it`,
+    );
+  }
+});
+
+test('CONTROL: the stored-cover probe would see one', () => {
+  assert.equal(/cover/i.test(scrub('  name: String(name ?? ""), cover: promotionCover,')), true);
 });
 
 test('the two bodies of the fallback are built from one course list', () => {
