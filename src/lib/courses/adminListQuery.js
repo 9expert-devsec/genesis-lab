@@ -54,11 +54,10 @@ export function courseListQuery(searchParams) {
 /**
  * `href` with the list filters appended, or unchanged when there are none.
  *
- * Never produces a bare trailing `?`, and never doubles an existing one.
+ * DEFINED IN lib/adminListQuery AND RE-EXPORTED HERE. It moved when
+ * /admin/articles needed the identical function for its page index — see the
+ * note in that file for why the params lists did NOT move with it. Every
+ * existing importer of this module is unaffected on purpose: the point of the
+ * move was one definition, not a migration of every call site.
  */
-export function withListQuery(href, query) {
-  const base = String(href ?? '');
-  const qs = String(query ?? '').replace(/^\?/, '');
-  if (!qs) return base;
-  return base + (base.includes('?') ? '&' : '?') + qs;
-}
+export { withListQuery } from '../adminListQuery';

@@ -1,6 +1,7 @@
 import { requirePage } from '@/lib/rbac/guard';
 import { getArticles } from '@/lib/actions/articles';
 import { ADMIN_LIST_FIELDS } from '@/lib/articleListFields';
+import { readListPage } from '@/lib/articles/adminListQuery';
 import { ArticlesAdminClient } from './_components/ArticlesAdminClient';
 
 export const metadata = { title: 'จัดการบทความ' };
@@ -43,8 +44,20 @@ export const dynamic = 'force-dynamic';
  */
 const ADMIN_LIST_LIMIT = 1500;
 
-export default async function ArticlesAdminPage() {
+export default async function ArticlesAdminPage({ searchParams }) {
   await requirePage('articles');
+
+  // THE PAGE INDEX IS READ HERE AND PASSED DOWN. It was `useState(1)` inside the
+  // client, never written to the URL at all, so opening a row from page 2 and
+  // coming back reset the admin to page 1 — the same class of defect
+  // test/fs/urlFilterNoState records for filters, on this screen's one piece of
+  // list state. See the note in lib/articles/adminListQuery, and the shape this
+  // follows in src/app/admin/courses/page.jsx.
+  //
+  // It does NOT change what is fetched: the list is paginated on the client from
+  // one full fetch (see ADMIN_LIST_LIMIT above), and moving the slice server-side
+  // would break the ordering controls, which plan against the whole collection.
+  const page = readListPage(await searchParams);
 
   // `total` is the whole point: countDocuments already computed it and the old
   // code discarded it, which is why nothing on the page could tell that 284
@@ -63,6 +76,7 @@ export default async function ArticlesAdminPage() {
       articles={items}
       total={total}
       reachable={items.length}
+      page={page}
     />
   );
 }

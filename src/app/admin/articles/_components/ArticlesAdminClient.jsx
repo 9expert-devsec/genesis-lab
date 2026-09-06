@@ -1,7 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+// No `useEffect`: the two this list had were both page-index bookkeeping (reset
+// on search, clamp on shrink) and both became derivations when the URL took the
+// index over. Nothing else on this screen needed one.
+import { useCallback, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   ArrowUpToLine,
@@ -33,6 +37,7 @@ import { STEP_REFUSALS, describeAllOrderControls, describeRankTarget } from '@/l
 // set in ONE place — the article edit screen — and this list neither reads nor
 // writes it. `applyPositionPlan` stays: it replays the plan the server returns.
 import { applyPositionPlan } from '@/lib/articlePositioning';
+import { pageQuery, withListQuery } from '@/lib/articles/adminListQuery';
 
 // Split into two parts so the "เผยแพร่" column can stack date over time and
 // stay inside a w-32 budget instead of forcing a single wide line.
@@ -63,7 +68,24 @@ export function ArticlesAdminClient({
   articles: initial,
   total: serverTotal = 0,
   reachable: serverReachable = 0,
+  /**
+   * THE PAGE INDEX, AND IT IS A PROP BECAUSE THE URL OWNS IT.
+   *
+   * Read from `?page=` by page.jsx. It is deliberately NOT copied into
+   * `useState` here, and there is no `setPage`: that copy is the defect class
+   * test/fs/urlFilterNoState is written for. A value seeded from the URL into
+   * state goes stale the moment a navigation keeps this instance, and — worse —
+   * gets serialised back out into every แก้ไข link below, so the stale number
+   * becomes the real one on the next click.
+   *
+   * Named `page` rather than `initialPage` for the same reason: the `initial*`
+   * prefix reads as an invitation to take the value over with state, and the
+   * next person accepts it.
+   */
+  page: urlPage = 1,
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [rows, setRows] = useState(initial);
   // The COLLECTION size, from countDocuments — not the number of rows fetched.
   // Seeded once from the server payload, exactly like `rows` above, so the two
@@ -122,18 +144,54 @@ export function ArticlesAdminClient({
   }, [rows, query]);
 
   // ── Client-side pagination over the filtered rows ──────────────
+  // The SLICE is still client-side and PAGE_SIZE is unchanged. Only WHERE the
+  // page index is stored moved; nothing about what the server fetches, what the
+  // rank/ordering code reads, or how big a page is has changed.
   const PAGE_SIZE = 12;
-  const [page, setPage] = useState(1);
-
-  // Reset to page 1 whenever the search query changes.
-  useEffect(() => { setPage(1); }, [query]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
 
-  // Clamp page if the filtered set shrank (e.g. after delete or search).
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+  /**
+   * CLAMPED BY DERIVATION, NOT BY AN EFFECT.
+   *
+   * `urlPage` can name a page that does not exist: a stale bookmark, a typed
+   * number, or a page that stopped existing because a row was deleted or the
+   * search box narrowed the list. That used to be
+   * `useEffect(() => { if (page > totalPages) setPage(totalPages); })`, which
+   * cannot survive the index moving to the URL — and does not need to. Both
+   * inputs are already in hand at render time, so this is one expression rather
+   * than a state write scheduled after a paint.
+   *
+   * Everything below reads THIS value, including `listQuery`, so a URL naming
+   * page 9 of a 3-page list hands the edit links a page that exists rather than
+   * carrying the impossible one forward.
+   */
+  const page = Math.min(Math.max(1, urlPage), totalPages);
+
+  /**
+   * The one and only writer of this screen's URL state.
+   *
+   * Serialised from the page it is given — never from anything held in state,
+   * which is the half of the urlFilterNoState defect that turns a display bug
+   * into a data bug. Same shape as CoursesAdminClient's `navigate`.
+   */
+  const navigate = useCallback(
+    (next) => {
+      const qs = pageQuery(next);
+      startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
+    },
+    [router, pathname]
+  );
+
+  /**
+   * What every outbound link on this screen has to carry.
+   *
+   * A page index in the URL only survives the round trip if the way BACK
+   * reproduces it, and this list has three hops out: the แก้ไข link here, the
+   * edit screen's ← control, and the create screen's post-save redirect. Miss
+   * one and the position dies at exactly that step.
+   */
+  const listQuery = pageQuery(page);
 
   const pageRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -265,13 +323,43 @@ export function ArticlesAdminClient({
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                /**
+                 * The old `useEffect(() => setPage(1), [query])`, rewritten for
+                 * a page index that lives in the URL.
+                 *
+                 * Searching from page 5 must land on the FIRST page of matches,
+                 * not the last — the clamp above would otherwise put the admin
+                 * at the bottom of a shortened list, which reads as "my search
+                 * found nothing".
+                 *
+                 * Guarded on `urlPage`, the raw URL value, so this fires at most
+                 * ONCE per search — on the first keystroke typed while the
+                 * address still names a later page — and not once per character.
+                 * That matters: this route is `force-dynamic`, so a write per
+                 * character would re-fetch the whole list per character. It is
+                 * `urlPage` and not the clamped `page` deliberately: those two
+                 * disagree exactly when the URL holds a number the list cannot
+                 * show, which is a stale param that should be cleared.
+                 *
+                 * The search term itself stays client state, unlike the course
+                 * list's. It filters live on every keystroke here, and moving it
+                 * to the URL means committing on Enter/blur instead — a change
+                 * to how the box behaves, not to where the page index lives.
+                 */
+                if (urlPage > 1) navigate(1);
+              }}
               placeholder="ค้นหา title / slug / author / tag…"
               className="w-72 rounded-9e-md border border-[var(--surface-border)] bg-white py-2 pl-8 pr-3 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
             />
           </div>
           <Link
-            href="/admin/articles/new"
+            /* Hop one of the OTHER round trip. The create screen's post-save
+               redirect reads the page back off its own URL, so without this the
+               page index never reaches it and that redirect always lands on
+               page 1 — a fix for the ← link only, which is half a fix. */
+            href={withListQuery('/admin/articles/new', listQuery)}
             className="inline-flex items-center gap-1 rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
           >
             <Plus className="h-4 w-4" /> สร้างบทความ
@@ -504,7 +592,11 @@ export function ArticlesAdminClient({
                 <td className="px-3 py-3 text-right">
                   <div className="inline-flex items-center gap-1.5">
                     <Link
-                      href={`/admin/articles/${a._id}/edit`}
+                      /* Carries the page index out. The edit screen reads it
+                         back off its own URL and puts it on the ← control, so
+                         this is hop one of the round trip — dropping it here
+                         loses the position before the admin has left. */
+                      href={withListQuery(`/admin/articles/${a._id}/edit`, listQuery)}
                       className="inline-flex items-center gap-1 rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
                       aria-label="แก้ไข"
                     >
@@ -533,7 +625,9 @@ export function ArticlesAdminClient({
         </table>
       </div>
 
-      <Pager page={page} totalPages={totalPages} onGo={setPage} />
+      {/* `onGo` writes the URL instead of state — the Pager itself is unchanged
+          and still just reports which page was clicked. */}
+      <Pager page={page} totalPages={totalPages} onGo={navigate} />
 
       {confirmDelete && (
         <div

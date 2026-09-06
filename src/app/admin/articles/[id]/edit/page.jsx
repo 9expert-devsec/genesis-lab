@@ -5,15 +5,21 @@ import { listSkills }   from '@/lib/api/skills';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { requirePage } from '@/lib/rbac/guard';
 import { RecordHistory } from '@/components/audit/RecordHistory';
+import { articleListQuery } from '@/lib/articles/adminListQuery';
 import { ArticleForm } from '../../_components/ArticleForm';
 
 export const metadata = { title: 'แก้ไขบทความ' };
 export const dynamic  = 'force-dynamic';
 
-export default async function EditArticlePage({ params }) {
+export default async function EditArticlePage({ params, searchParams }) {
   const session = await requirePage('articles');
 
   const { id } = await params;
+
+  // The list's page position, arriving on the URL the list linked to. Passed
+  // down so this screen's ← control puts the admin back on the page they left
+  // rather than on page 1. Same shape as the courses editor.
+  const listQuery = articleListQuery(await searchParams);
 
   // `pinCapacity` is read HERE and not in the form. The form holds one document
   // and "is the pinned block full" is a property of the whole collection, so a
@@ -57,6 +63,7 @@ export default async function EditArticlePage({ params }) {
         courses={courses}
         isSuperAdmin={isSuperAdmin}
         pinCapacity={pinCapacity}
+        listQuery={listQuery}
       />
       {/* Mounted here rather than inside ArticleForm because RecordHistory is a
           SERVER component that reads the session itself — the form is
