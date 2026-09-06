@@ -280,6 +280,43 @@ const promotionBundleContent = z.object({
   name:  z.string().default(''),   // read by: the renderer's heading; the editor's ชื่อแพ็กเกจ field
   blurb: z.string().default(''),   // read by: the renderer's sub-line; the editor's คำโปรย field
 
+  /**
+   * The SHORT label — the dark pill above the headline, and the word inside the
+   * course-list heading. Read by: the renderer's pill, the renderer's
+   * หลักสูตรที่ร่วมรายการ heading, and the editor's ป้ายสั้น field.
+   *
+   * ── A SECOND FIELD, NOT A SLICE OF `name` ──────────────────────────────────
+   * `name` is the headline — "ดีลสุดคุ้ม! จับคู่ 2 คอร์ส …" — and a pill reading
+   * the first N characters of that is not a label, it is a truncation. This is
+   * what the author TYPES, and it is theirs: two bundles on one page may be
+   * "Bundle 1" and "แพ็กเกจ Pro" and neither is derivable from the other.
+   *
+   * NOT DERIVED FROM POSITION either. "Bundle 1" looks like an index and is
+   * not one: reordering the sections must not silently rename them, and an
+   * author who wants the second bundle called "Bundle 1" is allowed to.
+   *
+   * ── IT DRAFTS BY CONTAINMENT — THERE IS NO SIDE TO ASSIGN ──────────────────
+   * A reader arriving here from `DRAFT_CONTENT_KEYS` will look for this key in
+   * that list and not find it. That is correct and not an omission: that list
+   * names PAGE-level keys of `pageBuilderSchema`, and `sections` is already one
+   * of them, so everything inside a section's `content` inherits the draft /
+   * publish split by containment. The exact-set test in test/pure/draftState
+   * partitions page keys and will never see this one. Editing either would be
+   * the mistake.
+   *
+   * ── THE DECLARATION BUYS A DEFAULT AND A READER, NOT STORABILITY ───────────
+   * This object ends in `.passthrough()`, so an undeclared key an editor writes
+   * would already survive validation and persist. What declaring it adds is the
+   * `''` default, a place to state the reasoning, and — the reason this repo
+   * insists — a NAMED READER. A key nothing reads is the thing the rule is
+   * against, and `.passthrough()` is exactly why that rule cannot be enforced
+   * by the schema alone.
+   *
+   * DELIBERATELY ABSENT FROM `sectionRendersEmpty`'s bundle branch — see the
+   * note there. A label alone is not an authored bundle.
+   */
+  label: z.string().default(''),
+
   // Read by: the renderer's struck-through / large price, bundlePricing's
   // discountPercent, and publishBlockers' net-above-list refusal.
   listPrice: z.number().int().min(0).nullable().default(null), // ราคาปกติ
@@ -290,11 +327,18 @@ const promotionBundleContent = z.object({
   /**
    * Closes THIS BUNDLE'S registration only.
    *
-   * It must NOT affect the per-course ลงทะเบียน buttons in the item cards —
-   * those point at ordinary rounds through `scheduleRegistrationHref`, which
-   * has its own `full` refusal, and a promotion being over does not close a
-   * course's rounds. The two live in one component, so nothing structural keeps
-   * them apart; the renderer states it and a test asserts it.
+   * ── THE CAVEAT THIS NOTE CARRIED IS RETIRED, NOT FORGOTTEN ──────────────
+   * It used to say the switch must NOT affect the per-course ลงทะเบียน buttons
+   * in the item cards, because those pointed at ordinary rounds through
+   * `scheduleRegistrationHref` and a promotion being over does not close a
+   * course's rounds. Two kinds of button in one component, with only a comment
+   * and a test keeping them apart.
+   *
+   * THOSE BUTTONS WERE REMOVED — a panel selling a package should not offer a
+   * cheaper-looking path to one course of it. The cards now carry a single link
+   * each, to a course DETAIL page, which is not a registration affordance in
+   * any state. So there is no longer a second thing for this switch to reach,
+   * and the rule has become the plain reading of its own name.
    *
    * When closed the bundle STAYS VISIBLE with its button replaced by a state
    * message. Hiding it would read as a broken page to anyone holding a link.

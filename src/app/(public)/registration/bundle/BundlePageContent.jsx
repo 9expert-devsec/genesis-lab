@@ -10,6 +10,7 @@ import {
 import {
   BUNDLE_CLOSED_MESSAGE,
   BUNDLE_UNAVAILABLE_MESSAGE,
+  BUNDLE_EXPIRED_MESSAGE,
 } from "@/lib/pageBuilder/bundleRegistration";
 import { chooseItemRound } from "@/lib/pageBuilder/chosenRounds";
 import { formatRoundDays } from "@/lib/schedule/roundDateLabel";
@@ -236,18 +237,44 @@ export async function BundlePageContent({ searchParams, step }) {
 function renderRefusal(reason) {
   if (isSilentRefusal(reason)) notFound();
 
-  const closed = reason === "closed";
+  /**
+   * THREE spoken refusals, and the reason picks one. It was a boolean over two.
+   *
+   * `expired` is not a softer `unavailable`: that sentence opens with
+   * "ขณะนี้ยังไม่สามารถ…" and invites the visitor back, which is honest for an
+   * unpublished page and a lie about a promotion whose end date has passed.
+   * Nor is it `closed`, which is a switch someone can flip back.
+   *
+   * A LOOKUP rather than nested ternaries, so adding a fourth reason is one row
+   * and cannot leave a message paired with the wrong testid.
+   */
+  const SPOKEN = {
+    closed: {
+      testid: "bundle-refused-closed",
+      heading: BUNDLE_CLOSED_MESSAGE,
+      sub: "ขณะนี้แพ็กเกจนี้ปิดรับลงทะเบียนอยู่ — สอบถามรอบถัดไปหรือเงื่อนไขล่าสุดได้จากทีมขาย",
+    },
+    page_expired: {
+      testid: "bundle-refused-expired",
+      heading: BUNDLE_EXPIRED_MESSAGE,
+      sub: "ช่วงเวลาของโปรโมชันนี้ผ่านไปแล้ว — สอบถามโปรโมชันที่กำลังจัดอยู่ได้จากทีมขาย",
+    },
+  };
+  const spoken = SPOKEN[reason] ?? {
+    testid: "bundle-refused-unavailable",
+    heading: BUNDLE_UNAVAILABLE_MESSAGE,
+    sub: "หากคุณเข้ามาจากลิงก์ที่บันทึกไว้ ลิงก์นั้นอาจไม่ตรงกับแพ็กเกจที่เปิดรับอยู่ในขณะนี้",
+  };
+
   return (
     <article className="mx-auto max-w-[680px] px-4 py-16 lg:px-6">
       <div
-        data-testid={
-          closed ? "bundle-refused-closed" : "bundle-refused-unavailable"
-        }
+        data-testid={spoken.testid}
         data-reason={reason}
         className="rounded-9e-lg border border-dashed border-[var(--surface-border)] px-6 py-12 text-center"
       >
         <h1 className="text-xl font-bold text-[var(--text-primary)]">
-          {closed ? BUNDLE_CLOSED_MESSAGE : BUNDLE_UNAVAILABLE_MESSAGE}
+          {spoken.heading}
         </h1>
         {/*
           ── THE CLOSED LINE CLAIMS ONLY WHAT THE SWITCH ACTUALLY MEANS ──────
@@ -263,13 +290,16 @@ function renderRefusal(reason) {
           and points at the people who DO know. No "ชั่วคราว" and no "ยังไม่
           เปิด" either: both predict a reopening we cannot promise.
 
-          Still clearly distinct from the unavailable line below it, which is
-          about a STALE LINK rather than a decision.
+          Still clearly distinct from the two lines beside it: `unavailable` is
+          about a STALE LINK rather than a decision, and `expired` is about a
+          DATE. The expired sub-line is the one place the set says plainly that
+          the offer is over — which the CLOSED line above may never say, for the
+          reasons just given — and it still points at the sales team, because
+          "this offer ended" and "there is nothing for you" are different
+          sentences and only the first is true.
         */}
         <p className="mt-3 text-sm text-[var(--text-secondary)]">
-          {closed
-            ? "ขณะนี้แพ็กเกจนี้ปิดรับลงทะเบียนอยู่ — สอบถามรอบถัดไปหรือเงื่อนไขล่าสุดได้จากทีมขาย"
-            : "หากคุณเข้ามาจากลิงก์ที่บันทึกไว้ ลิงก์นั้นอาจไม่ตรงกับแพ็กเกจที่เปิดรับอยู่ในขณะนี้"}
+          {spoken.sub}
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-sm font-semibold">
           <Link

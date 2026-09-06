@@ -72,6 +72,119 @@ test('CONTROL: the same probes find NOTHING when the fields are absent', () => {
   assert.notEqual(d.querySelector('[data-pb-bundle]'), null);
 });
 
+// ── the short label: the pill, and the course-list heading ────────────────
+//
+// `label` is a SECOND name field, not a slice of `name`: the pill reads
+// "Bundle 1" while the headline reads the long sentence, and neither is
+// derivable from the other. It is also not derived from the section's POSITION
+// — reordering a page must not rename its bundles.
+
+const ITEM = { id: 'i1', courseId: 'MSE-L1' };
+
+test('an authored label draws the pill, above the headline', () => {
+  const d = doc({ ...FULL, label: 'Bundle 1' });
+  const pill = d.querySelector('[data-testid="bundle-label"]');
+  assert.equal(text(pill), 'Bundle 1');
+
+  // ABOVE the headline, not merely present. compareDocumentPosition is the
+  // structural claim; asserting only that both exist would pass with the pill
+  // rendered underneath, or inside, the <h3>.
+  const h3 = d.querySelector('h3');
+  assert.notEqual(h3, null);
+  assert.ok(
+    pill.compareDocumentPosition(h3) & 4, // DOCUMENT_POSITION_FOLLOWING
+    'the pill is not before the headline',
+  );
+});
+
+test('an ABSENT label draws no pill — not an empty one', () => {
+  /**
+   * The distinction that matters: `querySelector` returning null, not a pill
+   * whose text happens to be ''. An empty pill is a dark rectangle on the page
+   * with nothing in it, which is the failure this asserts against.
+   */
+  for (const content of [FULL, { ...FULL, label: '' }, { ...FULL, label: '   ' }]) {
+    assert.equal(
+      doc(content).querySelector('[data-testid="bundle-label"]'),
+      null,
+      `a pill was drawn for label ${JSON.stringify(content.label)}`,
+    );
+  }
+  // …and a non-string cannot smuggle one in either.
+  assert.equal(doc({ ...FULL, label: 7 }).querySelector('[data-testid="bundle-label"]'), null);
+});
+
+test('CONTROL: the pill probe finds one when a label IS set', () => {
+  // Without this, the four nulls above would pass on a component that never
+  // renders a pill at all.
+  assert.notEqual(
+    doc({ ...FULL, label: 'Bundle 1' }).querySelector('[data-testid="bundle-label"]'),
+    null,
+  );
+});
+
+test('the course-list heading carries the label, and the count', () => {
+  const d = doc({ ...FULL, label: 'Bundle 1', items: [ITEM, { id: 'i2', courseId: 'PBI-L1' }] });
+  assert.equal(
+    text(d.querySelector('[data-testid="bundle-items-heading"]')),
+    'หลักสูตรที่ร่วมรายการ Bundle 1 (2 คอร์ส)',
+  );
+});
+
+test('without a label the heading drops the label AND its space', () => {
+  /**
+   * `หลักสูตรที่ร่วมรายการ (2 คอร์ส)` — one space before the bracket, not two.
+   * A stand-in word was rejected: inventing a name the author declined to type
+   * is the opposite of "absent renders nothing".
+   *
+   * Asserted on the RAW textContent rather than the whitespace-collapsed
+   * helper, because collapsing is exactly what would hide a double space.
+   */
+  const d = doc({ ...FULL, items: [ITEM, { id: 'i2', courseId: 'PBI-L1' }] });
+  const raw = d.querySelector('[data-testid="bundle-items-heading"]').textContent;
+  assert.equal(raw, 'หลักสูตรที่ร่วมรายการ (2 คอร์ส)');
+  assert.equal(raw.includes('  '), false, 'the label left its space behind');
+});
+
+test('CONTROL: the two heading forms genuinely differ', () => {
+  // An equality that compared two identical strings would pass while the
+  // interpolation did nothing.
+  const withLabel = doc({ ...FULL, label: 'Bundle 1', items: [ITEM] })
+    .querySelector('[data-testid="bundle-items-heading"]').textContent;
+  const without = doc({ ...FULL, items: [ITEM] })
+    .querySelector('[data-testid="bundle-items-heading"]').textContent;
+  assert.notEqual(withLabel, without);
+  assert.ok(withLabel.includes('Bundle 1'));
+  assert.equal(without.includes('Bundle 1'), false);
+});
+
+test('the heading counts what the DOCUMENT holds, and is absent with no items', () => {
+  // One item, one คอร์ส — the count is items.length, so an unresolvable course
+  // still counts and the heading agrees with the cards beneath it.
+  assert.equal(
+    text(doc({ ...FULL, items: [ITEM] }).querySelector('[data-testid="bundle-items-heading"]')),
+    'หลักสูตรที่ร่วมรายการ (1 คอร์ส)',
+  );
+  // No items → no heading. A heading over nothing is the empty-block failure
+  // this repo keeps fixing in other sections.
+  assert.equal(doc(FULL).querySelector('[data-testid="bundle-items-heading"]'), null);
+  assert.equal(doc({ ...FULL, label: 'Bundle 1' }).querySelector('[data-testid="bundle-items-heading"]'), null);
+});
+
+test('the label reaches NEITHER the quotation link NOR any other surface', () => {
+  /**
+   * It is display only. The registration document carries `name` (through
+   * buildBundleTag's four explicit fields) and the confirmation email carries
+   * `bundleName` — both enumerate their fields, so a new content key cannot
+   * ride along. What this file CAN check is the section's own output: the
+   * register link is keyed on (pageId, sectionId) and must not gain the label.
+   */
+  const d = doc({ ...FULL, label: 'Bundle 1', items: [ITEM] });
+  const href = d.querySelector('[data-testid="bundle-register"]').getAttribute('href');
+  assert.equal(href.includes('Bundle'), false, 'the label leaked into the quotation link');
+  assert.equal(href, '/registration/bundle?page=p1&section=sec-1');
+});
+
 // ── the fail-closed guard, and its mirror ─────────────────────────────────
 
 test('nothing authored at all renders NOTHING', () => {
@@ -123,6 +236,15 @@ test('sectionRendersEmpty MIRRORS the component guard, case for case', () => {
     { listPrice: 0 },
     { netPrice: 0 },
     { items: [{ id: 'i1', courseId: 'MSE-L1' }] },
+    /**
+     * ADDED with `label`, into the EXISTING mirror rather than beside it. The
+     * label is deliberately NOT one of the six authored fields, so a bundle
+     * carrying only a label must be empty to BOTH readers — otherwise the page
+     * draws a lone dark pill and the tree says the section is blank, or the
+     * reverse. This row is the one that would go red if either side adopted it.
+     */
+    { label: 'Bundle 1' },
+    { label: 'Bundle 1', name: 'B' },
     FULL,
   ];
   for (const content of inputs) {
@@ -191,6 +313,131 @@ test('OPEN (the absent default) draws the register button and the code', () => {
   }
 });
 
+test('the register button reads สมัคร Bundle นี้', () => {
+  /**
+   * Pinned because nothing pinned it before, and it is the one string on this
+   * section a visitor acts on. It says สมัคร while the flow it starts is still
+   * a QUOTATION request — the confirmation mail opens
+   * "เราได้รับคำขอใบเสนอราคาสำหรับ …" — so the two describe one act in two
+   * registers, deliberately, and a future round changing either should have to
+   * change this line and notice the other.
+   */
+  assert.equal(
+    text(doc(FULL).querySelector('[data-testid="bundle-register"]')),
+    'สมัคร Bundle นี้',
+  );
+  // The wording it REPLACED, gone from the render — not merely the new string
+  // present somewhere alongside the old.
+  assert.equal(
+    doc(FULL).body.textContent.includes('ขอใบเสนอราคาแพ็กเกจนี้'),
+    false,
+    'the old quotation wording is still on the page',
+  );
+});
+
+test('CONTROL: the label probe reads the button, not a constant', () => {
+  // The assertion above would pass on a reader that returned the expected
+  // string regardless. A render with no button must produce null, and the
+  // closed state must produce something ELSE.
+  assert.equal(
+    doc(FULL, undefined, {}).querySelector('[data-testid="bundle-register"]'),
+    null,
+    'a button rendered without the pair',
+  );
+  const closed = doc({ ...FULL, registrationOpen: false });
+  assert.equal(closed.querySelector('[data-testid="bundle-register"]'), null);
+  assert.equal(
+    closed.body.textContent.includes('สมัคร Bundle นี้'),
+    false,
+    'the closed bundle still offers the button label',
+  );
+});
+
+// ── the two-column panel ──────────────────────────────────────────────────
+//
+// Geometry belongs to the browser tier and is measured there. What a render
+// test CAN hold is the STRUCTURE the geometry depends on: which block each
+// thing lives in, and the DOM order that decides the stacked reading order.
+
+test('the offer is in the left column and the courses in the right', () => {
+  const d = doc({ ...FULL, label: 'Bundle 1', items: [ITEM] });
+  const left = d.querySelector('[data-testid="bundle-left"]');
+  const right = d.querySelector('[data-testid="bundle-right"]');
+  assert.notEqual(left, null, 'there is no left column');
+  assert.notEqual(right, null, 'there is no right column');
+
+  // Each surface in the column that owns it — asserted by containment, not by
+  // presence anywhere on the panel.
+  for (const sel of [
+    '[data-testid="bundle-label"]',
+    '[data-testid="bundle-discount"]',
+    '[data-testid="bundle-prices"]',
+    '[data-testid="bundle-vat-note"]',
+    '[data-testid="bundle-register"]',
+  ]) {
+    assert.notEqual(left.querySelector(sel), null, `${sel} is not in the left column`);
+    assert.equal(right.querySelector(sel), null, `${sel} leaked into the right column`);
+  }
+  for (const sel of ['[data-testid="bundle-items-heading"]', '[data-testid="bundle-items"]']) {
+    assert.notEqual(right.querySelector(sel), null, `${sel} is not in the right column`);
+    assert.equal(left.querySelector(sel), null, `${sel} is still in the left column`);
+  }
+});
+
+test('the LEFT column comes first in the DOM — which is the stacked order', () => {
+  /**
+   * Below the two-column breakpoint the grid collapses to one column and the
+   * DOM order becomes the reading order. The price and the button must reach a
+   * phone BEFORE the course list, which is also how the desktop layout reads,
+   * so there is no reordering rule to keep in step — the source order is it.
+   */
+  const d = doc({ ...FULL, items: [ITEM] });
+  const left = d.querySelector('[data-testid="bundle-left"]');
+  const right = d.querySelector('[data-testid="bundle-right"]');
+  assert.ok(
+    left.compareDocumentPosition(right) & 4, // DOCUMENT_POSITION_FOLLOWING
+    'the course column precedes the offer column — a phone would meet the cards first',
+  );
+});
+
+test('CONTROL: the containment probe can fail — the panel holds both columns', () => {
+  // Without this, every `right.querySelector(...) === null` above would pass on
+  // a render where the right column were empty, or absent entirely.
+  const d = doc({ ...FULL, items: [ITEM] });
+  const panel = d.querySelector('[data-pb-bundle]');
+  assert.notEqual(panel.querySelector('[data-testid="bundle-items"]'), null);
+  assert.notEqual(panel.querySelector('[data-testid="bundle-register"]'), null);
+  // …and the two columns are siblings under the panel, not nested one inside
+  // the other, which would make every containment assertion above vacuous.
+  const left = d.querySelector('[data-testid="bundle-left"]');
+  const right = d.querySelector('[data-testid="bundle-right"]');
+  assert.equal(left.contains(right), false, 'the right column is inside the left');
+  assert.equal(right.contains(left), false, 'the left column is inside the right');
+});
+
+test('the price block is three lines: ราคาปกติ, the net price, the VAT note', () => {
+  const d = doc({ ...FULL, items: [ITEM] });
+  const prices = d.querySelector('[data-testid="bundle-prices"]');
+  assert.match(text(prices), /ราคาปกติ/);
+  assert.match(text(prices), /40,800/);
+  assert.match(text(prices), /32,640/);
+  assert.match(text(prices), /บาท/);
+  assert.equal(
+    text(d.querySelector('[data-testid="bundle-vat-note"]')),
+    '* ราคาดังกล่าวยังไม่รวม VAT 7%',
+  );
+  // The list price is struck through — the whole point of showing it.
+  assert.notEqual(d.querySelector('[data-testid="bundle-list-price"]'), null);
+});
+
+test('CONTROL: the VAT note goes with the price block, not the panel', () => {
+  // An unpriced bundle must not print a footnote about a price it does not
+  // state — which is what a note rendered outside the block would do.
+  const d = doc({ name: 'B', items: [ITEM] });
+  assert.equal(d.querySelector('[data-testid="bundle-prices"]'), null);
+  assert.equal(d.querySelector('[data-testid="bundle-vat-note"]'), null);
+});
+
 test('the register link carries the PAIR, not the section id alone', () => {
   /**
    * `duplicatePageBuilderPage` keeps section ids by design, so two bundles on a
@@ -242,6 +489,89 @@ test('CLOSED replaces both with a state message, and the section stays visible',
   // the more direct reason that a closed bundle must not be registerable.
   assert.equal(d.querySelector('[data-testid="bundle-code"]'), null);
   assert.equal(d.querySelector('[data-testid="bundle-register"]'), null);
+});
+
+test('the closed state is BUTTON-SHAPED and inert, in the live button’s box', () => {
+  /**
+   * It was a left-aligned <p> in a bordered box, which read as an error notice
+   * rather than as the button's disabled twin. It now matches the live button's
+   * box exactly and differs only in surface and cursor.
+   *
+   * The box classes are compared AGAINST THE LIVE BUTTON rather than asserted
+   * as literals, so the two cannot drift: change the button's padding and this
+   * goes red until the closed state follows.
+   */
+  const live = doc(FULL).querySelector('[data-testid="bundle-register"]');
+  const closed = doc({ ...FULL, registrationOpen: false })
+    .querySelector('[data-testid="bundle-closed"]');
+  assert.notEqual(closed, null);
+
+  for (const shape of ['w-full', 'rounded-9e-md', 'px-4', 'py-3', 'text-sm', 'font-bold',
+                       'inline-flex', 'items-center', 'justify-center']) {
+    assert.ok(live.getAttribute('class').includes(shape), `the LIVE button lost ${shape}`);
+    assert.ok(closed.getAttribute('class').includes(shape), `the closed state lost ${shape}`);
+  }
+});
+
+test('the closed state is not a control, and takes no tab stop', () => {
+  /**
+   * NOT a <button disabled> — a control that exists to do nothing is a promise
+   * the page cannot keep, and a reader announces it as a dimmed button, raising
+   * "how do I enable it". NOT an <a> without an href — a placeholder anchor
+   * with no role, which is the dead stop this asserts against.
+   *
+   * A <span> has no implicit role and no tab stop. The check is structural: the
+   * element's tag, and the absence of every attribute or tag that would make it
+   * focusable.
+   */
+  const closed = doc({ ...FULL, registrationOpen: false })
+    .querySelector('[data-testid="bundle-closed"]');
+
+  assert.equal(closed.tagName, 'SPAN', `the closed state is a <${closed.tagName.toLowerCase()}>`);
+  assert.equal(closed.hasAttribute('href'), false, 'it is a link');
+  assert.equal(closed.hasAttribute('tabindex'), false, 'it was given a tab stop');
+  assert.equal(closed.hasAttribute('disabled'), false, 'a <span> cannot be disabled — wrong element');
+  assert.equal(closed.getAttribute('aria-disabled'), 'true');
+
+  // Nothing focusable ANYWHERE inside it either — a nested link or button would
+  // reintroduce the dead stop through the back door.
+  assert.equal(
+    closed.querySelectorAll('a, button, input, select, textarea, [tabindex]').length,
+    0,
+    'the closed state contains a focusable descendant',
+  );
+});
+
+test('CONTROL: the focusability probe fires on the shapes it forbids', () => {
+  /**
+   * Without this, every negative above would pass on an element the probe
+   * simply failed to find. The same three checks are run against elements that
+   * SHOULD trip them — including the live register button, which is a real
+   * <a href> and must look focusable to this probe.
+   */
+  const live = doc(FULL).querySelector('[data-testid="bundle-register"]');
+  assert.equal(live.tagName, 'A', 'the live button is not an anchor — the contrast is gone');
+  assert.equal(live.hasAttribute('href'), true);
+
+  /**
+   * The panel needs an ITEM for this half: with the bundle closed, the register
+   * button and the code chip both go, and a bundle with no items has nothing
+   * focusable left — the selector would find zero and prove nothing. A card
+   * carries a real course link, which is what the probe must be able to see.
+   */
+  const d = doc({ ...FULL, registrationOpen: false, items: [ITEM] });
+  const wrapper = d.querySelector('[data-pb-bundle]');
+  assert.ok(
+    wrapper.querySelectorAll('a, button, input, select, textarea, [tabindex]').length > 0,
+    'the selector finds nothing anywhere on the panel — it cannot discriminate',
+  );
+  // …and the closed element is still not one of them, on that same render.
+  assert.equal(
+    wrapper
+      .querySelector('[data-testid="bundle-closed"]')
+      .querySelectorAll('a, button, input, select, textarea, [tabindex]').length,
+    0,
+  );
 });
 
 test('CONTROL: only a literal false closes it — every other value leaves it open', () => {

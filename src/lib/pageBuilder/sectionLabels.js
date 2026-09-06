@@ -262,6 +262,17 @@ export function sectionRendersEmpty(section) {
      *
      * `!= null` on the prices, not truthiness: `0` is a real price (free) and
      * must count as authored. `null` is the unset default.
+     *
+     * ── `label` IS DELIBERATELY NOT ONE OF THESE ─────────────────────────────
+     * It was added to this type's content and left out of this list on purpose,
+     * and the renderer's own guard leaves it out identically — the two must
+     * agree or the tree marks a section empty that draws, or the reverse.
+     *
+     * A short label with no headline, no blurb, no price, no code and no items
+     * is not an authored bundle: it would render as a lone dark pill floating
+     * on the page, which is worse than the nothing an empty section already
+     * draws. So a label ALONE stays empty, and a label BESIDE any of the six
+     * above rides along on that field's authorship.
      */
     case 'promotion_bundle':
       return (
