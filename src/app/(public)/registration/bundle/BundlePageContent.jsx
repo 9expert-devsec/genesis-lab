@@ -211,8 +211,6 @@ export async function BundlePageContent({ searchParams, step }) {
       <BundleWizard
         pageId={String(doc._id)}
         sectionId={gate.section.id}
-        bundleName={content.name || ""}
-        courseCount={lines.length}
         step={step}
         basePath={BUNDLE_BASE_PATH}
         summary={

@@ -629,15 +629,25 @@ const bundleHtml = renderToStaticMarkup(createElement(PublicTable, {
   detailHref: href,
 }));
 
-test('a bundle leg carries the แพ็กเกจ chip, naming the package', () => {
+test('a bundle leg carries the Bundle chip, which names NO package', () => {
   /**
    * Three rows, one coordinator, three courses, three minutes apart. Without
    * this chip they read as three unrelated people who happened to book on the
    * same afternoon — and nothing else on the row could tell you otherwise.
+   *
+   * THE CHIP NO LONGER CARRIES THE PACKAGE NAME. It read
+   * `แพ็กเกจ: <bundle.name>`; it now reads `Bundle`. The package name is on the
+   * DETAIL screen — its own แพ็กเกจ row and the header subtitle — and those
+   * were deliberately left alone.
    */
   const row = rowFor(bundleHtml, BUNDLE_LEG._id);
   assert.match(row, /data-testid="bundle-leg-chip"/);
-  assert.match(row, /แพ็กเกจ: Data Analyst Starter/);
+  assert.match(row, /Bundle/);
+  // The name is GONE, not merely unasserted — and the fixture really does carry
+  // one, so this is the chip dropping it rather than there being none to show.
+  assert.equal(/Data Analyst Starter/.test(row), false, 'the package name is still on the chip');
+  assert.equal(BUNDLE_LEG.bundle.name, 'Data Analyst Starter');
+  assert.equal(/แพ็กเกจ:/.test(row), false);
 });
 
 test('CONTROL: an ordinary registration carries NO chip', () => {
@@ -656,17 +666,35 @@ test('both legs of one request are chipped — the grouping is visible, not impl
   }
 });
 
-test('an UNNAMED bundle still says แพ็กเกจ rather than rendering a bare label', () => {
+test('a NAMED and an UNNAMED bundle now chip identically', () => {
   /**
    * `promotion_bundle.name` defaults to '' and no publish rule demands one, so
-   * this is a state an author can ship. The word alone still says the thing
-   * that matters — this row is one leg of several — and a chip reading
-   * "แพ็กเกจ: " would read as a value that failed to load.
+   * an unnamed bundle is a state an author can ship. This test used to be about
+   * the FALLBACK: `แพ็กเกจ: <name>` when there was a name, bare `แพ็กเกจ` when
+   * there was not, so that a chip never read "แพ็กเกจ: " like a value that
+   * failed to load.
+   *
+   * THAT BRANCH IS GONE. The chip reads `Bundle` either way, so the named and
+   * unnamed cases are now the same string — which is the property worth pinning,
+   * because it is what makes the old fallback unnecessary rather than merely
+   * unused.
    */
-  const row = rowFor(bundleHtml, UNNAMED_LEG._id);
-  assert.match(row, /data-testid="bundle-leg-chip"/);
-  assert.equal(/แพ็กเกจ:/.test(row), false, 'a trailing colon with nothing after it');
-  assert.match(row, /แพ็กเกจ</);
+  const unnamed = rowFor(bundleHtml, UNNAMED_LEG._id);
+  const named = rowFor(bundleHtml, BUNDLE_LEG._id);
+
+  const chipOf = (row) => /<span[^>]*data-testid="bundle-leg-chip"[^>]*>([\s\S]*?)<\/span>/.exec(row)?.[1];
+  assert.ok(chipOf(unnamed), 'the unnamed leg has no chip');
+  assert.ok(chipOf(named), 'the named leg has no chip');
+  assert.equal(chipOf(unnamed), chipOf(named), 'the two chips differ');
+  assert.match(chipOf(unnamed), /Bundle/);
+  // No colon-with-nothing-after-it can survive, because there is no colon.
+  assert.equal(/แพ็กเกจ:/.test(unnamed), false);
+
+  // CONTROL: the two fixtures really do differ in the underlying data, so the
+  // equality above is the CHIP collapsing them and not two identical rows.
+  assert.equal(String(UNNAMED_LEG.bundle.name ?? ''), '');
+  assert.equal(BUNDLE_LEG.bundle.name, 'Data Analyst Starter');
+  assert.notEqual(unnamed, named);
 });
 
 test('no bundle row emits an empty element either', () => {
@@ -756,7 +784,18 @@ test('the chip says HOW MANY courses, which the table could not say before', () 
    * docs/ticket-bundle-request-completeness-unqueryable.md.
    */
   const row = rowFor(foldedHtml, FOLD_REQ);
-  assert.match(row, /แพ็กเกจ: Claude AI ครบลูป · 3 หลักสูตร/);
+  // The COUNT survived the chip losing its package name — a different fact,
+  // added to close that ticket, and nothing about dropping the name argued for
+  // dropping it.
+  assert.match(row, /Bundle · 3 หลักสูตร/);
+  // CONTROL: the count is real rather than a constant in the markup — the
+  // fixture has three legs, and the name it no longer shows is in the data.
+  assert.equal(/Claude AI ครบลูป/.test(row), false, 'the package name is still on the chip');
+  assert.equal(/Bundle · 2 หลักสูตร/.test(row), false);
+  // …and the fixture DOES carry that name, so the absence above is the chip
+  // dropping it rather than an assertion that could never have matched.
+  assert.equal(FOLDED.bundle.name, 'Claude AI ครบลูป');
+  assert.equal(FOLDED.legs.length, 3);
 });
 
 test('one schedule chip per course, so the two columns line up', () => {
