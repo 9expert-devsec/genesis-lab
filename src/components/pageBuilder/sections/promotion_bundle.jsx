@@ -2,7 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { GraduationCap } from 'lucide-react';
 
-import { cn, formatPrice, courseHref } from '@/lib/utils';
+import { cn, formatBaht, courseHref } from '@/lib/utils';
 /**
  * `backgroundClass` and `ratioClass` are REUSED rather than re-spelt. Both are
  * single-source maps this module already owns for the two_column type, and
@@ -50,18 +50,23 @@ import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
  * broken canvas, and the panel is this type's own content rather than a frame
  * around its items.
  *
- * ── WHY `formatPrice` AND NOT `coursePriceLabel` ──────────────────────────
+ * ── WHY `formatBaht` AND NOT `coursePriceLabel`, NOR `formatPrice` ────────
  * `coursePriceLabel` is "THE price label for a COURSE" and carries a semantic
  * this type does not have: it answers 0 / null / non-numeric with
  * `Inhouse Only`, which is a real fact about a course with no public seat price
- * and a lie about a bundle. A 0-baht bundle is not an in-house engagement.
+ * and a lie about a bundle. A 0-baht bundle is not an in-house engagement. That
+ * refusal still stands and is why it was not reached for again.
  *
- * `formatPrice` (lib/utils) is the general money formatter — `Intl` th-TH
- * currency, no fraction digits — and is already what the shared `CourseCard`
- * uses, so a bundle's price and a course's price are formatted by one function.
- * An unset price is `null` and is never passed to it: the element is not
+ * `formatPrice` WAS used here and is not any more, and the premise moved rather
+ * than the preference: it emits `฿38,990`, and this panel writes บาท after the
+ * number, so the unit appeared TWICE — `฿55,700 บาท` on screen. `formatBaht`
+ * (lib/utils, beside `formatPrice`) is that same `Intl` th-TH number with the
+ * symbol left off, so the Thai unit is the only one.
+ *
+ * An unset price is `null` and is never passed to either: the element is not
  * rendered at all. That is what keeps `null` (unset) and `0` (free) apart all
- * the way to the screen.
+ * the way to the screen, and `formatBaht` answers `'-'` on null exactly as
+ * `formatPrice` does so the two cannot disagree about the empty case.
  */
 
 /**
@@ -473,7 +478,7 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
             <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
               ราคาปกติ{' '}
               <span data-testid="bundle-list-price" className="line-through">
-                {formatPrice(listPrice)}
+                {formatBaht(listPrice)}
               </span>{' '}
               บาท
             </p>
@@ -484,7 +489,7 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
                 data-testid="bundle-net-price"
                 className="font-heading text-4xl font-bold text-red-600 dark:text-red-400"
               >
-                {formatPrice(netPrice)}
+                {formatBaht(netPrice)}
               </span>
               <span className="text-base font-bold text-[var(--text-primary)]">บาท</span>
             </p>

@@ -82,9 +82,14 @@ export function discountPercent(listPrice, netPrice) {
  *
  * Read by the bundle quotation summary's price panel, which prints three lines:
  *
- *     ราคาปกติ (รวม 2 หลักสูตร)      ฿40,800
- *     ส่วนลดแพ็กเกจ 20%              -฿8,160
- *     ราคาสุทธิ                       ฿32,640
+ *     ราคาปกติ (รวม 2 หลักสูตร)      40,800 บาท
+ *     ส่วนลดแพ็กเกจ 20%              -8,160 บาท
+ *     ราคาสุทธิ                       32,640 บาท
+ *
+ * (It illustrated the same three lines with a ฿ prefix until that panel
+ * dropped the symbol for a trailing บาท — the arithmetic below is unchanged;
+ * only what the caller prints around it moved. The minus stays on the NUMBER,
+ * which is why this function still returns a positive.)
  *
  * ── IT IS `list - net`, AND NEVER `percent × list` ────────────────────────
  * This is the whole reason the function exists rather than the panel doing its
@@ -114,7 +119,7 @@ export function discountPercent(listPrice, netPrice) {
  *
  * Equal prices give `0`, matching the percentage's `0`, and NOT null. A bundle
  * sold at list price has a real discount of nothing; the caller's `> 0` branch
- * is what declines to draw a `-฿0` line, exactly as `> 0` is what declines to
+ * is what declines to draw a `-0 บาท` line, exactly as `> 0` is what declines to
  * draw a `ลด 0%` chip.
  */
 export function discountAmount(listPrice, netPrice) {
