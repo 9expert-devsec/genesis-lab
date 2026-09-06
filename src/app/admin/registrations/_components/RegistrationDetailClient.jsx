@@ -142,7 +142,40 @@ const ACTION_VARIANT = { confirmed: 'primary', cancelled: 'outline' };
  * pinning is an fs assertion rather than a render one. Nothing on screen would
  * announce the drift.
  */
-const ACTION_SHORT   = { confirmed: 'บันทึกส่งแล้ว', cancelled: 'ยกเลิก' };
+/**
+ * ── THE SHORT FORM IS NO LONGER AN ABBREVIATION OF A DIFFERENT SENTENCE ────
+ *
+ * `confirmed` read `บันทึกส่งแล้ว` — a wording invented to fit a 100px button,
+ * which then said something the action does not do. It reads as "save", the
+ * card directly beneath the button says `ขั้นตอนถัดไป: ส่งใบเสนอราคาแล้ว`, and
+ * the badge that appears after the click says the same thing again. Three
+ * places, two sentences.
+ *
+ * It now matches both, word for word. Deliberately NOT the shorter
+ * `ส่งใบเสนอราคา`: that reads as "press this and the system sends the
+ * quotation". The system sends nothing — the team does, and this button only
+ * records that they did. The trailing แล้ว is the whole distinction and must
+ * not be shortened away.
+ *
+ * The button was widened to hold it (`wide` on PrimaryAction, measured in a
+ * browser at 105px of label against a 140px box). The label was not what was
+ * wrong; the box was.
+ *
+ * ── DERIVED, NOT PASTED ───────────────────────────────────────────────────
+ * The wording IS the status label, byte for byte, so it is read from the
+ * vocabulary rather than written out here. fs/publicStatusLabelSources caught
+ * the pasted version and was right to: "a site that pasted the NEW label in has
+ * simply moved the drift forward one round — the next relabel finds four copies
+ * again." Derived, a future relabel of `confirmed` reaches this button by
+ * itself, which is the property that makes the button and the badge after the
+ * click impossible to disagree.
+ *
+ * `cancelled` is unreachable here and is left alone: cancellation is terminal,
+ * so it can never occupy the primary slot — the menu renders it through
+ * ACTION_LABEL instead. Removing it would break the key-set equality guard, and
+ * it is a separate decision from this one.
+ */
+const ACTION_SHORT   = { confirmed: statusLabel('confirmed'), cancelled: 'ยกเลิก' };
 
 const PAYMENT_METHOD_LABEL = { credit_card: 'บัตรเครดิต/เดบิต', promptpay: 'QR PromptPay', quote: 'ขอใบเสนอราคา' };
 const OMISE_STATUS_LABEL   = { pending: 'รอชำระ', successful: 'สำเร็จ', failed: 'ล้มเหลว', expired: 'หมดอายุ' };
@@ -1215,6 +1248,9 @@ export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], hi
         description={statusDescription}
         primary={primaryTarget ? (
           <PrimaryAction
+            /* 140px, because the label it must hold is 105px wide and the
+               100px box gives it 88px. See ACTION_SHORT and PrimaryAction. */
+            wide
             title={ACTION_LABEL[primaryTarget]}
             onClick={() => handleStatusAction(primaryTarget)}
             disabled={busy !== null}

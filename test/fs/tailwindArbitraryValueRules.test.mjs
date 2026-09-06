@@ -2372,7 +2372,21 @@ test("the measured geometry really is in the harvest, not merely a large count",
     // otherwise wonder which of the two is out of date.
     "h-[49px]", // the tab list
     "h-[39px]", // one tab
-    "w-[100px]", // the primary action
+    // `w-[100px]` — THE OLD PRIMARY ACTION — is deliberately absent from THIS
+    // render. The public screen's button is 140px now: its label moved from
+    // `บันทึกส่งแล้ว`, a wording invented to fit the box, to the
+    // `ส่งใบเสนอราคาแล้ว` the action actually performs, which measures 105px in
+    // a browser against the old box's 88px content width. The label was not
+    // what was wrong.
+    //
+    // 100px did NOT disappear from the product — `PrimaryAction` still emits it
+    // by default and the IN-HOUSE screen still renders it, which is why the
+    // class is still compiled and still has a home. It is named here rather
+    // than silently swapped, for the same reason `h-[93px]` and
+    // `gap-x-[36px]` are named above: this list is the geometry the design
+    // specifies, and a reader comparing it to the design file should be able to
+    // see which measurement moved and where it went.
+    "w-[140px]", // the primary action, public screen
     "w-[39px]", // the overflow button
     "w-[21px]", // the count badge
     "h-[43px]", // the section-card header row
