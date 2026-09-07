@@ -108,14 +108,30 @@ export function CourseSeoRail({
         />
       </RailField>
 
+      {/* ── THE LABEL USED TO SAY "(alias resolution)" AND THAT WAS WRONG ───
+          It named a narrower thing than the checkbox does. The field is
+          `CourseExtension.isPublished`, and unticking it does not turn off the
+          pretty URL — resolveCourse returns null on BOTH branches, so the alias
+          URL and the /<code>-training-course URL each answer 404. An admin
+          reading the old label would reasonably expect the code URL to keep
+          working, discover the alias 404ing, and conclude the course was
+          deleted.
+
+          The wording now matches what the rest of this admin already calls this
+          exact field: the form header renders เผยแพร่ / ซ่อน from it, and
+          lib/courses/courseStatusBadge maps `isPublished === false` to ซ่อน.
+          No field renamed, no default changed, no filter behaviour touched. */}
       <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
         <input
           type="checkbox"
           checked={isPublished}
           onChange={(e) => onIsPublished(e.target.checked)}
         />
-        แสดงผลในเว็บสาธารณะ (alias resolution)
+        เผยแพร่หลักสูตรบนเว็บสาธารณะ
       </label>
+      <p className="mt-1 text-xs text-[var(--text-muted)]">
+        ไม่ติ๊ก = ซ่อนหลักสูตร ทั้ง URL แบบกำหนดเอง และ URL ตามรหัสหลักสูตร จะขึ้น 404 ทั้งคู่
+      </p>
     </div>
   );
 }

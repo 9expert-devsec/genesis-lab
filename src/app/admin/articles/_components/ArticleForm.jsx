@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
+import { withListQuery } from '@/lib/articles/adminListQuery';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import {
   createArticle,
@@ -161,6 +162,17 @@ export function ArticleForm({
   // the shape describePinCapacity returns for an empty list, so the /new screen
   // (which has no article to pin yet) renders without a special case.
   pinCapacity = null,
+  /**
+   * The list's URL state (today: `page=N`), read SERVER-SIDE by whichever screen
+   * mounted this form and handed straight back to the two controls that leave
+   * it — the ← link and the create redirect.
+   *
+   * A plain string, never parsed here. This form has no business knowing what
+   * the list's params mean; it only has to not drop them. Defaults to '' so a
+   * form reached by a typed URL or a bookmark still renders and still goes back
+   * to a working list.
+   */
+  listQuery = '',
 }) {
   const router = useRouter();
   const isEdit = Boolean(article?._id);
@@ -540,7 +552,10 @@ export function ArticleForm({
           setTimeout(() => setSaved(false), 3000);
           router.refresh();
         } else {
-          router.push('/admin/articles');
+          // RETURN PATH TWO. The edit branch above has none — it stays on this
+          // screen — so this is the only redirect back to the list, and it
+          // carries the page position for the same reason the ← link does.
+          router.push(withListQuery('/admin/articles', listQuery));
           router.refresh();
         }
       } catch (err) {
@@ -556,7 +571,7 @@ export function ArticleForm({
     author, publishedAt, active, showPinBadge,
     jsonLdEnabled, schemaType, jsonLdOverrides,
     rawOverride, rawOverrideEnabled, isSuperAdmin,
-    isEdit, article, router,
+    isEdit, article, router, listQuery,
   ]);
 
   /**
@@ -627,7 +642,10 @@ export function ArticleForm({
       <header className="flex-shrink-0 border-b border-[var(--surface-border)] bg-white dark:bg-[#111d2c]">
         <div className="flex items-center gap-3 px-6 py-3">
           <Link
-            href="/admin/articles"
+            /* RETURN PATH ONE, and the one the ticket was raised about: the
+               admin's way back from an edit. Without the query this lands on
+               page 1 whatever page they came from. */
+            href={withListQuery('/admin/articles', listQuery)}
             className="inline-flex items-center gap-1 text-sm text-9e-action hover:underline"
           >
             <ChevronLeft className="h-4 w-4" /> รายการบทความ

@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
+import { headcountLabel } from "@/lib/recruitHeadcount";
 import {
   Briefcase,
   MapPin,
@@ -11,6 +14,11 @@ import {
   ClipboardList,
   GraduationCap,
   Gift,
+  // ALIASED. `Users` is a plural common noun and this file talks about
+  // `recruits` and a `job` throughout; an unaliased import of that name is one
+  // `const Users = …` away from a module-scope shadow that resolves at runtime
+  // to a React component. Same reason AdminSidebar imports `Image as ImageIcon`.
+  Users as UsersIcon,
 } from "lucide-react";
 
 const TYPE_LABEL = {
@@ -29,6 +37,22 @@ const TYPE_ACCENT = {
 
 export default function OpenPositionsSection({ recruits = [] }) {
   const [detailJob, setDetailJob] = useState(null);
+
+  // THE BUTTON THAT OPENED THE DIALOG, captured at click time so focus can go
+  // back to it when the dialog closes.
+  //
+  // A ref to the element rather than "restore whatever was focused", and the
+  // reason is measured rather than theoretical: the dialog can be dismissed by
+  // clicking the backdrop, which blurs the trigger FIRST, so by the time the
+  // cleanup runs `document.activeElement` is <body>. Probed in Chrome before
+  // this change — after a backdrop dismiss, focus was on <body> and a keyboard
+  // user was returned to the top of the document. ScheduleFilterSheet carries
+  // the same `returnFocusRef` for the same reason.
+  const triggerRef = useRef(null);
+  const openDetail = (recruit, trigger) => {
+    triggerRef.current = trigger ?? null;
+    setDetailJob(recruit);
+  };
 
   return (
     <section
@@ -65,7 +89,7 @@ export default function OpenPositionsSection({ recruits = [] }) {
                 key={recruit._id}
                 className="w-full max-w-[420px] sm:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)]"
               >
-                <PositionCard recruit={recruit} onDetail={setDetailJob} />
+                <PositionCard recruit={recruit} onDetail={openDetail} />
               </div>
             ))}
           </div>
@@ -73,7 +97,11 @@ export default function OpenPositionsSection({ recruits = [] }) {
       </div>
 
       {detailJob && (
-        <JobDetailModal job={detailJob} onClose={() => setDetailJob(null)} />
+        <JobDetailModal
+          job={detailJob}
+          onClose={() => setDetailJob(null)}
+          returnFocusRef={triggerRef}
+        />
       )}
     </section>
   );
@@ -113,6 +141,22 @@ function PositionCard({ recruit, onDetail }) {
           <Clock size={12} />
           {typeLabel}
         </span>
+        {/* ── THE WHOLE CHIP IS INSIDE THE CONDITION ────────────────────────
+            Icon, text, AND the <span> that carries this row's `gap-x-3`. The
+            usual way this ships is with only the text conditional, which leaves
+            an empty element behind — the icon floating on its own, or a 12px
+            gap in the middle of the row with nothing in it.
+
+            `!== null` rather than `{headcountLabel(...) && …}`: the shorthand
+            evaluates to the falsy value itself, and for a stored 0 that is `0`,
+            which React renders as a bare "0" in the meta row. headcountLabel
+            returns null or a string, never '' — see the note there. */}
+        {headcountLabel(recruit.headcount) !== null && (
+          <span className="inline-flex items-center gap-1">
+            <UsersIcon size={12} />
+            {headcountLabel(recruit.headcount)}
+          </span>
+        )}
       </div>
 
       <div className="my-3 border-t border-[var(--surface-border)]" />
@@ -142,7 +186,7 @@ function PositionCard({ recruit, onDetail }) {
       <div className="mt-4 flex gap-2">
         <button
           type="button"
-          onClick={() => onDetail(recruit)}
+          onClick={(e) => onDetail(recruit, e.currentTarget)}
           className="inline-flex items-center justify-center gap-2
            rounded-9e-xl border border-9e-brand bg-transparent px-6 py-3
            font-en font-semibold text-9e-action
@@ -170,7 +214,51 @@ function PositionCard({ recruit, onDetail }) {
   );
 }
 
-function JobDetailModal({ job, onClose }) {
+/**
+ * The job detail dialog.
+ *
+ * ══ IT IS PORTALLED, AND IT SITS IN THE OVERLAY TIER ════════════════════════
+ * MEASURED IN A REAL BROWSER before this was changed, at 1440x900 on /join-us:
+ *
+ *   · the overlay computed `z-index: 50`, the site header `60`, so
+ *     `elementFromPoint` at the header's centre returned the header's own nav
+ *     link — the header painted OVER the dim, and the panel's top (45px) sat
+ *     above the header's bottom edge (81px), which is the clipped department
+ *     badge in the report;
+ *   · the floating dock is also `z-50` and is mounted from the ROOT layout,
+ *     after `{children}` — equal z-index, later in tree order, so it won.
+ *     `elementFromPoint` over each dock child returned that child: the
+ *     back-to-top glyph and the chat launcher's image, both fully bright over
+ *     the dim.
+ *
+ * So the cause of both was the TIER, not the portal — the section this dialog
+ * lives in creates no stacking context today (no transform, filter, opacity or
+ * z-index on it or any ancestor), so `z-[9700]` alone would have fixed the
+ * paint order. The portal is still the right shape and goes in with it:
+ * `position: fixed` is defeated outright by a transformed ancestor, and this
+ * subtree is one `will-change` or one animation wrapper away from that. The
+ * chat panel and the header drawer are portalled for the same reason, and the
+ * chat panel's case is the one that has actually bitten this repo.
+ *
+ * 9700 is a NEW RUNG, not a share of the image lightbox's 9600. The ladder in
+ * tailwind.config.js is documented per occupant, and this suite already has a
+ * guard for a rung claiming fewer users than it has (see the z-30 occupants
+ * test) — so a second modal on 9600 would leave their relative order undefined
+ * and the comment wrong. The rule it follows is the lightbox's, verbatim: this
+ * is modal, the visitor opened it on purpose, so neither a promo (9000) nor a
+ * chat window (9500) may cover it, and it still yields to primary navigation
+ * (9998/9999).
+ *
+ * ── THE `typeof document` BRANCH ────────────────────────────────────────────
+ * Same reasoning as ScheduleFilterSheet's: this is a client component and Next
+ * still renders it on the server, where `createPortal` throws. Today it is only
+ * ever mounted from a click so the server never reaches it, but that is a
+ * property of one call site rather than of this component. Rendering in place
+ * when there is no document is the honest fallback.
+ */
+export function JobDetailModal({ job, onClose, returnFocusRef }) {
+  const panelRef = useRef(null);
+
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") onClose();
@@ -179,31 +267,76 @@ function JobDetailModal({ job, onClose }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // ── FOCUS IN, AND FOCUS BACK OUT ──────────────────────────────────────────
+  // MEASURED IN CHROME before this was added: opening the dialog left focus on
+  // the ดูรายละเอียด button behind it — `overlay.contains(document.activeElement)`
+  // was false — so a keyboard user's next Tab walked the page UNDERNEATH an
+  // element declaring `aria-modal="true"`, and a screen-reader user was told
+  // nothing had happened. Closing then dropped focus on <body>.
+  //
+  // The PANEL takes focus rather than the close button: it is the dialog's own
+  // container, so a screen reader announces the dialog's label and its contents
+  // from the top, rather than announcing "ปิด" as if that were the point of
+  // opening it. It carries `tabIndex={-1}` for that — programmatically
+  // focusable, not a tab stop of its own.
+  //
+  // NO FOCUS TRAP, and no dependency for one. Tab can still leave the dialog,
+  // which is a real (and pre-existing) gap; what is fixed here is the pair that
+  // makes the dialog usable at all from a keyboard. A trap is a bigger change
+  // than a quick fix should carry, and it is named in the round report rather
+  // than half-built.
   useEffect(() => {
-    document.body.style.overflow = "hidden";
+    panelRef.current?.focus?.();
+    const returnTo = returnFocusRef;
     return () => {
-      document.body.style.overflow = "";
+      // `focus()` on a detached or hidden node is a no-op, so the guard is
+      // cheap insurance rather than ceremony. preventScroll because the page
+      // behind is being unlocked in the same tick and we do not want the
+      // browser scrolling it to reveal the trigger.
+      returnTo?.current?.focus?.({ preventScroll: true });
     };
-  }, []);
+  }, [returnFocusRef]);
+
+  // ── THE PAGE BEHIND MUST NOT SCROLL ───────────────────────────────────────
+  // This used to be four lines inline that set `overflow: hidden` and, on
+  // cleanup, wrote `""`. Writing "" rather than the value it found is a real
+  // bug rather than a style point: with any other overlay already holding the
+  // lock — the chat panel, the mobile drawer, the schedule sheet, all of which
+  // lock the body — closing this dialog unlocked the page underneath the one
+  // still open.
+  //
+  // useBodyScrollLock is the repo's one implementation and is ref-counted, so
+  // two overlays open at once survive being closed in either order. It also
+  // compensates the scrollbar gutter, which the inline copy did not: on a
+  // classic-scrollbar platform, hiding the document scrollbar widens the page
+  // by ~15px and everything centred on it jumps sideways as the dialog opens.
+  useBodyScrollLock(true);
 
   const typeLabel = TYPE_LABEL[job.employmentType] ?? job.employmentType;
   const accentColor = TYPE_ACCENT[job.employmentType] ?? "bg-9e-brand";
   const applyEmail = job.applyEmail || "training@9expert.co.th";
   const subject = encodeURIComponent(`สมัครงาน: ${job.title}`);
 
-  return (
+  const overlay = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[9700] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={`รายละเอียดตำแหน่ง ${job.title}`}
     >
+      {/* dvh, NOT vh. On mobile browsers `vh` is the LARGE viewport — the one
+          with the URL bar hidden — so 90vh can exceed what is actually on
+          screen and the pinned apply button ends up under the browser chrome.
+          `dvh` is what the rest of this repo already uses for full-height
+          surfaces (the public layout's min-h-[100dvh], globals.css's body). */}
       <div
-        className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-9e-xl bg-white shadow-9e-lg dark:bg-9e-card"
+        ref={panelRef}
+        tabIndex={-1}
+        className="relative max-h-[90dvh] flex flex-col w-full max-w-2xl overflow-hidden rounded-9e-xl bg-white shadow-9e-lg outline-none dark:bg-9e-card"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className={`h-1.5 rounded-t-9e-xl ${accentColor}`} />
+        <div className={`h-1.5 shrink-0 rounded-t-9e-xl ${accentColor}`} />
 
         <div className="border-b border-[var(--surface-border)] p-6 pb-4">
           <div className="flex items-start justify-between gap-4">
@@ -225,6 +358,14 @@ function JobDetailModal({ job, onClose }) {
                 <span className="flex items-center gap-1 font-thai text-sm text-9e-slate-dp-50 dark:text-9e-slate-dp-400">
                   <Clock size={13} /> {typeLabel}
                 </span>
+                {/* Same line, same formatting, same rule as the card's — see
+                    the note there. The size is 13 here because every chip in
+                    THIS row is 13; the card's are 12. */}
+                {headcountLabel(job.headcount) !== null && (
+                  <span className="flex items-center gap-1 font-thai text-sm text-9e-slate-dp-50 dark:text-9e-slate-dp-400">
+                    <UsersIcon size={13} /> {headcountLabel(job.headcount)}
+                  </span>
+                )}
               </div>
             </div>
             <button
@@ -238,7 +379,7 @@ function JobDetailModal({ job, onClose }) {
           </div>
         </div>
 
-        <div className="space-y-6 p-6">
+        <div className="min-h-0 flex-1 space-y-6 p-6 overflow-y-auto">
           {job.description && (
             <p className="font-thai text-sm leading-relaxed text-[var(--text-secondary)]">
               {job.description}
@@ -294,6 +435,10 @@ function JobDetailModal({ job, onClose }) {
       </div>
     </div>
   );
+
+  return typeof document === "undefined"
+    ? overlay
+    : createPortal(overlay, document.body);
 }
 
 function DetailSection({ icon, title, items, accent }) {

@@ -24,9 +24,33 @@
 // would have caught it at runtime; test/fs/chatWiring asserts the exact
 // filename against the real directory listing instead, which IS case-sensitive
 // even on Windows because it compares strings rather than resolving a path.
+//
+// ── WHY .webp, AND WHY 240x240 ──────────────────────────────────────────────
+// The PNG was 400x400 and 188,238 bytes — Lighthouse put 183.7 KiB of the home
+// page's image savings on this one file, because the launcher draws it at 24px.
+//
+// 240 is not "small enough to save bytes", it is the LARGEST size any of the
+// four sites actually needs. They are not one size, which is the thing that
+// nearly got this wrong:
+//
+//   ChatAvatar     h-5  =  20px    ChatPanel header  h-10 =  40px
+//   ChatLauncher   h-6  =  24px    WelcomeScreen     h-20 =  80px
+//
+// The welcome screen's 80px at 3x DPI is 240, so that is the floor. Anything
+// smaller — 96, say, which is 3x the launcher — would upscale the welcome
+// screen by 2.5x at 1x DPI.
+//
+// ONE file for all four, because there is ONE constant, and that is the whole
+// argument at the top of this file. A per-size asset would need a second
+// export, which is exactly what the four-literals problem was.
+//
+// ── THE PNG IS STILL HERE, AND STILL TRACKED ────────────────────────────────
+// Nothing points at it now. Deleting an asset is its own decision and is not
+// bundled into a performance fix; it also remains the only lossless master the
+// webp can be regenerated from.
 
 /** Public path of the AI agent's mark. */
-export const CHAT_MARK_SRC = '/logo/ai-chatbot.png';
+export const CHAT_MARK_SRC = '/logo/ai-chatbot.webp';
 
 /**
  * Accessible name for the ONE place the mark is not decorative.

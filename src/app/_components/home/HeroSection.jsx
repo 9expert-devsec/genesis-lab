@@ -58,13 +58,49 @@ export function HeroSection() {
           than the source's 16:9 at desktop widths, so a cover crop takes the
           difference off the TOP (empty sky) and leaves the earth's limb —
           which is the whole reason the crop is anchored to the bottom.
-          The image never drives the height; see the content box below. */}
+          The image never drives the height; see the content box below.
+
+          ── QUALITY IS 80, AND IT IS SET HERE RATHER THAN GLOBALLY ──────────
+          This was `quality={100}`, which is maximum quality and effectively no
+          compression: Lighthouse (mobile, home) measured the 1920px render at
+          362.5 KiB with 74.8 KiB recoverable, and it is the largest first-party
+          image on the page.
+
+          The prop is PER-IMAGE on purpose. `images.qualities` in
+          next.config.mjs is not configured, so nothing here changes the default
+          Next applies to every other image on the site — and this is the only
+          `quality` prop in src/, so the two cannot drift into disagreeing.
+
+          80 is the normal invisible-loss point, but this particular image is a
+          dark gradient with stars, which is exactly where banding shows first.
+          It was checked by eye, not by byte count; if banding ever appears in
+          the sky, raise this number rather than reaching for the global.
+
+          ── `priority` AND `fetchPriority` ARE TWO DIFFERENT PROPS ──────────
+          `priority` was already here and is doing its job: it is what emits the
+          `<link rel="preload" as="image">` for this element. What it does NOT
+          do, in Next 15.5.15, is set `fetchpriority`. The two are independent
+          arguments to the image component — `getDynamicProps(fetchPriority)` is
+          spread into both the <img> and the preload <link>, and it is fed by
+          the `fetchPriority` prop alone, never derived from `priority`.
+
+          Measured on the deployed page before this change: the preload link was
+          present (so `priority` was working) and neither it nor the <img>
+          carried any `fetchpriority` — the document's only occurrence was
+          Next's own `fetchPriority="low"` on a webpack chunk. That is exactly
+          the Lighthouse item "fetchpriority=high should be applied to the image
+          preload request", and adding `priority` again could not have fixed it,
+          because it was never missing.
+
+          No `loading` attribute here, deliberately: `priority` already implies
+          eager, and setting `loading` would fight it. */}
       <Image
         src="/hero-img/background.png"
         alt=""
         fill
         priority
-        quality={100}
+        fetchPriority="high"
+        quality={80}
         sizes="100vw"
         className="object-cover object-bottom"
       />

@@ -61,7 +61,34 @@ export const useSearchParams = () => {
 export const useParams = () => ({});
 export const useSelectedLayoutSegment = () => null;
 export const useSelectedLayoutSegments = () => [];
-export function redirect(url) { const e = new Error(`NEXT_REDIRECT:${url}`); e.digest = 'NEXT_REDIRECT'; throw e; }
-export const permanentRedirect = redirect;
+/**
+ * ── redirect() AND permanentRedirect() ARE DIFFERENT FUNCTIONS ──────────────
+ * They used to be one here: `export const permanentRedirect = redirect`. That
+ * made the two INDISTINGUISHABLE to every test in this suite, and three call
+ * sites already depend on the difference — the promotion-mode 308, the
+ * historical-slug 308, and notFoundBoundary's permanent/temporary branch. A
+ * test could assert that something redirected; it could not assert WHICH
+ * status, so a permanent redirect published by mistake would have looked
+ * exactly like a temporary one.
+ *
+ * The digest is the REAL one Next throws, verified against the installed
+ * next/navigation.js outside a request context:
+ *
+ *     redirect('/t')          → NEXT_REDIRECT;replace;/t;307;
+ *     permanentRedirect('/t') → NEXT_REDIRECT;replace;/t;308;
+ *
+ * so a test can read the status out of the digest exactly as the framework
+ * encodes it, rather than trusting a stand-in shape invented here. `message`
+ * is 'NEXT_REDIRECT' to match; nothing in the suite matched the old
+ * `NEXT_REDIRECT:${url}` message — the one guard that greps for NEXT_REDIRECT
+ * reads the page SOURCE, not a thrown error.
+ */
+function throwRedirect(url, status) {
+  const e = new Error('NEXT_REDIRECT');
+  e.digest = `NEXT_REDIRECT;replace;${url};${status};`;
+  throw e;
+}
+export function redirect(url) { throwRedirect(url, 307); }
+export function permanentRedirect(url) { throwRedirect(url, 308); }
 export function notFound() { const e = new Error('NEXT_NOT_FOUND'); e.digest = 'NEXT_NOT_FOUND'; throw e; }
 export const RedirectType = { push: 'push', replace: 'replace' };

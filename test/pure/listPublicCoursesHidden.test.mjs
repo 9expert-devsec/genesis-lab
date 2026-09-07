@@ -46,6 +46,14 @@ function harness({ hidden = [], upstream = UPSTREAM } = {}) {
         calls.hiddenReads += 1;
         return new Set(hidden);
       },
+      // ROUND U3, and NOT OPTIONAL for the same reason `loadOrder` below is
+      // not: omitted, this falls through to the real `loadCourseAliasMap`,
+      // which connects and reads course_extensions. It fails open — an empty
+      // map — so every test here would still PASS while sitting on mongoose's
+      // buffering timeout, which is precisely the shape the note below
+      // describes. An empty map leaves `urlAlias: null` on every row, which is
+      // what these fixtures already assume.
+      loadAliases: async () => new Map(),
       // `null` is "do not order" — see courseOrderStore's note on why that is
       // the safe direction. It leaves the array exactly as the fetchUpstream
       // stub above returned it, which is what every expectation below reads.

@@ -2,13 +2,20 @@ import { listPrograms } from '@/lib/api/programs';
 import { listSkills }   from '@/lib/api/skills';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { requirePage } from '@/lib/rbac/guard';
+import { articleListQuery } from '@/lib/articles/adminListQuery';
 import { ArticleForm } from '../_components/ArticleForm';
 
 export const metadata = { title: 'สร้างบทความใหม่' };
 export const dynamic  = 'force-dynamic';
 
-export default async function NewArticlePage() {
+export default async function NewArticlePage({ searchParams }) {
   const session = await requirePage('articles');
+
+  // The list's page position, if the admin got here from a paged list. This
+  // screen's POST-SAVE REDIRECT is the second return path — the edit screen has
+  // no redirect at all, it stays put — so it has to carry the page back too, or
+  // the fix works for one way home and not the other.
+  const listQuery = articleListQuery(await searchParams);
 
   const [programsRes, skillsRes, coursesRes] = await Promise.all([
     listPrograms().catch(() => ({ items: [] })),
@@ -40,6 +47,7 @@ export default async function NewArticlePage() {
       skills={skills}
       courses={courses}
       isSuperAdmin={isSuperAdmin}
+      listQuery={listQuery}
     />
   );
 }

@@ -399,6 +399,21 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
   // replay happened; describing the downstream effects would be a guess (§2).
   entry('webhook_logs', 'webhook_log', 'Webhook Log', 'act_only'),
 
+  /**
+   * REDIRECT RULES — 'full', and registering the pair is the point.
+   *
+   * A rule decides where a visitor's browser goes. "Who pointed /courses
+   * somewhere else, and at what" has to have an answer — and an UNREGISTERED
+   * pair fails CLOSED to act_only, which would write the row with WHO and WHEN
+   * and no payload at all. That is precisely the question nobody could then
+   * answer.
+   *
+   * Safe to keep whole: a rule is a handful of short scalars, nowhere near the
+   * writer's 2 KB per-field cap, and it carries no personal data. The free-text
+   * note is truncated at the call site regardless.
+   */
+  entry('redirects', 'redirect_rule', 'กฎ Redirect', 'full'),
+
   // Self-service rename / password rotation. The ACT only — never the password
   // value, and the name change is not worth a diff here.
   entry('profile',  'admin', 'โปรไฟล์ของตนเอง', 'act_only'),

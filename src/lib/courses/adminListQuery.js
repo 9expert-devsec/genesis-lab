@@ -54,11 +54,20 @@ export function courseListQuery(searchParams) {
 /**
  * `href` with the list filters appended, or unchanged when there are none.
  *
- * Never produces a bare trailing `?`, and never doubles an existing one.
+ * DEFINED IN lib/adminListQuery AND RE-EXPORTED HERE. It moved when
+ * /admin/articles needed the identical function for its page index — see the
+ * note in that file for why the params lists did NOT move with it. Every
+ * existing importer of this module is unaffected on purpose: the point of the
+ * move was one definition, not a migration of every call site.
+ *
+ * BOUND LOCALLY AND THEN RE-EXPORTED, rather than `export { x } from '…'`.
+ * The two forms are identical to a bundler; they are not identical to
+ * test/fs/libImportsResolved, whose scanner strips IMPORT statements and then
+ * looks for identifiers with no binding in scope. A bare re-export is not an
+ * import statement, so it survived the strip and read as a use of an
+ * unimported name — a false positive, but one that costs nothing to avoid and
+ * would otherwise be re-litigated by whoever next saw the guard go red.
  */
-export function withListQuery(href, query) {
-  const base = String(href ?? '');
-  const qs = String(query ?? '').replace(/^\?/, '');
-  if (!qs) return base;
-  return base + (base.includes('?') ? '&' : '?') + qs;
-}
+import { withListQuery } from '../adminListQuery';
+
+export { withListQuery };

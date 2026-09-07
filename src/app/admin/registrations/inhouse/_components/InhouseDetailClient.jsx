@@ -48,6 +48,7 @@ import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
   TabList, TabPanel, SectionCard, SystemCard, DL, DLRow, QuotedNote, DetailError,
   EditField, EditArea, EditSelect, InternalNotesBody, CopyAction,
+  LegacyInvoiceAddressRow,
 } from '../../_components/detailShell';
 import { personCopyText } from '@/lib/registrations/copyText';
 
@@ -1329,6 +1330,30 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
                   action={<CopyAction text={branchLabel} label="สาขาสำหรับใบเสนอราคา" />} />
                 <DLRow label="ที่อยู่" value={address}
                   action={<CopyAction text={address} label="ที่อยู่สำหรับใบเสนอราคา" />} />
+                {/*
+                  ── THE IMPORTED ROW, IN THE PLACE THE ADDRESS WOULD HAVE BEEN
+                  Same component and same explanation as the public screen —
+                  one import, one field, one wording. See its docstring in
+                  detailShell for why the guard lives there and not in `DLRow`.
+
+                  ── THE TWO ADDRESSES COME FROM `quotation`, THE LIVE STATE ──
+                  Not from `doc`, for the reason the three lines above this card
+                  already give: `address` is built from `{ ...doc, ...quotation }`
+                  so that the read view reflects an edit the moment it lands. If
+                  this row read `doc.thaiAddress` it would keep showing the
+                  legacy line under a structured address an admin had just
+                  filled in, until the page was reloaded.
+
+                  `legacyInvoiceAddress` is read from `doc` and only from `doc`.
+                  It is not in `editableQuotation`, not in the section map, and
+                  not in `updateRegistration`'s allowlist — there is no live
+                  copy of it to read, by design.
+                */}
+                <LegacyInvoiceAddressRow
+                  thaiAddress={quotation.thaiAddress}
+                  internationalAddress={quotation.internationalAddress}
+                  legacyInvoiceAddress={doc.legacyInvoiceAddress}
+                />
               </DL>
             )}
           </SectionCard>

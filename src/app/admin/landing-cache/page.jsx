@@ -16,10 +16,14 @@
  * The key is still `landing_cache`: it is what `Role.pages` holds in Mongo, and
  * the console guards on the same one.
  *
- * `_components/LandingCacheClient.jsx` is deliberately NOT deleted this round.
- * It is the component the console's sync button was ported from, and removing
- * it belongs with round 3's write actions rather than with a read-only screen —
- * a deletion here would make this commit's diff span two unrelated concerns.
+ * `_components/LandingCacheClient.jsx` — the component this page used to render,
+ * and the one the console's sync button was ported from — has now been deleted.
+ * Nothing imported it; this page has been a bare redirect since the port, and
+ * the file was reachable only from two comments pointing at it.
+ *
+ * THIS FILE STAYS. It is the redirect, not the dead component: deleting it
+ * would 404 every bookmark and every older role description that names
+ * /admin/landing-cache.
  */
 
 import { redirect } from 'next/navigation';

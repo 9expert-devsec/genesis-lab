@@ -9,6 +9,16 @@ import { anchoredMenuPosition } from '@/lib/anchoredMenu';
 // beside the rest of the note vocabulary and is driven from the `pure` tier
 // without a DOM. See its docstring for why it never returns a dash.
 import { noteByline } from '@/lib/registrations/internalNotes';
+// The legacy-address condition and its three strings are a pure decision — is
+// there an unstructured address to show, and what does the screen call it — so
+// they live outside the component tree and are driven from the `pure` tier.
+// See that module for why the condition is exactly this wide and no wider.
+import {
+  legacyInvoiceAddressLine,
+  LEGACY_INVOICE_ADDRESS_LABEL,
+  LEGACY_INVOICE_ADDRESS_HINT,
+  LEGACY_INVOICE_ADDRESS_COPY_LABEL,
+} from '@/lib/registration/legacyInvoiceAddress';
 
 /**
  * `useLayoutEffect` in the browser, `useEffect` on the server.
@@ -1654,6 +1664,70 @@ export function CopyAction({ text, label }) {
   const value = typeof text === 'string' ? text.trim() : '';
   if (!value) return null;
   return <CopyButton value={value} label={label} />;
+}
+
+/**
+ * THE LEGACY INVOICE ADDRESS ROW — the one row on either detail screen that
+ * exists to explain itself.
+ *
+ * ══ WHY THIS IS IN THE SHELL AND A FIELD LIST IS NOT ════════════════════════
+ *
+ * The file header's test is "would a change to this be WRONG for one of them",
+ * and this is the case where the answer is emphatically no: the label, the hint
+ * and the copy control's accessible name are ONE explanation of ONE import, and
+ * a change to any of them that landed on only one screen would leave the two
+ * screens disagreeing about what the same field is. The strings themselves live
+ * further out still, in @/lib/registration/legacyInvoiceAddress, with the
+ * condition — so the `pure` tier can hold them without a DOM.
+ *
+ * It is presentational like everything else here. It takes no `source`, does not
+ * know there are two collections, and does not know that the public screen keeps
+ * these three values under `invoice` while the in-house one keeps them at the
+ * top level. Each caller passes the three; this draws the row or draws nothing.
+ *
+ * ══ IT RENDERS NOTHING RATHER THAN AN EMPTY ROW ═════════════════════════════
+ *
+ * Returning `null` is the same absent-means-absent rule `DLRow` owns, applied
+ * one level up. It could NOT be left to `DLRow`: the value passed below is a
+ * `<>…</>` wrapping a hint that is present unconditionally, so on a document
+ * with no legacy address the fragment would still contain the hint paragraph —
+ * a component element `isEmptyValue` is required to treat as non-empty — and
+ * the row would render with the explanation and no address. That is round 5's
+ * wrapped-but-empty defeat in a new place, and the guard belongs here, on the
+ * STRING, before any of it is wrapped.
+ *
+ * ══ NO EDIT AFFORDANCE, AND THAT IS THE POINT OF THE HINT ═══════════════════
+ *
+ * The row is inside a card with a แก้ไข button and it is not among the fields
+ * that button reaches. The hint says so in words, because a control that is
+ * simply absent is indistinguishable from a value nobody has got round to
+ * filling in. The COPY control is not an edit and is here for the same reason
+ * every neighbouring row has one — a salesperson re-types this into a quotation
+ * exactly as they re-type a structured address.
+ */
+export function LegacyInvoiceAddressRow({ thaiAddress, internationalAddress, legacyInvoiceAddress }) {
+  const line = legacyInvoiceAddressLine({ thaiAddress, internationalAddress, legacyInvoiceAddress });
+  if (!line) return null;
+
+  return (
+    <DLRow
+      label={LEGACY_INVOICE_ADDRESS_LABEL}
+      value={
+        <>
+          {/* `whitespace-pre-wrap` because the blob is verbatim: a Drupal row
+              that arrived with a newline in it keeps the newline rather than
+              being silently re-flowed into one line. `break-words` because it
+              is unstructured free text with no join points, and `min-w-0` on
+              the `dd` only helps if the text itself is allowed to break. */}
+          <span className="block whitespace-pre-wrap break-words">{line}</span>
+          <span className="mt-[4px] block text-[11px] leading-[16px] text-[var(--text-muted)]">
+            {LEGACY_INVOICE_ADDRESS_HINT}
+          </span>
+        </>
+      }
+      action={<CopyAction text={line} label={LEGACY_INVOICE_ADDRESS_COPY_LABEL} />}
+    />
+  );
 }
 
 /** The page-level error line. Absent when there is nothing to say. */

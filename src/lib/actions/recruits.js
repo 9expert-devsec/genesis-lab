@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Recruit from '@/models/Recruit';
 import { requireAdmin } from '@/lib/actions/auth';
+import { normalizeHeadcount } from '@/lib/recruitHeadcount';
 
 const PUBLIC_PATH = '/join-us';
 const ADMIN_PATH  = '/admin/recruits';
@@ -95,6 +96,14 @@ export async function createRecruit(data) {
     title,
     department:      String(data?.department ?? '').trim(),
     location:        String(data?.location ?? '').trim(),
+    // ── THE SERVER DECIDES, NOT THE PAYLOAD ────────────────────────────────
+    // `type="number"` and `min="1"` on the input are a convenience for whoever
+    // is typing, and nothing more: this action is reachable from anywhere a
+    // session can reach it, and a payload carrying '3.7', '-2', 'abc' or
+    // 10_000_000 has met none of them. normalizeHeadcount is the same function
+    // the three render sites use, so "what gets stored" and "what gets shown"
+    // cannot disagree.
+    headcount:       normalizeHeadcount(data?.headcount),
     employmentType,
     description,
     responsibilities: cleanList(data?.responsibilities),
@@ -145,6 +154,13 @@ export async function updateRecruit(id, data) {
   }
   if (data?.department !== undefined) update.department = String(data.department).trim();
   if (data?.location !== undefined)   update.location   = String(data.location).trim();
+  // Same normaliser as the create path — see the note there. The `!== undefined`
+  // gate is the file's existing convention for "this field was submitted", and
+  // it is what makes CLEARING the field work: an emptied input submits `''`,
+  // which is defined, so it reaches here and normalises to null. Omitting the
+  // key entirely (a partial update from somewhere else) leaves the stored value
+  // alone, which is the same contract every other field here has.
+  if (data?.headcount !== undefined)  update.headcount  = normalizeHeadcount(data.headcount);
   if (data?.employmentType !== undefined) {
     if (!VALID_TYPES.has(data.employmentType)) {
       return { ok: false, error: 'ประเภทงานไม่ถูกต้อง' };

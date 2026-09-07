@@ -23,6 +23,7 @@ import { listPublicCourses } from '@/lib/api/public-courses';
 import { planVisibilityRevalidation } from '@/lib/courses/publishVisibilityPlan';
 import { resolveAnchorWrite, ANCHOR } from '@/lib/courses/upstreamAnchorPlan';
 import { buildExtensionUpdate } from '@/lib/courses/extensionUpdate';
+import { planFormerAliases } from '@/lib/courses/aliasHistory';
 import { sanitiseTopicRichForWrite } from '@/lib/courses/topicEditorSave';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
@@ -109,6 +110,29 @@ export async function getCourseExtensionByAlias(alias) {
   const normalized = normaliseAlias(alias);
   if (!normalized) return null;
   const doc = await CourseExtension.findOne({ urlAlias: normalized }).lean();
+  return serialize(doc);
+}
+
+/**
+ * The extension whose FORMER aliases include this one, or null.
+ *
+ * Round U4.2. Consulted only after the current-alias lookup has missed, so a
+ * course reachable at its current alias never reaches here.
+ *
+ * ── AN EXACT MATCH, NOT A REGEX ────────────────────────────────────────────
+ * Unlike getCourseExtensionByFormerCode, which matches formerCodes
+ * case-insensitively through an anchored $regex, this compares exactly. It
+ * can: `normaliseAlias` lower-cases on write, so every stored entry is already
+ * in one form, and the caller normalises the incoming segment the same way.
+ * A regex here would be a slower scan buying nothing — and `$elemMatch` with a
+ * case-insensitive regex cannot use the multikey index, while this can.
+ */
+export async function getCourseExtensionByFormerAlias(alias) {
+  if (!alias) return null;
+  await dbConnect();
+  const normalized = normaliseAlias(alias);
+  if (!normalized) return null;
+  const doc = await CourseExtension.findOne({ formerAliases: normalized }).lean();
   return serialize(doc);
 }
 
@@ -200,13 +224,21 @@ export async function checkAliasAvailable(alias, courseId) {
    */
   const [owner, courseList] = await Promise.all([
     CourseExtension.findOne({
-      urlAlias: wanted,
+      // ── CURRENT **OR** FORMER (U4.2) ────────────────────────────────────
+      // A former alias of another course is still a live URL: it redirects to
+      // that course. Claiming it here would make one URL mean two courses.
+      // One query rather than two, and the row is enough to tell WHICH kind of
+      // claim it is — `urlAlias === wanted` means current, otherwise it
+      // matched through formerAliases.
+      $or: [{ urlAlias: wanted }, { formerAliases: wanted }],
       // Scoped to OTHER courses: re-saving a course's own alias is not a
       // collision, and this action is an upsert keyed on courseId, so the
       // overwhelmingly common save is an edit that leaves the alias untouched.
+      // It also means a course RECLAIMING one of its own former aliases is
+      // allowed, which is the revert case aliasHistory cleans up on write.
       courseId: { $ne: courseId },
     })
-      .select('courseId')
+      .select('courseId urlAlias')
       .lean(),
     // includeHidden — a HIDDEN course still owns its derived
     // /<code>-training-course path. Filtering here would let an admin take an
@@ -222,7 +254,12 @@ export async function checkAliasAvailable(alias, courseId) {
 
   // The alias-vs-alias answer is complete on its own — report it before
   // admitting the upstream half could not be checked.
-  const taken = aliasConflict({ alias: wanted, existingCourseId: owner?.courseId ?? null });
+  const ownedAsCurrent = owner && owner.urlAlias === wanted;
+  const taken = aliasConflict({
+    alias: wanted,
+    existingCourseId: ownedAsCurrent ? owner.courseId : null,
+    formerOwnerCourseId: owner && !ownedAsCurrent ? owner.courseId : null,
+  });
   if (taken) return taken;
 
   if (!courseList.ok) {
@@ -326,6 +363,33 @@ export async function saveCourseExtension(courseId, data) {
     // absent flag means VISIBLE.
     const beforeDoc = await CourseExtension.findOne({ courseId }).lean();
     const before = extensionFields(beforeDoc);
+
+    /**
+     * ── THE ALIAS HISTORY, WRITTEN ONLY WHEN THE ALIAS IS NAMED ────────────
+     *
+     * Gated on `urlAlias` being present in `update`, not on the raw payload:
+     * `buildExtensionUpdate` already applied the key-presence rule, so reading
+     * the answer off its output means there is ONE decision about what "the
+     * caller named this key" means rather than two that can drift.
+     *
+     * The gate is the whole safety property here. A caller that does not render
+     * the alias field — the payment tab is one — must leave both `urlAlias` and
+     * `formerAliases` exactly as they are. Writing the plan unconditionally
+     * would make saving the Omise toggle rewrite the course's URL history from
+     * an undefined `data.urlAlias`, which is the same class of defect that
+     * silently reset omisePaymentEnabled and the reason $set selection exists.
+     *
+     * The rule itself — including the revert cleanup, which is where a
+     * redirect-to-self hides — is in lib/courses/aliasHistory, pure and tested
+     * without a database.
+     */
+    if (Object.prototype.hasOwnProperty.call(update, 'urlAlias')) {
+      update.formerAliases = planFormerAliases({
+        storedAlias: beforeDoc?.urlAlias,
+        storedFormerAliases: beforeDoc?.formerAliases,
+        nextAlias: cleanAlias,
+      });
+    }
 
     /**
      * ── THE UPSTREAM ANCHOR, SET ONLY INTO AN EMPTY FIELD ──────────────────

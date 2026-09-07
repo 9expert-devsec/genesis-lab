@@ -1,0 +1,66 @@
+nid	drupalTitle	tier	genesisCourseId	genesisCourseName	otherCandidates	strippedTokens	reason	totalSubmissions
+2757	Claude Cowork for Business	exact	CLAUDE-AI	Claude Cowork for Business				373
+2205	Power BI Desktop for Business Analytics	exact	POWER-BI	Power BI Desktop for Business Analytics				205
+2188	Microsoft Excel Advanced	exact	MSE-L2	Microsoft Excel Advanced				179
+2239	Microsoft 365 Copilot for Business Professionals	exact	COPILOT-M365	Microsoft 365 Copilot for Business Professionals				161
+2187	Microsoft Excel Intermediate	exact	MSE-L1	Microsoft Excel Intermediate				99
+2206	Power Apps for Business	exact	POWER-APPS	Power Apps for Business				99
+2244	Power Automate (Cloud) for Business Automation	exact	PAM-CLD	Power Automate (Cloud) for Business Automation				88
+2192	Microsoft Excel Power Query	exact	MSE-L6	Microsoft Excel Power Query				73
+2235	Canva Pro for Smart Working	exact	CANVA-L1	Canva Pro for Smart Working				69
+2255	Power Automate (Desktop) for Business Automation	exact	PAM-DSK	Power Automate (Desktop) for Business Automation				63
+2241	Generative AI for Business Transformation	exact	GEN-AI-L1	Generative AI for Business Transformation				62
+2232	Python Programming	exact	PYTHON-L1	Python Programming				57
+2240	AI Agents with Microsoft Copilot Studio	exact	COPILOT-STU	AI Agents with Microsoft Copilot Studio				55
+2797	Microsoft Excel AI for Business	exact	MSE-AI	Microsoft Excel AI for Business				55
+2189	Microsoft Excel Macro and VBA	exact	MSE-L3	Microsoft Excel Macro and VBA				45
+2223	Power BI Advanced Visualization and AI	exact	POWER-BI-ADV	Power BI Advanced Visualization and AI				45
+2245	Advanced Power Automate (Cloud)	exact	PAM-CLD-ADV	Advanced Power Automate (Cloud)				39
+2290	Workflow Automation with n8n	exact	N8N-L1	Workflow Automation with n8n				38
+2190	Microsoft Excel Advanced PivotTable and PivotChart	exact	MSE-L4	Microsoft Excel Advanced PivotTable and PivotChart				37
+2835	Build Business Apps with Claude Code	exact	VIBE-CODE-L1	Build Business Apps with Claude Code				35
+2225	Power BI Advanced Power Query	exact	POWER-BI-PQ	Power BI Advanced Power Query				32
+2250	Advanced Power Apps for Business	exact	POWER-APPS-ADV	Advanced Power Apps for Business				30
+2224	Data Analysis Expression (DAX) for Power BI	exact	POWER-BI-DAX	Data Analysis Expression (DAX) for Power BI				28
+2243	AI Builder in Power Platform for Business	exact	PP-AI	AI Builder in Power Platform for Business				28
+2736	AI Content Creator for Business	exact	CC-AI	AI Content Creator for Business				28
+2320	Canva AI for Business Accelerator	exact	CANVA-L2	Canva AI for Business Accelerator				25
+2836	Build AI Multi-Agent with Claude Code	exact	VIBE-CODE-L2	Build AI Multi-Agent with Claude Code				24
+2872	Microsoft 365 Copilot Cowork for Productivity	exact	COPILOT-COWORK	Microsoft 365 Copilot Cowork for Productivity				24
+2233	Machine Learning using Python	exact	PYTHON-L2	Machine Learning using Python				23
+2265	Querying Data with T-SQL	exact	SQL-PG-Query	Querying Data with T-SQL				21
+2266	SQL Server Programming - Stored Procedure	exact	SQL-PG-SP	SQL Server Programming - Stored Procedure				20
+2191	Microsoft Excel Business Intelligence	exact	MSE-L5	Microsoft Excel Business Intelligence				16
+2249	ASP.NET Core Web API & Security	exact	DEV-VS-06	ASP.NET Core Web API & Security				15
+2257	Advanced Power Automate (Desktop)	exact	PAM-DSK-ADV	Advanced Power Automate (Desktop)				15
+2262	Microsoft SQL Server Database Administration	exact	SQL-ADM	Microsoft SQL Server Database Administration				15
+2356	GitHub Copilot for Developer	exact	COPILOT-DEV	GitHub Copilot for Developer				15
+2236	Microsoft PowerPoint Advanced	exact	MSP-L1	Microsoft PowerPoint Advanced				14
+2261	Microsoft SQL Server Essential	exact	SQL-101	Microsoft SQL Server Essential				13
+2799	Manus AI for Marketing Mastery	exact	MANUS-MKT	Manus AI for Marketing Mastery				13
+2865	Multi-Agent with Microsoft Copilot Studio	exact	COPILOT-STU-ADV	Multi-Agent with Microsoft Copilot Studio				13
+2798	Manus AI for Exclusive Owner Business	exact	MANUS-EXC	Manus AI for Exclusive Owner Business				12
+2226	Data Model for Power BI	exact	POWER-BI-XDM	Data Model for Power BI				11
+2230	Microsoft 365 for Business	exact	MS365-L1	Microsoft 365 for Business				11
+2246	Microsoft Fabric Essential for Business	exact	MS-FB-101	Microsoft Fabric Essential for Business				11
+2263	Microsoft SQL Server Performance Tuning	exact	SQL-ADM-Tuning	Microsoft SQL Server Performance Tuning				10
+2248	ASP.NET Core MVC	exact	DEV-VS-04	ASP.NET Core MVC				9
+2186	Microsoft Excel Powerful Functions	exact	MSE-FUNCTIONS	Microsoft Excel Powerful Functions				7
+2227	Microsoft Access Intermediate	exact	MSA-L1	Microsoft Access Intermediate				7
+2242	AI Automation Agent with Make.com	exact	MAKE-L1	AI Automation Agent with Make.com				7
+2234	Microsoft Project Managing Projects	exact	MSJ-L1	Microsoft Project Managing Projects				6
+2254	.NET MAUI : การพัฒนา Native Cross-platform Apps ด้วย C#	exact	DEV-VS-05	.NET MAUI : การพัฒนา Native Cross-platform Apps ด้วย C#				6
+2185	Microsoft Excel Advanced for Financial	exact	MSE-FINANCE	Microsoft Excel Advanced for Financial				5
+2258	UiPath for Business Automation	exact	UIPATH	UiPath for Business Automation				5
+2260	Build Power Apps with Power Automate	exact	POWER-PF-B1	Build Power Apps with Power Automate				5
+2193	Microsoft Excel VBA Programming	exact	MSE-L7	Microsoft Excel VBA Programming				4
+2237	Microsoft PowerPoint Design in Action	exact	MSP-L2	Microsoft PowerPoint Design in Action				4
+2259	Innovation Anywhere with Microsoft Power Platform	exact	POWER-PF	Innovation Anywhere with Microsoft Power Platform				4
+2426	Agentic AI Development With Google ADK And Python	exact	GOO-ADK	Agentic AI Development With Google ADK And Python				4
+2247	Programming in C# with Visual Studio	exact	DEV-VS-01	Programming in C# with Visual Studio				3
+2238	Infographics & Digital Media with Advanced Microsoft PowerPoint	exact	MSP-L3	Infographics & Digital Media with Advanced Microsoft PowerPoint				2
+8	(null)	unmatched					drupalTitle is null in legacy-courses.json — no title to match on; resolve from the Drupal node by hand	1
+2231	Microsoft Word Professional	exact	MSWO365-PRO	Microsoft Word Professional				1
+2256	(null)	unmatched					drupalTitle is null in legacy-courses.json — no title to match on; resolve from the Drupal node by hand	1
+2264	ETL with SQL Server Integration Service (SSIS)	exact	SQL-BI-ETL	ETL with SQL Server Integration Service (SSIS)				1
+2267	Database Concept and Design	exact	DB-01	Database Concept and Design				1

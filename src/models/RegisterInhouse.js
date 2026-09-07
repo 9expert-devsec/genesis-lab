@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { InternalNoteSchema } from './internalNoteSchema';
+import { LegacyImportSchema } from './legacyImportSchema';
 
 const ThaiAddressSchema = new mongoose.Schema(
   {
@@ -151,6 +152,37 @@ const RegisterInhouseSchema = new mongoose.Schema(
     thaiAddress:           { type: ThaiAddressSchema, default: null },
     internationalAddress:  { type: InternationalAddressSchema, default: null },
 
+    /**
+     * ── THE LEGACY QUOTATION ADDRESS. ONE BLOB, AND IT STAYS ONE BLOB. ──────
+     *
+     * Drupal collected the invoice address as a SINGLE free-text field. There is
+     * no แขวง, no เขต, no postcode and no reliable separator, so it cannot be
+     * split into `thaiAddress` without a machine inventing the boundaries — and
+     * a guessed district sitting in the province field is indistinguishable from
+     * a real one on every row it is wrong about.
+     *
+     * So it is stored verbatim in a path of its own, and `thaiAddress` stays
+     * null on an imported enquiry. A human reading the record sees what was
+     * typed.
+     *
+     * ══ IT MUST NOT BE MERGED INTO `message`. THIS WAS A RULING. ════════════
+     *
+     * `message` below is THE CUSTOMER'S OWN TEXT. Appending an address to it
+     * would put system-generated content into a field the customer believes is
+     * theirs and that is shown back to them. The public side carries the same
+     * ruling over `notes` — see RegisterPublic.legacyInvoiceAddress.
+     *
+     * Not `adminNotes` either: that is an append-only internal LOG with an
+     * author and a timestamp per entry, and an address is neither an event nor
+     * something anyone wrote.
+     *
+     * Named `legacyInvoiceAddress` on BOTH collections rather than
+     * `legacyQuotationAddress` here: it is one field from one legacy source,
+     * written by one import. A per-collection name would be two spellings of one
+     * thing.
+     */
+    legacyInvoiceAddress:  { type: String, trim: true },
+
     // ── Notes ──────────────────────────────────────────────────
     message: { type: String, trim: true, maxlength: 2000 },
 
@@ -225,11 +257,75 @@ const RegisterInhouseSchema = new mongoose.Schema(
     },
     source:     { type: String, default: 'web' },
     ipAddress:  { type: String },
+
+    /**
+     * ══ CARRIED ACROSS FROM DRUPAL, OR NOT. `null` IS "NOT IMPORTED". ═══════
+     *
+     * ── WHY THIS EXISTS: THE IMPORT IS RE-RUNNABLE ─────────────────────────
+     * The legacy import is not a one-shot. It runs once to move the bulk and
+     * AGAIN ON CUTOVER NIGHT to catch everything Drupal accepted in between —
+     * the same script over the same source table, re-reading every row it has
+     * already imported.
+     *
+     * `legacy.sid` is the Drupal `webform_submission.sid`, and it is what makes
+     * that second run INSERT NOTHING IT ALREADY INSERTED. Without it, "have I
+     * seen this row?" has no answer that is not a guess: nothing on a legacy
+     * submission carries a genesis id, and matching on (company, contact, month)
+     * would merge two enquiries one coordinator sent in the same week — an
+     * ordinary thing to do, and unrecoverable once merged.
+     *
+     * The unique partial index below is what ENFORCES it. The field alone is a
+     * label; the index is the guarantee.
+     *
+     * A `sid` is unique WITHIN a Drupal webform, and the two webforms land in
+     * two collections — so each collection carries its own index over its own
+     * key space, and `legacy.webformId` is what tells a reader which space a
+     * given sid belongs to.
+     *
+     * See models/legacyImportSchema.js for the field-by-field reasoning and for
+     * why the subdocument is shared with RegisterPublic rather than copied.
+     */
+    legacy: { type: LegacyImportSchema, default: null },
   },
   { timestamps: true, collection: 'register_inhouse' }
 );
 
 RegisterInhouseSchema.index({ createdAt: -1, status: 1 });
+
+/**
+ * ══ THE DEDUP GUARANTEE: UNIQUE, AND PARTIAL ════════════════════════════════
+ *
+ * UNIQUE is the point — it is what turns "the import script checks first" into
+ * "a second insert cannot happen". A check-then-insert in application code is
+ * two round trips with a gap in the middle, and the catch-up run is exactly the
+ * situation where two invocations could overlap.
+ *
+ * ── PARTIAL, AND THIS HALF IS NOT AN OPTIMISATION ──────────────────────────
+ * A plain unique index treats a MISSING field as null and indexes it, so every
+ * document born here — the 8 existing enquiries and every one the web form takes
+ * tomorrow — would collide with the others on a shared null, and the SECOND
+ * non-imported enquiry would fail to save. `partialFilterExpression` keeps them
+ * out of the index entirely, so uniqueness is asserted over imported documents
+ * and nothing else.
+ *
+ * ── `$exists: true`, AND WHAT IT DOES NOT COVER ────────────────────────────
+ * It excludes a document with `legacy: null` (the default) and one whose
+ * `legacy` subdocument omits `sid`. It does NOT exclude one written with an
+ * explicit `legacy.sid: null` — that field exists and would be indexed, so a
+ * second such document would collide. The import writes the subdocument whole,
+ * with a real sid from MySQL, so that shape is not produced; it is written down
+ * because it is the one way this index can surprise someone.
+ *
+ * BUILDING IT IS A DEPLOY-TIME EVENT, NOT A CODE ONE. Mongoose only creates
+ * indexes when autoIndex is on, and a unique index cannot be built over data
+ * that already violates it. Declaring it BEFORE the import is deliberate: the
+ * constraint exists from the first inserted row rather than being added
+ * afterwards over data that may already need it.
+ */
+RegisterInhouseSchema.index(
+  { 'legacy.sid': 1 },
+  { unique: true, partialFilterExpression: { 'legacy.sid': { $exists: true } } }
+);
 
 // Drop cached model from prior schema shape so dev HMR picks up the new
 // structure. No-op in production.

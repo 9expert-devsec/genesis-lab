@@ -4,7 +4,8 @@ import { memo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Award, BarChart2, Clock, MonitorPlay } from "lucide-react";
-import { cn, courseHref } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { courseLinkHref } from "@/lib/courses/courseLinkHref";
 import { coursePriceLabel } from "@/lib/coursePriceLabel";
 import ScheduleCard from "@/components/ScheduleCard";
 import { EarlyBirdRibbon } from "@/components/ui/EarlyBirdRibbon";
@@ -99,7 +100,10 @@ function CourseCardComponent({
 
   const isInhouseOnly = isInhouse === true && !isPublic;
 
-  const href = courseHref(id ? String(id).toLowerCase() : "");
+  // The alias when the admin set one, else the derived path — the SAME
+  // function the page's canonical tag uses. `course`, not `id`: the alias
+  // rides on the row as `urlAlias`, so a string cannot carry it.
+  const href = courseLinkHref(course);
   const inhouseHref = `/registration/in-house?course=${String(id ?? '').toLowerCase()}`;
   const programIcon = program?.programiconurl;
   const programLabel = program?.program_name;

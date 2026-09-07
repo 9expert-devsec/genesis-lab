@@ -8,15 +8,30 @@
  * Docs: https://schema.org/Course
  * Google rich results: https://developers.google.com/search/docs/appearance/structured-data/course
  */
+import { courseCanonicalUrl } from '@/lib/courses/courseCanonicalPath';
+
 export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }) {
   if (!course?.course_name) return null;
 
   const base = siteUrl ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'https://genesis-lab.9expert.app';
 
-  // Resolve the canonical URL — prefer urlAlias from CourseExtension if available,
-  // fall back to the standard slug pattern.
-  const slug = extension?.urlAlias || `${course.course_id?.toLowerCase?.()}-training-course`;
-  const courseUrl = `${base}/${slug}`;
+  /**
+   * THE ONE CANONICAL RULE, not a local copy of it.
+   *
+   * This file used to hold its own: `extension?.urlAlias || <code>-training-course`,
+   * joined as `${base}/${slug}`. It picked the right URL and spelled it wrong —
+   * aliases are stored WITH a leading slash, so an aliased course emitted
+   *     https://site//build-business-apps-with-claude-code-training-course
+   * with a double slash, for every one of the 80 courses that has an alias.
+   * That resolves to the same page, which is why it went unnoticed, and it is a
+   * THIRD spelling of a URL this round exists to have exactly one of.
+   *
+   * courseCanonicalUrl trims the base and returns the normalised path, so the
+   * join cannot double. The page's `alternates.canonical` calls the same
+   * function, and test/render/courseCanonicalMetadata asserts the two are EQUAL
+   * rather than merely both plausible.
+   */
+  const courseUrl = courseCanonicalUrl(course, extension, base);
 
   // Build hasCourseInstance from live schedules (open/nearly_full only).
   // Each schedule becomes a CourseInstance with startDate/endDate/location.

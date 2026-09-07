@@ -32,8 +32,8 @@ import { coursePathFromId } from '@/lib/webhooks/courseRevalidatePlan';
 import { reservedPathOwner } from '@/lib/courses/reservedPaths';
 
 /**
- * The canonical stored form of a typed alias: trimmed, with exactly one leading
- * slash, or null for "no custom URL".
+ * The canonical stored form of a typed alias: trimmed, LOWER-CASED, with exactly
+ * one leading slash and no trailing slash — or null for "no custom URL".
  *
  * null rather than '' because the unique index is SPARSE — it skips documents
  * whose key is null, which is what lets every course without a custom URL
@@ -51,16 +51,46 @@ import { reservedPathOwner } from '@/lib/courses/reservedPaths';
  * conflict. Stripping here collapses them before either the check or the index
  * ever sees them.
  *
- * PROVABLY BEHAVIOUR-PRESERVING ON EXISTING DATA: measured across all 78 rows,
- * zero carry a trailing slash, so no stored alias changes meaning and no row
- * starts colliding with another that did not before.
+ * ── ROUND U4 (D3): LOWER-CASED ──────────────────────────────────────────────
+ * Aliases were matched case-SENSITIVELY (`findOne({urlAlias})`, no collation)
+ * while course codes were matched case-INSENSITIVELY. So `/Excel-Course` and
+ * `/excel-course` were two aliases to the index and two different pages to a
+ * crawler, while `/EXCEL-training-course` and `/excel-training-course` were one
+ * page. One rule for one kind of URL and a different rule for the other is the
+ * shape that ships a duplicate.
+ *
+ * Lower-casing HERE rather than at the lookup is what makes it one rule: this
+ * function is what the save path, the conflict check, the canonical tag, the
+ * og:url, the JSON-LD, the sitemap and the link helper all call, so they cannot
+ * disagree about what a stored alias looks like. A read path that lower-cased on
+ * its own would find the row and then emit a canonical the row does not match.
+ *
+ * ── ROUND U4 (D4): DUPLICATE LEADING SLASHES COLLAPSE ───────────────────────
+ * `//x` used to pass through untouched — it is already slash-prefixed, so the
+ * old prefix rule had nothing to add. But `//x` is a protocol-relative URL: a
+ * browser reads `//x` as `https://x`, an entirely different origin. An alias
+ * that shape is not a path on this site at all.
+ *
+ * It is fixed here and not in the link helper for the reason U3 recorded when it
+ * deliberately left it: the link, the canonical tag, the og:url, the JSON-LD and
+ * the sitemap all read through this one function, and fixing it in one of the
+ * five would make that one disagree with the other four.
+ *
+ * PROVABLY BEHAVIOUR-PRESERVING ON EXISTING DATA: measured against the live
+ * collection immediately before this change, across all 80 rows holding a
+ * non-null `urlAlias` — zero contain an uppercase character, zero begin with
+ * `//`, zero carry a trailing slash and zero lack a leading slash. So no stored
+ * alias changes meaning, no row starts colliding with another that did not
+ * before, and nothing needs migrating. This normalises what is TYPED from here
+ * on; it does not rewrite what is stored.
  */
 export function normaliseAlias(raw) {
   if (!raw) return null;
   const trimmed = String(raw).trim().replace(/\/+$/, '');
   // '/' alone strips to '' — that is "no custom URL", not an alias of nothing.
   if (!trimmed) return null;
-  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  // Leading slashes collapse to exactly one, whether there were none or three.
+  return `/${trimmed.replace(/^\/+/, '')}`.toLowerCase();
 }
 
 /**
@@ -106,9 +136,16 @@ export function legacyPathOwner({ alias, courseIds = [], exceptCourseId = null }
  * @param {object} input
  * @param {string} input.alias                    the alias being saved (either representation)
  * @param {string|null} [input.existingCourseId]  course_id already holding it, or null
+ * @param {string|null} [input.formerOwnerCourseId] course_id that USED to hold it, or null
+ * @param {string|null} [input.legacyOwner]       course_id whose derived path it shadows
  * @returns {{ field: 'urlAlias', error: string }|null} null when the alias is free
  */
-export function aliasConflict({ alias, existingCourseId = null, legacyOwner = null } = {}) {
+export function aliasConflict({
+  alias,
+  existingCourseId = null,
+  formerOwnerCourseId = null,
+  legacyOwner = null,
+} = {}) {
   const wanted = normaliseAlias(alias);
   if (!wanted) return null; // no custom URL is always allowed — sparse index
 
@@ -156,6 +193,33 @@ export function aliasConflict({ alias, existingCourseId = null, legacyOwner = nu
       error:
         `URL Alias นี้ถูกใช้แล้วโดยหลักสูตร "${existingCourseId}" — `
         + 'กรุณาใช้ URL อื่น',
+    };
+  }
+
+  /**
+   * ── A FORMER ALIAS OF ANOTHER COURSE (U4.2) ─────────────────────────────
+   * Checked LAST of the four, because it is the weakest claim: the other
+   * course is not using this URL right now, it is only still redirecting from
+   * it. But allowing it would mean one URL means two courses — course B would
+   * render at /x while course A still redirects /x to itself, and which one a
+   * visitor gets would depend on which lookup ran first.
+   *
+   * THE UNIQUE INDEX CANNOT EXPRESS THIS. `urlAlias_1` compares urlAlias to
+   * urlAlias; the rule here is "B.urlAlias must not equal any of
+   * A.formerAliases", which spans two DIFFERENT fields on two different
+   * documents. MongoDB has no cross-field uniqueness, so a multikey unique
+   * index on formerAliases would only stop two courses sharing a former alias
+   * — a different and much rarer collision. This therefore stays an
+   * application-level rule, with the same concurrency window every
+   * application-level check in this file has, and the index does not close
+   * this one.
+   */
+  if (formerOwnerCourseId) {
+    return {
+      field: 'urlAlias',
+      error:
+        `URL นี้เคยเป็นที่อยู่ของหลักสูตร "${formerOwnerCourseId}" — `
+        + 'ยังมีลิงก์เดิมที่ส่งต่อไปยังหลักสูตรนั้นอยู่ ถ้าใช้ซ้ำ URL เดียวจะหมายถึงสองหลักสูตร กรุณาใช้ URL อื่น',
     };
   }
 

@@ -1,0 +1,229 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+import { recordNotFound, shouldRecord, resolveNotFound } from '@/lib/redirects/resolveNotFound';
+
+/**
+ * T6 — THE 404 RECORDER IS BOUNDED BY CONSTRUCTION.
+ *
+ * This is a write on a path anyone on the internet can trigger, on a connection
+ * pool sized for an Atlas M0 free tier. "It should be fine" is not a bound, so
+ * the bound is asserted: N requests for one path produce ONE document with a
+ * count of N, never N documents.
+ *
+ * The model below implements the two things that matter — the unique key and
+ * `$inc` — and nothing else. Anything the code asks for that a real collection
+ * would not support throws, rather than being quietly agreed with.
+ */
+function makeStore() {
+  const rows = new Map();          // `${host}\x00${path}` -> row
+  const calls = [];
+
+  const model = {
+    __rows: () => [...rows.values()],
+    __calls: calls,
+    async updateOne(filter, update, options = {}) {
+      calls.push({ filter, update, options });
+
+      const unsupported = Object.keys(update ?? {}).filter(
+        (k) => !['$inc', '$set', '$setOnInsert'].includes(k)
+      );
+      if (unsupported.length) throw new Error(`unsupported operator ${unsupported.join(',')}`);
+
+      const key = `${filter.host}\x00${filter.path}`;
+      let row = rows.get(key);
+      if (!row) {
+        if (!options.upsert) return { matchedCount: 0, modifiedCount: 0 };
+        row = { ...(update.$setOnInsert ?? {}) };
+        rows.set(key, row);
+      }
+      for (const [k, delta] of Object.entries(update.$inc ?? {})) {
+        row[k] = (typeof row[k] === 'number' ? row[k] : 0) + delta;
+      }
+      Object.assign(row, update.$set ?? {});
+      return { matchedCount: 1, modifiedCount: 1 };
+    },
+  };
+
+  return { model, deps: { NotFoundHit: model, connect: async () => {}, warn: () => {} } };
+}
+
+// ── T6: the bound ───────────────────────────────────────────────────────────
+
+test('T6: 25 requests for ONE path produce ONE document with count 25', async () => {
+  const { model, deps } = makeStore();
+
+  for (let i = 0; i < 25; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    await recordNotFound({ host: 'www.example.com', path: '/gone' }, deps);
+  }
+
+  const rows = model.__rows();
+  assert.equal(rows.length, 1, `growth is bounded by DISTINCT paths, not by traffic — got ${rows.length} rows`);
+  assert.equal(rows[0].count, 25);
+  assert.equal(rows[0].host, 'www.example.com');
+  assert.equal(rows[0].path, '/gone');
+});
+
+test('T6: distinct paths get distinct rows — the bound is per path, not global', () => {
+  // The control for the case above: if the recorder collapsed everything into
+  // one row, the assertion above would pass for the wrong reason.
+  const { model, deps } = makeStore();
+  return Promise.all([
+    recordNotFound({ host: 'a.test', path: '/one' }, deps),
+    recordNotFound({ host: 'a.test', path: '/two' }, deps),
+    recordNotFound({ host: 'b.test', path: '/one' }, deps),
+  ]).then(() => {
+    assert.equal(model.__rows().length, 3, 'host is part of the key too');
+  });
+});
+
+test('every write is ONE upsert — never a read-then-write', async () => {
+  const { model, deps } = makeStore();
+  await recordNotFound({ host: 'a.test', path: '/x' }, deps);
+  assert.equal(model.__calls.length, 1);
+  assert.equal(model.__calls[0].options.upsert, true);
+  assert.ok(model.__calls[0].update.$inc, 'the counter is incremented server-side, not computed');
+});
+
+test('lastSeen moves on every hit; firstSeen is set once', async () => {
+  // This is what makes the TTL behave as documented: a path still being
+  // requested keeps its row, one that stops is reclaimed 30 days later.
+  const { model, deps } = makeStore();
+  await recordNotFound({ host: 'a.test', path: '/x' }, deps);
+  const first = model.__rows()[0].firstSeen;
+  await new Promise((r) => setTimeout(r, 5));
+  await recordNotFound({ host: 'a.test', path: '/x' }, deps);
+  const row = model.__rows()[0];
+  assert.equal(row.firstSeen.getTime(), first.getTime(), 'firstSeen moved');
+  assert.ok(row.lastSeen.getTime() >= first.getTime(), 'lastSeen did not move');
+});
+
+// ── what is refused before it can create a row ──────────────────────────────
+
+test('an over-long path is refused BEFORE truncation could fan it out', async () => {
+  /**
+   * normalisePath truncates at the cap. If the length check ran after, a few
+   * thousand different over-long requests would each truncate to a different
+   * prefix and create a row apiece — a fan-out through the very function meant
+   * to bound things.
+   */
+  const long = `/${'a'.repeat(5000)}`;
+  assert.equal(shouldRecord(long), false);
+
+  const { model, deps } = makeStore();
+  await recordNotFound({ host: 'a.test', path: long }, deps);
+  assert.equal(model.__rows().length, 0);
+});
+
+test('/admin paths are never recorded', async () => {
+  // The admin surface answers 404 to the public by design. Recording those
+  // would fill the worklist with the door working correctly — and hand a prober
+  // a way to confirm which admin paths exist by watching what appears.
+  assert.equal(shouldRecord('/admin'), false);
+  assert.equal(shouldRecord('/admin/roles'), false);
+  const { model, deps } = makeStore();
+  await recordNotFound({ host: 'a.test', path: '/admin/roles' }, deps);
+  assert.equal(model.__rows().length, 0);
+});
+
+test('well-known scanner noise is refused', async () => {
+  for (const p of ['/wp-login.php', '/wp-admin/x', '/.env', '/.git/config', '/vendor/phpunit', '/cgi-bin/x']) {
+    assert.equal(shouldRecord(p), false, p);
+  }
+});
+
+test('the root and an empty path are not recorded', () => {
+  assert.equal(shouldRecord('/'), false);
+  assert.equal(shouldRecord(''), false);
+  assert.equal(shouldRecord('   '), false);
+});
+
+test('CONTROL: an ordinary legacy path IS recorded', () => {
+  // Without this, every refusal above would be satisfied by a function that
+  // refuses everything.
+  assert.equal(shouldRecord('/some/legacy/page'), true);
+  assert.equal(shouldRecord('/old-course-page'), true);
+});
+
+test('a missing host records nothing — there would be no key', async () => {
+  const { model, deps } = makeStore();
+  await recordNotFound({ host: '', path: '/x' }, deps);
+  assert.equal(model.__rows().length, 0);
+});
+
+// ── nothing here may fail the response ──────────────────────────────────────
+
+test('a database that throws never reaches the caller', async () => {
+  const warns = [];
+  const deps = {
+    NotFoundHit: { async updateOne() { throw new Error('mongo down'); } },
+    connect: async () => {},
+    warn: (...a) => warns.push(a.join(' ')),
+  };
+  const res = await recordNotFound({ host: 'a.test', path: '/x' }, deps);
+  assert.equal(res.recorded, false);
+  assert.equal(res.reason, 'error');
+  assert.equal(warns.length, 1, 'swallowed, but not silently');
+});
+
+// ── the boundary: one read, one write, only ever one of them ────────────────
+
+function boundaryDeps({ rules = [], onRecord = () => {} } = {}) {
+  const recorded = [];
+  return {
+    recorded,
+    deps: {
+      RedirectRule: {
+        find() {
+          return {
+            select() { return this; },
+            limit() { return this; },
+            lean: async () => rules,
+          };
+        },
+      },
+      connect: async () => {},
+      // `after()` is not available outside a request scope; the drive calls the
+      // scheduled function inline so the effect is observable.
+      schedule: (fn) => fn(),
+      record: async (entry) => { recorded.push(entry); onRecord(entry); return { recorded: true }; },
+      warn: () => {},
+    },
+  };
+}
+
+test('a MATCH redirects and records NOTHING — a path with a rule is not a 404', async () => {
+  const { recorded, deps } = boundaryDeps({
+    rules: [{ host: 'a.test', source: '/old', destination: '/new', permanent: true, isActive: true }],
+  });
+  const hit = await resolveNotFound({ host: 'a.test', path: '/old' }, deps);
+  assert.deepEqual(hit, { destination: '/new', permanent: true });
+  assert.equal(recorded.length, 0);
+});
+
+test('a MISS records once and returns null', async () => {
+  const { recorded, deps } = boundaryDeps({ rules: [] });
+  const hit = await resolveNotFound({ host: 'a.test', path: '/gone' }, deps);
+  assert.equal(hit, null);
+  assert.equal(recorded.length, 1);
+  assert.deepEqual(recorded[0], { host: 'a.test', path: '/gone' });
+});
+
+test('a failed rule LOOKUP yields a plain 404, never a guessed redirect', async () => {
+  const deps = {
+    RedirectRule: { find() { throw new Error('mongo down'); } },
+    connect: async () => {},
+    schedule: (fn) => fn(),
+    record: async () => ({ recorded: true }),
+    warn: () => {},
+  };
+  assert.equal(await resolveNotFound({ host: 'a.test', path: '/x' }, deps), null);
+});
+
+test('no request scope means no recording, and no throw', async () => {
+  const { recorded, deps } = boundaryDeps({ rules: [] });
+  deps.schedule = () => { throw new Error('after() outside a request scope'); };
+  assert.equal(await resolveNotFound({ host: 'a.test', path: '/x' }, deps), null);
+  assert.equal(recorded.length, 0);
+});

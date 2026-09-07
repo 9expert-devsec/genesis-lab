@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync, readdirSync } from 'node:fs';
+import vm from 'node:vm';
 import { transform } from 'sucrase';
 
 // EVERY server-action module AND every API route handler must parse.
@@ -47,19 +48,69 @@ import { transform } from 'sucrase';
 // the routes list is RECURSIVE and its anchors additionally prove the walker
 // descends and handles a dynamic-segment directory name.
 //
-// WHAT THIS CANNOT SEE:
-//   · anything about runtime. A module that parses can still throw on import,
-//     reference an undefined symbol, or export nothing.
+// ── SUCRASE ALONE WAS NOT A PARSE, AND THAT SHIPPED A BROKEN BUILD ──────────
+//
+// This file used to be `transform(src, {transforms:['imports']})` and nothing
+// else. That is not enough, and the gap is not theoretical: a cherry-pick left
+// `src/lib/actions/dashboard.js` with a parameter `from` redeclared as a `const`
+// in the same function. Vercel rejected it —
+//
+//     Module parse failed: Identifier 'from' has already been declared (111:12)
+//
+// — and this guard, whose entire reason for existing is that a syntax error in
+// an action module must never be invisible, was GREEN on that file. Measured:
+//
+//     SUCRASE on the broken dashboard.js                      PARSED OK
+//     SUCRASE on `function f(from='',to=''){const {from,to}=g()}`  PARSED OK
+//
+// Sucrase is syntax-directed and does no scope analysis. A REDECLARATION is a
+// scope error, not a syntax error, so it is invisible to it — as is anything
+// else V8 rejects after parsing but before running.
+//
+// So the check is now sucrase FOR MODULE SYNTAX and V8 FOR THE ACTUAL PARSE:
+// `transform` rewrites the import/export forms `vm.Script` will not accept, and
+// `new vm.Script` then hands the result to the same parser Node and the build
+// use. It costs one extra construction per file, needs NO flag and spawns
+// nothing, and it catches both this defect and the star-slash that motivated the
+// original file.
+//
+// WHAT THIS CANNOT SEE — and the first entry is the one that matters:
+//   · A FREE IDENTIFIER. The same broken module referenced SEVEN symbols it
+//     neither imported nor defined (DEFAULT_RANGE, dashboardScopes, dateRange,
+//     buildDashboardMetrics, …). Those are RUNTIME ReferenceErrors — they fire
+//     when the function is called, not when the file is parsed — and a parser is
+//     CORRECT to accept them. Catching them needs the module imported and its
+//     export invoked, which for a `'use server'` module is a much larger
+//     question than this file. The gap is named, not closed.
+//   · anything else about runtime. A module that parses can still throw on
+//     import or export nothing.
 //   · type or contract errors of any kind.
+//   · WHETHER THE CODE IS REACHABLE. A parser sees dead code and live code
+//     alike; that limit belongs to every text-based guard in this suite and is
+//     written up in
+//     docs/ticket-a-source-scan-cannot-tell-live-code-from-dead-code.md.
 //   · a route written as route.ts / route.jsx. This repo is JS-only and every
 //     one of its handlers is route.js; a TypeScript route would be skipped in
 //     silence. Widen ROUTE_BASENAMES deliberately if that ever changes.
 //   · lib helpers, components and pages. Most of those ARE reached by some
 //     test; the two directories here were the ones reached by none.
 //
-// The transform is `imports`-only: enough to force a full parse, without the
-// JSX transform these files never need. Verified sufficient for all 35 route
-// handlers as well as the action modules.
+// And the standing lesson this file is one half of: A GREEN SUITE DOES NOT MEAN
+// THE APP BUILDS. Even upgraded, this catches parse errors only. `npm run build`
+// is the instrument for the rest.
+
+/**
+ * Parse one module the way Node would, throwing on anything V8 rejects.
+ *
+ * Two stages, and both are load-bearing: sucrase rewrites `import`/`export`
+ * (which `vm.Script` cannot accept) without the JSX transform these files never
+ * need, and `vm.Script` is the real parse — full scope analysis, no execution.
+ * Nothing is run, so mongoose and next/server are never loaded and the reason
+ * no test imports these modules does not apply here.
+ */
+function parseModule(source) {
+  new vm.Script(transform(source, { transforms: ['imports'] }).code);
+}
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
@@ -158,7 +209,7 @@ test('every src/lib/actions module parses', () => {
   for (const file of actionFiles()) {
     const abs = path.join(ACTIONS_DIR, file);
     try {
-      transform(readFileSync(abs, 'utf8'), { transforms: ['imports'] });
+      parseModule(readFileSync(abs, 'utf8'));
     } catch (err) {
       failures.push(`${file}: ${err?.message ?? err}`);
     }
@@ -171,20 +222,61 @@ test('every src/lib/actions module parses', () => {
 });
 
 test('CONTROL: the parse check rejects source that is genuinely broken', () => {
-  // Without this, a transform() that swallowed its errors would make the test
-  // above pass for anything. Uses the exact defect that motivated the guard: a
-  // path containing a star-slash, written inside a block comment.
+  // Without this, a checker that swallowed its errors would make the test above
+  // pass for anything. The first case is the exact defect that motivated the
+  // original file: a path containing a star-slash, inside a block comment.
   assert.throws(
-    () => transform('/**\n * see src/lib/*/trigger*Sync.js\n */\nconst x = 1;', { transforms: ['imports'] }),
+    () => parseModule('/**\n * see src/lib/*/trigger*Sync.js\n */\nconst x = 1;'),
     'a block comment closed early by a star-slash must fail to parse'
   );
   assert.throws(
-    () => transform('export async function x( {', { transforms: ['imports'] }),
+    () => parseModule('export async function x( {'),
     'and so must an unbalanced paren'
   );
   assert.doesNotThrow(
-    () => transform("import { after } from 'next/server';\nexport const x = 1;", { transforms: ['imports'] }),
+    () => parseModule("import { after } from 'next/server';\nexport const x = 1;"),
     'while valid module source must pass'
+  );
+});
+
+test('CONTROL: the check catches a REDECLARATION, which sucrase alone does not', () => {
+  /**
+   * The control for the upgrade, and it asserts BOTH halves — that the new
+   * checker rejects the defect, and that the old one accepted it. Without the
+   * second half, "V8 is stronger here" is an unproven claim and someone could
+   * revert `parseModule` to a bare `transform` with every test still green.
+   *
+   * The subject is the real defect, reduced: `getDashboardMetrics(range, from,
+   * to)` with `const { from, to }` in its body. It reached production as
+   * `Module parse failed: Identifier 'from' has already been declared (111:12)`.
+   */
+  const redeclared = "export async function f(range, from = '', to = '') {\n"
+    + '  const { from, to } = g(range);\n'
+    + '  return from + to;\n}';
+
+  assert.throws(
+    () => parseModule(redeclared),
+    /already been declared/,
+    'a parameter redeclared as a const in the same scope must fail to parse'
+  );
+  assert.doesNotThrow(
+    () => transform(redeclared, { transforms: ['imports'] }),
+    'sucrase alone rejects this after all — the upgrade would be unnecessary, '
+    + 'and the reasoning in this file’s header is wrong'
+  );
+});
+
+test('CONTROL: a free identifier still PASSES — the gap is named, not closed', () => {
+  /**
+   * Not an oversight being locked in: a parser is CORRECT to accept a reference
+   * to an undeclared symbol, because it is a runtime error. Pinning it here
+   * means the header's "WHAT THIS CANNOT SEE" is checked rather than merely
+   * asserted, and the day someone closes that gap this test fails and tells them
+   * to update the header instead of leaving it stale.
+   */
+  assert.doesNotThrow(
+    () => parseModule('export const a = UNDEFINED_THING;'),
+    'a free identifier now throws — the header must stop claiming it cannot be seen'
   );
 });
 
@@ -227,7 +319,7 @@ test('every src/app/api route handler parses', () => {
   const failures = [];
   for (const abs of routeFiles()) {
     try {
-      transform(readFileSync(abs, 'utf8'), { transforms: ['imports'] });
+      parseModule(readFileSync(abs, 'utf8'));
     } catch (err) {
       failures.push(`${relFromRoot(abs)}: ${err?.message ?? err}`);
     }

@@ -1,0 +1,229 @@
+/**
+ * Per-path redirect rules — the PURE half.
+ *
+ * Everything that decides anything lives here: how a host and a path are
+ * normalised, whether a rule may be created, and which rule a request matches.
+ * The database and the route are I/O around it.
+ *
+ * ── WHY PURE, AND WHY THAT IS A REQUIREMENT RATHER THAN A PREFERENCE ───────
+ * The existing masterclass gate in src/middleware.js is a predicate written
+ * inline in the file that uses it. Nothing can import it, no test can reach it,
+ * and it has sat there dead — never called, host-blind, env-blind — without any
+ * check noticing. A redirect table is a security surface: it decides where a
+ * visitor's browser goes. It does not get to be untestable.
+ *
+ * So `matchRedirect` is a function of (host, path, rules) and nothing else. No
+ * clock, no database, no request object.
+ */
+
+/** Longest path we will ever store or match. Beyond this is not a real URL. */
+export const MAX_PATH_LENGTH = 512;
+
+/** Longest host we will store. */
+export const MAX_HOST_LENGTH = 253;
+
+/**
+ * A host, canonically.
+ *
+ * Lower-cased and stripped of its port. NOT stripped of `www.` — the whole
+ * point of keying rules on a host is that `masterclass.9experttraining.com` and
+ * `www.9experttraining.com` serve the SAME paths and must resolve differently.
+ * Folding them together would defeat the rule's reason for existing.
+ */
+export function normaliseHost(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .split(',')[0]        // an x-forwarded-host chain: the first hop is the client's
+    .trim()
+    .replace(/:\d+$/, '') // strip the port
+    .slice(0, MAX_HOST_LENGTH);
+}
+
+/**
+ * A path, canonically: leading slash, no query, no fragment, no trailing
+ * slash (except the root), collapsed duplicate slashes, LOWER-CASED.
+ *
+ * ── WHY LOWER-CASED, WHICH IS A REAL DECISION AND NOT TIDYING ─────────────
+ * These rules exist to catch URLs pasted into emails, printed in PDFs and
+ * indexed by search engines years ago, from a Drupal site whose paths were
+ * lower-case by convention. A rule that fails because someone typed one capital
+ * letter produces a silent 404 — the exact outcome the table exists to prevent,
+ * and one nobody would think to check.
+ *
+ * The cost is that `/Foo` and `/foo` cannot be two different rules. That is
+ * accepted: they were never two different pages.
+ *
+ * DESTINATIONS ARE NOT LOWER-CASED — see `normaliseDestination`. A target is a
+ * live URL on this app, where case can matter.
+ */
+export function normalisePath(value) {
+  let path = String(value ?? '').trim();
+  if (!path) return '';
+  path = path.split('#')[0].split('?')[0];
+  if (!path.startsWith('/')) path = `/${path}`;
+  path = path.replace(/\/{2,}/g, '/');
+  if (path.length > 1) path = path.replace(/\/+$/, '');
+  return path.toLowerCase().slice(0, MAX_PATH_LENGTH);
+}
+
+/** A destination path — same shape rules, but case is PRESERVED. */
+export function normaliseDestination(value) {
+  let path = String(value ?? '').trim();
+  if (!path) return '';
+  if (!path.startsWith('/')) return path; // left alone so validation can refuse it
+  const [before, ...rest] = path.split('#');
+  path = before;
+  const query = path.includes('?') ? path.slice(path.indexOf('?')) : '';
+  let base = query ? path.slice(0, path.indexOf('?')) : path;
+  base = base.replace(/\/{2,}/g, '/');
+  if (base.length > 1) base = base.replace(/\/+$/, '');
+  const hash = rest.length ? `#${rest.join('#')}` : '';
+  return `${base}${query}${hash}`.slice(0, MAX_PATH_LENGTH);
+}
+
+/** Is this path inside the admin surface? Checked on the normalised form. */
+export function isAdminPath(path) {
+  const p = normalisePath(path);
+  return p === '/admin' || p.startsWith('/admin/');
+}
+
+/**
+ * ── THE OPEN-REDIRECT GUARD ───────────────────────────────────────────────
+ *
+ * A destination must be a path on THIS site. Not a preference — a redirect
+ * table an admin can point at an arbitrary origin is an open redirect, and an
+ * open redirect on a training company's domain is a phishing kit with the
+ * company's SEO behind it.
+ *
+ * Three shapes are refused, and the second is the one people miss:
+ *
+ *   'https://evil.test/x'   an absolute URL. Obvious.
+ *   '//evil.test/x'         PROTOCOL-RELATIVE. It starts with '/', so a naive
+ *                           `startsWith('/')` check passes it, and the browser
+ *                           treats it as an absolute URL to another origin.
+ *   '/\\evil.test'          backslashes, which some agents normalise to '/'.
+ *
+ * Checked on the RAW value before normalisation, because normalisation collapses
+ * `//` to `/` and would launder a protocol-relative URL into a valid-looking
+ * internal path.
+ */
+export function isInternalDestination(raw) {
+  const value = String(raw ?? '').trim();
+  if (!value.startsWith('/')) return false;
+  if (value.startsWith('//')) return false;
+  if (value.startsWith('/\\')) return false;
+  if (value.includes('://')) return false;
+  if (/[\x00-\x1f]/.test(value)) return false;
+  return true;
+}
+
+/** Characters that would suggest a pattern. Rules are EXACT — see validate. */
+const PATTERN_CHARS = /[*:()[\]{}?]/;
+
+/**
+ * Can this rule be created? `{ ok: true, value }` or `{ ok: false, errors }`.
+ *
+ * Errors are keyed by FIELD so the form can put each refusal on the input that
+ * caused it, the way the course editor puts an alias clash on the alias box.
+ */
+export function validateRule({ host, source, destination } = {}) {
+  const errors = {};
+
+  const cleanHost = normaliseHost(host);
+  if (!cleanHost) errors.host = 'ต้องระบุโฮสต์';
+  else if (!/^[a-z0-9.-]+$/.test(cleanHost)) errors.host = 'โฮสต์ไม่ถูกต้อง';
+
+  const rawSource = String(source ?? '').trim();
+  const cleanSource = normalisePath(rawSource);
+  if (!rawSource) errors.source = 'ต้องระบุพาธต้นทาง';
+  else if (!rawSource.startsWith('/')) errors.source = 'พาธต้นทางต้องขึ้นต้นด้วย /';
+  else if (rawSource.length > MAX_PATH_LENGTH) errors.source = `พาธต้นทางยาวเกิน ${MAX_PATH_LENGTH} ตัวอักษร`;
+  else if (PATTERN_CHARS.test(rawSource)) {
+    // No wildcards, no regex, no patterns — by ruling. Refused rather than
+    // silently never matching, which is how an admin would conclude the whole
+    // panel is broken.
+    errors.source = 'ไม่รองรับ pattern หรือ wildcard — ต้องเป็นพาธแบบตรงตัวเท่านั้น';
+  } else if (isAdminPath(cleanSource)) {
+    errors.source = 'ห้ามสร้างกฎสำหรับ /admin';
+  }
+
+  const rawDest = String(destination ?? '').trim();
+  if (!rawDest) errors.destination = 'ต้องระบุปลายทาง';
+  else if (!isInternalDestination(rawDest)) {
+    errors.destination = 'ปลายทางต้องเป็นพาธภายในเว็บไซต์ ขึ้นต้นด้วย / เท่านั้น';
+  } else if (rawDest.length > MAX_PATH_LENGTH) {
+    errors.destination = `ปลายทางยาวเกิน ${MAX_PATH_LENGTH} ตัวอักษร`;
+  } else if (isAdminPath(rawDest)) {
+    errors.destination = 'ห้ามชี้ปลายทางไปที่ /admin';
+  }
+
+  const cleanDest = normaliseDestination(rawDest);
+  if (!errors.source && !errors.destination && cleanSource === normalisePath(cleanDest)) {
+    // A rule pointing at itself is an infinite redirect the browser breaks out
+    // of after a few hops, which reads to a visitor as a broken site.
+    errors.destination = 'ต้นทางและปลายทางต้องไม่ใช่พาธเดียวกัน';
+  }
+
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  return { ok: true, value: { host: cleanHost, source: cleanSource, destination: cleanDest } };
+}
+
+/**
+ * Which rule does this request match? — THE DECISION, and it is exact.
+ *
+ * @param {object} input
+ * @param {string} input.host
+ * @param {string} input.path
+ * @param {Array}  input.rules  candidate rules, already read from storage
+ * @returns {{destination: string, permanent: boolean} | null}
+ *
+ * ── EXACT, ON BOTH KEYS ───────────────────────────────────────────────────
+ * Host AND path, both normalised, both compared with `===`. There is no
+ * fallback to a path-only match when the host does not line up, and that
+ * absence is deliberate: masterclass.9experttraining.com and www serve the same
+ * `/masterclass/<slug>` paths, so a path-only match would redirect the host
+ * that is supposed to SERVE the page.
+ *
+ * Inactive rules are skipped here rather than filtered by the caller, so a
+ * caller that forgets the filter cannot accidentally honour a disabled rule.
+ */
+export function matchRedirect({ host, path, rules } = {}) {
+  const h = normaliseHost(host);
+  const p = normalisePath(path);
+  if (!h || !p) return null;
+
+  for (const rule of rules ?? []) {
+    if (rule?.isActive === false) continue;
+    if (normaliseHost(rule?.host) !== h) continue;
+    if (normalisePath(rule?.source) !== p) continue;
+
+    /**
+     * A stored row is still checked before it is obeyed. The validator runs at
+     * write time, but a row can also arrive by a direct database edit or a
+     * restored backup, and this is the last point before a visitor's browser is
+     * sent somewhere.
+     *
+     * ── THE RAW VALUE IS CHECKED FIRST, AND THE ORDER IS THE WHOLE POINT ────
+     * `normaliseDestination` collapses `//` to `/`, so `//evil.test` becomes
+     * `/evil.test` — which passes every internal-looking test there is. Running
+     * the guard on the NORMALISED value would launder a protocol-relative URL
+     * into a valid-looking internal path and hand the visitor to another origin.
+     *
+     * That is not hypothetical: this function had exactly that bug, and the
+     * test named "a STORED rule with an external destination is refused at
+     * match time" is what found it. The same ordering rule is stated in
+     * `isInternalDestination`'s own note; it has to be obeyed at BOTH call
+     * sites, not just the validator's.
+     */
+    if (!isInternalDestination(rule?.destination)) continue;
+
+    const destination = normaliseDestination(rule?.destination);
+    if (!isInternalDestination(destination)) continue;
+    if (isAdminPath(destination)) continue;
+    if (normalisePath(destination) === p) continue;
+
+    return { destination, permanent: rule?.permanent !== false };
+  }
+  return null;
+}

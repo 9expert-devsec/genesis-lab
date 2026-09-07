@@ -50,6 +50,7 @@ import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
   CopyAction, EqualSummaryRow, TabList, TabPanel, SectionCard, SystemCard,
   DL, DLRow, QuotedNote, DetailError, EditField, selectCls, InternalNotesBody,
+  LegacyInvoiceAddressRow,
   DETAIL_FIELD_VALUE,
 } from './detailShell';
 import { readNotes } from '@/lib/registrations/internalNotes';
@@ -1584,7 +1585,8 @@ export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], hi
                 setInvoice={setInvoice}
               />
             ) : (
-              <InvoiceReadView requestInvoice={requestInvoice} invoice={invoice} />
+              <InvoiceReadView requestInvoice={requestInvoice} invoice={invoice}
+                legacyInvoiceAddress={doc.legacyInvoiceAddress} />
             )}
           </SectionCard>
 
@@ -2732,7 +2734,7 @@ export function InvoiceEditForm({ requestInvoice, setRequestInvoice, invoice, se
 
 // ── Invoice read view ─────────────────────────────────────────────
 
-function InvoiceReadView({ requestInvoice, invoice }) {
+function InvoiceReadView({ requestInvoice, invoice, legacyInvoiceAddress }) {
   if (!requestInvoice || !invoice) {
     return <p className="text-[13px] italic leading-[22px] text-[var(--text-muted)]">ไม่ได้ขอใบเสนอราคา</p>;
   }
@@ -2792,6 +2794,25 @@ function InvoiceReadView({ requestInvoice, invoice }) {
           value={[invoice.internationalAddress.line1, invoice.internationalAddress.line2, invoice.internationalAddress.city, invoice.internationalAddress.state, invoice.internationalAddress.postalCode, invoice.internationalAddress.country].filter(Boolean).join(', ')}
         />
       )}
+      {/*
+        ── THE IMPORTED ROW, IN THE PLACE THE ADDRESS WOULD HAVE BEEN ─────────
+        Last, because it is the same field as the two rows above it and takes
+        their position when neither of them renders. The component decides
+        whether there is anything to draw — see its docstring for why that guard
+        is not left to `DLRow`.
+
+        ── IT READS THE LIVE `invoice`, NOT `doc.invoice` ────────────────────
+        Both address paths come from the EDIT STATE, so the moment an admin fills
+        in a structured address and this view comes back, the legacy row is gone
+        in the same render rather than sitting under the address they just typed.
+        `legacyInvoiceAddress` is the one value here that is NOT live, and cannot
+        be: it is on `doc` and nothing on this screen writes it.
+      */}
+      <LegacyInvoiceAddressRow
+        thaiAddress={invoice.thaiAddress}
+        internationalAddress={invoice.internationalAddress}
+        legacyInvoiceAddress={legacyInvoiceAddress}
+      />
     </DL>
   );
 }

@@ -20,11 +20,10 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/options';
 import { uploadToCloudinary } from '@/lib/cloudinary';
+import { checkUpload } from '@/lib/uploads/uploadRules';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 
 // Allowlist of subfolders the admin UI may write into. Anything else
 // either silently lands in the default folder or, for malformed
@@ -54,6 +53,12 @@ const ALLOWED_FOLDERS = new Set([
   'about',
   'career-paths',
   'masterclass',
+  // Admin profile photos. LISTING IT HERE IS NOT OPTIONAL POLISH: without the
+  // entry the folder falls through to `uploads` below, the request returns 200,
+  // and the file lands in the wrong tree — a success that is wrong, which is
+  // the worst failure available here. It also carries its own, stricter rules
+  // (see uploadRules.js): JPG/PNG/WebP only, no SVG, no PDF, 2 MB.
+  'avatars',
   'uploads',
 ]);
 
@@ -77,22 +82,18 @@ export async function POST(req) {
     return NextResponse.json({ error: 'No file' }, { status: 400 });
   }
 
-  const isImage = file.type?.startsWith('image/');
-  const isPdf = file.type === 'application/pdf';
-  if (!isImage && !isPdf) {
-    return NextResponse.json(
-      { error: 'Only image or PDF files allowed' },
-      { status: 400 }
-    );
-  }
-  if (file.size > MAX_BYTES) {
-    return NextResponse.json(
-      { error: `File too large (max ${MAX_BYTES / 1024 / 1024} MB)` },
-      { status: 400 }
-    );
-  }
-
+  // THE FOLDER IS RESOLVED BEFORE VALIDATION, and the order is the point: the
+  // rules are per-folder now, so validating first would apply the DEFAULT rule
+  // to an avatar and let a 4 MB PDF through on its way to being renamed
+  // `uploads`. Resolve, then judge by what it resolved to.
   const folder = ALLOWED_FOLDERS.has(folderRaw) ? folderRaw : 'uploads';
+
+  // The decision lives in @/lib/uploads/uploadRules — a pure table, testable
+  // without a request. Unnamed folders get the pre-existing rule unchanged.
+  const verdict = checkUpload(folder, file);
+  if (!verdict.ok) {
+    return NextResponse.json({ error: verdict.error }, { status: 400 });
+  }
 
   try {
     const result = await uploadToCloudinary(file, folder);

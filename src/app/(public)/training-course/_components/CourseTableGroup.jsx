@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { courseHref } from '@/lib/utils';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 import {
   INHOUSE_ONLY_LABEL,
   coursePriceLabel,
@@ -132,9 +132,8 @@ export function CourseTableGroup({ program, courses }) {
           </thead>
           <tbody>
             {courses.map((c) => {
-              const href = courseHref(
-                c.course_id ? String(c.course_id).toLowerCase() : ''
-              );
+              // Canonical path, from the shared rule — the row carries urlAlias.
+              const href = courseLinkHref(c);
               return (
                 <tr
                   key={c._id ?? c.course_id}

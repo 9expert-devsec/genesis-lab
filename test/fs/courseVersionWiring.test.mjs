@@ -258,12 +258,24 @@ test('the form swallows both version calls — history can never fail a save', (
   }
 });
 
-test('the actions themselves never throw out to the save path', () => {
+test('the WRITE actions never throw out to the save path', () => {
   const src = code(ACTIONS);
-  // Both exports open by swallowing a failed permission check rather than
-  // letting a 403 propagate into a save that already succeeded.
-  assert.equal(countCallSites(src, 'requireAdmin'), 2);
-  assert.ok(src.includes('catch'), 'and both wrap their work');
+  /**
+   * Scoped to the two WRITE exports, which is a narrowing the read side forced
+   * and an improvement on what stood here. This used to count `requireAdmin`
+   * across the whole file and read that as "both exports swallow" — a count
+   * that says nothing about WHICH function did the swallowing, and that would
+   * have gone on passing if a writer had lost its guard while a reader gained
+   * two.
+   *
+   * The read half deliberately does NOT swallow: an empty answer there would
+   * read as "this course has no history" to someone who merely lacks
+   * permission. That difference is asserted in test/fs/courseVersionReadSide.
+   */
+  const writeHalf = src.slice(0, src.indexOf('export async function listCourseVersions'));
+  assert.ok(writeHalf.length > 0, 'CONTROL: the write half is still identifiable');
+  assert.equal(countCallSites(writeHalf, 'requireAdmin'), 2);
+  assert.ok(writeHalf.includes('catch'), 'and both wrap their work');
 });
 
 test('the writer is imported, not re-implemented, wherever a version is written', () => {
@@ -287,7 +299,18 @@ test('the writer is imported, not re-implemented, wherever a version is written'
  */
 test('B6: the version actions gate on the SAME menu key the save path uses', () => {
   const src = code(ACTIONS);
-  assert.equal(occurrences(src, "requireAdmin('courses')"), 2);
+  /**
+   * FOUR since the read side landed: the two writers plus `listCourseVersions`
+   * and `getCourseVersionDiff`. The count is pinned rather than floored so that
+   * an export added WITHOUT a gate reddens this — an ungated read of this
+   * collection would hand one admin another's course history.
+   *
+   * The read half's own guards live in test/fs/courseVersionReadSide, including
+   * the part this cannot express: that a refusal is REPORTED there rather than
+   * swallowed into an empty list, which is the opposite of what the write half
+   * must do.
+   */
+  assert.equal(occurrences(src, "requireAdmin('courses')"), 4);
   assert.equal(
     /requireAdmin\('(?!courses')/.test(src),
     false,

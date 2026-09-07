@@ -214,6 +214,39 @@ export function courseClause(course, source) {
 }
 
 /**
+ * ══ IMPORTED FROM DRUPAL, OR BORN HERE ══════════════════════════════════════
+ *
+ * `'only'` → the rows the legacy import wrote. `'exclude'` → the rows this
+ * system took itself. Anything else, including the empty default, adds NO
+ * clause and shows both — the same degrade direction `rangeToDateFilter` and
+ * the status clause already take, and for the same reason: a filter value
+ * nobody recognises must produce the unfiltered list, never a clause matching
+ * nothing, because an empty table reads as lost data.
+ *
+ * ── IT ASKS ABOUT `legacy.sid`, NOT ABOUT `legacy` ────────────────────────
+ * `legacy` is a subdocument defaulting to NULL, so `{ legacy: { $exists: true } }`
+ * would be TRUE for every document ever written — the path exists and holds
+ * null. `legacy.sid` is the dedup key the import actually writes, and under a
+ * null parent it does not exist. This is the same predicate the unique partial
+ * index on both models is built from, so the filter and the constraint agree by
+ * construction rather than by two people remembering the same thing.
+ *
+ * ── ONE CLAUSE, SAME ON BOTH COLLECTIONS ──────────────────────────────────
+ * Unlike `courseClause`, this does not branch on `source`: both register_public
+ * and register_inhouse carry the identical `legacy` subdocument from the shared
+ * models/legacyImportSchema, so one predicate is correct on either side. If that
+ * ever stops being true, this is the function that has to learn about it.
+ *
+ * @param {string} legacy 'only' | 'exclude' | anything (unfiltered)
+ */
+export function legacyClause(legacy) {
+  const v = String(legacy ?? '').trim();
+  if (v === 'only')    return { 'legacy.sid': { $exists: true } };
+  if (v === 'exclude') return { 'legacy.sid': { $exists: false } };
+  return {};
+}
+
+/**
  * The search `$or` for a source.
  *
  * The two sources search DIFFERENT fields and that is not an oversight: an
@@ -325,7 +358,7 @@ function searchClauses(source, term, courseCodes = []) {
  * it in would make the guard demand it of callers that already have it by
  * another route.
  */
-export const SCOPE_PARAMS = Object.freeze(['q', 'range', 'from', 'to', 'course']);
+export const SCOPE_PARAMS = Object.freeze(['q', 'range', 'from', 'to', 'course', 'legacy']);
 /**
  * `courseCodes` is NOT a SCOPE_PARAM, and the distinction is worth one line.
  *
@@ -341,7 +374,7 @@ export const SCOPE_PARAMS = Object.freeze(['q', 'range', 'from', 'to', 'course']
  */
 export function buildRegistrationScope({
   q = '', source = 'public', range = 'all', from = '', to = '', course = '',
-  courseCodes = [], now,
+  legacy = '', courseCodes = [], now,
 } = {}) {
   const scope = {};
 
@@ -352,6 +385,17 @@ export function buildRegistrationScope({
 
   const byCourse = courseClause(course, source);
   if (Object.keys(byCourse).length) scope.$and = [byCourse];
+
+  /**
+   * ── ASSIGNED FLAT, NOT PUSHED INTO `$and`, AND THAT IS SAFE HERE ─────────
+   * `legacyClause` returns a single `'legacy.sid'` key, which no other clause in
+   * this function can produce: the search owns `$or`, the window owns
+   * `createdAt`, the course owns `$and`. So a plain assign cannot clobber
+   * anything, and it keeps the query readable in a log. The course needs `$and`
+   * for a reason that does not apply here — its clause is ITSELF an `$or` and
+   * would replace the search's.
+   */
+  Object.assign(scope, legacyClause(legacy));
 
   return scope;
 }
@@ -379,6 +423,7 @@ export function buildRegistrationFilter({
   from = '',
   to = '',
   course = '',
+  legacy = '',
   courseCodes = [],
   now,
 } = {}) {
@@ -429,7 +474,7 @@ export function buildRegistrationFilter({
    * and an object literal cannot hold two `$or` keys anyway. `$and` composes
    * them, each keeping its own internal `$or`. That is done in the scope.
    */
-  Object.assign(filter, buildRegistrationScope({ q, source, range, from, to, course, courseCodes, now }));
+  Object.assign(filter, buildRegistrationScope({ q, source, range, from, to, course, legacy, courseCodes, now }));
 
   return filter;
 }

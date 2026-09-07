@@ -11,28 +11,48 @@ import { readSource } from '../sourceScan.mjs';
  * in `main()` and cannot be imported here, so the wiring is checked at the
  * source.
  *
- * ── READING THIS FILE AT ALL IS THE FIRST HAZARD ────────────────────────────
- * scripts/rewrite-legacy-references.mjs contains 4 literal NUL bytes, used
- * deliberately as composite-key separators. grep and ripgrep classify it as
- * BINARY and return "binary file matches" with ZERO lines, which reads exactly
- * like "not found" — that silent empty result has produced a wrong conclusion
- * about this file more than once. readSource() reads bytes through Node and is
- * not fooled, and the control below pins that the NULs are still there so a
- * future reader knows the hazard has not quietly gone away.
+ * ── READING THIS FILE USED TO BE THE FIRST HAZARD. IT IS NOT ANY MORE ───────
+ * This paragraph used to warn that the script contained 4 literal NUL bytes,
+ * used deliberately as composite-key separators, and that grep and ripgrep
+ * therefore classified it as BINARY and returned "binary file matches" with
+ * ZERO lines — a silent empty result that reads exactly like "not found" and
+ * had produced a wrong conclusion about this file more than once. The control
+ * below pinned the count at 4 so the hazard could not quietly change, and said
+ * that if they were ever removed, that was a queued change landing early.
+ *
+ * THAT CHANGE HAS LANDED. The four separators are now written `\x00` — the same
+ * character, spelled as an escape — so the file is ordinary UTF-8 text and
+ * every text tool can read it. The control is inverted rather than deleted: it
+ * now pins that the NULs are GONE, because the hazard coming back is the thing
+ * worth catching, and because six other files in this repo turned out to carry
+ * the same defect. test/fs/noNulBytes now sweeps every tracked source file for
+ * it, so this control is the local, named half of a rule that is enforced
+ * globally.
+ *
+ * readSource() reads bytes through Node and was never fooled either way, which
+ * is why the assertions below did not need changing.
  */
 
 const REL = 'scripts/rewrite-legacy-references.mjs';
 const src = readSource(REL);
 
-test('CONTROL: the file was really read, NULs and all', () => {
+test('CONTROL: the file was really read, and the NUL hazard is gone', () => {
   // Against an empty string every "must contain" below fails loudly, but every
   // "must not contain" would pass in silence. Anchor the input first.
   assert.ok(src.code.length > 5000, `scanned to only ${src.code.length} chars`);
   assert.equal(
-    (src.raw.match(/\0/g) || []).length, 4,
-    'the 4 deliberate NUL bytes are gone or multiplied. They are composite-key '
-    + 'separators, not corruption — and they are why grep lies about this file. '
-    + 'If they were removed, that was a queued change landing early.',
+    (src.raw.match(/\0/g) || []).length, 0,
+    'a literal NUL byte is back in this script. The four composite-key '
+    + 'separators are written \\x00 now — the same character, spelled as an '
+    + 'escape — because a raw one makes grep, file(1) and git diff treat the '
+    + 'whole file as binary, and this suite\'s own scanners can then skip it '
+    + 'while still reporting green.',
+  );
+  // …and the separators are still THERE, as escapes. Asserting only their
+  // absence would pass against a script that had stopped composing keys at all.
+  assert.ok(
+    src.code.includes('\\x00'),
+    'the composite-key separators are gone entirely, not merely re-spelled',
   );
 });
 

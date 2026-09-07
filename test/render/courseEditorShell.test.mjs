@@ -124,12 +124,24 @@ test('the rail holds URL Alias', () => {
   assert.match(rail, /URL Alias/);
 });
 
-test('the rail holds the rest of the SEO fields and the alias-resolution checkbox', () => {
+test('the rail holds the rest of the SEO fields and the publish checkbox', () => {
   const rail = railOf(renderEdit());
   for (const label of ['Meta Title', 'Meta Description', 'OG Image URL', 'Tags']) {
     assert.match(rail, new RegExp(label), `${label} is not in the rail`);
   }
-  assert.match(rail, /แสดงผลในเว็บสาธารณะ/, 'the alias-resolution checkbox is not in the rail');
+  // ── THIS USED TO LOOK FOR "แสดงผลในเว็บสาธารณะ (alias resolution)" ────────
+  // The checkbox was relabelled because the old text named a narrower thing
+  // than the control does: the field is CourseExtension.isPublished, and
+  // unticking it does not turn off the pretty URL — resolveCourse returns null
+  // on BOTH branches, so the alias URL and the /<code>-training-course URL each
+  // answer 404. The wording now matches what the rest of the admin calls this
+  // field (เผยแพร่ / ซ่อน). The control is the same control; only its label and
+  // this test's expectation moved.
+  assert.match(rail, /เผยแพร่หลักสูตรบนเว็บสาธารณะ/, 'the publish checkbox is not in the rail');
+  assert.doesNotMatch(rail, /alias resolution/,
+    'the old label is back — it tells the admin the code URL keeps working, and it does not');
+  // The hint that says what unticking actually does.
+  assert.match(rail, /จะขึ้น 404 ทั้งคู่/, 'the hint naming both URLs is missing');
 });
 
 test('website_urls has no input anywhere — section 8 is gone', () => {
@@ -142,14 +154,23 @@ test('website_urls has no input anywhere — section 8 is gone', () => {
 
 // ── the gallery is the only tabbed region ───────────────────────────────────
 
-test('the gallery is the only tabbed region', () => {
+test('the left column is the only tabbed region', () => {
   const html = renderEdit();
   assert.match(html, /Gallery \(1\)/, 'no gallery tab, or it does not count its items');
   assert.match(html, /เนื้อหาหลักสูตร/, 'no content tab to switch back to');
-  // Exactly two tab buttons: the content column and the gallery. Any third is a
-  // tab this screen was explicitly not supposed to grow.
+  /**
+   * THREE since the version-history tab landed, and the pin moves rather than
+   * relaxes into a floor: this screen grows a tab only deliberately, and the
+   * count is what makes that deliberate. It said 2 and "any third is a tab this
+   * screen was explicitly not supposed to grow" — that was true until a third
+   * was specified, approved, and given its own panel.
+   *
+   * The invariant that matters is not the number but that every panel stays
+   * MOUNTED; that is pinned in test/render/courseEditorTabPanels and
+   * test/fs/courseVersionReadSide, not here.
+   */
   const tabs = html.match(/class="border-b-2 px-4 py-2 text-sm font-medium/g) ?? [];
-  assert.equal(tabs.length, 2, `expected exactly 2 tabs, found ${tabs.length}`);
+  assert.equal(tabs.length, 3, `expected exactly 3 tabs, found ${tabs.length}`);
 });
 
 test('the course body stays MOUNTED behind the gallery tab', () => {

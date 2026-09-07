@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readSource, countCallSites } from '../sourceScan.mjs';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 
 /**
  * The wiring the pure tier cannot reach: the catch-all route is an async Server
@@ -108,31 +109,65 @@ test('the Preview button appends ?preview=1 only while the course is hidden', ()
 test('Preview still opens the course’s REAL public URL, both shapes', () => {
   // The alias when there is one, the derived legacy path when there is not.
   // A preview that opened some other URL would not be a preview of the page.
-  const { code } = readSource(FORM);
-  assert.match(code, /urlAlias\.trim\(\)\s*\?\s*`\/\$\{urlAlias\.trim\(\)\.replace\(\/\^\\\/\/, ''\)\}`/);
-  assert.match(code, /`\/\$\{String\(courseId \?\? ''\)\.toLowerCase\(\)\}-training-course`/);
+  //
+  // ── THE TWO BRANCHES MOVED INTO THE SHARED HELPER (ROUND U3) ─────────────
+  // This used to pin the form's own copy of the rule: a ternary on
+  // `urlAlias.trim()` that stripped a leading slash and re-added one, else a
+  // template building `/<code>-training-course`. Both branches now live in
+  // `courseCanonicalPath`, which every public link, the canonical tag, the
+  // JSON-LD and the sitemap also use — so the admin's preview and the page the
+  // site actually publishes cannot name different URLs any more.
+  //
+  // The CLAIM is unchanged and is what the test name still says. What it
+  // asserts is now the delegation plus the behaviour, rather than a copy of
+  // the rule.
+  const { code, withImports } = readSource(FORM);
+  assert.match(withImports, /import \{ courseLinkHref \}/, 'the form lost the shared helper');
+  assert.match(code, /const previewPath = courseLinkHref\(\{ course_id: courseId, urlAlias \}\)/,
+    'the form builds its own preview path again');
   assert.match(code, /href=\{previewHref\}/);
+
+  // Both shapes, behaviourally, against the same function the form calls.
+  assert.equal(courseLinkHref({ course_id: 'DA-PBI', urlAlias: '/pretty-course' }), '/pretty-course');
+  assert.equal(courseLinkHref({ course_id: 'DA-PBI', urlAlias: '' }), '/da-pbi-training-course');
+  // …and the leading-slash strip the old copy needed is not needed here: the
+  // helper never prepends, so a stored `/pretty` cannot become `//pretty`.
+  assert.ok(!courseLinkHref({ course_id: 'DA-PBI', urlAlias: '/pretty' }).startsWith('//'));
 });
 
 // ── the second half of the original defect ─────────────────────────────────
 
-test('resolveCourse gates BOTH url shapes on isPublished', () => {
+test('resolveCourse gates EVERY url shape on isPublished', () => {
   /**
    * The alias path always had the check. The derived
    * /<code>-training-course path had NONE, so un-publishing stopped one of a
    * course's two public URLs and left the other serving the whole page. Pinned
-   * in source as well as behaviour because the two checks are in different
+   * in source as well as behaviour because the checks are in different
    * branches and it is the second one that was missing for a long time.
+   *
+   * ROUND U4.2 ADDED A THIRD URL SHAPE — a FORMER alias — and with it a third
+   * gate. It is not a branch nobody reasoned about: an unpublished course must
+   * 404 at every URL that reaches it, and a former alias is one of those. A
+   * course hidden after a rename would otherwise stay fully readable at its old
+   * address, which is the original defect reached by a newer route.
    */
   const { code } = readSource('src/lib/resolveCourse.js');
   assert.match(code, /if \(byAlias && \(includeHidden \|\| byAlias\.isPublished !== false\)\)/);
+  assert.match(code, /if \(byFormer && \(includeHidden \|\| byFormer\.isPublished !== false\)\)/);
   assert.match(code, /if \(!includeHidden && extension\?\.isPublished === false\) return null;/);
 });
 
-test('CONTROL: both gates read isPublished, and the file has exactly two', () => {
-  // A third would mean a branch nobody has reasoned about; one would mean this
-  // regressed to the shape the round started from.
+test('CONTROL: the gates read isPublished, one per URL shape and no more', () => {
+  // A FOURTH would mean a branch nobody has reasoned about; fewer than three
+  // would mean this regressed towards the shape a round started from.
+  //
+  // The expected count is derived from the URL shapes rather than written as a
+  // bare number, so that adding a shape without its gate cannot be made to pass
+  // by editing one digit.
   const { code } = readSource('src/lib/resolveCourse.js');
+  const SHAPES = ['a current alias', 'a former alias', 'a derived code path'];
   const hits = code.match(/isPublished/g) ?? [];
-  assert.equal(hits.length, 2, 'two gates, one per URL shape');
+  assert.equal(hits.length, SHAPES.length,
+    `one gate per URL shape — resolveCourse resolves ${SHAPES.join(', ')}, and an `
+    + 'unpublished course must 404 at every one of them');
 });

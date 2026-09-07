@@ -1,4 +1,7 @@
-import { notFound, permanentRedirect } from 'next/navigation';
+import { notFound, permanentRedirect, redirect } from 'next/navigation';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { notFoundOrRedirect } from '@/lib/redirects/notFoundBoundary';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import {
@@ -6,6 +9,7 @@ import {
   listSchedulesByCourse,
 } from '@/lib/api/schedules';
 import { resolveCourse } from '@/lib/resolveCourse';
+import { courseRedirectTarget, courseRedirectFn } from '@/lib/courses/courseRedirect';
 import { resolveHiddenCourseForAdmin } from '@/lib/courses/adminCoursePreview';
 import { inhouseRegistrationHref } from '@/lib/courseRegistrationHref';
 import { getCareerPathBySlug } from '@/lib/career-paths/getCareerPaths';
@@ -58,6 +62,8 @@ import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { ProgramPageClient } from '@/app/(public)/program/[slug]/_components/ProgramPageClient';
 import { SkillPageClient } from '@/app/(public)/skill/[slug]/_components/SkillPageClient';
 import { buildCourseJsonLd } from '@/lib/courses/buildCourseJsonLd';
+import { courseCanonicalUrl } from '@/lib/courses/courseCanonicalPath';
+import { attachAliases, loadCourseAliasMap } from '@/lib/courses/hiddenCourses';
 import {
   getCustomPageBySlug,
   getCustomPageBySlugAny,
@@ -430,14 +436,38 @@ export async function generateMetadata({ params, searchParams }) {
     const ogImage =
       extension?.ogImage?.trim() || course.course_cover_url || '';
 
+    /**
+     * ── THE COURSE CANONICAL DOES NOT FOLLOW THE REQUEST ──────────────────
+     * Every other branch in this function uses `pageUrl`, which is the URL the
+     * visitor arrived at, and that is correct for them: a career path, a
+     * program, a skill, a custom page and a builder page each have ONE URL, so
+     * self-canonicalising says something true.
+     *
+     * A course has two — the admin's alias and the derived
+     * /<code>-training-course — and both serve 200. Self-canonicalising there
+     * meant each of the 77 aliased courses shipped two pages that each declared
+     * THEMSELVES canonical, which is the site telling a crawler to pick for us.
+     *
+     * So this branch, and only this branch, asks courseCanonicalPath. Reaching
+     * the code URL now emits the alias; reaching the alias emits the same
+     * alias. `pageUrl` remains the fallback for the case the helper cannot name
+     * — no course_id and no alias — because the old behaviour is the right
+     * thing to degrade to.
+     *
+     * NOTHING ABOUT RESOLUTION CHANGES. Both URLs still serve 200. This is a
+     * declaration, not a redirect.
+     */
+    const canonicalUrl =
+      courseCanonicalUrl(course, extension, process.env.NEXT_PUBLIC_SITE_URL) || pageUrl;
+
     return {
       title,
       description,
-      alternates: { canonical: pageUrl },
+      alternates: { canonical: canonicalUrl },
       openGraph: {
         title,
         description,
-        url: pageUrl,
+        url: canonicalUrl,
         images: ogImage ? [{ url: ogImage }] : [],
       },
     };
@@ -538,7 +568,16 @@ export default async function CatchAllPage({ params, searchParams }) {
   const { slug } = await params;
   const segment = segmentFromSlug(slug);
 
-  if (!segment) notFound();
+  /**
+   * ── EXIT 1: A MULTI-SEGMENT PATH ──────────────────────────────────────────
+   * `segmentFromSlug` returns null for anything containing a slash, so
+   * `/a/b/c` leaves this route HERE, before any resolver runs. That makes this
+   * the only place a multi-segment legacy URL can be caught — and a Drupal site
+   * carries a great many of them.
+   *
+   * Does not return: it either throws a redirect or throws notFound().
+   */
+  if (!segment) await notFoundOrRedirect(slug);
 
   // Program / skill pretty-URL pages (custom admin slug, no prefix).
   // Skip obvious course / career-path suffixes so we don't probe the DB
@@ -640,6 +679,51 @@ export default async function CatchAllPage({ params, searchParams }) {
     const { course, extension } = resolved;
     const isHiddenPreview = publicResolved === null;
 
+    /**
+     * ══ THE CANONICAL REDIRECT IS RAISED HERE, IN THE PAGE ═════════════════
+     *
+     * `resolveCourse` is called by BOTH `generateMetadata` and this render, so
+     * the redirect had to be raised in exactly one of them. It is raised here,
+     * for three reasons:
+     *
+     *   · THE PAGE IS THE THING THAT REDIRECTS. `generateMetadata` exists to
+     *     describe a document; a request that redirects has no document to
+     *     describe. Raising it there would make a description function control
+     *     the response, which is not what it is for.
+     *   · IT IS THE CHEAPER PLACE. Sitting above the Promise.allSettled below,
+     *     a redirected request skips seven upstream fetches — schedules,
+     *     programs, early bird, promos, FAQs, skills, linkability — that would
+     *     be discarded.
+     *   · ONE RAISER, ONE STATUS. Raising in both would be two call sites for
+     *     one rule, which is how the two would eventually disagree about the
+     *     status the switch selects.
+     *
+     * WHAT THE OTHER PATH DOES: `generateMetadata` still runs and still returns
+     * metadata, computing the same canonical it always did. It does not throw,
+     * does not redirect, and cannot double-redirect. Next discards that metadata
+     * when the render redirects, so the cost is one wasted resolve and the
+     * benefit is that the metadata path keeps exactly the behaviour U2 gave it.
+     *
+     * ── NOT FOR THE ADMIN PREVIEW ARM ────────────────────────────────────────
+     * `isHiddenPreview` means the public resolve returned null and an
+     * authenticated admin is previewing an unpublished course. Redirecting that
+     * would drop `?preview=1` — `redirect()` takes a path, not the query — and
+     * the destination would then resolve as a public request, find the course
+     * unpublished, and 404. So preview renders where it was asked for, exactly
+     * as before this round.
+     */
+    if (!isHiddenPreview) {
+      const canonicalRedirect = courseRedirectTarget({
+        requestedPath: `/${segment}`,
+        course,
+        extension,
+      });
+      // Throws NEXT_REDIRECT — nothing below runs when a target is returned.
+      if (canonicalRedirect) {
+        courseRedirectFn({ redirect, permanentRedirect })(canonicalRedirect);
+      }
+    }
+
     // Parallelise schedules + programs. `/programs` carries `programcolor`
     // which the hero gradient uses; the course detail response doesn't
     // include it. If the programs fetch fails we fall through to the
@@ -717,9 +801,13 @@ export default async function CatchAllPage({ params, searchParams }) {
       schedules,
       siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
     });
-    const courseSlug =
-      extension?.urlAlias || `${course.course_id?.toLowerCase?.()}-training-course`;
-    const courseUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/${courseSlug}`;
+    // The BreadcrumbList's last item is the course itself, so it is the same
+    // claim as the canonical tag and must be the same URL. This was a fourth
+    // copy of the rule — `${SITE}/${extension.urlAlias}` — and carried the same
+    // double-slash defect buildCourseJsonLd had, since an alias already starts
+    // with one.
+    const courseUrl =
+      courseCanonicalUrl(course, extension, process.env.NEXT_PUBLIC_SITE_URL);
     const breadcrumbJsonLd = {
       '@context': 'https://schema.org',
       '@type': 'BreadcrumbList',
@@ -776,6 +864,10 @@ export default async function CatchAllPage({ params, searchParams }) {
             RelatedCourses, whose cards carry capsules of their own. */}
         <CourseDetail
           course={course}
+          relatedCoursesWithAliases={attachAliases(
+            Array.isArray(course.related_courses) ? course.related_courses : [],
+            await loadCourseAliasMap(),
+          )}
           skillHrefs={skillHrefs}
           skillSlugs={linkability.skillSlugs}
           courseProgramHref={courseProgramHref}
@@ -886,11 +978,34 @@ export default async function CatchAllPage({ params, searchParams }) {
     permanentRedirect(`/${historical.slug}`);
   }
 
-  notFound();
+  /**
+   * ── EXIT 2: EVERY RESOLVER MISSED ─────────────────────────────────────────
+   * The admin-managed redirect table is consulted LAST, after every resolver
+   * above — including the two historical-slug redirects immediately preceding
+   * this — has had its chance.
+   *
+   * That ordering is the mechanism behind "a rule cannot shadow a live page".
+   * It is not enforced by validating rules against a list of routes, which
+   * would go stale the day someone adds a page; it is true by construction,
+   * because this line is only reached when the app has already established it
+   * has nothing to serve.
+   *
+   * Does not return.
+   */
+  await notFoundOrRedirect(slug);
 }
 
 function CourseDetail({
   course,
+  /**
+   * `course.related_courses` with each row's `urlAlias` attached.
+   *
+   * Attached by the async page rather than here: those rows are EMBEDDED in
+   * upstream's detail response and never pass through `listPublicCourses`, so
+   * nothing else would have given them an alias — and the lookup is async while
+   * this component is not.
+   */
+  relatedCoursesWithAliases = [],
   skillHrefs = {},
   skillSlugs = {},
   courseProgramHref = null,
@@ -910,9 +1025,29 @@ function CourseDetail({
   const stickyInhouseHref = isInhouseOnly
     ? inhouseRegistrationHref(course.course_id)
     : null;
-  const relatedCourses = Array.isArray(course.related_courses)
-    ? course.related_courses
-    : [];
+  /**
+   * ── ALIASES FOR THE COURSES THIS PAGE LINKS TO, BUT DID NOT FETCH ─────────
+   * `related_courses` and `previous_course` are EMBEDDED in upstream's detail
+   * response — they never pass through `listPublicCourses`, so nothing has
+   * attached `urlAlias` to them and the related-course cards and the
+   * breadcrumb's prerequisite chip would both emit the code form while every
+   * list surface emitted the alias.
+   *
+   * COSTS NO EXTRA QUERY. `loadCourseAliasMap` is a projection of the one
+   * per-request read `loadHiddenCourseIds` already performs, and the public
+   * header calls that on every page through getNavMenuData — so by the time
+   * this runs, React.cache is answering from memory.
+   */
+  // Attached by the async page above and passed in, because THIS COMPONENT IS
+  // SYNCHRONOUS — an `await` here compiles to "await isn't allowed in a
+  // non-async function" and only `next build` says so, since no test tier
+  // compiles this route.
+  const relatedCourses = relatedCoursesWithAliases;
+  // NOT plumbed to SkillBreadcrumb, and that is a finding rather than an
+  // omission: its prerequisite <Link> is COMMENTED OUT (SkillBreadcrumb.jsx:97),
+  // so `previousHref` is computed there and never rendered. Attaching an alias
+  // for it would be plumbing a dead path. The component calls the shared helper
+  // anyway, so it emits the canonical URL if that block is ever revived.
   const hasRelated = relatedCourses.length > 0;
   const gallery = Array.isArray(extension?.gallery) ? extension.gallery : [];
   // `getEarlyBirdByCourse` joins the linked Promotion as `promotion` so

@@ -59,6 +59,12 @@ function harness({ extensions = [STALE_EXTENSION] } = {}) {
     // getCourseExtensionByFormerCode, which reads Mongo; see
     // test/fs/injectedDepCoverage.test.mjs for why an unsupplied db-backed dep
     // is a defect while the branch that reaches it is still unexercised.
+    // U4.2 added a FORMER-ALIAS lookup to resolveCourse. Supplied for the
+    // same reason as fetchExtensionByFormerCode below: left at its
+    // production default it reaches Mongo, and no fixture here goes near
+    // the branch that calls it — which is exactly the latent shape
+    // test/fs/injectedDepCoverage exists to catch before it costs a hang.
+    fetchExtensionByFormerAlias: async () => null,
     fetchExtensionByFormerCode: async () => null,
   };
   return { calls, deps };
@@ -121,6 +127,7 @@ test('CONTROL: with an EXACT-match lookup, the reported 404 comes straight back'
       [STALE_EXTENSION].find((e) => e.urlAlias === alias) ?? null,
     fetchCourse: async (id) => UPSTREAM.find((c) => c.course_id === id) ?? null, // verbatim
     fetchExtension: async () => null,
+    fetchExtensionByFormerAlias: async () => null,
     fetchExtensionByFormerCode: async () => null,
   };
 

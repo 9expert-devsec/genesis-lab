@@ -24,6 +24,7 @@ import CareerPath from '@/models/CareerPath';
 import MasterclassCourse from '@/models/MasterclassCourse';
 import { requireAdmin } from '@/lib/actions/auth';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 
 /**
  * Same serialisation the READ path uses (getLocalFaqs.js): lean/plain object
@@ -72,7 +73,10 @@ async function revalidateForFaq(course_type, ref_id) {
     const ext = await CourseExtension.findOne({ courseId: ref_id })
       .select('urlAlias')
       .lean();
-    const publicPath = ext?.urlAlias || `/${ref_id.toLowerCase()}-training-course`;
+    // The canonical path, from the shared rule — the same one the page's
+    // <link rel="canonical"> declares, so the purge and the page agree on
+    // which URL this course HAS.
+    const publicPath = courseLinkHref({ course_id: ref_id, urlAlias: ext?.urlAlias });
     revalidatePath(publicPath);
     return;
   }

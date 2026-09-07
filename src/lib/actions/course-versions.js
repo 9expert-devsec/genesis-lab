@@ -26,10 +26,15 @@
  * immediately without touching MSDB when there is any. Only a course whose
  * history is empty costs a read.
  *
- * ── NOTHING HERE MAY FAIL A SAVE ────────────────────────────────────────────
- * Both exports swallow everything. They are called after the save has already
- * happened, so there is no outcome they could usefully report and nothing the
- * admin could do about one. The returns exist for tests and for a reader.
+ * ── NOTHING ON THE WRITE PATH MAY FAIL A SAVE ───────────────────────────────
+ * The two WRITE exports swallow everything. They are called after the save has
+ * already happened, so there is no outcome they could usefully report and
+ * nothing the admin could do about one. The returns exist for tests and for a
+ * reader.
+ *
+ * The READ exports at the foot of this file are the deliberate exception: they
+ * report a refusal instead of swallowing it, because an empty answer there
+ * would read as "this course has no history". See the note above them.
  */
 
 import { after } from 'next/server';
@@ -45,6 +50,12 @@ import {
   canonicalCourseKey,
 } from '@/lib/courses/courseSnapshot';
 import { recordCourseContentVersion } from '@/lib/courses/courseVersionWriter';
+// ADDED beside the statements above rather than folded into either — the
+// standing rule in this repo. `VERSION_KIND` comes from courseSnapshot, which
+// is already imported above; it is named in its own statement so the read
+// side's dependencies are visible as a group.
+import { VERSION_KIND } from '@/lib/courses/courseSnapshot';
+import { diffSnapshots, summariseChanges, VERSION_PAGE_SIZE } from '@/lib/courses/courseVersionDiff';
 
 /**
  * Read one course from MSDB, bypassing every cache.
@@ -223,4 +234,230 @@ export async function commitCourseVersion({ courseId, upstreamId, preImage } = {
   }
 
   return { ok: true };
+}
+
+/* ══ THE READ SIDE ═════════════════════════════════════════════════════════
+ *
+ * READ ONLY, ALL OF IT. Nothing below writes to `course_versions`, to a course,
+ * or to anything else. There is no restore, no rollback and no delete, by
+ * ruling — a version history that can also change things is a second write path
+ * into the course, and this round is not that.
+ *
+ * Unlike the two writers above, these do NOT swallow a permission failure into
+ * a benign empty result. On the save path an empty answer is the right
+ * degradation; here it would render as "this course has no history" to someone
+ * who simply may not see it, which is a lie the UI would have no way to correct.
+ * They return an explicit refusal instead and the tab says so.
+ */
+
+/* VERSION_PAGE_SIZE is imported, NOT declared here: this module is
+ * `'use server'` and every export of such a file must be an async function —
+ * a plain `export const` is a build error, not a style preference. It lives in
+ * lib/courses/courseVersionDiff with the rest of the read side's pure values. */
+
+/** A file block as the client renders it — Dates become strings. */
+function serialiseFile(file) {
+  return {
+    field: file.field ?? '',
+    lang: file.lang ?? '',
+    filename: file.filename ?? '',
+    publicPath: file.publicPath ?? '',
+    bytes: Number(file.bytes) || 0,
+    uploadedAt: file.uploadedAt ? new Date(file.uploadedAt).toISOString() : null,
+    outlineVersion: file.outlineVersion ?? null,
+  };
+}
+
+/**
+ * Changed-field labels for one page of rows, as a Map keyed by row id.
+ *
+ * Only CONTENT rows take part. A file_replacement carries no snapshot, is never
+ * diffed, and must not sit between two content rows as if it were one — so it
+ * is skipped on both sides of every comparison.
+ */
+async function summarisePage(courseId, pageRows) {
+  const out = new Map();
+  const contentRows = pageRows.filter((r) => r.kind === VERSION_KIND.CONTENT);
+  if (contentRows.length === 0) return out;
+
+  const oldest = pageRows[pageRows.length - 1];
+
+  // The listed content rows, plus the newest content row OLDER than the page,
+  // which is what the last row on the page is diffed against. Without it the
+  // last row on every page would claim to have changed everything.
+  const [onPage, predecessor] = await Promise.all([
+    CourseVersion.find({ _id: { $in: contentRows.map((r) => r._id) } })
+      .select('snapshot createdAt')
+      .sort({ createdAt: -1, _id: -1 })
+      .lean(),
+    CourseVersion.findOne({
+      courseId,
+      kind: VERSION_KIND.CONTENT,
+      createdAt: { $lt: oldest.createdAt },
+    })
+      .select('snapshot')
+      .sort({ createdAt: -1, _id: -1 })
+      .lean(),
+  ]);
+
+  const ordered = [...onPage, ...(predecessor ? [predecessor] : [])];
+  for (let i = 0; i < onPage.length; i += 1) {
+    const current = ordered[i];
+    const previous = ordered[i + 1] ?? null;
+    // The FIRST version of a course has nothing before it. Its summary is empty
+    // and the UI says so, rather than pretending every field was created at once.
+    const changes = previous ? diffSnapshots(previous.snapshot, current.snapshot) : [];
+    out.set(String(current._id), summariseChanges(changes));
+  }
+  return out;
+}
+
+/**
+ * One course's version list — METADATA ONLY.
+ *
+ * ── THE PROJECTION IS THE POINT ────────────────────────────────────────────
+ * `.select('-snapshot')` is not a micro-optimisation. A snapshot is 7.5 KB on
+ * the smallest real course today and 20.3 KB on the largest, measured across
+ * all 79; the metadata beside it is a couple of hundred bytes. Shipping the
+ * list with snapshots attached would move close to half a megabyte per tab-open
+ * on a course with a full page of history, to render rows that show a number, a
+ * date and a name — and that ratio only worsens, because the rich editors that
+ * dominate a snapshot are the ones the admin has barely started using.
+ *
+ * The same split, for the same measured reason, as getPageVersions in
+ * lib/actions/pageBuilder.js. Its note carries the page-side numbers.
+ *
+ * ── WHY THE SUMMARY IS A SECOND READ AND NOT A WIDER PROJECTION ────────────
+ * The list shows WHICH FIELDS changed, and that cannot be known without
+ * comparing two snapshots — there is no stored changed-field list, because
+ * adding one would mean changing the writer, which this round may not do.
+ *
+ * So the summary is computed HERE, on the server, over a BOUNDED page of rows,
+ * and only the resulting labels cross to the client. The browser never receives
+ * a snapshot from this action at all. That keeps the WIRE cost proportional to
+ * what is displayed, which is the constraint that mattered. The server-side
+ * read is real, is bounded by VERSION_PAGE_SIZE, and is stated here rather than
+ * hidden: the cheap fix is a `changedKeys` array written at save time, which is
+ * a writer change and deliberately NOT made in this round.
+ */
+export async function listCourseVersions({ courseId, limit = VERSION_PAGE_SIZE } = {}) {
+  try {
+    await requireAdmin('courses');
+  } catch {
+    return { ok: false, reason: 'forbidden', rows: [] };
+  }
+
+  const code = canonicalCourseKey(courseId);
+  if (!code) return { ok: false, reason: 'no-course-id', rows: [] };
+
+  try {
+    await dbConnect();
+
+    /**
+     * NEWEST FIRST BY `createdAt`, NEVER BY `versionNumber`.
+     *
+     * The number is nullable by design — the writer falls back to an unnumbered
+     * row when it cannot win a number under concurrency, precisely so a
+     * snapshot is never lost to protect the numbering. Sorting on it would rank
+     * every such row against every number, and Mongo puts null below all of
+     * them on a descending sort, so the NEWEST row could sort last. `_id`
+     * breaks a same-millisecond tie, exactly as the writer's own lookup does.
+     */
+    const rows = await CourseVersion.find({ courseId: code })
+      .select('-snapshot')     // NOT the snapshot — see above
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(Math.max(1, Math.min(Number(limit) || VERSION_PAGE_SIZE, 100)))
+      .lean();
+
+    if (rows.length === 0) return { ok: true, rows: [] };
+
+    const summaries = await summarisePage(code, rows);
+
+    return {
+      ok: true,
+      rows: rows.map((r) => ({
+        id: String(r._id),
+        kind: r.kind,
+        versionNumber: r.versionNumber ?? null,
+        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+        actorName: r.actor?.name ?? '',
+        preImageMissing: Boolean(r.preImageMissing),
+        file: r.file ? serialiseFile(r.file) : null,
+        summary: summaries.get(String(r._id)) ?? '',
+      })),
+    };
+  } catch (err) {
+    console.warn('[courseVersion] list failed:', err?.message ?? err);
+    return { ok: false, reason: 'error', rows: [] };
+  }
+}
+
+/**
+ * ONE version's field-by-field comparison against the version before it.
+ *
+ * Returns the COMPUTED CHANGES, not the two snapshots. The client never
+ * receives a whole snapshot from this action either: only the fields that
+ * actually moved travel, and for an unchanged field neither value does. That is
+ * what keeps a 20 KB snapshot off the wire to show a price edit.
+ *
+ * `previousMissing` is a real and different answer from "nothing changed":
+ *   · the FIRST version of a course has no predecessor — expected, not an error
+ *   · a version whose `preImageMissing` is set has one because the pre-image
+ *     read FAILED, and the UI must say the previous state was never captured
+ *     rather than render a diff against nothing.
+ */
+export async function getCourseVersionDiff({ versionId } = {}) {
+  try {
+    await requireAdmin('courses');
+  } catch {
+    return { ok: false, reason: 'forbidden' };
+  }
+
+  const id = String(versionId ?? '').trim();
+  if (!id) return { ok: false, reason: 'no-version-id' };
+
+  try {
+    await dbConnect();
+    const row = await CourseVersion.findById(id).lean();
+    if (!row) return { ok: false, reason: 'not-found' };
+
+    /**
+     * A FILE REPLACEMENT IS NEVER DIFFED. It carries no snapshot by
+     * construction, and the path it describes is byte-identical before and
+     * after, so there is nothing a comparison could show. It returns as an
+     * EVENT and the UI renders it as one.
+     */
+    if (row.kind === VERSION_KIND.FILE_REPLACEMENT) {
+      return {
+        ok: true,
+        kind: row.kind,
+        file: row.file ? serialiseFile(row.file) : null,
+        changes: [],
+        preImageMissing: false,
+        previousMissing: false,
+      };
+    }
+
+    const previous = await CourseVersion.findOne({
+      courseId: row.courseId,
+      kind: VERSION_KIND.CONTENT,
+      createdAt: { $lt: row.createdAt },
+    })
+      .select('snapshot versionNumber createdAt')
+      .sort({ createdAt: -1, _id: -1 })
+      .lean();
+
+    return {
+      ok: true,
+      kind: row.kind,
+      file: null,
+      preImageMissing: Boolean(row.preImageMissing),
+      previousMissing: !previous,
+      previousVersionNumber: previous?.versionNumber ?? null,
+      changes: previous ? diffSnapshots(previous.snapshot, row.snapshot) : [],
+    };
+  } catch (err) {
+    console.warn('[courseVersion] diff failed:', err?.message ?? err);
+    return { ok: false, reason: 'error' };
+  }
 }

@@ -93,14 +93,28 @@ export const SOURCE_VALUES = Object.freeze(['public', 'inhouse']);
  * Same reasoning `SCOPE_PARAMS` gives for excluding it from the query scope: it
  * SELECTS THE COLLECTION rather than filtering within one. A namespaced
  * `inhouse.source` would be nonsense.
+ *
+ * ── `legacy` JOINED IN THE LEGACY-IMPORT ROUND, AND IT IS PER-SOURCE TOO ───
+ * It answers "was this row carried across from Drupal, or born here?", and BOTH
+ * collections receive imported rows — so it is a real question on each side and
+ * gets the same treatment as every other filter. It exists because the dashboard
+ * queue now has two cards that must not count the same row, and a card whose
+ * link cannot express its own condition is the thing that file refuses to ship.
  */
 export const PER_SOURCE_PARAMS = Object.freeze([
-  'status', 'q', 'range', 'from', 'to', 'course', 'page',
+  'status', 'q', 'range', 'from', 'to', 'course', 'page', 'legacy',
 ]);
 
-/** The value that means "not set", per parameter. Absent from the URL. */
+/**
+ * The value that means "not set", per parameter. Absent from the URL.
+ *
+ * `legacy: ''` — the empty string is "both kinds", not a third state. The two
+ * real values are 'only' and 'exclude'; anything else degrades to no clause at
+ * all, which is the same direction `range` and `status` already degrade in.
+ */
 const DEFAULTS = Object.freeze({
   status: 'all', q: '', range: 'all', from: '', to: '', course: '', page: '1',
+  legacy: '',
 });
 
 /**

@@ -246,7 +246,7 @@ export function flagResolutionCollisions(derivativeEntries) {
   // two strips must be wrong, because a single style renders a source once.
   const byStyleSource = new Map();
   for (const e of derivativeEntries) {
-    const key = `${e.derivative.style} ${e.derivative.sourcePath}`;
+    const key = `${e.derivative.style}\x00${e.derivative.sourcePath}`;
     if (!byStyleSource.has(key)) byStyleSource.set(key, []);
     byStyleSource.get(key).push(e);
   }

@@ -1,0 +1,317 @@
+{
+  "2185": {
+    "courseId": "MSE-FINANCE",
+    "courseCode": "MSE-FINANCE",
+    "courseName": "Microsoft Excel Advanced for Financial"
+  },
+  "2186": {
+    "courseId": "MSE-FUNCTIONS",
+    "courseCode": "MSE-FUNCTIONS",
+    "courseName": "Microsoft Excel Powerful Functions"
+  },
+  "2187": {
+    "courseId": "MSE-L1",
+    "courseCode": "MSE-L1",
+    "courseName": "Microsoft Excel Intermediate"
+  },
+  "2188": {
+    "courseId": "MSE-L2",
+    "courseCode": "MSE-L2",
+    "courseName": "Microsoft Excel Advanced"
+  },
+  "2189": {
+    "courseId": "MSE-L3",
+    "courseCode": "MSE-L3",
+    "courseName": "Microsoft Excel Macro and VBA"
+  },
+  "2190": {
+    "courseId": "MSE-L4",
+    "courseCode": "MSE-L4",
+    "courseName": "Microsoft Excel Advanced PivotTable and PivotChart"
+  },
+  "2191": {
+    "courseId": "MSE-L5",
+    "courseCode": "MSE-L5",
+    "courseName": "Microsoft Excel Business Intelligence"
+  },
+  "2192": {
+    "courseId": "MSE-L6",
+    "courseCode": "MSE-L6",
+    "courseName": "Microsoft Excel Power Query"
+  },
+  "2193": {
+    "courseId": "MSE-L7",
+    "courseCode": "MSE-L7",
+    "courseName": "Microsoft Excel VBA Programming"
+  },
+  "2205": {
+    "courseId": "POWER-BI",
+    "courseCode": "POWER-BI",
+    "courseName": "Power BI Desktop for Business Analytics"
+  },
+  "2206": {
+    "courseId": "POWER-APPS",
+    "courseCode": "POWER-APPS",
+    "courseName": "Power Apps for Business"
+  },
+  "2223": {
+    "courseId": "POWER-BI-ADV",
+    "courseCode": "POWER-BI-ADV",
+    "courseName": "Power BI Advanced Visualization and AI"
+  },
+  "2224": {
+    "courseId": "POWER-BI-DAX",
+    "courseCode": "POWER-BI-DAX",
+    "courseName": "Data Analysis Expression (DAX) for Power BI"
+  },
+  "2225": {
+    "courseId": "POWER-BI-PQ",
+    "courseCode": "POWER-BI-PQ",
+    "courseName": "Power BI Advanced Power Query"
+  },
+  "2226": {
+    "courseId": "POWER-BI-XDM",
+    "courseCode": "POWER-BI-XDM",
+    "courseName": "Data Model for Power BI"
+  },
+  "2227": {
+    "courseId": "MSA-L1",
+    "courseCode": "MSA-L1",
+    "courseName": "Microsoft Access Intermediate"
+  },
+  "2230": {
+    "courseId": "MS365-L1",
+    "courseCode": "MS365-L1",
+    "courseName": "Microsoft 365 for Business"
+  },
+  "2231": {
+    "courseId": "MSWO365-PRO",
+    "courseCode": "MSWO365-PRO",
+    "courseName": "Microsoft Word Professional"
+  },
+  "2232": {
+    "courseId": "PYTHON-L1",
+    "courseCode": "PYTHON-L1",
+    "courseName": "Python Programming"
+  },
+  "2233": {
+    "courseId": "PYTHON-L2",
+    "courseCode": "PYTHON-L2",
+    "courseName": "Machine Learning using Python"
+  },
+  "2234": {
+    "courseId": "MSJ-L1",
+    "courseCode": "MSJ-L1",
+    "courseName": "Microsoft Project Managing Projects"
+  },
+  "2235": {
+    "courseId": "CANVA-L1",
+    "courseCode": "CANVA-L1",
+    "courseName": "Canva Pro for Smart Working"
+  },
+  "2236": {
+    "courseId": "MSP-L1",
+    "courseCode": "MSP-L1",
+    "courseName": "Microsoft PowerPoint Advanced"
+  },
+  "2237": {
+    "courseId": "MSP-L2",
+    "courseCode": "MSP-L2",
+    "courseName": "Microsoft PowerPoint Design in Action"
+  },
+  "2238": {
+    "courseId": "MSP-L3",
+    "courseCode": "MSP-L3",
+    "courseName": "Infographics & Digital Media with Advanced Microsoft PowerPoint"
+  },
+  "2239": {
+    "courseId": "COPILOT-M365",
+    "courseCode": "COPILOT-M365",
+    "courseName": "Microsoft 365 Copilot for Business Professionals"
+  },
+  "2240": {
+    "courseId": "COPILOT-STU",
+    "courseCode": "COPILOT-STU",
+    "courseName": "AI Agents with Microsoft Copilot Studio"
+  },
+  "2241": {
+    "courseId": "GEN-AI-L1",
+    "courseCode": "GEN-AI-L1",
+    "courseName": "Generative AI for Business Transformation"
+  },
+  "2242": {
+    "courseId": "MAKE-L1",
+    "courseCode": "MAKE-L1",
+    "courseName": "AI Automation Agent with Make.com"
+  },
+  "2243": {
+    "courseId": "PP-AI",
+    "courseCode": "PP-AI",
+    "courseName": "AI Builder in Power Platform for Business"
+  },
+  "2244": {
+    "courseId": "PAM-CLD",
+    "courseCode": "PAM-CLD",
+    "courseName": "Power Automate (Cloud) for Business Automation"
+  },
+  "2245": {
+    "courseId": "PAM-CLD-ADV",
+    "courseCode": "PAM-CLD-ADV",
+    "courseName": "Advanced Power Automate (Cloud)"
+  },
+  "2246": {
+    "courseId": "MS-FB-101",
+    "courseCode": "MS-FB-101",
+    "courseName": "Microsoft Fabric Essential for Business"
+  },
+  "2247": {
+    "courseId": "DEV-VS-01",
+    "courseCode": "DEV-VS-01",
+    "courseName": "Programming in C# with Visual Studio"
+  },
+  "2248": {
+    "courseId": "DEV-VS-04",
+    "courseCode": "DEV-VS-04",
+    "courseName": "ASP.NET Core MVC"
+  },
+  "2249": {
+    "courseId": "DEV-VS-06",
+    "courseCode": "DEV-VS-06",
+    "courseName": "ASP.NET Core Web API & Security"
+  },
+  "2250": {
+    "courseId": "POWER-APPS-ADV",
+    "courseCode": "POWER-APPS-ADV",
+    "courseName": "Advanced Power Apps for Business"
+  },
+  "2254": {
+    "courseId": "DEV-VS-05",
+    "courseCode": "DEV-VS-05",
+    "courseName": ".NET MAUI : การพัฒนา Native Cross-platform Apps ด้วย C#"
+  },
+  "2255": {
+    "courseId": "PAM-DSK",
+    "courseCode": "PAM-DSK",
+    "courseName": "Power Automate (Desktop) for Business Automation"
+  },
+  "2257": {
+    "courseId": "PAM-DSK-ADV",
+    "courseCode": "PAM-DSK-ADV",
+    "courseName": "Advanced Power Automate (Desktop)"
+  },
+  "2258": {
+    "courseId": "UIPATH",
+    "courseCode": "UIPATH",
+    "courseName": "UiPath for Business Automation"
+  },
+  "2259": {
+    "courseId": "POWER-PF",
+    "courseCode": "POWER-PF",
+    "courseName": "Innovation Anywhere with Microsoft Power Platform"
+  },
+  "2260": {
+    "courseId": "POWER-PF-B1",
+    "courseCode": "POWER-PF-B1",
+    "courseName": "Build Power Apps with Power Automate"
+  },
+  "2261": {
+    "courseId": "SQL-101",
+    "courseCode": "SQL-101",
+    "courseName": "Microsoft SQL Server Essential"
+  },
+  "2262": {
+    "courseId": "SQL-ADM",
+    "courseCode": "SQL-ADM",
+    "courseName": "Microsoft SQL Server Database Administration"
+  },
+  "2263": {
+    "courseId": "SQL-ADM-Tuning",
+    "courseCode": "SQL-ADM-Tuning",
+    "courseName": "Microsoft SQL Server Performance Tuning"
+  },
+  "2264": {
+    "courseId": "SQL-BI-ETL",
+    "courseCode": "SQL-BI-ETL",
+    "courseName": "ETL with SQL Server Integration Service (SSIS)"
+  },
+  "2265": {
+    "courseId": "SQL-PG-Query",
+    "courseCode": "SQL-PG-Query",
+    "courseName": "Querying Data with T-SQL"
+  },
+  "2266": {
+    "courseId": "SQL-PG-SP",
+    "courseCode": "SQL-PG-SP",
+    "courseName": "SQL Server Programming - Stored Procedure"
+  },
+  "2267": {
+    "courseId": "DB-01",
+    "courseCode": "DB-01",
+    "courseName": "Database Concept and Design"
+  },
+  "2290": {
+    "courseId": "N8N-L1",
+    "courseCode": "N8N-L1",
+    "courseName": "Workflow Automation with n8n"
+  },
+  "2320": {
+    "courseId": "CANVA-L2",
+    "courseCode": "CANVA-L2",
+    "courseName": "Canva AI for Business Accelerator"
+  },
+  "2356": {
+    "courseId": "COPILOT-DEV",
+    "courseCode": "COPILOT-DEV",
+    "courseName": "GitHub Copilot for Developer"
+  },
+  "2426": {
+    "courseId": "GOO-ADK",
+    "courseCode": "GOO-ADK",
+    "courseName": "Agentic AI Development With Google ADK And Python"
+  },
+  "2736": {
+    "courseId": "CC-AI",
+    "courseCode": "CC-AI",
+    "courseName": "AI Content Creator for Business"
+  },
+  "2757": {
+    "courseId": "CLAUDE-AI",
+    "courseCode": "CLAUDE-AI",
+    "courseName": "Claude Cowork for Business"
+  },
+  "2797": {
+    "courseId": "MSE-AI",
+    "courseCode": "MSE-AI",
+    "courseName": "Microsoft Excel AI for Business"
+  },
+  "2798": {
+    "courseId": "MANUS-EXC",
+    "courseCode": "MANUS-EXC",
+    "courseName": "Manus AI for Exclusive Owner Business"
+  },
+  "2799": {
+    "courseId": "MANUS-MKT",
+    "courseCode": "MANUS-MKT",
+    "courseName": "Manus AI for Marketing Mastery"
+  },
+  "2835": {
+    "courseId": "VIBE-CODE-L1",
+    "courseCode": "VIBE-CODE-L1",
+    "courseName": "Build Business Apps with Claude Code"
+  },
+  "2836": {
+    "courseId": "VIBE-CODE-L2",
+    "courseCode": "VIBE-CODE-L2",
+    "courseName": "Build AI Multi-Agent with Claude Code"
+  },
+  "2865": {
+    "courseId": "COPILOT-STU-ADV",
+    "courseCode": "COPILOT-STU-ADV",
+    "courseName": "Multi-Agent with Microsoft Copilot Studio"
+  },
+  "2872": {
+    "courseId": "COPILOT-COWORK",
+    "courseCode": "COPILOT-COWORK",
+    "courseName": "Microsoft 365 Copilot Cowork for Productivity"
+  }
+}

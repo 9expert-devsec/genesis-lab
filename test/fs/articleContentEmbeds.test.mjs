@@ -506,9 +506,9 @@ function globToRe(glob) {
   let g = glob.replace(/^\.\//, '');
   g = g.replace(/[.+^$()|[\]]/g, '\\$&');
   g = g.replace(/\{([^}]+)\}/g, (_, alts) => `(?:${alts.split(',').join('|')})`);
-  g = g.replace(/\*\*\//g, ' ');
+  g = g.replace(/\*\*\//g, '\x00');
   g = g.replace(/\*/g, '[^/]*');
-  g = g.replace(/ /g, '(?:.*/)?');
+  g = g.replace(/\x00/g, '(?:.*/)?');
   return new RegExp(`^${g}$`);
 }
 

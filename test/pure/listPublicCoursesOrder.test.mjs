@@ -49,6 +49,13 @@ const deps = (overrides = {}) => ({
   },
   loadHidden: async () => new Set(),
   loadOrder: async () => ORDER,
+  // ROUND U3. Same reason `loadOrder` is here and not optional: omitted, this
+  // falls through to the real `loadCourseAliasMap`, which connects and reads
+  // course_extensions for real — and it fails open, returning an empty map, so
+  // the tests would still PASS while each one sat on mongoose's buffering
+  // timeout. test/fs/injectedDepCoverage is what names this file when it is
+  // missing; that guard exists because exactly this happened to `loadOrder`.
+  loadAliases: async () => new Map(),
   ...overrides,
 });
 

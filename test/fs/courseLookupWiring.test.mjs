@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { walkSources } from '../sourceScan.mjs';
 
 /**
  * Two things the render tier cannot reach, both in async Server Components that
@@ -24,6 +25,13 @@ const read = (p) => readFileSync(path.join(ROOT, p), 'utf8');
 const PAGE = read('src/app/(public)/registration/public/RegisterPageContent.jsx');
 const RESOLVE = read('src/lib/resolveCourse.js');
 const ADAPTER = read('src/lib/api/public-courses.js');
+
+/**
+ * The tokens that would make the fallback match fuzzy, in ONE place so the ban
+ * below and the control that keeps it honest cannot disagree about the list.
+ * They used to be two lists, and the shorter one was the control.
+ */
+const FUZZY_TOKENS = ['.trim(', '.replace(', '.startsWith(', '.includes(', 'normalize('];
 
 // ── Commit 1: the diagnostic warn ──────────────────────────────────────────
 
@@ -235,7 +243,7 @@ test('the fallback match is exact-except-case, with no normalisation', () => {
   // link on the wrong course's registration form.
   assert.match(ADAPTER, /String\(c\?\.course_id \?\? ''\)\.toLowerCase\(\) === wanted/);
   const body = /export async function getCourseByCodeInsensitive\(([\s\S]*?)\n\}/.exec(ADAPTER)[1];
-  for (const banned of ['.trim(', '.replace(', '.startsWith(', '.includes(', 'normalize(']) {
+  for (const banned of FUZZY_TOKENS) {
     assert.ok(!body.includes(banned), `"${banned}" would make the match fuzzy`);
   }
 });
@@ -243,7 +251,22 @@ test('the fallback match is exact-except-case, with no normalisation', () => {
 test('CONTROL: those banned tokens are things that DO appear in this repo', () => {
   // Guards against a banned-list of strings that could never match anything —
   // the way an "absent" assertion silently becomes decorative.
-  const resolve = read('src/lib/resolveCourse.js');
-  assert.ok(resolve.includes('.trim('), '.trim( is real code used nearby');
-  assert.ok(resolve.includes('.startsWith('), '.startsWith( likewise');
+  //
+  // ── IT SCANS src/ NOW, RATHER THAN SAMPLING ONE FILE ─────────────────────
+  // It used to read resolveCourse.js and assert that `.trim(` and
+  // `.startsWith(` were in it. Round U4 replaced that file's one
+  // `seg.startsWith('/')` with a call to normaliseAlias, and this control went
+  // red — reporting not that the ban had weakened but that its SAMPLE had. A
+  // control hostage to one file's incidental contents fires for the wrong
+  // reason, which is the one thing a control must not do.
+  //
+  // It also covers all five tokens now. It used to check two, so `.replace(`,
+  // `.includes(` and `normalize(` were banned with nothing establishing they
+  // were strings that occur here at all.
+  const sources = walkSources('src');
+  for (const token of FUZZY_TOKENS) {
+    const hit = sources.find((f) => f.raw.includes(token));
+    assert.ok(hit,
+      `"${token}" appears nowhere under src/, so banning it from the fallback match asserts nothing`);
+  }
 });

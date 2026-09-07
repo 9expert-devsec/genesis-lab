@@ -78,7 +78,59 @@ const nextConfig = {
   // prompted it, and this file is where such a promise can be reviewed in a
   // diff. Renaming a skill again means adding a line here, deliberately.
   async redirects() {
+    /**
+     * ══ THE MASTERCLASS HOST MOVES ONTO www AT CUTOVER ═══════════════════════
+     *
+     * Every path on masterclass.9experttraining.com → the SAME path on www.
+     * One rule instead of hundreds, and it is here rather than in the admin
+     * redirect table for the reason this function's header already argues: a
+     * permanent redirect is a promise to search engines, and re-pointing an
+     * entire domain is a change that belongs in a diff somebody reviews — not
+     * in a database row one click can create.
+     *
+     * ── MEASURED, NOT ASSUMED (Next 15.5.15, dev server, explicit Host) ─────
+     *   Host: masterclass.9experttraining.com  /masterclass/some-slug
+     *       → 308 https://www.9experttraining.com/masterclass/some-slug
+     *   Host: masterclass.9experttraining.com  /
+     *       → 308 https://www.9experttraining.com/
+     *   Host: www.9experttraining.com          /masterclass/some-slug
+     *       → 404, NOT redirected — it falls through to normal routing
+     *   Host: localhost:3000                   /masterclass/some-slug
+     *       → 404, NOT redirected
+     *
+     * The third line is the one that matters: www serves /masterclass/<slug>
+     * itself, so a rule that also caught www would redirect the host that is
+     * supposed to answer. It does not.
+     *
+     * ── ⚠ WHY IT IS ENV-GATED, WHICH IS A DELIBERATE DEVIATION ⚠ ────────────
+     * `main` currently SERVES masterclass.9experttraining.com and takes real
+     * course payments. This file is shared between branches, so an unconditional
+     * rule here becomes live the moment this branch merges — and if that merge
+     * happens for any reason before the cutover, every payment URL on that host
+     * 308s away and the money stops.
+     *
+     * Gating it on an env var makes the rule reviewable in the diff (its whole
+     * justification) while keeping it INERT until a deployment deliberately
+     * switches it on. That is the same shape, in this same function's
+     * neighbourhood, as `BLOB_PUBLIC_BASE` gating the webroot and blob rewrites
+     * — "inert until the variable is set, because pointing at an undefined
+     * origin would turn working URLs into broken ones".
+     *
+     * TO ARM IT: set MASTERCLASS_REDIRECT_HOST to the source host on the
+     * deployment that should redirect. Unset everywhere else.
+     */
+    const masterclassRedirectHost = process.env.MASTERCLASS_REDIRECT_HOST;
+    const masterclassHostRedirect = masterclassRedirectHost
+      ? [{
+        source: '/:path*',
+        has: [{ type: 'host', value: masterclassRedirectHost }],
+        destination: 'https://www.9experttraining.com/:path*',
+        permanent: true,
+      }]
+      : [];
+
     return [
+      ...masterclassHostRedirect,
       {
         source: '/online-course',
         destination: 'https://academy.9experttraining.com',
@@ -171,6 +223,28 @@ const nextConfig = {
     const prefix = LEGACY_PREFIX;
     const rawExt = RAW_EXTENSION_LIST.join('|');
 
+    /**
+     * THE CHARACTERS THAT FORCE A PATH OFF THE STATIC TIER.
+     *
+     * `&` and `#` are refused in a Cloudinary public_id, so the migration
+     * substituted them (`&`→`and`, `#`→`sharp`). Those rules are lossy and
+     * non-invertible, so no static pattern can express the mapping and the
+     * request has to reach the resolver, which looks the file up by its stored
+     * source path.
+     *
+     * BOTH SPELLINGS OF EACH, because Next matches on the RAW pathname: a
+     * client that percent-encodes sends `%26`/`%23` and the literal character
+     * never arrives. For `#` the encoded form is the ONLY one that can arrive.
+     *
+     * ── ONE DEFINITION, TWO CONSUMERS ──────────────────────────────────────
+     * This was written out inline when the per-root fallback was the only rule
+     * that needed it. The derivative-aware pair added below needs the IDENTICAL
+     * class, and two copies that drifted would route a file to the resolver in
+     * one shape and to Cloudinary in the other — which is the defect this whole
+     * block exists to fix, reintroduced one level down.
+     */
+    const substitutedChars = '(?:&|%26|#|%23)';
+
     const image = (transform, id) =>
       `${base}/image/upload/${transform ? `${transform}/` : ''}${prefix}/${id}`;
 
@@ -185,6 +259,50 @@ const nextConfig = {
      * even though neither has a width.
      */
     const rulesFor = (at, transform) => [
+      // ── SUBSTITUTION-CARRYING DERIVATIVES FIRST OF ALL ──────────────────
+      //
+      // MEASURED DEFECT, 2026-09-07: three article covers returned HTTP 400.
+      // A styles/ path whose filename contains `&` was claimed by the ordinary
+      // derivative rules below — they are listed before the per-root fallback,
+      // and first match wins — and forwarded to Cloudinary with a literal `&`
+      // in the public_id, which Cloudinary refuses.
+      //
+      // The isolating evidence: the same three characters in a DIRECT
+      // (non-derivative) reference returned 200 with `x-legacy-delivery:
+      // resolver`. Same character, same substitution, different rule. So the
+      // substitution side was never wrong — the precedence was.
+      //
+      // ── WHY ORDERING ALONE COULD NOT FIX IT ────────────────────────────
+      // The obvious repair is to hoist the per-root fallback above the
+      // derivative rules. It does not work, and the reason is worth writing
+      // down so nobody tries it again: that fallback passes `:rest` through
+      // verbatim, so the resolver would be handed
+      // `styles/large_cover/public/articles/cover/foo & bar.png.webp` and it
+      // looks up by EXACT stored sourcePath. No such row exists — the registry
+      // holds the source, not the derivative — so every one of them would turn
+      // a 400 into a 404 `resolver-miss`.
+      //
+      // The resolver cannot be taught to strip a derivative without putting
+      // that vocabulary in a second place. So the strip stays here, in the
+      // rewrite, where it already lives: these two rules are the existing
+      // derivative pair with the substitution class added and the destination
+      // pointed at the resolver instead of Cloudinary. They hand it the SOURCE
+      // path, which is exactly what it indexes.
+      //
+      // NOT A WIDENING. `:rest` must contain a substitution character, so an
+      // ordinary derivative matches neither rule and falls through to the
+      // static pair below untouched. That is checkable rather than asserted:
+      // a static hit carries NO `x-legacy-delivery` header, so its appearance
+      // on an ordinary image would be this change overreaching.
+      {
+        source: `${at}${FILES_DIR}/styles/:style/public/:rest(.*${substitutedChars}${DERIVATIVE_SOURCE_PATTERN}).:appended(${DERIVATIVE_APPENDED_PATTERN})`,
+        destination: `/legacy-file${FILES_DIR}/:rest`,
+      },
+      {
+        source: `${at}${FILES_DIR}/styles/:style/public/:rest(.*${substitutedChars}.*)`,
+        destination: `/legacy-file${FILES_DIR}/:rest`,
+      },
+
       // ── DERIVATIVES FIRST ───────────────────────────────────────────────
       // These must precede the ampersand and catch-all rules for the same
       // root: a styles/ path IS a `sites/default/files` path, and whichever
@@ -219,6 +337,13 @@ const nextConfig = {
         // in a public_id and the migration substituted them (`&`→`and`,
         // `#`→`sharp`) — lossy, non-invertible rules.
         //
+        // THIS RULE HANDLES THE DIRECT SHAPE ONLY. A substitution-carrying
+        // path wearing a `styles/` prefix is claimed earlier, by the
+        // derivative-aware pair at the top of this array, because the resolver
+        // needs the SOURCE path and this rule passes `:rest` through verbatim.
+        // The two share `substitutedChars` so they cannot disagree about what
+        // counts as substitution-carrying.
+        //
         // Narrow ON PURPOSE. It matches 19 paths: the 6 ampersand files and the
         // 13 C# ones. Everything else stays on the static path below, where no
         // function of ours runs.
@@ -246,7 +371,7 @@ const nextConfig = {
         // The resolver serves the DEFAULT variant regardless of `at`. Nineteen
         // files is not worth threading a variant through a database lookup.
         {
-          source: `${at}/${root}/:rest(.*(?:&|%26|#|%23).*)`,
+          source: `${at}/${root}/:rest(.*${substitutedChars}.*)`,
           destination: `/legacy-file/${root}/:rest`,
         },
         // RAW: the extension decides, so this has to win over the image

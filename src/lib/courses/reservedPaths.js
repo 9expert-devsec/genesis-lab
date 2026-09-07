@@ -96,6 +96,15 @@ export const RESERVED_PATHS = Object.freeze([
 
   // ── public/ — served at the root ─────────────────────────────────────────
   { segment: 'assets', source: 'static' },
+  // The bundled default profile avatar (src/lib/avatar/avatarUrl.js). Listed on
+  // the same conservative basis as every other entry in this block rather than
+  // because the framework strictly forces it: `public/avatar/` makes Next serve
+  // /avatar/avatar-default-512.png, but it does not claim the bare URL /avatar,
+  // so a course alias of /avatar would probably still resolve today. "Probably"
+  // is the problem — this list refuses the whole first segment for all eight of
+  // its neighbours, and an alias that loses to a static file loses SILENTLY,
+  // with no error and no symptom. The cost is named: no course can use /avatar.
+  { segment: 'avatar', source: 'static' },
   { segment: 'brand', source: 'static' },
   // The Home hero artwork. Same `-img` convention as policies-img below.
   { segment: 'hero-img', source: 'static' },

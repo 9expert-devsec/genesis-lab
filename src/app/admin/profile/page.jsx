@@ -13,6 +13,7 @@ import { dbConnect } from '@/lib/db/connect';
 import Admin from '@/models/Admin';
 import { roleBadgeStyle } from '@/lib/rbac/roleColor';
 import { ProfileClient } from './_components/ProfileClient';
+import { ProfileAvatarCard } from './_components/ProfileAvatarCard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,7 @@ export default async function ProfilePage() {
   if (email) {
     await dbConnect();
     const doc = await Admin.findOne({ email })
-      .select('email name roleKey active totpEnabled lastLoginAt createdAt')
+      .select('email name roleKey active totpEnabled lastLoginAt createdAt imagePublicId')
       .lean();
     me = doc ? JSON.parse(JSON.stringify(doc)) : null;
   }
@@ -48,6 +49,13 @@ export default async function ProfilePage() {
           ข้อมูลบัญชีและการตั้งค่าส่วนตัว
         </p>
       </div>
+
+      {/* The avatar sits at the TOP, above the read-only identity block: it is
+          the only thing on this screen that is both editable and visible
+          elsewhere in the panel, and burying it under a dl of read-only rows
+          would make it look like a property of the account rather than a
+          control. */}
+      <ProfileAvatarCard initialPublicId={me?.imagePublicId ?? null} />
 
       <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-5">
         <dl className="grid grid-cols-3 gap-y-3 text-sm">
