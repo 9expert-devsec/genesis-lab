@@ -206,7 +206,7 @@ export function BundleSummary({
           </div>
           <div className="flex items-baseline justify-between gap-4 border-t border-[var(--surface-border)] pt-3">
             <dt className="text-sm font-bold text-[var(--text-primary)]">
-              ราคาสุทธิ
+              ราคา
             </dt>
             <dd className="font-heading text-2xl font-bold text-[var(--text-primary)]">
               {formatBaht(netPrice)} บาท
