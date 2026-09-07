@@ -1,12 +1,31 @@
-# `dev`'s suite baseline — 100 failures across 30 groups
+# `dev`'s suite baseline — 96 failures across 29 groups
 
-**Measured:** 2026-09-07, on `dev` at `41c174c4`
-(*fix(dashboard): restore the action wrapper a cherry-pick concatenated*).
+**Measured:** 2026-09-07, on `dev` after the request-fold port.
+
+```
+[suite] 10697 passed, 96 failed, 10793 total across 703 files (floor 5000)
+exit=1
+```
+
+**Previous measurement**, at `41c174c4` (*fix(dashboard): restore the action wrapper a
+cherry-pick concatenated*), before the fold port:
 
 ```
 [suite] 10680 passed, 100 failed, 10780 total across 702 files (floor 5000)
-exit=1
 ```
+
+Diffed BY NAME, not by count. Four names left the set and **none joined it**:
+
+```
+- CONTROL: the dashboard slice is the trend aggregation and nothing else
+- the SEVEN-DAY TREND counts requests too
+- the dashboard imports the SAME key and the SAME precedence
+- the dashboard no longer counts public registrations one status at a time
+```
+
+All four are the `registrationsFoldWiring` group. One kept its name and is now green
+against `buildMetrics.js`; the other three were replaced by the guards described in that
+section below.
 
 ## Why this file exists
 
@@ -37,13 +56,14 @@ every member changes.
    the suite ran. Build status is a separate question with a separate instrument
    (`npm run build`), and it must be asked separately.
 
-2. **Four of these failures are correct and must stay red.** The
-   `registrationsFoldWiring` group asserts that the dashboard folds registrations by
-   request. It does not — `buildMetrics.js` groups by `{ source, status }`, one row per
-   leg. Those four passed until `41c174c4` only because they matched strings inside a dead
-   code block in a module that could not compile. They are honest now. **Do not clear them
-   by re-pointing the regex**; they clear when the behaviour lands in `buildMetrics.js`.
-   See `ticket-the-dashboard-counts-legs-not-requests.md`.
+2. **The four `registrationsFoldWiring` failures are gone, and not by re-pointing a
+   regex.** `buildMetrics.js` now folds legs into requests in every counting branch, so
+   the dashboard and `/admin/registrations` answer the same number. The guarantee moved
+   with the behaviour: `test/pure/dashboardFoldsRequests.test.mjs` asserts on the
+   PIPELINE OBJECT the real code builds — which cannot pass on dead code, the way the
+   three source scans it replaced did for a day — and the source-text half that remains in
+   `registrationsFoldWiring` now checks `buildMetrics.js` for the one claim that really is
+   about text: that it imports the shared rules rather than restating them.
 
 Three names are generated at runtime from template literals and could not be mapped back
 to a file by string search; they are grouped at the end.
@@ -128,13 +148,6 @@ to a file by string search; they are grouped at the end.
 - and `snapshot` is not in it, by name
 - getPageVersions still refuses the snapshot
 - the projection is exactly the metadata fields
-
-### `test/fs/registrationsFoldWiring.test.mjs` — 4  ← CORRECT, keep red
-
-- CONTROL: the dashboard slice is the trend aggregation and nothing else
-- the SEVEN-DAY TREND counts requests too
-- the dashboard imports the SAME key and the SAME precedence
-- the dashboard no longer counts public registrations one status at a time
 
 ### `test/render/onlineCourseCardSkillCapsule.test.mjs` — 4
 

@@ -211,64 +211,84 @@ test('the card keys are still built from the declared vocabulary', () => {
  * silent-wrong-number class in its cross-screen form — and it is worse than the
  * within-screen version, because the two numbers are never visible together.
  */
-const DASHBOARD = readSource('src/lib/actions/dashboard.js');
-
 /**
- * The trend aggregation, bounded by the statement that CONSUMES it rather than
- * by a character count — see the control below for why that distinction earned
- * its own note.
+ * ══ THE DASHBOARD'S HALF OF THIS RULE MOVED, AND SO DID ITS GUARD ═══════════
+ *
+ * It used to be asserted here, as three `assert.match` calls against
+ * `src/lib/actions/dashboard.js`. That was wrong twice over:
+ *
+ * 1. THE BEHAVIOUR IS NOT THERE ANY MORE. `dashboard.js` is a thin authorised
+ *    wrapper — guard, scopes, models, delegate — and the reads live in
+ *    `lib/dashboard/buildMetrics.js`. A guard reading the action for an
+ *    aggregation stage was asserting against a file that will never contain one
+ *    again, and would have stayed red against perfectly correct code until
+ *    somebody deleted it.
+ *
+ * 2. THOSE THREE PASSED FOR A DAY ON A FILE THAT COULD NOT COMPILE. A
+ *    cherry-pick concatenated two versions of the action and left the folding
+ *    code unreachable — computed into locals nothing read, under a `return` that
+ *    built its payload elsewhere. Every string the regexes looked for was
+ *    present, in dead code, in a module that took the build down. A source scan
+ *    matches text, and text survives in dead code; see
+ *    docs/ticket-a-source-scan-cannot-tell-live-code-from-dead-code.md for why
+ *    no cleverer regex reaches this and what does.
+ *
+ * THE BEHAVIOURAL HALF now lives in `test/pure/dashboardFoldsRequests.test.mjs`,
+ * which runs `buildDashboardMetrics` against counting doubles and asserts on the
+ * PIPELINE OBJECT THE REAL CODE BUILT. That cannot pass on dead code, because a
+ * dead branch constructs nothing.
+ *
+ * WHAT STAYS HERE is the one claim that genuinely is about source text: that the
+ * dashboard IMPORTS the two shared rules rather than restating them. It belongs
+ * beside the list's half of the same rule, which is the whole point of this
+ * file — the two screens must not merely agree, they must read the same
+ * definitions.
  */
-function trendAggregation() {
-  const start = DASHBOARD.code.indexOf('const trendAgg');
-  assert.notEqual(start, -1, 'the trend aggregation is gone');
-  const end = DASHBOARD.code.indexOf('trendMap', start);
-  assert.notEqual(end, -1, 'the statement that reads trendAgg is gone — the bound is wrong');
-  return DASHBOARD.code.slice(start, end);
-}
+const BUILD_METRICS = readSource('src/lib/dashboard/buildMetrics.js');
 
 test('the dashboard imports the SAME key and the SAME precedence', () => {
-  assert.match(DASHBOARD.withImports,
+  assert.match(BUILD_METRICS.withImports,
     /import\s*\{[^}]*\bREQUEST_KEY_EXPR\b[^}]*\}\s*from\s*'@\/lib\/registrations\/foldRequests'/,
     'the dashboard does not group by the shared key');
-  assert.match(DASHBOARD.withImports,
+  assert.match(BUILD_METRICS.withImports,
     /import\s*\{[^}]*\brequestStatusExpr\b[^}]*\}\s*from\s*'@\/lib\/registrations\/requestStatus'/,
     'the dashboard does not collapse a request with the shared precedence');
 });
 
-test('the dashboard no longer counts public registrations one status at a time', () => {
+test('the dashboard does not restate either rule as a second copy', () => {
   /**
-   * The exact shape that counted legs: `countDocuments({...dateFilter, status})`
-   * once per value. Four of them, plus a bare total.
+   * The failure this prevents is not a missing import — it is a SECOND
+   * DEFINITION sitting beside the import and quietly winning. A hand-written
+   * `$ifNull` on `bundle.requestId` agrees with the list today and drifts the
+   * first time one of the two is edited, which is the cross-screen version of
+   * the defect this file exists for.
+   *
+   * Read from `.code`, so a doc block quoting the expression — this file's own
+   * header does — cannot satisfy it. The pure-tier test asserts the same claim
+   * from the other side, by IDENTITY against the imported object: measured, a
+   * structurally identical copy passes `deepEqual` and fails `===`.
    */
-  assert.ok(!/RegisterPublic\.countDocuments\(\{ \.\.\.dateFilter, status:/.test(DASHBOARD.code),
-    'a per-status countDocuments on RegisterPublic is back — that counts legs');
-  assert.ok(!/RegisterPublic\.countDocuments\(dateFilter\)/.test(DASHBOARD.code),
-    'the public total counts documents again — that is legs, not requests');
-  assert.match(DASHBOARD.code, /requestStatusExpr\('\$statuses'\)/,
-    'the dashboard does not resolve one status per request');
+  assert.equal(
+    /\$ifNull:\s*\[\s*'\$bundle\.requestId'/.test(BUILD_METRICS.code), false,
+    'buildMetrics writes its own request-key expression instead of importing REQUEST_KEY_EXPR',
+  );
+  assert.equal(
+    /REQUEST_STATUS_PRECEDENCE|\$setIsSubset/.test(BUILD_METRICS.code), false,
+    'buildMetrics reimplements the request-status precedence instead of calling requestStatusExpr',
+  );
 });
 
-test('the SEVEN-DAY TREND counts requests too', () => {
-  // Without the group stage a three-course package draws a bar of three on the
-  // day it was bought — a busy day that was one enquiry.
-  const trend = trendAggregation();
-  assert.match(trend, /_id: REQUEST_KEY_EXPR/, 'the trend does not group by request');
-  assert.match(trend, /\$min: '\$createdAt'/,
-    'the trend does not date a request by its FIRST leg — a late-evening request could land on the wrong day');
-});
-
-test('CONTROL: the dashboard slice is the trend aggregation and nothing else', () => {
-  /**
-   * BOUNDED ON A STATEMENT, NOT ON A CHARACTER COUNT. The first draft sliced
-   * 900 characters and this control caught it running past the end of the
-   * aggregation into `statusDist` — sourceScan's defect 6 exactly, a matcher
-   * whose bound has nothing to do with its subject. The bound is now the line
-   * that consumes the aggregation's result.
-   */
-  const trend = trendAggregation();
-  assert.ok(trend.includes('dateToString'), 'the slice is not the trend aggregation');
-  assert.equal(trend.includes('statusDist'), false, 'the slice has run past the trend');
-  assert.ok(trend.length > 200 && trend.length < 1500, `the trend slice is ${trend.length} chars`);
+test('CONTROL: the copy-detector finds a planted second definition', () => {
+  // Without this, both `false` assertions above are satisfied by a regex that
+  // never matches anything — the classic vacuous negative.
+  const planted = "reqKey: { $ifNull: ['$bundle.requestId', { $toString: '$_id' }] },";
+  assert.ok(/\$ifNull:\s*\[\s*'\$bundle\.requestId'/.test(planted),
+    'the key-copy matcher does not recognise the very shape it forbids');
+  assert.ok(/REQUEST_STATUS_PRECEDENCE|\$setIsSubset/.test('case: { $setIsSubset: [f, T] }'),
+    'the precedence-copy matcher does not recognise a reimplementation');
+  // …and the real file is not empty, so the negatives above have a subject.
+  assert.ok(BUILD_METRICS.code.length > 2000,
+    `buildMetrics scanned to ${BUILD_METRICS.code.length} chars — too little to conclude anything from`);
 });
 
 test('the seat count that KEEPS legs says so where it is rendered', () => {

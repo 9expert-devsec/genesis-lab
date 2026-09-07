@@ -43,6 +43,14 @@ import {
 } from '@/lib/dashboard/ranges';
 import { readRegistrationQueue, readSystemQueue } from '@/lib/dashboard/actionQueue';
 import { statusColor } from '@/lib/dashboard/statusColors';
+// ══ THE SAME TWO RULES /admin/registrations COUNTS BY ══════════════════════
+// Imported, never restated. This screen and that one must not disagree about
+// how many registrations exist, and the only way to guarantee that is for both
+// to group by the same key and collapse a request with the same precedence.
+// A hand-written `$ifNull` here would agree today and drift the first time the
+// precedence changed.
+import { REQUEST_KEY_EXPR } from '@/lib/registrations/foldRequests';
+import { requestStatusExpr } from '@/lib/registrations/requestStatus';
 
 /**
  * The public status labels for the donut, DERIVED.
@@ -130,9 +138,65 @@ function registrationPipeline({ inhouseCollection, window, now }) {
     return [{ $match: { createdAt: { $gte: win.from, $lte: win.to } } }];
   };
 
-  const byStatus = {
-    $group: { _id: { source: '$source', status: '$status' }, n: { $sum: 1 } },
-  };
+  /**
+   * ══ EVERY FIGURE ON THIS PAGE COUNTS REQUESTS, NOT LEGS ════════════════════
+   *
+   * A three-course bundle is ONE registration request written as three rows.
+   * Counted as documents it adds three to the total, three to the donut, three
+   * to the trend bar and three to the age histogram — while
+   * /admin/registrations, which folds, shows it as one. A dashboard total
+   * differing from the list header by the number of bundle legs, with nothing
+   * on either screen explaining which is right, is the silent-wrong-number
+   * class this project keeps removing. It does not matter which of the two is
+   * "correct" if they differ.
+   *
+   * ── WHY IT IS TWO STAGES AND CANNOT BE ONE ──────────────────────────────
+   * Folding is `$addToSet` and THEN resolve: the request's status is a function
+   * of the whole set of its legs' statuses, so the set has to exist before
+   * `requestStatusExpr` can be applied to it. No single `$group` expresses that.
+   *
+   * ── THE SECOND STAGE EMITS THE SHAPE THE OLD ONE DID ────────────────────
+   * `{_id: {source, status}, n}` — unchanged. Every consumer below
+   * (`foldByStatus`, `foldByAge`, the series walk) reads `_id.source`,
+   * `_id.status` and `n`, and none of them had to move. The fold is a change to
+   * WHAT IS COUNTED, not to what the branches hand back.
+   *
+   * ── WHERE THE TWO STATUS RULES COMPOSE, AND WHY IN THIS ORDER ───────────
+   * `requestStatusExpr` runs FIRST, in Mongo, over the RAW STORED VALUES —
+   * exactly as /admin/registrations does it (registrations.js, the public
+   * status counts). `effectiveStatus` runs SECOND, in JS, in `foldByStatus`.
+   *
+   * The order is deliberate and it matches the list. Resolving a request by a
+   * rule the list does not use would agree today — because nothing public holds
+   * a retired value — and disagree the first time something did, which is the
+   * defect this whole fold exists to prevent.
+   *
+   * MEASURED, rather than assumed, over every stored value and 15 leg-sets:
+   *   · `effectiveStatus` is the IDENTITY for `source: 'public'` — it rewrites
+   *     only in-house values — so on the public side the JS half is a no-op and
+   *     the composition IS the list's rule, not a second one resembling it.
+   *   · in-house registrations carry no `bundle`, so each is its own request and
+   *     `requestStatusExpr` sees a one-element set, where it is the identity.
+   *     The JS half then applies the legacy map exactly as it did before.
+   * Neither source changes meaning; the public side gains the fold.
+   */
+  const foldToRequests = (extra = {}) => ({
+    $group: {
+      _id: { source: '$source', reqKey: '$reqKey' },
+      statuses: { $addToSet: '$status' },
+      ...extra,
+    },
+  });
+
+  const byStatus = [
+    foldToRequests(),
+    {
+      $group: {
+        _id: { source: '$_id.source', status: requestStatusExpr('$statuses') },
+        n: { $sum: 1 },
+      },
+    },
+  ];
 
   /**
    * The bucket edges as absolute Dates: a document created AFTER `after` is at
@@ -145,7 +209,7 @@ function registrationPipeline({ inhouseCollection, window, now }) {
     .map((b) => ({ id: b.id, after: new Date(now.getTime() - b.upTo * DAY_MS) }));
 
   const facet = {
-    current: [...windowMatch({ from, to }), byStatus],
+    current: [...windowMatch({ from, to }), ...byStatus],
     /**
      * ── GROUPED BY STATUS TOO, SINCE ROUND E4 ────────────────────────────────
      *
@@ -163,13 +227,23 @@ function registrationPipeline({ inhouseCollection, window, now }) {
      * "the sparkline and the chart agree" true by construction rather than by
      * two implementations happening to match.
      */
+    /**
+     * ── A REQUEST IS DATED BY ITS FIRST LEG ─────────────────────────────────
+     * `$min` on `createdAt`, not any leg's own date. The legs of one request are
+     * written inside a single transaction milliseconds apart, so the request
+     * happened when the FIRST one landed; taking any other could push a request
+     * submitted at 23:59:59.9 into the following day and draw it on the wrong
+     * bar. The bucket is then computed from that folded date, which is why the
+     * `$dateToString` moved into the second stage.
+     */
     series: [
       ...windowMatch({ from, to }),
+      foldToRequests({ createdAt: { $min: '$createdAt' } }),
       {
         $group: {
           _id: {
-            source: '$source',
-            status: '$status',
+            source: '$_id.source',
+            status: requestStatusExpr('$statuses'),
             key: { $dateToString: { format: bucketFormat(bucket), date: '$createdAt', timezone: BUCKET_TZ } },
           },
           n: { $sum: 1 },
@@ -206,11 +280,19 @@ function registrationPipeline({ inhouseCollection, window, now }) {
      */
     ages: [
       ...windowMatch({ from, to }),
+      /**
+       * ── THE AGE OF A REQUEST IS THE AGE OF ITS FIRST LEG ─────────────────
+       * Same `$min` and the same reasoning as the series: the request is as old
+       * as the moment it was submitted. Ageing a bundle by its last-written leg
+       * would report every bundle as marginally younger than it is, and could
+       * drop one across a bucket edge.
+       */
+      foldToRequests({ createdAt: { $min: '$createdAt' } }),
       {
         $group: {
           _id: {
-            source: '$source',
-            status: '$status',
+            source: '$_id.source',
+            status: requestStatusExpr('$statuses'),
             bucket: {
               $switch: {
                 branches: ageEdges.map(({ id, after }) => ({
@@ -225,8 +307,25 @@ function registrationPipeline({ inhouseCollection, window, now }) {
         },
       },
     ],
-    // Deliberately unfiltered — see the header.
-    bounds: [{ $group: { _id: null, min: { $min: '$createdAt' }, max: { $max: '$createdAt' }, n: { $sum: 1 } } }],
+    /**
+     * Deliberately unfiltered — see the header.
+     *
+     * ── `n` COUNTS REQUESTS, LIKE EVERY OTHER TOTAL ON THE PAGE ────────────
+     * This figure feeds the EMPTY STATE: "there are N registrations, the most
+     * recent on <date>, none of them in the window you selected". Left as a
+     * document count it would be the one total on the page that still counted
+     * legs — the same disagreement this round removes, in the one place a
+     * reader goes precisely because the rest of the screen is empty.
+     *
+     * `min`/`max` are unaffected by the fold — the minimum of the per-request
+     * minima is the minimum of the legs — so only `n` changes meaning. The cost
+     * is a second pass over the whole corpus rather than over the window; it is
+     * measured in the header note above and is the same 49 documents.
+     */
+    bounds: [
+      { $group: { _id: { source: '$source', reqKey: '$reqKey' }, min: { $min: '$createdAt' }, max: { $max: '$createdAt' } } },
+      { $group: { _id: null, min: { $min: '$min' }, max: { $max: '$max' }, n: { $sum: 1 } } },
+    ],
   };
 
   /**
@@ -238,16 +337,46 @@ function registrationPipeline({ inhouseCollection, window, now }) {
    * entirely, the same way round E2 omits an unauthorised figure rather than
    * nulling it.
    */
-  if (prev) facet.previous = [...windowMatch(prev), byStatus];
+  if (prev) facet.previous = [...windowMatch(prev), ...byStatus];
 
-  const project = { $project: { _id: 0, createdAt: 1, status: 1, source: { $literal: 'public' } } };
+  /**
+   * ══ THE REQUEST KEY IS COMPUTED HERE, AND IT HAS TO BE ═════════════════════
+   *
+   * `REQUEST_KEY_EXPR` is `$ifNull: ['$bundle.requestId', {$toString: '$_id'}]`
+   * — it reads TWO fields this projection otherwise destroys. `_id: 0` drops the
+   * id explicitly and `bundle` is never carried, so downstream of this stage
+   * both of the key's inputs are gone and no branch could fold if it wanted to.
+   *
+   * Evaluating it HERE, where the original document is still in scope, is what
+   * makes the fold possible at all. It costs one string per row on a projection
+   * that already exists — the union stays three fields wide plus the key, rather
+   * than carrying whole registration documents with their attendee lists and
+   * invoice addresses through a `$unionWith` no branch below reads.
+   *
+   * ── THE IN-HOUSE SIDE PROJECTS IT TOO, EXPLICITLY ───────────────────────
+   * Not an oversight to tidy away later. In-house registrations carry no
+   * `bundle`, so the expression degrades to `$toString: '$_id'` and every
+   * document is its own request — which is correct, and is why the in-house
+   * numbers do not move. But the field must be PRESENT: a missing `reqKey`
+   * would group every in-house row under one null key and collapse the entire
+   * source to a single "request".
+   */
+  const projectWithKey = (source) => ({
+    $project: {
+      _id: 0,
+      createdAt: 1,
+      status: 1,
+      source: { $literal: source },
+      reqKey: REQUEST_KEY_EXPR,
+    },
+  });
 
   return [
-    project,
+    projectWithKey('public'),
     {
       $unionWith: {
         coll: inhouseCollection,
-        pipeline: [{ $project: { _id: 0, createdAt: 1, status: 1, source: { $literal: 'inhouse' } } }],
+        pipeline: [projectWithKey('inhouse')],
       },
     },
     { $facet: facet },
