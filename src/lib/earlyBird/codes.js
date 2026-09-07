@@ -65,3 +65,27 @@ export const EB_CLAIMED = 'EB_CLAIMED';
  * agrees). Those two are why this module exists rather than a local constant.
  */
 export const EB_NEEDS_ADOPTION = 'EB_NEEDS_ADOPTION';
+
+/**
+ * The course is held by a GENESIS PAGE — another promotion page owns this row
+ * through `owner_page_id`. A hard refusal, like EB_CLAIMED, and separate from it
+ * on purpose.
+ *
+ * ── WHY IT IS NOT JUST EB_CLAIMED ─────────────────────────────────────────
+ * The two refusals have DIFFERENT WAYS OUT, and a code that cannot tell them
+ * apart forces every screen to guess which one it is showing:
+ *
+ *   EB_CLAIMED        an MSDB promotion holds it → release it from that
+ *                     promotion's Early Bird screen
+ *   EB_PAGE_CLAIMED   a Genesis page holds it → clear the binding in THAT
+ *                     page's settings, or edit the Early Bird there
+ *
+ * The holder is named on the refusal either way (`claim.promotion_id` /
+ * `claim.owner_page_id`), so a screen can link straight to the place the author
+ * has to go rather than telling them a course is taken and stopping.
+ *
+ * Read by: `writeEarlyBird` (returns it). No client reads it yet — the page-side
+ * settings UI that will is the next round's work, and this code exists now so
+ * that UI reads a vocabulary the server already owns rather than inventing one.
+ */
+export const EB_PAGE_CLAIMED = 'EB_PAGE_CLAIMED';

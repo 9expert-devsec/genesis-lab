@@ -363,18 +363,57 @@ test('one course, one Early Bird', async (t) => {
     assert.match(slice.slice(0, 200), /requireAdmin\('courses'\)/);
   });
 
+  /**
+   * ── THIS PROBE MOVED FILE, AND THE ASSERTION DID NOT ──────────────────────
+   * It used to scan `course-promos.js` for the literal
+   * `course_id: courseId, $or: [{ promotion_id: '' }, { promotion_id: incoming }]`.
+   * The `$or` is now BUILT by `ownerFilter` in lib/earlyBird/ownership.js —
+   * extracted so a second writer (a promotion PAGE) asks the database the same
+   * question instead of retyping it — so a probe pinned to the old location
+   * would report the extraction as the defect it exists to catch.
+   *
+   * What is asserted is unchanged, and is asserted in TWO halves so neither
+   * file can drop its side:
+   *   · the writer still filters on the owner rather than the course alone
+   *     (it passes an `$or`, and that `$or` comes from the shared builder), and
+   *   · the builder still produces the promotion pair it always produced.
+   * The behavioural proof is the whole file above this block; these two are the
+   * structural guard against the filter quietly becoming `{ course_id }`.
+   */
+  const OWNERSHIP = readFileSync(
+    path.join(ROOT, 'src', 'lib', 'earlyBird', 'ownership.js'),
+    'utf8'
+  );
+
   await t.test('the guarded write filters on the OWNER, not the course alone', () => {
     assert.match(
       SRC,
-      /course_id: courseId,\s*\$or: \[\{ promotion_id: '' \}, \{ promotion_id: incoming \}\]/,
+      /course_id: courseId,\s*\$or: ownerFilter\(\{ pageId: incomingPage, promotionId: incoming \}\)/,
       'the filter is back to { course_id } alone — that is the silent overwrite'
+    );
+    assert.match(
+      SRC,
+      /import \{[\s\S]*?ownerFilter[\s\S]*?\} from '@\/lib\/earlyBird\/ownership'/,
+      'the writer builds its own filter again instead of sharing the rule'
     );
   });
 
-  await t.test('CONTROL: the probe is live — it does not match a filter without $or', () => {
+  await t.test('the shared builder still produces the promotion pair', () => {
+    assert.match(
+      OWNERSHIP,
+      /return \[\{ promotion_id: '' \}, \{ promotion_id: idOf\(promotionId\) \}\];/,
+      'ownerFilter no longer returns the unowned-or-mine pair for a promotion caller'
+    );
+  });
+
+  await t.test('CONTROL: the probes are live — neither matches a filter without $or', () => {
     assert.doesNotMatch(
       "{ course_id: courseId },",
-      /course_id: courseId,\s*\$or: \[\{ promotion_id: '' \}, \{ promotion_id: incoming \}\]/
+      /course_id: courseId,\s*\$or: ownerFilter\(\{ pageId: incomingPage, promotionId: incoming \}\)/
+    );
+    assert.doesNotMatch(
+      'export function ownerFilter() { return []; }',
+      /return \[\{ promotion_id: '' \}, \{ promotion_id: idOf\(promotionId\) \}\];/
     );
   });
 

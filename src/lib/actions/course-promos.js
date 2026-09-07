@@ -20,7 +20,20 @@ import { requireAdmin } from '@/lib/actions/auth';
 // stayed green, because the suite has no bundler. They live in a plain module
 // now. Do NOT re-export them from here — a re-exported const is still a
 // non-async export and brings the error straight back.
-import { EB_CLAIMED, EB_NEEDS_ADOPTION } from '@/lib/earlyBird/codes';
+import { EB_CLAIMED, EB_NEEDS_ADOPTION, EB_PAGE_CLAIMED } from '@/lib/earlyBird/codes';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The ownership rule left this file for the same reason the
+// codes did (a non-async export of a `'use server'` module is a build error)
+// and for one more: a SECOND writer is coming — a promotion PAGE that writes
+// through to this collection on save — and it cannot import a private function
+// out of an action module. Retyping the rule there is the silent-overwrite
+// defect returning in a second costume, so the rule is a module now. See
+// lib/earlyBird/ownership.js for the four states and why the page wins.
+import {
+  earlyBirdUpdate,
+  ownerFilter,
+  resolveOwner,
+} from '@/lib/earlyBird/ownership';
 import {
   listSchedulesByCourse,
   PUBLIC_SCHEDULE_STATUSES,
@@ -234,18 +247,14 @@ export async function getEarlyBirdAdminByCourse(courseId) {
 // strand it, since a course claimed by nobody would appear in no promotion and
 // could only be freed from the course's own tab — the tedium this round exists
 // to remove.
-
-/** The field set a save may write. Everything else on the row is untouchable. */
-function earlyBirdUpdate(data) {
-  return {
-    promotion_id:  String(data?.promotion_id ?? '').trim(),
-    schedule_id:   String(data?.schedule_id ?? '').trim(),
-    label_th:      String(data?.label_th ?? 'Early Bird').trim() || 'Early Bird',
-    special_price: data?.special_price ? Number(data.special_price) : null,
-    deadline:      data?.deadline ? new Date(data.deadline) : null,
-    is_active:     Boolean(data?.is_active),
-  };
-}
+//
+// ── THE RULE ITSELF NOW LIVES IN lib/earlyBird/ownership.js ────────────────
+// `earlyBirdUpdate`, the discriminator and the guarded filter were private
+// functions of this file. They are imported above instead, unchanged, because a
+// second writer (a promotion PAGE writing through on save) cannot reach a
+// private function here and would have retyped them. This block stays as the
+// argument for the rule; the rule is next door, and its header carries the
+// four states the extraction adds room for.
 
 /** Resolve a promotion's title for a message. Falls back to the bare id. */
 async function promotionTitle(promotionId) {
@@ -257,14 +266,53 @@ async function promotionTitle(promotionId) {
   return promo?.title || promotionId;
 }
 
-async function claimedRefusal(courseId, holderId) {
+/**
+ * ── `forPage` ADDS THE WAY OUT, AND ONLY WHERE IT IS NEEDED ───────────────
+ * All four live rows are `legacy_owned`, so a page author binding an Early Bird
+ * meets THIS refusal first — and a bare "already claimed" reads as a bug when
+ * the author can see no promotion anywhere on their page. The extra sentence
+ * names the holder as an MSDB promotion and says the row must be released from
+ * that promotion's Early Bird screen before a page can take it.
+ *
+ * The promotion→promotion wording is UNCHANGED, deliberately. That refusal is
+ * rendered by two existing screens today, the plan says this state's handling
+ * is unchanged from today, and the added sentence would be wrong there anyway:
+ * an author refused by another promotion is already standing on the promotion
+ * screen the sentence would send them to.
+ */
+async function claimedRefusal(courseId, holderId, { forPage = false } = {}) {
   const title = await promotionTitle(holderId);
+  const base = `หลักสูตร ${courseId} อยู่ใน Early Bird ของ «${title}» แล้ว — ` +
+    'หนึ่งหลักสูตรมีได้เพียง Early Bird เดียว';
   return {
     ok: false,
     code: EB_CLAIMED,
-    error: `หลักสูตร ${courseId} อยู่ใน Early Bird ของ «${title}» แล้ว — ` +
-      'หนึ่งหลักสูตรมีได้เพียง Early Bird เดียว',
+    error: forPage
+      ? `${base} โปรโมชันนี้อยู่ในระบบ MSDB — ต้องปลดหลักสูตรออกจาก ` +
+        'Early Bird ของโปรโมชันนั้นก่อน หน้าเพจจึงจะผูกหลักสูตรนี้ได้'
+      : base,
     claim: { course_id: courseId, promotion_id: holderId, promotion_title: title },
+  };
+}
+
+/**
+ * The course is held by ANOTHER Genesis page. Its own refusal because the way
+ * out is a different place — that page's settings, not a promotion screen — and
+ * a code that cannot tell the two apart makes every screen guess which one it
+ * is showing. See lib/earlyBird/codes.js.
+ *
+ * The holder is named as a page id rather than a title: resolving it to a page
+ * name means a PageBuilder read from inside the Early Bird actions, and this
+ * module has no business importing the page model to write a sentence. The
+ * page-side surface that renders this already knows its own pages.
+ */
+function pageClaimedRefusal(courseId, holderPageId) {
+  return {
+    ok: false,
+    code: EB_PAGE_CLAIMED,
+    error: `หลักสูตร ${courseId} ถูกผูกไว้กับหน้าโปรโมชันอื่นแล้ว — ` +
+      'ต้องยกเลิกการผูกในหน้านั้นก่อน จึงจะย้ายมาที่หน้านี้ได้',
+    claim: { course_id: courseId, owner_page_id: holderPageId, promotion_id: '' },
   };
 }
 
@@ -283,25 +331,44 @@ export async function getEarlyBirdClaim(courseId) {
 
 /** The claim read itself, un-gated — every exported caller gates first. */
 async function readEarlyBirdClaim(courseId) {
-  if (!courseId) return { status: 'free', course_id: courseId, config: null };
+  if (!courseId) return { status: 'free', owner: 'free', course_id: courseId, config: null };
   await dbConnect();
   const doc = await EarlyBirdConfig.findOne({ course_id: courseId }).lean();
-  if (!doc) return { status: 'free', course_id: courseId, config: null };
+  if (!doc) return { status: 'free', owner: 'free', course_id: courseId, config: null };
 
-  const holder = String(doc.promotion_id ?? '').trim();
-  if (!holder) {
+  /**
+   * ── THE CLAIM'S VOCABULARY STAYS THREE-VALUED, DELIBERATELY ──────────────
+   * `resolveOwner` answers with FOUR states; this claim reports three, and the
+   * mapping is a decision rather than a loss. `free` / `unowned` / `held` is
+   * what `EarlyBirdTab`'s ClaimNotice and `PromotionEarlyBirdClient` branch on,
+   * and widening it here would change what every existing screen renders for a
+   * concern neither of them has yet. A page-owned row IS held — by a page
+   * instead of a promotion — so it maps to `held`, which is the true answer to
+   * the only question these screens ask: may I take this course?
+   *
+   * `owner_page_id` rides along beside it so the page-side surfaces of the next
+   * round can tell the two holders apart WITHOUT a second read. It is `''` for
+   * every row today (the field does not exist yet), so nothing changes.
+   */
+  const owner = resolveOwner(doc);
+  if (owner === 'unowned') {
     return {
       status: 'unowned',
+      owner,
       course_id: courseId,
       promotion_id: '',
+      owner_page_id: '',
       promotion_title: '',
       config: serialize(doc),
     };
   }
+  const holder = String(doc.promotion_id ?? '').trim();
   return {
     status: 'held',
+    owner,
     course_id: courseId,
     promotion_id: holder,
+    owner_page_id: String(doc.owner_page_id ?? '').trim(),
     promotion_title: await promotionTitle(holder),
     config: serialize(doc),
   };
@@ -315,10 +382,32 @@ async function readEarlyBirdClaim(courseId) {
  * row. It is NOT a licence to rewrite that row's other fields — the callers
  * carry the existing values into their form so an ownership change cannot ride
  * a silent edit in with it.
+ *
+ * ── A CALLER IDENTIFIES ITSELF AS EXACTLY ONE KIND OF OWNER ───────────────
+ * `data.owner_page_id` marks a PAGE caller, `data.promotion_id` a PROMOTION
+ * one. Both live callers today supply the second and never the first, so
+ * `isPageCaller` is false throughout the existing suite and every branch below
+ * reduces to the code that was here before.
+ *
+ * The four states and what each does, per caller kind:
+ *
+ *                    page caller                    promotion caller
+ *   free             write                          write
+ *   unowned          adopt (needs `adopt: true`)    adopt (needs `adopt: true`)
+ *   legacy_owned     REFUSED + the way out (D4)     REFUSED (unchanged wording)
+ *   page_owned       same page writes, else REFUSED REFUSED
+ *
+ * `page_owned` is checked FIRST in both columns, because a row can carry both
+ * owner fields — that is what adopting a released legacy row produces — and the
+ * page is the owner when it does. Reading `promotion_id` first would let a
+ * promotion save walk into a row a page owns and name the wrong holder in the
+ * refusal.
  */
 async function writeEarlyBird(courseId, data) {
   await dbConnect();
   const incoming = String(data?.promotion_id ?? '').trim();
+  const incomingPage = String(data?.owner_page_id ?? '').trim();
+  const isPageCaller = Boolean(incomingPage);
   const claim = await readEarlyBirdClaim(courseId);
 
   /**
@@ -330,19 +419,42 @@ async function writeEarlyBird(courseId, data) {
    *
    *   · this READ is the only refusal if `course_id`'s unique index is missing
    *     from the PRODUCTION collection. Mongoose `unique: true` builds an index
-   *     only via autoIndex; that it exists on the deployed collection has NOT
-   *     been verified here (production is read-only this round, and an index
-   *     build is a write). Without the index there is no E11000, ever.
-   *   · the E11000 below is the only refusal when two admins race, because this
-   *     read is already stale by the time the write lands.
+   *     only via autoIndex.
    *
-   * PREMISE, to re-read if it changes: "the production unique index is
-   * unverified". If it is ever confirmed present, this read becomes a fast path
-   * rather than a safety property — and only then is collapsing to one
-   * mechanism a real option.
+   *     PREMISE RESOLVED — it used to say "that it exists on the deployed
+   *     collection has NOT been verified here". It has been now: the live
+   *     collection carries `course_id_1` with `unique: true`, read directly off
+   *     it. So the E11000 path below is a real second refusal rather than a
+   *     hoped-for one.
+   *
+   *     THAT DOES NOT MAKE THIS READ COLLAPSIBLE, and the reason is the next
+   *     bullet rather than the index: the two fail in different worlds, and
+   *     only one of those worlds was about the index.
+   *   · the E11000 below is the only refusal when two admins race, because this
+   *     read is already stale by the time the write lands. Conversely this read
+   *     is the only thing that can tell the FOUR states apart and return the
+   *     right code — a duplicate-key error says "taken" and cannot say by whom
+   *     or how to get it back.
    */
-  if (claim.status === 'held' && claim.promotion_id !== incoming) {
-    return claimedRefusal(courseId, claim.promotion_id);
+  /**
+   * `page_owned` FIRST, for both caller kinds. A row carrying both owner fields
+   * belongs to its page, and the checks below read `promotion_id`, so an
+   * unordered version would hand a promotion caller a refusal naming `''`.
+   */
+  if (claim.owner === 'page_owned' && claim.owner_page_id !== incomingPage) {
+    return pageClaimedRefusal(courseId, claim.owner_page_id);
+  }
+  if (claim.owner === 'legacy_owned' && (isPageCaller || claim.promotion_id !== incoming)) {
+    return claimedRefusal(courseId, claim.promotion_id, { forPage: isPageCaller });
+  }
+  if (claim.status === 'unowned' && incomingPage && data?.adopt !== true) {
+    return {
+      ok: false,
+      code: EB_NEEDS_ADOPTION,
+      error: `หลักสูตร ${courseId} มี Early Bird อยู่แล้วแต่ยังไม่ได้ผูกกับเจ้าของใด — ` +
+        'ยืนยันเพื่อย้ายมาอยู่ใต้หน้าเพจนี้',
+      claim,
+    };
   }
   if (claim.status === 'unowned' && incoming && data?.adopt !== true) {
     return {
@@ -367,20 +479,39 @@ async function writeEarlyBird(courseId, data) {
    *
    * The `''` in the filter is the schema default and every write here sets it,
    * so an unowned row is `''` rather than missing.
+   *
+   * The `$or` is BUILT by `ownerFilter` rather than written here, so the second
+   * writer asks the database the same question this one does. For a promotion
+   * caller it returns exactly the array this line always held —
+   * `[{ promotion_id: '' }, { promotion_id: <incoming> }]` — which is what makes
+   * the extraction behaviour-identical. See ownership.js for the page branch and
+   * for the one race it deliberately leaves open until a page writer exists.
    */
   try {
     await EarlyBirdConfig.findOneAndUpdate(
       {
         course_id: courseId,
-        $or: [{ promotion_id: '' }, { promotion_id: incoming }],
+        $or: ownerFilter({ pageId: incomingPage, promotionId: incoming }),
       },
       { $set: earlyBirdUpdate(data), $setOnInsert: { course_id: courseId } },
       { upsert: true, new: true, runValidators: true }
     );
   } catch (err) {
     if (err?.code === 11000) {
+      /**
+       * The race actually happened. Re-read so the refusal names whoever WON,
+       * not whoever the stale pre-read saw — and answer with the code matching
+       * the winner's KIND, because the two have different ways out. Falling
+       * through to the promotion refusal for a page winner would send the
+       * author to a promotion screen that has nothing to release.
+       */
       const raced = await readEarlyBirdClaim(courseId);
-      return claimedRefusal(courseId, raced.promotion_id || incoming);
+      if (raced.owner === 'page_owned' && raced.owner_page_id !== incomingPage) {
+        return pageClaimedRefusal(courseId, raced.owner_page_id);
+      }
+      return claimedRefusal(courseId, raced.promotion_id || incoming, {
+        forPage: isPageCaller,
+      });
     }
     throw err;
   }
