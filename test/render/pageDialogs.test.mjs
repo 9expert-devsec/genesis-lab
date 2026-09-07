@@ -79,7 +79,8 @@ const PAGE = (over = {}) => ({
   seo: { metaTitle: 'ชื่อ', metaDescription: 'คำอธิบาย', canonicalUrl: '', ogImage: '', noIndex: false },
   jsonLd: {}, ...over,
 });
-const PROMO = () => PAGE({ pageType: 'promotion', promotionId: '', promotionOrder: 0, promotionCover: '' });
+// `over` so a test can name a promotionKind without a second fixture.
+const PROMO = (over = {}) => PAGE({ pageType: 'promotion', promotionId: '', promotionOrder: 0, promotionCover: '', ...over });
 const TIER = { canUseAdvanced: true, canPublish: true, canManagePreview: true };
 
 const noopPatch = noop;
@@ -171,6 +172,21 @@ const SETTINGS_PROMOTION = [
   'ภาพปกโปรโมชัน',
   'อัปโหลดภาพปก',
   'ธีม',
+  /**
+   * ── THE EARLY BIRD BINDING, ADDED RATHER THAN THE PIN LOOSENED ──────────
+   * The binding is page CONFIGURATION — the course detail page cannot find a
+   * promotion by scanning sections, so the page owns it and the save writes it
+   * through to EarlyBirdConfig. It renders in its own group AFTER ทั่วไป and
+   * only on a promotion page, which is why this label is here and not in
+   * SETTINGS_GENERAL.
+   *
+   * ONLY THE KIND SELECT, because PROMO() is a promotion page whose
+   * `promotionKind` is the default `none` — and a page that has not been made
+   * an Early Bird must not show five controls binding one. The bound case has
+   * its own assertion below, which is what keeps this an exact set rather than
+   * a partial one.
+   */
+  'ชนิดโปรโมชัน',
   'Meta title',
   'Meta description',
   'Canonical URL',
@@ -280,6 +296,66 @@ test('PageSettingsBody on a PROMOTION page renders the four extra fields too', (
     'the promotion-only fields changed — these are three of the five the mockups drop');
   // The promotion set is a superset of the general one, in the same order.
   assert.deepEqual(SETTINGS_GENERAL.filter((f) => !SETTINGS_PROMOTION.includes(f)), []);
+});
+
+test('a promotion page of kind early_bird renders the whole binding', () => {
+  /**
+   * The counterpart to the assertion above: `ชนิดโปรโมชัน` alone on a plain
+   * promotion page, the full binding once the kind says there is one. Asserted
+   * as an exact ADDITION rather than by loosening the set, so a control that
+   * silently disappears from the panel still reddens something.
+   *
+   * `bundle` is deliberately absent from both: it is a storable promotionKind
+   * with no UI branch, and it must render exactly what `none` renders.
+   */
+  const bound = PROMO({ promotionKind: 'early_bird' });
+  const added = labelsIn(settings(bound)).filter((l) => !labelsIn(settings(PROMO())).includes(l));
+  assert.deepEqual(added, [
+    'รอบอบรม', 'ราคาพิเศษ (บาท)', 'สิ้นสุดโปรโมชัน', 'ป้ายกำกับ',
+  ], 'the Early Bird binding’s controls changed');
+
+  /**
+   * The course picker is deliberately NOT in that list. It renders through
+   * `FieldBlock`, a <div>, because `Field` wraps its children in a <label> and
+   * a <label> forwards a stray click to the first labelable control inside it —
+   * which for a picker with buttons is the defect round 47/48 removed. So it
+   * carries no <label> for labelsIn to find, and is asserted by its own markup
+   * instead. Dropping it from the set without this note would read as the
+   * picker having gone missing.
+   */
+  const boundHtml = settings(bound);
+  assert.match(boundHtml, /หลักสูตร/, 'the course picker is gone from the Early Bird binding');
+  assert.match(boundHtml, /พิมพ์เพื่อค้นหารหัสหรือชื่อคอร์ส/, 'the typeahead is gone');
+
+  /**
+   * AND THE TYPED-CODE ESCAPE HATCH IS ABSENT, which is a behaviour assertion
+   * rather than a tidy-up. That box is a second writer: it sets a course code
+   * with no ObjectId beside it, and a binding in that state can never list a
+   * round or build a registration CTA — it looks configured and does nothing.
+   * The three section editors that have always had it keep it (its prop
+   * defaults to on); this panel opts out.
+   */
+  assert.doesNotMatch(boundHtml, /course-select-code-input/,
+    'the Early Bird binding can set a course code with no ObjectId again');
+
+  const asBundle = PROMO({ promotionKind: 'bundle' });
+  assert.deepEqual(labelsIn(settings(asBundle)), labelsIn(settings(PROMO())),
+    'bundle grew a UI branch — it is declared with none on purpose');
+});
+
+test('the scheduling limit is stated in the panel, not left to a tooltip', () => {
+  /**
+   * `is_active` follows whether the page is publicly visible RIGHT NOW, and
+   * nothing runs at publishStartDate to flip it — so an Early Bird on a
+   * scheduled page starts when the page is actually published. An author who
+   * has just used ตั้งเวลาเผยแพร่ elsewhere in this dialog would otherwise
+   * assume it works here and find out from a customer.
+   */
+  const html = settings(PROMO({ promotionKind: 'early_bird' }));
+  assert.match(html, /เมื่อหน้านี้ถูกเผยแพร่จริงแล้วเท่านั้น/,
+    'the panel no longer says the Early Bird waits for a real publish');
+  assert.match(html, /ทันทีที่บันทึก/,
+    'the panel no longer distinguishes reserving the course from advertising it');
 });
 
 test('PreviewBody renders exactly its own fields, groups and buttons', () => {

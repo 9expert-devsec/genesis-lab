@@ -30,6 +30,7 @@ export const STORE_DESCRIPTIONS = Object.freeze({
   programOrder:            'ลำดับหลักสูตรในโปรแกรม',
   skillOrder:              'ลำดับหลักสูตรใน Skill',
   earlyBirdConfig:         'ราคา Early Bird',
+  pageBuilderEarlyBird:    'รหัสหลักสูตรที่หน้าโปรโมชันเก็บไว้แสดงผลของ Early Bird',
   coursePromoLink:         'ลิงก์โปรโมชั่นของหลักสูตร',
   featuredCourse:          'หลักสูตรแนะนำ (หน้าแรก)',
   featuredOnlineCourse:    'คอร์สออนไลน์แนะนำ',

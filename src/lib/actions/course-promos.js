@@ -637,3 +637,99 @@ export async function deletePromotionEarlyBird(promotionId, courseId) {
   revalidatePath(`/admin/promotions/${promotionId}/early-bird`);
   return { ok: true };
 }
+
+// ── The page side: a promotion PAGE owns an Early Bird row ──────────────────
+//
+// A THIRD VIEW of the same rows, and still not a third authority. Both writes
+// below funnel into the same `writeEarlyBird` / owner-scoped delete the other
+// two screens use, so the ownership rule and its refusals are identical
+// whichever door the author came through.
+//
+// ── ON THE GATE: `pages`, NOT `promotions` ─────────────────────────────────
+// The promotion-side actions above hold `promotions` because that is the door
+// they are reached through. These are reached through the PAGE BUILDER, whose
+// every action holds `pages` (updatePageIdentity, publishPageStatus,
+// deletePageBuilderPage). Requiring `promotions` here would mean an admin who
+// can edit a page cannot SAVE it once it carries a binding — the page save
+// would throw mid-flight — and moving Early Bird configuration to page level
+// exists precisely so a page author can do it. `pages` is not a weaker key
+// than `promotions`; `lib/rbac/access.js` is a flat allowlist with no
+// implication between keys, so this is the key matching the door, which is the
+// same rule `saveEarlyBird` follows with `courses`.
+//
+// Neither is what stops a cross-owner write. `writeEarlyBird` is.
+
+/**
+ * Write one page's Early Bird binding through to its `EarlyBirdConfig` row.
+ *
+ * `pageId` comes from the ROUTE/document, never from a form, so this cannot be
+ * pointed at another page's row by a crafted payload — the same property
+ * `savePromotionEarlyBird` has for its promotion id.
+ *
+ * Returns `writeEarlyBird`'s result unchanged, refusals included, so the page
+ * save can fail with the reason rather than saving and silently skipping the
+ * write — which would leave the settings screen showing a binding that does
+ * not exist.
+ */
+export async function savePageEarlyBird(pageId, courseCode, data) {
+  await requireAdmin('pages');
+  if (!pageId) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+  if (!courseCode) return { ok: false, error: 'ยังไม่ได้เลือกหลักสูตร' };
+  return writeEarlyBird(courseCode, { ...data, owner_page_id: String(pageId) });
+}
+
+/**
+ * Remove every Early Bird row THIS PAGE owns. Used when the binding is cleared,
+ * when `promotionKind` moves away from `early_bird`, and when the page is
+ * deleted.
+ *
+ * ── OWNER-SCOPED, AND THAT IS THE WHOLE SAFETY ────────────────────────────
+ * The filter is `owner_page_id` alone. It can therefore only ever match rows
+ * this page owns: a legacy row (`owner_page_id` absent or '') cannot match a
+ * non-empty page id, and neither can another page's row. A filter naming the
+ * COURSE instead would delete whatever happened to hold that course — the
+ * silent overwrite this collection's rule exists to refuse, wearing a delete's
+ * clothes.
+ *
+ * `deleteMany` rather than `deleteOne` even though `course_id` is unique: the
+ * uniqueness is per course, not per page, so "every row this page owns" is the
+ * honest query and it stays correct if a page is ever allowed two.
+ *
+ * A page that owns nothing deletes nothing and reports ok — clearing an unset
+ * binding is not an error, and returning one would fail a page save for a
+ * no-op.
+ */
+export async function clearPageEarlyBird(pageId, { revalidateCourseId = '' } = {}) {
+  await requireAdmin('pages');
+  const owner = String(pageId ?? '').trim();
+  if (!owner) return { ok: true, deleted: 0 };
+  await dbConnect();
+  const { deletedCount } = await EarlyBirdConfig.deleteMany({ owner_page_id: owner });
+  if (deletedCount && revalidateCourseId) revalidateCourse(revalidateCourseId);
+  return { ok: true, deleted: deletedCount ?? 0 };
+}
+
+/**
+ * The rounds a PAGE author may attach — the page side's own door onto the same
+ * list the promotion screen uses.
+ *
+ * ── IT DELEGATES RATHER THAN COPYING THE QUERY ────────────────────────────
+ * A byte-identical second `listSchedulesByCourse` call is exactly the drift
+ * `lib/schedule/scheduleRegistrationHref` was extracted to stop, one layer up:
+ * the day the round list needs a different status set or a limit, a copy is a
+ * second place to remember. So this is a NAME, not an implementation — it
+ * exists so the page side has a door of its own whose gate can diverge from the
+ * promotion side's later without moving any caller.
+ *
+ * ── THE ARGUMENT IS AN ObjectId, NOT A COURSE CODE ────────────────────────
+ * `/schedules` takes `course=<ObjectId>` — the opposite convention from
+ * `/public-course?course_id=<CODE>`, and lib/api/schedules.js says so in as
+ * many words. The page stores `earlyBird.courseRef` for exactly this reason;
+ * passing the code silently returns nothing.
+ *
+ * Holds `promotions`. A round list is a read, so an admin without that key sees
+ * an empty picker rather than a failed save.
+ */
+export async function getCourseRoundsForPage(courseObjectId) {
+  return getCourseRoundsForPromotion(courseObjectId);
+}

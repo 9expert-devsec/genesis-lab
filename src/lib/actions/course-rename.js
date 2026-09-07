@@ -95,6 +95,10 @@ import CourseOutlineFile from '@/models/CourseOutlineFile';
 import ProgramOrder from '@/models/ProgramOrder';
 import SkillOrder from '@/models/SkillOrder';
 import EarlyBirdConfig from '@/models/EarlyBirdConfig';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. A promotion PAGE caches the course CODE beside its Early
+// Bird binding; the binding itself is an ObjectId and is untouched by a rename.
+import PageBuilder from '@/models/PageBuilder';
 import CoursePromoLink from '@/models/CoursePromoLink';
 import { FeaturedCourse } from '@/models/FeaturedCourse';
 import { FeaturedOnlineCourse } from '@/models/FeaturedOnlineCourse';
@@ -385,6 +389,10 @@ export async function renameCourseCode({ oldCode, newCode, previewToken } = {}) 
   // ── STEP 6+ — the exact-match stores.
   for (const [key, Model, field] of [
     ['earlyBirdConfig', EarlyBirdConfig, 'course_id'],
+    // The page-level Early Bird DISPLAY CACHE. A dotted path is fine here:
+    // `updateMany` addresses and $sets nested fields by path, and this store is
+    // in the same exact-match regime as its siblings.
+    ['pageBuilderEarlyBird', PageBuilder, 'earlyBird.courseCode'],
     ['coursePromoLink', CoursePromoLink, 'course_id'],
     ['featuredCourse', FeaturedCourse, 'course_id'],
     ['featuredOnlineCourse', FeaturedOnlineCourse, 'course_id'],

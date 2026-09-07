@@ -47,6 +47,23 @@ const EXPECTED_LIVE_ONLY_KEYS = [
   'publishEndDate',
   'promotionId',
   'promotionOrder',
+  /**
+   * The Early Bird binding, and it is on THIS side deliberately.
+   *
+   * A page save writes the binding through to EarlyBirdConfig, where it
+   * RESERVES a claim on a course no other page or promotion may then take. A
+   * drafted binding would let the draft say "no Early Bird here" while the
+   * claim stayed reserved on the live half — a course unavailable to everyone
+   * else with nothing on screen explaining why. The reverse is worse: a draft
+   * that reserved nothing would let two pages both look like they held a
+   * course until whichever published second was refused.
+   *
+   * The publish state still governs `is_active` on the written row, so the
+   * claim is RESERVED on save and only ADVERTISED once the page is publicly
+   * visible. Two different questions, two different answers.
+   */
+  'promotionKind',
+  'earlyBird',
   'slugHistory',
 ];
 
@@ -54,7 +71,7 @@ test('DRAFT_CONTENT_KEYS is exactly the nine content keys', () => {
   assert.deepEqual(DRAFT_CONTENT_KEYS, EXPECTED_DRAFT_KEYS);
 });
 
-test('LIVE_ONLY_KEYS is exactly the eight that keep taking effect immediately', () => {
+test('LIVE_ONLY_KEYS is exactly the ten that keep taking effect immediately', () => {
   // slug is identity (unique index, slugHistory, the cross-collection guard,
   // two public routes). pageType is routing — /promotions queries it, and it
   // gates promotionId/promotionOrder, which are live-only themselves. status

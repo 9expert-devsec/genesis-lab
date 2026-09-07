@@ -473,8 +473,28 @@ export function CourseIdsPicker({ value, onChange, courses = [], label, hint }) 
  * stored trimmed and otherwise verbatim; case is not folded, because four of 79
  * upstream ids are mixed-case and the course query is exact-match.
  */
+/**
+ * ── `allowDirectEntry` — OPT-OUT, DEFAULTING TO THE INCUMBENT ─────────────
+ * The typed-code escape hatch stays ON for the three section editors that have
+ * always had it: a `course_card` or `course_schedule` naming a code the
+ * catalogue does not list still renders, still saves, and the resolver — not
+ * this control — decides whether it is real. Removing it there would take away
+ * a working affordance.
+ *
+ * It is turned OFF for the page-level Early Bird binding, and the difference is
+ * not preference. That binding needs BOTH identifiers: the code addresses
+ * `EarlyBirdConfig.course_id`, and the upstream ObjectId is the only thing
+ * `/schedules` accepts. A typed code has no ObjectId beside it, so it can
+ * produce no rounds, therefore no registration CTA — a row that looks bound and
+ * does nothing. That is not a degraded success; it is the half-set state the
+ * binding's own guard refuses.
+ *
+ * A default of `true` is what makes this additive: the three existing callers
+ * pass nothing and render exactly what they rendered before.
+ */
 export function CourseSelectPicker({
   value, onChange, courses = [], label, hint, invalid = false, placeholder,
+  allowDirectEntry = true,
 }) {
   const code = typeof value === 'string' ? value.trim() : '';
   const names = useMemo(() => courseNameByCode(courses), [courses]);
@@ -519,6 +539,7 @@ export function CourseSelectPicker({
         </span>
       )}
 
+      {allowDirectEntry && (
       <div className="mt-2 flex items-center gap-1.5">
         <input
           type="text"
@@ -539,6 +560,7 @@ export function CourseSelectPicker({
           ใช้รหัสนี้
         </button>
       </div>
+      )}
     </FieldBlock>
   );
 }

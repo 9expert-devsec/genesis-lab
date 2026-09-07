@@ -46,6 +46,10 @@ import Promotion from '@/models/Promotion';
 import Article from '@/models/Article';
 import RegisterPublic from '@/models/RegisterPublic';
 import CareerPathRegistration from '@/models/CareerPathRegistration';
+// ADDED beside the statements above rather than folded into one — the standing
+// rule in this repo. A promotion PAGE caches the course CODE beside its Early
+// Bird binding, and the rename has to move it.
+import PageBuilder from '@/models/PageBuilder';
 
 /** How many identifying rows to carry back per store. The COUNT is unbounded. */
 const ROW_SAMPLE = 25;
@@ -77,6 +81,7 @@ export async function previewCourseCodeRename({ oldCode, newCode } = {}) {
     programRows,
     skillRows,
     earlyBirdRows,
+    pageEarlyBirdRows,
     promoLinkRows,
     featuredRows,
     featuredOnlineRows,
@@ -103,6 +108,12 @@ export async function previewCourseCodeRename({ oldCode, newCode } = {}) {
     ProgramOrder.find({ courseOrder: upper }, { programId: 1, courseOrder: 1, courseOrderSource: 1, _id: 0 }).lean(),
     SkillOrder.find({ courseOrder: upper }, { skillId: 1, courseOrder: 1, courseOrderSource: 1, _id: 0 }).lean(),
     EarlyBirdConfig.find(exact('course_id', from), { course_id: 1 }).lean(),
+    // The page-level Early Bird binding's DISPLAY CACHE. `earlyBird.courseRef`
+    // is the real binding and is an ObjectId a rename never touches; this is
+    // the code the settings panel shows and the write-through addresses
+    // EarlyBirdConfig by, so it has to move with the rename.
+    PageBuilder.find(exact('earlyBird.courseCode', from),
+      { slug: 1, title: 1, 'earlyBird.courseCode': 1 }).lean(),
     CoursePromoLink.find(exact('course_id', from), { course_id: 1, promotion_id: 1, display_order: 1 }).lean(),
     FeaturedCourse.find(exact('course_id', from), { course_id: 1, course_name: 1 }).lean(),
     FeaturedOnlineCourse.find(exact('course_id', from), { course_id: 1, course_name: 1 }).lean(),
@@ -144,6 +155,7 @@ export async function previewCourseCodeRename({ oldCode, newCode } = {}) {
       programOrder: programRows ?? [],
       skillOrder: skillRows ?? [],
       earlyBirdConfig: earlyBirdRows ?? [],
+      pageBuilderEarlyBird: pageEarlyBirdRows ?? [],
       coursePromoLink: promoLinkRows ?? [],
       featuredCourse: featuredRows ?? [],
       featuredOnlineCourse: featuredOnlineRows ?? [],

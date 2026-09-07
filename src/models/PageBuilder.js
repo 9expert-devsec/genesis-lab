@@ -5,6 +5,9 @@ import {
   PAGE_THEMES,
   JSONLD_TYPES,
 } from '@/lib/schemas/pageBuilder';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The promotion-kind vocabulary, for the enum below.
+import { PROMOTION_KINDS } from '@/lib/schemas/pageBuilder';
 
 /**
  * PageBuilder — a section-based, admin-authored page (collection
@@ -102,6 +105,37 @@ const PageBuilderSchema = new mongoose.Schema(
     // untracked asset can never look like an orphan. Revisit when 5b lands. See
     // docs/page-builder-status.md item 5.
     promotionCover: { type: String, default: '' },
+
+    /**
+     * What KIND of promotion this is, and — for `early_bird` — the binding
+     * itself. Both meaningless unless pageType === 'promotion', exactly as the
+     * three promotion fields above already are.
+     *
+     * `bundle` is in the enum with NO UI: the vocabulary is decided in one
+     * place (PROMOTION_KINDS in lib/schemas/pageBuilder.js) so a later bundle
+     * surface does not also have to widen a stored enum.
+     *
+     * ── TWO IDENTIFIERS, NEITHER AUTHORITATIVE OVER THE OTHER ─────────────
+     * CORRECTED: this used to call `courseRef` authoritative and the code a
+     * cache of it. Nothing recomputes the code from the ref; the write-through
+     * reads the CODE (it addresses EarlyBirdConfig.course_id) and
+     * `course-rename` maintains it as a first-class store. Upstream is simply
+     * asymmetric — `/schedules` accepts ONLY the ObjectId and `/public-course`
+     * accepts only the code — so each is the sole key somewhere and they are
+     * written together by one setter. The zod schema refuses a mixed pair.
+     *
+     * Zod is the authoritative validator (lib/schemas/pageBuilder.js); this
+     * mirrors it so a directly-seeded document still has the right shape.
+     */
+    promotionKind: { type: String, enum: PROMOTION_KINDS, default: 'none' },
+    earlyBird: {
+      courseRef:    { type: String, trim: true, default: '' }, // ObjectId — AUTHORITATIVE
+      courseCode:   { type: String, trim: true, default: '' }, // display cache only
+      scheduleId:   { type: String, trim: true, default: '' },
+      specialPrice: { type: Number, default: null },
+      deadline:     { type: Date,   default: null },
+      labelTh:      { type: String, trim: true, default: 'Early Bird' },
+    },
 
     // The page body — ordered section blocks. Loose blob (see SectionSchema).
     sections: { type: [SectionSchema], default: [] },

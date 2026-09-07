@@ -7,6 +7,10 @@ import { PAGE_TYPES, PAGE_THEMES } from '@/lib/schemas/pageBuilder';
 import { isReservedSlug } from '@/lib/pages/reservedSlugs';
 import { isStandalonePromotion } from '@/lib/pages/promotionMode';
 import { Field, Group, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The page-level Early Bird binding, which sits with the
+// other promotion settings because it is page CONFIGURATION, not content.
+import { EarlyBirdBinding } from './EarlyBirdBinding';
 import { useEditor } from './EditorProvider';
 import { VersionHistory } from './VersionHistory';
 import { PreviewBody } from './PreviewDialog';
@@ -223,7 +227,7 @@ export function ActivitySection({ pageId, open }) {
  * the cover uploader stay with it: they are three of the five fields the
  * mockups drop, and dropping a working control is not a redesign.
  */
-export function GeneralSection({ page, patch }) {
+export function GeneralSection({ page, patch, courses = [] }) {
   const slug = String(page?.slug ?? '');
   const slugBadFormat = slug !== '' && !SLUG_RE.test(slug);
   const slugReserved = slug !== '' && isReservedSlug(slug);
@@ -289,6 +293,17 @@ export function GeneralSection({ page, patch }) {
             <Warn>ธีมนี้ยังแสดงผลเหมือน “ค่าเริ่มต้น” — ยังไม่มีการออกแบบเฉพาะ</Warn>
           )}
         </Group>
+
+        {/*
+          Its OWN group, and gated on the same `pageType === 'promotion'` branch
+          the promotion trio above uses. It is not folded into ทั่วไป because it
+          is a binding to another collection rather than a property of the page,
+          and an author scanning the general group should not have to step over
+          six Early Bird controls to reach the theme.
+        */}
+        {page?.pageType === 'promotion' && (
+          <EarlyBirdBinding page={page} patch={patch} courses={courses} />
+        )}
     </>
   );
 }
@@ -338,6 +353,7 @@ export function SeoSection({ seo, patchSeo }) {
 
 export function PageSettingsBody({
   page, pageId, dispatch, open, dirty, saving, tier, initialSection, previewStatus = null,
+  courses = [],
   // The editor state, threaded rather than read from context. See VersionHistory.
   editor = null,
 }) {
@@ -375,7 +391,7 @@ export function PageSettingsBody({
         <SettingsNav section={section} onSelect={setSection} previewStatus={status} />
 
         <div className="min-w-0 flex-1 overflow-y-auto px-6 pb-7 pt-5">
-          {section === 'general' && <GeneralSection page={page} patch={patch} />}
+          {section === 'general' && <GeneralSection page={page} patch={patch} courses={courses} />}
           {section === 'seo' && <SeoSection seo={page?.seo ?? {}} patchSeo={patchSeo} />}
           {section === 'jsonld' && <JsonLdSection />}
           {section === 'preview' && (
@@ -398,7 +414,7 @@ export function PageSettingsBody({
 
 export function PageSettingsDialog({ open, onClose, initialSection = null }) {
   const editor = useEditor();
-  const { page, pageId, dispatch, dirty, saving, tier } = editor;
+  const { page, pageId, dispatch, dirty, saving, tier, courses } = editor;
 
   /**
    * The menu's dot needs the preview status BEFORE the preview section has ever
@@ -435,7 +451,7 @@ export function PageSettingsDialog({ open, onClose, initialSection = null }) {
         key={initialSection ?? 'general'}
         page={page} pageId={pageId} dispatch={dispatch} open={open}
         dirty={dirty} saving={saving} tier={tier} initialSection={initialSection}
-        previewStatus={previewStatus} editor={editor}
+        previewStatus={previewStatus} editor={editor} courses={courses}
       />
     </SettingsShell>
   );
