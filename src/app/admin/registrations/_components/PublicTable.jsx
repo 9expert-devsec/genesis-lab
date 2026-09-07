@@ -244,6 +244,7 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
                     name={row.courseName}
                     classDate={row.classDate}
                     bundle={row.bundle}
+                    earlyBird={row.earlyBird}
                     legs={legs}
                   />
                 </CellLink>
@@ -410,7 +411,7 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
  * added to close a filed defect (see below), and nothing about dropping the
  * name argues for dropping it.
  */
-function CourseCell({ name, classDate, bundle, legs = [] }) {
+function CourseCell({ name, classDate, bundle, earlyBird, legs = [] }) {
 
   /**
    * ── THE FOLDED CASE: EVERY COURSE THE REQUEST ASKED FOR ──────────────────
@@ -462,17 +463,98 @@ function CourseCell({ name, classDate, bundle, legs = [] }) {
 
   return (
     <>
+      {/**
+        * -- THE PROMOTION CHIPS SIT ABOVE THE COURSE NAME ---------------------
+        *
+        * They used to sit BELOW it here, while the folded branch above has
+        * always drawn its chip ABOVE the course lines -- so the same kind of tag
+        * appeared in two places depending on how many legs a request had.
+        * MEASURED before the move, by rendering all three shapes and reading the
+        * DOM order:
+        *
+        *     single row, bundle only      NAME  then  BUNDLE
+        *     single row, Early Bird only  NAME  then  EARLYBIRD
+        *     folded 2-leg bundle          BUNDLE  then  NAME
+        *
+        * A bundle always has two or more legs in practice, so the bundle chip an
+        * admin actually sees is the folded one, above; an Early Bird
+        * registration is always a single row, so its chip was the one below.
+        *
+        * The asymmetry was therefore never WITHIN this branch -- both chips were
+        * below the name here -- which is why BOTH move rather than only the
+        * Early Bird one. Moving one would have made the two disagree inside a
+        * single row, which is a worse version of the reported problem.
+        *
+        * ONE ROW FOR BOTH, so a registration carrying both draws them side by
+        * side at the same height as a folded bundle chip, and every promotion
+        * chip in the table starts at the same offset from the top of its cell.
+        *
+        * `h-[24px] items-center` is the folded branch own chip-row wrapper,
+        * reused rather than re-measured -- the two must agree about that height
+        * or the alignment this move exists for lasts only until one of them is
+        * retuned.
+        *
+        * THE ROW IS CONDITIONAL ON THERE BEING A CHIP. An unconditional 24px div
+        * would be an empty element on the majority of rows, which the
+        * empty-element guard catches and which the `classDate` block below is
+        * already conditional for. A row with no promotion simply starts at its
+        * course name, exactly as it did before this move and exactly as it does
+        * beside a folded bundle today.
+        */}
+      {(bundle || earlyBird) ? (
+        <div className="flex h-[24px] items-center gap-1">
+          {bundle ? (
+            <span
+              data-testid="bundle-leg-chip"
+              className="inline-flex w-fit max-w-full items-center truncate rounded-9e-sm bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
+            >
+              Bundle
+            </span>
+          ) : null}
+          {/**
+            * -- THE EARLY BIRD CHIP: THE LABEL, AND NOTHING ELSE --------------
+            * No price here, deliberately. This list is scanned, not read: a
+            * number in a 20-row table invites comparison against the absent
+            * numbers on every other row, and the value is PER SEAT, which a
+            * bare figure beside a course name does not say. The price lives on
+            * the DETAIL screen, which is where the quotation is actually
+            * written and where there is room to label it.
+            *
+            * AMBER, not violet: the bundle chip beside it is violet, and a
+            * second promotion in the same colour would read as the same thing.
+            * It is the palette the Early Bird banner already uses on the public
+            * side. That distinction matters MORE now the two share a row.
+            *
+            * `labelTh` is the author own label AS AT SUBMIT, falling back to
+            * the literal -- the fallback is the storage-floor rule again, since
+            * `label_th` can be empty on a directly-seeded config and an empty
+            * chip would be a coloured smudge.
+            *
+            * -- STILL A SIBLING, NEVER AN `else` -----------------------------
+            * Never both chips: one promotion per registration, ruled at the
+            * bundle route. This stays a SIBLING rather than an `else` branch so
+            * that if that rule is ever broken the screen SHOWS two chips --
+            * visibly wrong and fixable -- instead of silently hiding one.
+            *
+            * Sharing a row does not weaken that, and the shape is what keeps it
+            * true: the enclosing condition is an OR, so either chip alone
+            * renders and both together render both. An `else` here would turn a
+            * broken rule into an invisible one, which is the whole reason this
+            * was ruled on rather than left to taste.
+            */}
+          {earlyBird ? (
+            <span
+              data-testid="early-bird-chip"
+              className="inline-flex w-fit max-w-full items-center truncate rounded-9e-sm bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+            >
+              {earlyBird.labelTh || 'Early Bird'}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <p className="truncate text-[15px] font-bold leading-[20px] text-[var(--text-primary)]">
         {name || '—'}
       </p>
-      {bundle ? (
-        <span
-          data-testid="bundle-leg-chip"
-          className="mt-0.5 inline-flex w-fit max-w-full items-center truncate rounded-9e-sm bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
-        >
-          Bundle
-        </span>
-      ) : null}
       {classDate ? (
         <div className="flex h-[32px] items-center">
           <span className="truncate text-[13px] leading-[15px] text-[var(--text-secondary)]">

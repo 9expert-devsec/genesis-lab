@@ -7,6 +7,13 @@ import {
 } from '@/lib/api/schedules';
 import { resolveScheduleStatusBatch } from '@/lib/schedule-status';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The MAP says WHICH round is Early Bird and nothing else:
+// it projects `course_id schedule_id` only, so it carries no deadline. The
+// by-course read carries the whole document, and the notice needs the deadline
+// to say until when. Widening the map's projection would change a read path
+// four other surfaces share; calling this one changes nothing.
+import { getEarlyBirdByCourse } from '@/lib/actions/course-promos';
 import { getCourseExtension } from '@/lib/actions/course-extensions';
 import { getScheduleLocals } from '@/lib/actions/schedules';
 import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
@@ -76,7 +83,7 @@ export async function RegisterPageContent({ searchParams, step }) {
     redirect('/training-course');
   }
 
-  const [{ items: rawSchedules }, earlyBirdMap, ext] = await Promise.all([
+  const [{ items: rawSchedules }, earlyBirdMap, ext, earlyBirdConfig] = await Promise.all([
     // All three statuses. A `?class=` deep link to a sold-out round used to
     // land on a wizard whose carousel did not contain it — step 1 rendered
     // nothing and said nothing. The round has to ARRIVE before RegisterWizard
@@ -111,6 +118,23 @@ export async function RegisterPageContent({ searchParams, step }) {
     }),
     getAllActiveEarlyBirdMap().catch(() => ({})),
     getCourseExtension(course.course_id).catch(() => null),
+    /**
+     * The Early Bird config for THIS course, for the notice's "until when".
+     *
+     * In the SAME `Promise.all` as the others rather than awaited after it —
+     * it is independent of every one of them, so a second round trip would be
+     * latency on a form the customer is waiting for, bought for nothing.
+     *
+     * `.catch(() => null)` like its neighbours: this page must render without
+     * a promotion notice rather than not render. It is the same posture the
+     * submit route takes for the same read, and for a stronger reason there.
+     *
+     * NOTE it is not the authority on anything. The tag that reaches the
+     * registration is decided at SUBMIT, by this same function called again —
+     * so a deadline that passes while the customer types costs them the notice
+     * they already saw and, correctly, the discount too.
+     */
+    getEarlyBirdByCourse(course.course_id).catch(() => null),
   ]);
 
   // Apply admin status overrides (open → closed, scheduled changes).
@@ -137,6 +161,22 @@ export async function RegisterPageContent({ searchParams, step }) {
 
   const earlyBirdScheduleId =
     earlyBirdMap[String(course.course_id).toUpperCase()] ?? null;
+
+  /**
+   * The deadline the notice shows, or null.
+   *
+   * Gated on the config's own round matching the one the MAP named, so the two
+   * reads cannot disagree about which round the notice is for — they are taken
+   * a moment apart through different queries and an admin could in principle
+   * change the config between them. `getEarlyBirdByCourse` has already applied
+   * `is_active` and the deadline, so a non-null answer here means the offer is
+   * live right now.
+   */
+  const earlyBirdDeadline =
+    earlyBirdScheduleId &&
+    String(earlyBirdConfig?.schedule_id ?? '') === String(earlyBirdScheduleId)
+      ? (earlyBirdConfig?.deadline ?? null)
+      : null;
 
   // Back-link target for step 1 — the detail page of the course being
   // registered for, not the catalog.
@@ -201,6 +241,7 @@ export async function RegisterPageContent({ searchParams, step }) {
           startedScheduleIds={startedScheduleIds}
           initialClassId={initialClassId}
           earlyBirdScheduleId={earlyBirdScheduleId}
+          earlyBirdDeadline={earlyBirdDeadline}
           step={step}
           basePath={REGISTRATION_BASE_PATH}
           courseDetailHref={courseDetailHref}

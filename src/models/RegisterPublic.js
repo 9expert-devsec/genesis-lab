@@ -233,6 +233,87 @@ const BundleSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * The Early Bird tag. A SIBLING of `bundle`, not a shared "promotion" field,
+ * and that is a ruling rather than a convenience.
+ *
+ * ── WHY NOT ONE DISCRIMINATED `promotion` SUBDOCUMENT ─────────────────────
+ * `bundle == null` is currently THE WHOLE TEST for "is this an ordinary row" —
+ * build-public.js says so in as many words, and `foldRequests` keys the entire
+ * list on `bundle.requestId`. Folding both tags into one field with a `kind`
+ * discriminator would stop that test being that test, which is a change to how
+ * BUNDLE behaves, for the benefit of a second tag that shares none of its
+ * fields. The two promotions have nothing structural in common: a bundle is
+ * several rows that must be grouped and traced back to a section; an Early Bird
+ * is one row and one round, with no legs and nothing to group.
+ *
+ * What IS shared is the MECHANISM, and that is reused exactly: a subdocument
+ * defaulting to `undefined` so absent means "no promotion", a `build*Tag()`
+ * that mints it from what the SERVER resolved, absence from the zod schema so a
+ * client cannot post one, and denormalised display values.
+ *
+ * ── ONE PROMOTION PER REGISTRATION ────────────────────────────────────────
+ * A row never carries both. The refusal is written down at the bundle route,
+ * not left to the fact that the two are built on different paths — see the note
+ * there. An admin issues quotations BY HAND, so two stacked chips would leave
+ * the person writing the quote unable to say which price applies, which is the
+ * exact harm this whole tag exists to prevent.
+ *
+ * ══ EVERY FIELD HERE HAS A NAMED READER ════════════════════════════════════
+ *
+ *   courseCode    which course the promotion was for. Identity, and required:
+ *                 an Early Bird that cannot say which course it applied to is
+ *                 a tag nothing can check against a quotation.
+ *   scheduleId    THE ROUND. Required, because an Early Bird belongs to exactly
+ *                 one round by rule (EarlyBirdConfig holds a single
+ *                 `schedule_id`), and a tag naming no round could not be
+ *                 verified against the registration's own `classId`.
+ *   specialPrice  THE VALUE THIS TAG EXISTS FOR. Read by the detail screen.
+ *   labelTh       the label as it was at submit ("Early Bird", or whatever the
+ *                 author renamed it to). Read by the list chip and the detail.
+ *   deadline      when the offer ended, as it stood at submit. Not read yet;
+ *                 stored because it is the only thing that can later answer
+ *                 "was this quote issued inside the window".
+ *
+ * ── `specialPrice` IS PER SEAT, AND THE NAME DOES NOT SAY SO ──────────────
+ * Stated here because a reader will otherwise assume an order total. A public
+ * registration carries `attendeesCount` seats and several `attendees`, and the
+ * price copied here is `EarlyBirdConfig.special_price`, which is a per-person
+ * course price everywhere it is displayed (the banner renders it beside
+ * "ราคาดังกล่าวยังไม่รวมภาษีมูลค่าเพิ่ม", per head). NOTHING here multiplies.
+ * An admin writing a quotation multiplies by the seat count themselves, as they
+ * already do for the ordinary course price.
+ *
+ * ── AND IT IS DENORMALISED, WHICH IS THE POINT ────────────────────────────
+ * Same argument `bundle.name` makes: the EarlyBirdConfig row can be edited,
+ * deactivated or deleted, and its deadline WILL pass — after which
+ * `getEarlyBirdByCourse` returns null and the price that applied is
+ * unrecoverable. An admin reading a six-month-old quotation must still see what
+ * was sold. A lookup would show today's answer to a question about last March,
+ * and past the deadline it would show nothing at all.
+ *
+ * `null` rather than 0 for an unset price: 0 is a free course and null is "the
+ * config had no price", the same distinction `EarlyBirdConfig.special_price`
+ * already makes.
+ *
+ * ══ NOT CUSTOMER INPUT ═════════════════════════════════════════════════════
+ * Deliberately absent from `publicRegistrationSchema`, exactly as `bundle` is.
+ * That schema is a plain `z.object()` with no `.passthrough()`, so zod strips
+ * an unknown key — a client cannot post an `earlyBird` object and file a
+ * registration claiming a discount it was never offered. The tag is derived
+ * server-side from `getEarlyBirdByCourse`, at submit.
+ */
+const EarlyBirdSchema = new mongoose.Schema(
+  {
+    courseCode:   { type: String, trim: true, required: true },
+    scheduleId:   { type: String, trim: true, required: true },
+    specialPrice: { type: Number, default: null }, // PER SEAT — see above
+    labelTh:      { type: String, trim: true, default: '' },
+    deadline:     { type: Date,   default: null },
+  },
+  { _id: false }
+);
+
 const RegisterPublicSchema = new mongoose.Schema(
   {
     // Course / class references (upstream IDs as strings)
@@ -478,6 +559,18 @@ const RegisterPublicSchema = new mongoose.Schema(
      * the same idiom, for the same reason, as `supersedesRegistrationId` above.
      */
     bundle: { type: BundleSchema, default: undefined },
+
+    /**
+     * The Early Bird tag — see EarlyBirdSchema above for the shape, every
+     * field's reader, and why it is a sibling of `bundle` rather than sharing
+     * one promotion field with it.
+     *
+     * `default: undefined` so an ordinary registration writes NO KEY at all
+     * rather than a null one, and `earlyBird == null` is the whole test for
+     * "no Early Bird applied" — the same idiom, for the same reason, as
+     * `bundle` directly above it.
+     */
+    earlyBird: { type: EarlyBirdSchema, default: undefined },
 
     // Meta
     /**

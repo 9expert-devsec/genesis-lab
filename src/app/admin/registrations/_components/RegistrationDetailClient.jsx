@@ -1410,6 +1410,45 @@ export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], hi
                     emptyHint="แพ็กเกจนี้ไม่ได้ตั้งชื่อไว้"
                   />
                 )}
+                {/**
+                  * ── THE EARLY BIRD ROW, AND IT CARRIES THE PRICE ──────────
+                  * THIS is where the harm actually happens. An admin issues
+                  * every quotation BY HAND from this screen, so a registration
+                  * that does not say it was Early Bird gets quoted at full
+                  * price. The list chip says THAT it was; this says at WHAT.
+                  *
+                  * The price is shown here and not in the list because a
+                  * quotation is written here, there is room to label it, and
+                  * the value is PER SEAT — a bare number in a scanned table
+                  * would be read as an order total.
+                  *
+                  * "/ คน" is the label doing that work. The multiplication is
+                  * the admin's, exactly as it already is for the ordinary
+                  * course price; nothing in this codebase multiplies it.
+                  *
+                  * FROZEN, not looked up. `doc.earlyBird` was written at
+                  * submit; the config it came from can since have been edited,
+                  * deactivated or deleted, and past its deadline
+                  * `getEarlyBirdByCourse` returns null — so a lookup here would
+                  * show nothing at all for exactly the quotations most likely
+                  * to be written late.
+                  *
+                  * `emptyHint` for the same reason แพ็กเกจ above has one: a
+                  * config with no price is legitimate (the storage floor
+                  * accepts null), and a bare colon would read as a value that
+                  * failed to load.
+                  */}
+                {doc.earlyBird && (
+                  <DLRow
+                    label={doc.earlyBird.labelTh || 'Early Bird'}
+                    value={
+                      doc.earlyBird.specialPrice == null
+                        ? ''
+                        : `${Number(doc.earlyBird.specialPrice).toLocaleString('th-TH')} บาท / คน`
+                    }
+                    emptyHint="ไม่ได้บันทึกราคาพิเศษไว้"
+                  />
+                )}
                 <DLRow label="หลักสูตร"  value={doc.courseName} />
                 <DLRow label="รหัสคอร์ส" value={doc.courseCode || doc.courseId} />
                 <DLRow

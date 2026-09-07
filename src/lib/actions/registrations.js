@@ -286,7 +286,24 @@ export async function listRegistrations({
        * It is a SUBDOCUMENT, and the rule this projection is held to is that it
        * equals the render. Four short strings, on a page of twenty rows.
        */
-        .select('courseName classDate scheduleType attendanceMode coordinator attendeesCount status createdAt bundle')
+        /**
+         * ── `earlyBird` IS HERE FOR THE SAME REASON `bundle` IS ────────────
+         * MEASURED before it was added: without it in this projection the list
+         * chip renders NOTHING, silently, on every row — the query never
+         * returns the field, so `row.earlyBird` is undefined and the chip's
+         * guard is simply false. A chip that is absent because of a projection
+         * looks exactly like a registration that was not Early Bird, which is
+         * the failure this tag exists to prevent, moved one layer down.
+         *
+         * The projection rule this file is held to is that it EQUALS THE
+         * RENDER. The list draws the label only, so the whole subdocument
+         * crossing is more than the list strictly needs — but `.select()` is
+         * per-field, not per-leaf, and five short values on a page of twenty
+         * rows is not worth a second projection shape to trim. The DETAIL
+         * screen reads the price from the same subdocument through its own
+         * unprojected `findById`.
+         */
+        .select('courseName classDate scheduleType attendanceMode coordinator attendeesCount status createdAt bundle earlyBird')
         .lean()
       : [];
 

@@ -110,6 +110,30 @@ export function buildBundleLegs({ items, resolved, todayKey, data, attendees, bu
       source: 'web',
       ipAddress,
       bundle,
+      /**
+       * ── NO `earlyBird` KEY ON A LEG. EVER. AND IT IS SAID HERE ───────────
+       *
+       * ONE PROMOTION PER REGISTRATION. A bundle already carries its own
+       * pricing — the author set a package price over N courses — and an admin
+       * issues the quotation BY HAND from this document. A leg wearing both
+       * chips would leave the person writing that quote unable to say which
+       * price applies: the package rate, or the Early Bird rate on one of its
+       * courses. That is not a display problem, it is a wrong invoice.
+       *
+       * ── WHY THIS COMMENT EXISTS WHEN THE CODE ALREADY DOES NOTHING ───────
+       * Legs are built HERE and ordinary registrations at
+       * `/api/registration/public`, so today a leg gets no Early Bird tag
+       * because nothing on this path asks for one. That is EMERGENT, not
+       * decided — exactly the shape that nearly became a defect in the
+       * ownership rule, where a correct behaviour nobody had named looked like
+       * an oversight and invited a "tidy-up" that would have reopened it.
+       *
+       * So: the absence is the ruling. A future edit that adds Early Bird
+       * derivation to this file, or routes legs through
+       * `buildQuoteRegistration`'s `earlyBird` argument, is changing the rule
+       * and must say so. test/fs/earlyBirdRegistrationTag asserts a leg carries
+       * no `earlyBird` key.
+       */
     });
   }
 
