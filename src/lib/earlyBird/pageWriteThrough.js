@@ -135,9 +135,10 @@ export function earlyBirdIsActive(page, now = Date.now()) {
  * supplies the KEY, so omitting it here is what makes that guarantee real.
  *
  * `course_id` carries the CODE because that is what the column stores and what
- * every reader joins on. The page's authoritative binding is `courseRef`, the
- * ObjectId; the caller resolves the code and passes it in, so this function
- * never has to decide which of the two is the truth.
+ * every reader joins on. The caller passes it in rather than this function
+ * choosing between the page's two identifiers — they are written together and
+ * neither is derived from the other (see the schema's note), so there is no
+ * "which is the truth" question for this function to answer.
  */
 export function deriveEarlyBirdRow(page, courseCode, now = Date.now()) {
   if (!hasEarlyBirdBinding(page)) return null;
@@ -157,4 +158,67 @@ export function deriveEarlyBirdRow(page, courseCode, now = Date.now()) {
     deadline:      earlyBirdDeadline(binding, page),
     is_active:     earlyBirdIsActive(page, now),
   };
+}
+
+/**
+ * ── WHOSE PERMISSION IS IT? THE FIELD'S, NOT THE DOCUMENT'S ────────────────
+ *
+ * The Early Bird binding sets a COMMERCIAL PRICE and reserves a course against
+ * every other page and promotion. Editing a page's heading does not. Gating the
+ * whole page save on `promotions` would make a promotion page unsaveable by the
+ * person who edits it; gating none of it would let page-edit rights set a price.
+ * Neither is right, so the permission attaches to the FIELDS.
+ *
+ * This is the predicate that decides which kind of save is being attempted.
+ * Pure, so the settings panel can ask the same question the action asks.
+ *
+ * ── THE COMPARISON IS OVER STORED FORM, NOT OBJECT IDENTITY ───────────────
+ * `existing` comes from Mongo (`deadline` is a Date, absent keys are missing)
+ * and `incoming` from a zod parse of a client patch (`deadline` is an ISO
+ * string, every key present with a default). A deep-equal would call every save
+ * a change and demand `promotions` for renaming a page. So each field is
+ * compared in the form it is STORED in — dates as instants, everything else as
+ * trimmed strings — and `null`, `''` and absent are one value throughout,
+ * because that is what they mean on a row nobody has bound.
+ *
+ * `specialPrice` compares numerically with `0` preserved: 0 is a free course
+ * and `null` is unset, and collapsing them would let a price be set to free
+ * without the permission.
+ */
+const BINDING_FIELDS = ['courseRef', 'courseCode', 'scheduleId', 'labelTh'];
+
+/** A field's stored form, as a comparable string. */
+function fieldForm(binding, key) {
+  if (key === 'deadline') {
+    const t = ms(binding?.deadline);
+    return t === null ? '' : String(t);
+  }
+  if (key === 'specialPrice') {
+    const v = binding?.specialPrice;
+    return v == null || v === '' ? '' : String(Number(v));
+  }
+  return str(binding?.[key]);
+}
+
+/**
+ * Does this save CHANGE the binding — any of its six fields, or the kind?
+ *
+ * `promotionKind` counts, and it has to: switching away from `early_bird`
+ * releases the claim and deletes the owned row, which is as much a commercial
+ * act as setting the price was. A gate that watched only the six fields would
+ * let page-edit rights delete an Early Bird by changing a dropdown.
+ *
+ * Absent `promotionKind` on either side reads as `'none'` — the schema default
+ * — so a page stored before the field existed does not look like a change the
+ * first time it is saved.
+ */
+export function bindingChanged(existing, incoming) {
+  const kindOf = (p) => str(p?.promotionKind) || 'none';
+  if (kindOf(existing) !== kindOf(incoming)) return true;
+  const a = existing?.earlyBird ?? {};
+  const b = incoming?.earlyBird ?? {};
+  for (const key of [...BINDING_FIELDS, 'deadline', 'specialPrice']) {
+    if (fieldForm(a, key) !== fieldForm(b, key)) return true;
+  }
+  return false;
 }

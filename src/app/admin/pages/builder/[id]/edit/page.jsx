@@ -5,6 +5,11 @@ import {
   canPublish,
   canManagePreview,
 } from "@/lib/rbac/access";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The Early Bird binding is gated on the `promotions` menu
+// key, and the panel renders read-only without it. The flag is UI only; the
+// action re-checks the same predicate server-side (updatePageIdentity).
+import { canAccess } from "@/lib/rbac/access";
 import { getPageBuilderPageById } from "@/lib/actions/pageBuilder";
 import { catalogueOrEmpty } from "@/lib/pageBuilder/courseCatalogue";
 import { PageBuilderEditor } from "@/components/pageBuilder/editor/PageBuilderEditor";
@@ -65,6 +70,7 @@ export default async function EditBuilderPage({ params }) {
         canUseAdvanced: canUseAdvanced(user),
         canPublish: canPublish(user),
         canManagePreview: canManagePreview(user),
+        canManagePromotions: canAccess(user, "promotions"),
       }}
     />
   );

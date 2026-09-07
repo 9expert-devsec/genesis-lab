@@ -343,6 +343,31 @@ test('a promotion page of kind early_bird renders the whole binding', () => {
     'bundle grew a UI branch — it is declared with none on purpose');
 });
 
+test('a binding with no end date at all says so, in the panel', () => {
+  /**
+   * Neither the binding's own date nor the page's publishEndDate is a
+   * legitimate state — an Early Bird that runs until somebody switches it off —
+   * and it is what an untouched form looks like, so it is the easiest one to
+   * reach by accident. A warning, not a refusal.
+   */
+  const html = settings(PROMO({ promotionKind: 'early_bird' }));
+  assert.match(html, /ยังไม่มีวันสิ้นสุด/, 'a never-ending Early Bird is no longer flagged');
+  assert.doesNotMatch(html, /โปรจะสิ้นสุด/,
+    'a resolved end date is shown for a binding that has none');
+});
+
+test('a binding WITH an end date shows the resolved date, not the rule', () => {
+  // The author reads the answer; the rule stays discoverable from which side
+  // the panel says it came from.
+  const html = settings(PROMO({
+    promotionKind: 'early_bird',
+    publishEndDate: '2026-09-25T16:59:59.999Z',
+  }));
+  assert.match(html, /โปรจะสิ้นสุด/, 'the resolved end date is gone');
+  assert.match(html, /25 ก\.ย\. 2569/, 'the resolved date is not rendered in Thai');
+  assert.match(html, /วันสิ้นสุดการเผยแพร่/, 'the panel no longer says which date won');
+});
+
 test('the scheduling limit is stated in the panel, not left to a tooltip', () => {
   /**
    * `is_active` follows whether the page is publicly visible RIGHT NOW, and

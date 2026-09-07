@@ -227,7 +227,7 @@ export function ActivitySection({ pageId, open }) {
  * the cover uploader stay with it: they are three of the five fields the
  * mockups drop, and dropping a working control is not a redesign.
  */
-export function GeneralSection({ page, patch, courses = [] }) {
+export function GeneralSection({ page, patch, courses = [], tier = null }) {
   const slug = String(page?.slug ?? '');
   const slugBadFormat = slug !== '' && !SLUG_RE.test(slug);
   const slugReserved = slug !== '' && isReservedSlug(slug);
@@ -302,7 +302,19 @@ export function GeneralSection({ page, patch, courses = [] }) {
           six Early Bird controls to reach the theme.
         */}
         {page?.pageType === 'promotion' && (
-          <EarlyBirdBinding page={page} patch={patch} courses={courses} />
+          <EarlyBirdBinding
+            page={page}
+            patch={patch}
+            courses={courses}
+            /**
+             * READ-ONLY, NOT HIDDEN, for an admin without the `promotions` key.
+             * A hidden panel reads as a missing feature and gets reported as
+             * one; a disabled panel with a reason tells the author exactly what
+             * to ask for. The server re-checks the same predicate — this flag
+             * is never the guard (updatePageIdentity refuses the save).
+             */
+            canEdit={tier?.canManagePromotions !== false}
+          />
         )}
     </>
   );
@@ -391,7 +403,9 @@ export function PageSettingsBody({
         <SettingsNav section={section} onSelect={setSection} previewStatus={status} />
 
         <div className="min-w-0 flex-1 overflow-y-auto px-6 pb-7 pt-5">
-          {section === 'general' && <GeneralSection page={page} patch={patch} courses={courses} />}
+          {section === 'general' && (
+            <GeneralSection page={page} patch={patch} courses={courses} tier={tier} />
+          )}
           {section === 'seo' && <SeoSection seo={page?.seo ?? {}} patchSeo={patchSeo} />}
           {section === 'jsonld' && <JsonLdSection />}
           {section === 'preview' && (

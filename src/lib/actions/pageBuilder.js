@@ -78,6 +78,12 @@ import {
   deriveEarlyBirdRow,
   hasEarlyBirdBinding,
 } from "@/lib/earlyBird/pageWriteThrough";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The Early Bird binding's permission attaches to the FIELDS,
+// not to the page save: `bindingChanged` says which kind of save this is, and
+// `canAccess` answers it softly so the refusal is a message rather than a 403.
+import { bindingChanged } from "@/lib/earlyBird/pageWriteThrough";
+import { canAccess } from "@/lib/rbac/access";
 import {
   savePageEarlyBird,
   clearPageEarlyBird,
@@ -1533,6 +1539,37 @@ export async function updatePageIdentity(id, patch, expectedUpdatedAt) {
     promotionKind: parsed.data.promotionKind,
     earlyBird: parsed.data.earlyBird,
   };
+
+  /**
+   * ── THE BINDING'S OWN PERMISSION ─────────────────────────────────────────
+   * The Early Bird binding sets a commercial price and reserves a course
+   * against every other page and promotion; editing a page's heading does not.
+   * So `promotions` is required to CHANGE the binding, and not to save a page
+   * that leaves it alone — which is why this is a comparison rather than a gate
+   * at the top of the function. Gating the whole save would make a promotion
+   * page unsaveable by the person who edits it; gating nothing would let
+   * page-edit rights set a price.
+   *
+   * `canAccess` rather than `requireAdmin('promotions')`: the latter throws a
+   * bare 403 that surfaces as a failed save with no reason. This refusal names
+   * the missing permission, which is the difference between an author asking
+   * for access and an author reporting a bug.
+   *
+   * `promotionKind` counts as the binding — switching away from `early_bird`
+   * releases the claim and deletes the owned row, which is as commercial an act
+   * as setting the price was.
+   */
+  if (
+    bindingChanged(existing, parsed.data) &&
+    !canAccess(session.user, "promotions")
+  ) {
+    return {
+      ok: false,
+      error:
+        "การแก้ไข Early Bird ต้องมีสิทธิ์เข้าถึงเมนู “โปรโมชัน” — " +
+        "ส่วนอื่นของหน้านี้ยังแก้ไขและบันทึกได้ตามปกติ",
+    };
+  }
 
   /**
    * The write-through, on the RESULTING page and BEFORE the page write — see

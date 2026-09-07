@@ -7,6 +7,9 @@ import {
   earlyBirdIsActive,
   deriveEarlyBirdRow,
 } from '@/lib/earlyBird/pageWriteThrough';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The field-level permission predicate.
+import { bindingChanged } from '@/lib/earlyBird/pageWriteThrough';
 
 /**
  * WHAT A PAGE'S BINDING BECOMES AS AN `EarlyBirdConfig` ROW.
@@ -240,4 +243,175 @@ test('the folded deadline reaches the row, not just the predicate', () => {
   );
   assert.equal(row.deadline.getTime(), NOW + DAY, 'the window’s end did not reach the row');
   assert.equal(row.is_active, true, 'a deadline still in the future deactivated the row');
+});
+
+// ── whose permission is it: the field's, not the document's ─────────────────
+
+
+/**
+ * `updatePageIdentity` requires the `promotions` key only when the SAVE CHANGES
+ * the binding. Gating the whole page save would make a promotion page
+ * unsaveable by the person who edits it; gating nothing would let page-edit
+ * rights set a commercial price and reserve a course against every other page.
+ *
+ * The comparison is over STORED FORM, not object identity: `existing` comes
+ * from Mongo (Date, absent keys) and `incoming` from a zod parse (ISO string,
+ * every key defaulted). A deep-equal would call every save a change and demand
+ * `promotions` for renaming a page — which is the failure these two assertions
+ * exist to catch.
+ */
+
+const stored = (over = {}) => ({
+  promotionKind: 'early_bird',
+  earlyBird: {
+    courseRef: '69cf396d91bb52363c6bde1d',
+    courseCode: 'MSE-AI',
+    scheduleId: 'sched-1',
+    specialPrice: 10965,
+    deadline: new Date('2026-12-01T00:00:00.000Z'),
+    labelTh: 'Early Bird',
+    ...(over.earlyBird ?? {}),
+  },
+  ...over,
+});
+
+/** What zod hands back for the SAME binding: ISO string, not Date. */
+const parsed = (over = {}) => ({
+  promotionKind: 'early_bird',
+  earlyBird: {
+    courseRef: '69cf396d91bb52363c6bde1d',
+    courseCode: 'MSE-AI',
+    scheduleId: 'sched-1',
+    specialPrice: 10965,
+    deadline: '2026-12-01T00:00:00.000Z',
+    labelTh: 'Early Bird',
+    ...(over.earlyBird ?? {}),
+  },
+  ...over,
+});
+
+test('an UNCHANGED binding is not a change — the save needs only `pages`', () => {
+  assert.equal(bindingChanged(stored(), parsed()), false,
+    'renaming a page would now demand the promotions key');
+});
+
+test('CHANGING any binding field is a change — the save needs `promotions`', () => {
+  const cases = {
+    courseRef:    { courseRef: '6a4b281e1e7c93cfea505bdc' },
+    courseCode:   { courseCode: 'COPILOT-STU-ADV' },
+    scheduleId:   { scheduleId: 'sched-2' },
+    specialPrice: { specialPrice: 9999 },
+    deadline:     { deadline: '2026-12-31T00:00:00.000Z' },
+    labelTh:      { labelTh: 'ลดพิเศษ' },
+  };
+  for (const [field, over] of Object.entries(cases)) {
+    assert.equal(bindingChanged(stored(), parsed({ earlyBird: over })), true,
+      `changing ${field} slipped past the gate`);
+  }
+});
+
+test('changing promotionKind is a change — switching away DELETES the owned row', () => {
+  // As commercial an act as setting the price was. A gate watching only the six
+  // fields would let page-edit rights release an Early Bird via a dropdown.
+  assert.equal(bindingChanged(stored(), parsed({ promotionKind: 'none' })), true);
+  assert.equal(bindingChanged(stored(), parsed({ promotionKind: 'bundle' })), true);
+});
+
+test('absent promotionKind reads as `none` on both sides', () => {
+  // A page stored before the field existed must not look like a change the
+  // first time it is saved.
+  assert.equal(bindingChanged({}, { promotionKind: 'none' }), false);
+  assert.equal(bindingChanged({}, {}), false);
+});
+
+test('null, "" and absent are one value — an empty binding is not a change', () => {
+  assert.equal(
+    bindingChanged(
+      { promotionKind: 'none', earlyBird: { courseRef: '', deadline: null } },
+      { promotionKind: 'none', earlyBird: {
+        courseRef: '', courseCode: '', scheduleId: '',
+        specialPrice: null, deadline: null, labelTh: '',
+      } }
+    ),
+    false,
+    'an untouched empty binding demanded the promotions key'
+  );
+});
+
+test('0 and null are DIFFERENT prices — free is not unset', () => {
+  // Collapsing them would let a price be set to free without the permission.
+  assert.equal(
+    bindingChanged(stored({ earlyBird: { specialPrice: null } }),
+                   parsed({ earlyBird: { specialPrice: 0 } })),
+    true
+  );
+});
+
+// ── the boundary the author actually named ─────────────────────────────────
+
+// ADDED beside the statements at the top rather than folded into them — the
+// standing rule in this repo. The shared end-of-day conversion the panel now
+// writes through, so the assertions below are about the value that is STORED
+// rather than about a string this file made up.
+import { windowEndFromInput, toDateInput } from '@/lib/pageBuilder/publishWindow';
+
+/** An instant, read on the Bangkok wall clock. */
+const inBangkok = (v) =>
+  new Date(v).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok' });
+
+test('a picked day ends at the END of that day in Bangkok, not in UTC', () => {
+  /**
+   * ── THE DEFECT, MEASURED ─────────────────────────────────────────────────
+   * The panel wrote `${picked}T23:59:59.000Z` — end of day in UTC, which is
+   * 06:59 the NEXT morning in Bangkok. So a promotion the author ended on
+   * 21 Sep kept its special price until 07:00 on 22 Sep: seven hours past the
+   * day they named.
+   *
+   * Not the mirror defect either: a UTC-MIDNIGHT store would have killed it at
+   * 07:00 ON the final day, which is what publishWindow.js's own header
+   * describes for the preview-expiry field. Both are wrong; only one instant
+   * is right, and it is the one the shared conversion produces.
+   */
+  const picked = '2026-09-21';
+  const stored = windowEndFromInput(picked);
+
+  assert.equal(stored, '2026-09-21T16:59:59.999Z');
+  assert.match(inBangkok(stored), /^21\/09\/2026, 23:59:59$/,
+    'the deadline no longer lands at the end of the day the author named');
+
+  // The old value, pinned as the thing that must not come back.
+  assert.match(inBangkok(`${picked}T23:59:59.000Z`), /^22\/09\/2026/,
+    'CONTROL: the previous convention really did spill into the next day');
+});
+
+test('the stored instant round-trips back to the same date box', () => {
+  // A day that differs between UTC and Bangkok is the only interesting case:
+  // 16:59:59.999Z is still the 21st in both, which is what makes it safe.
+  const stored = windowEndFromInput('2026-09-21');
+  assert.equal(toDateInput(stored), '2026-09-21', 'the box would show a different day than it wrote');
+});
+
+test('a date that does not exist is refused rather than rolled forward', () => {
+  // `new Date('2026-02-31T…')` is not Invalid Date — V8 rolls it into 3 March.
+  // Null is "no bound", the same as a cleared box.
+  assert.equal(windowEndFromInput('2026-02-31'), null);
+  assert.equal(windowEndFromInput(''), null);
+  assert.equal(windowEndFromInput('2026-13-01'), null);
+});
+
+test('the resolved deadline uses that instant across all four combinations', () => {
+  const own = windowEndFromInput('2026-09-21');
+  const win = windowEndFromInput('2026-09-25');
+
+  // binding only
+  assert.equal(earlyBirdDeadline({ deadline: own }, {}).toISOString(), own);
+  // publishEndDate only
+  assert.equal(earlyBirdDeadline({}, { publishEndDate: win }).toISOString(), win);
+  // both — the EARLIER wins, whichever side it is on
+  assert.equal(
+    earlyBirdDeadline({ deadline: own }, { publishEndDate: win }).toISOString(), own);
+  assert.equal(
+    earlyBirdDeadline({ deadline: win }, { publishEndDate: own }).toISOString(), own);
+  // neither
+  assert.equal(earlyBirdDeadline({}, {}), null);
 });
