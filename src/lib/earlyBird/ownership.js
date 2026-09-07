@@ -115,6 +115,43 @@ export function canWrite(doc, { pageId = '', promotionId = '' } = {}) {
 }
 
 /**
+ * ── A CALLER THAT NAMES NO OWNER MAY NOT TOUCH AN OWNED ROW ───────────────
+ *
+ * The course tab supplies NEITHER `owner_page_id` NOR `promotion_id` when the
+ * author leaves the promotion select empty. That caller must not be able to
+ * edit a row a promotion PAGE owns — two writers on one row is the
+ * silent-overwrite shape this whole module exists to refuse, and the page-side
+ * write-through would then be quietly overwritten by a screen that shows the
+ * row as editable.
+ *
+ * ── IT ALREADY BEHAVED THIS WAY. THIS NAMES IT. ──────────────────────────
+ * Stated plainly because a previous round claimed the opposite and was wrong:
+ * `canWrite` above answers `false` for exactly this case, because a no-owner
+ * caller's `pageId` is `''` and `'' === '<a real page id>'` is false. The
+ * writer's own branch reaches the same answer by comparing the same two values.
+ *
+ * So this is not a fix for a hole — MEASURED: a no-owner caller against a
+ * page-owned row is already refused with EB_PAGE_CLAIMED, and the row survives
+ * field for field. What was missing is that the rule was EMERGENT: a `!==` in
+ * an action, agreeing with a predicate here that nothing called, and no test
+ * pinning either. An edit narrowing that comparison to page callers only —
+ * which reads like a tidy-up — would have reopened it in silence.
+ *
+ * Now the writer calls this, and `test/fs/earlyBirdOwnerHole` executes it.
+ *
+ * ── WHY IT IS THE ONLY OWNERSHIP QUESTION SPELLED AS ITS OWN FUNCTION ─────
+ * The other three states are refused with DIFFERENT codes and different ways
+ * out, so they need the branch structure the writer already has. This one is a
+ * single yes/no about the most dangerous caller shape, and the danger is that
+ * it looks like an oversight rather than a rule — an argument that belongs
+ * beside the rule rather than in a commit message nobody re-reads.
+ */
+export function refusesOwnerlessWrite(doc, { pageId = '', promotionId = '' } = {}) {
+  if (idOf(pageId) || idOf(promotionId)) return false; // the caller named an owner
+  return resolveOwner(doc) === 'page_owned';
+}
+
+/**
  * The `$or` a guarded upsert filters on — the BELT to the pre-read's braces.
  *
  * ── WHY BOTH, AND WHY NEITHER IS REDUNDANT ─────────────────────────────────

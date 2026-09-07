@@ -5,6 +5,22 @@ import { getCourseRoundsForPage } from '@/lib/actions/course-promos';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { Field, Group, TextInput, Warn, INPUT_CLASS } from './fields';
 import { CourseSelectPicker } from './CoursePicker';
+// ADDED beside the statements above rather than folded into any — the standing
+// rule in this repo.
+//
+// `windowEndFromInput` / `toDateInput` already own "the last instant of this
+// named day, in Asia/Bangkok" and "the YYYY-MM-DD a date box should show, in
+// Bangkok". This panel had its own hand-rolled pair and both were wrong in the
+// two ways publishWindow.js's header describes — see the deadline field below.
+// One definition of end-of-day for the whole codebase is the entire point.
+import { windowEndFromInput, toDateInput } from '@/lib/pageBuilder/publishWindow';
+// The Thai date label, zone-pinned. Used to echo the interpreted date back to
+// the author, because <input type="date"> renders mm/dd/yyyy under a non-Thai
+// browser locale and 05/09 reads as 5 September to the person typing it.
+import { formatThaiDate } from '@/lib/promotions/promotionDateLabel';
+// The SAME derivation the write-through uses, so the panel shows the date that
+// will actually be stored rather than a second opinion about it.
+import { earlyBirdDeadline } from '@/lib/earlyBird/pageWriteThrough';
 
 /**
  * The page-level Early Bird binding — course, round, price, deadline, label.
@@ -31,11 +47,69 @@ const OFFERED_KINDS = [
 
 const KIND_LABELS = { none: 'ไม่มี', early_bird: 'Early Bird', bundle: 'แพ็กเกจ (ยังไม่รองรับ)' };
 
-/** `2026-09-08T00:00:00.000Z` → `2026-09-08`, for `<input type="date">`. */
-function dateValue(v) {
-  if (!v) return '';
-  const t = new Date(v);
-  return Number.isNaN(t.getTime()) ? '' : t.toISOString().slice(0, 10);
+/**
+ * ── THE LOCAL `dateValue` IS GONE — IT READ THE UTC CALENDAR ──────────────
+ * It was `new Date(v).toISOString().slice(0, 10)`, which is precisely the
+ * `String(v).slice(0, 10)` that `toDateInput` was written to replace: it names
+ * the UTC day, so every instant stored as a Bangkok end-of-day
+ * (`…T16:59:59.999Z`) is fine but anything later in the UTC day shows the wrong
+ * date. The shared reader answers "the Bangkok calendar day this instant is
+ * in", which is the only question a date box is asking.
+ */
+
+/**
+ * ── 4b + 4c: WHAT ACTUALLY ENDS THIS PROMOTION, IN ONE LINE ────────────────
+ *
+ * Two dates can end an Early Bird and they mean DIFFERENT THINGS, which is why
+ * they are still two fields and not one:
+ *
+ *   สิ้นสุดโปรโมชัน  the author's own date — stops the SPECIAL PRICE.
+ *   publishEndDate  the page's publish window — removes the WHOLE PAGE.
+ *
+ * The stored deadline is the earlier of them, because whichever arrives first
+ * genuinely ends the offer; every read path re-checks `deadline`, so folding
+ * the window's end into it closes the promotion with no read-path change. That
+ * rule is correct and is not what this component is for — this says what it
+ * RESOLVED TO, and which side won, so an author reads a date instead of doing
+ * the arithmetic.
+ *
+ * ── AND IT WARNS WHEN NOTHING ENDS IT ─────────────────────────────────────
+ * Neither date set is a legitimate state — an Early Bird that runs until
+ * somebody switches it off — and an easy one to reach by accident, because it
+ * is what an untouched form looks like. So it is a warning and not a refusal,
+ * and it says what will have to happen (a hand switch-off) rather than only
+ * that something is missing.
+ */
+function DeadlineSummary({ binding, page }) {
+  const own = binding?.deadline ?? null;
+  const window = page?.publishEndDate ?? null;
+  const resolved = earlyBirdDeadline(binding, page);
+
+  if (!resolved) {
+    return (
+      <Warn>
+        ยังไม่มีวันสิ้นสุด — Early Bird นี้จะแสดงต่อไปเรื่อย ๆ จนกว่าจะปิดเอง
+        ตั้งวันสิ้นสุดโปรโมชัน หรือกำหนดวันสิ้นสุดการเผยแพร่ของหน้านี้
+      </Warn>
+    );
+  }
+
+  // WHICH date won, decided by comparing instants rather than by re-running the
+  // rule — the resolved value is already the answer, so this only labels it.
+  const t = resolved.getTime();
+  const fromWindow = window != null && window !== '' && new Date(window).getTime() === t;
+  const fromOwn = own != null && own !== '' && new Date(own).getTime() === t;
+  const source = fromOwn && fromWindow
+    ? 'ตรงกันทั้งสองวัน'
+    : fromWindow
+      ? 'มาจากวันสิ้นสุดการเผยแพร่ของหน้านี้'
+      : 'มาจากวันสิ้นสุดโปรโมชัน';
+
+  return (
+    <p className="mb-3 rounded-9e-sm border border-[var(--surface-border)] px-2.5 py-2 text-[11px] leading-relaxed text-9e-slate-dp-50">
+      โปรจะสิ้นสุด <strong>{formatThaiDate(resolved)}</strong> ({source})
+    </p>
+  );
 }
 
 /** One round, as a line an author can recognise. */
@@ -45,14 +119,38 @@ function roundLabel(round) {
   return round?.status ? `${label} · ${round.status}` : label;
 }
 
-export function EarlyBirdBinding({ page, patch, courses = [] }) {
+/**
+ * ── `canEdit` — READ-ONLY, NEVER HIDDEN ───────────────────────────────────
+ * An admin without the `promotions` menu key may still edit and save this page;
+ * what they may not do is CHANGE the binding, because it sets a commercial
+ * price and reserves a course against every other page. So the panel renders,
+ * disabled, with a line saying which permission is missing.
+ *
+ * Hiding it would read as a missing feature and be reported as one — and it
+ * would also hide a binding that IS in force, which an author needs to be able
+ * to see even when they cannot change it.
+ *
+ * IT IS NOT THE GUARD. `updatePageIdentity` re-checks the same predicate and
+ * refuses the save; this only stops an author filling in a form that will be
+ * rejected. Defaults to true so every existing caller is unchanged.
+ */
+export function EarlyBirdBinding({ page, patch, courses = [], canEdit = true }) {
   const kind = page?.promotionKind ?? 'none';
   const binding = page?.earlyBird ?? {};
   const courseRef = String(binding.courseRef ?? '').trim();
   const courseCode = String(binding.courseCode ?? '').trim();
 
-  /** Merge one field, keeping the rest — the shape PageSettingsDialog uses for `seo`. */
-  const patchBinding = (p) => patch({ earlyBird: { ...binding, ...p } });
+  /**
+   * Merge one field, keeping the rest — the shape PageSettingsDialog uses for
+   * `seo`. Every write in this panel goes through here or through the kind
+   * select, and both refuse when `canEdit` is false: a disabled attribute is a
+   * rendering hint, and a guard at the one setter is what makes the read-only
+   * state a property of the component rather than of its markup.
+   */
+  const patchBinding = (p) => {
+    if (!canEdit) return;
+    patch({ earlyBird: { ...binding, ...p } });
+  };
 
   /**
    * ── THE ONE SETTER FOR BOTH IDENTIFIERS ───────────────────────────────────
@@ -134,11 +232,20 @@ export function EarlyBirdBinding({ page, patch, courses = [] }) {
 
   return (
     <Group title="Early Bird">
+      {!canEdit && (
+        <p className="mb-3 rounded-9e-sm border border-[var(--surface-border)] px-2.5 py-2 text-[11px] leading-relaxed text-9e-slate-dp-50">
+          คุณดูการตั้งค่า Early Bird ได้ แต่แก้ไขไม่ได้ —
+          ต้องมีสิทธิ์เข้าถึงเมนู “โปรโมชัน” จึงจะเปลี่ยนได้
+          ส่วนอื่นของหน้านี้ยังแก้ไขและบันทึกได้ตามปกติ
+        </p>
+      )}
       <Field label="ชนิดโปรโมชัน" hint="เลือก Early Bird เพื่อผูกหลักสูตรและรอบอบรมกับหน้านี้">
         <select
           className={INPUT_CLASS}
           value={kind}
+          disabled={!canEdit}
           onChange={(e) => {
+            if (!canEdit) return;
             const next = e.target.value;
             // Switching AWAY releases the claim on save — the write-through
             // deletes only rows this page owns. The binding's own fields are
@@ -159,6 +266,18 @@ export function EarlyBirdBinding({ page, patch, courses = [] }) {
 
       {kind === 'early_bird' && (
         <>
+          {!canEdit ? (
+            /*
+              A DIFFERENT CONTROL, not a disabled one. CourseSearchSelect has no
+              disabled state, and a combobox that opens, filters and accepts a
+              click while `patchBinding` silently discards the result is worse
+              than plain text: it looks like it worked. This says what is bound
+              and offers nothing.
+            */
+            <Field label="หลักสูตร" hint="แก้ไขไม่ได้ — ต้องมีสิทธิ์เมนู “โปรโมชัน”">
+              <p className={INPUT_CLASS}>{courseCode || '— ยังไม่ได้เลือกคอร์ส —'}</p>
+            </Field>
+          ) : (
           <CourseSelectPicker
             value={courseCode}
             onChange={pickCourse}
@@ -176,6 +295,7 @@ export function EarlyBirdBinding({ page, patch, courses = [] }) {
              */
             allowDirectEntry={false}
           />
+          )}
           {/**
             * The half-set state, which is now only reachable from data that
             * predates this guard or was seeded directly.
@@ -202,7 +322,7 @@ export function EarlyBirdBinding({ page, patch, courses = [] }) {
             <select
               className={INPUT_CLASS}
               value={savedRound}
-              disabled={!courseRef || loadingRounds}
+              disabled={!canEdit || !courseRef || loadingRounds}
               onChange={(e) => patchBinding({ scheduleId: e.target.value })}
             >
               <option value="">
@@ -222,6 +342,7 @@ export function EarlyBirdBinding({ page, patch, courses = [] }) {
 
           <Field label="ราคาพิเศษ (บาท)" hint="เว้นว่างถ้ายังไม่กำหนด — 0 หมายถึงฟรีจริง ๆ">
             <TextInput
+              disabled={!canEdit}
               value={binding.specialPrice ?? ''}
               onChange={(v) => {
                 const t = String(v).trim();
@@ -234,20 +355,65 @@ export function EarlyBirdBinding({ page, patch, courses = [] }) {
 
           <Field
             label="สิ้นสุดโปรโมชัน"
-            hint="ถ้าหน้านี้มีวันสิ้นสุดการเผยแพร่ ระบบจะใช้วันที่ที่มาถึงก่อน"
+            hint="วันสุดท้ายที่ยังได้ราคาพิเศษ (ถึง 23:59 น. ของวันนั้น)"
           >
             <input
               type="date"
               className={INPUT_CLASS}
-              value={dateValue(binding.deadline)}
-              onChange={(e) =>
-                patchBinding({ deadline: e.target.value ? `${e.target.value}T23:59:59.000Z` : null })
-              }
+              disabled={!canEdit}
+              value={toDateInput(binding.deadline)}
+              /**
+               * ── 4a: THE BOUNDARY WAS SEVEN HOURS LATE ──────────────────
+               * This wrote `${value}T23:59:59.000Z` — end of day in UTC, which
+               * is 06:59 the NEXT morning in Bangkok. MEASURED for a picked
+               * 2026-09-21: stored 2026-09-21T23:59:59.000Z = 22/09 06:59:59
+               * Bangkok, so the special price survived seven hours into a day
+               * the author had already ended. `windowEndFromInput` stores
+               * 2026-09-21T16:59:59.999Z = 21/09 23:59:59 Bangkok — the day the
+               * author names is a day the promotion runs, all of it and no more.
+               *
+               * It also REFUSES a date that does not exist: `new Date` rolls
+               * '2026-02-31' into 3 March rather than failing, so a shape check
+               * plus NaN would have stored a deadline three days past anything
+               * typed. Null there means "no bound", same as a cleared box.
+               */
+              onChange={(e) => patchBinding({ deadline: windowEndFromInput(e.target.value) })}
             />
+            {/**
+              * ── 4d: THE INTERPRETED DATE, ECHOED BACK ────────────────────
+              * `<input type="date">` renders in the BROWSER's locale, so a Thai
+              * admin on an en-US profile sees mm/dd/yyyy and reads 05/09 as
+              * 5 September when it means 9 May. The control's format is not
+              * ours to set — `lang` is a hint browsers may ignore — so the
+              * repo's existing answer is used instead: render the interpreted
+              * date back in Thai, the same `formatThaiDate` the promotions grid
+              * label uses. A mis-typed date is then visible before it is saved,
+              * not after it ends the promotion on the wrong day.
+              */}
+            {binding.deadline && (
+              <span className="mt-1 block text-xs text-9e-slate-dp-50">
+                = {formatThaiDate(binding.deadline)}
+              </span>
+            )}
           </Field>
+
+          {/**
+            * ── 4b: THE RESOLVED DATE, NOT THE RULE ──────────────────────────
+            * This used to explain the earlier-of-two rule in prose and leave the
+            * author to compute the answer. It states the answer, and names which
+            * of the two dates produced it — the rule is still discoverable, from
+            * the result rather than instead of it.
+            *
+            * It reads `earlyBirdDeadline`, the SAME pure function the
+            * write-through uses, so the panel cannot show a date the save would
+            * not store. A second local "earlier of the two" here would be the
+            * drift this whole module was factored to prevent.
+            */}
+          <DeadlineSummary binding={binding} page={page} />
 
           <Field label="ป้ายกำกับ" hint='ข้อความบนป้าย เช่น "Early Bird"'>
             <TextInput
+              disabled={!canEdit}
               value={binding.labelTh ?? ''}
               onChange={(v) => patchBinding({ labelTh: v })}
             />

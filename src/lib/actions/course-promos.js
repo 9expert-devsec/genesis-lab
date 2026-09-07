@@ -34,10 +34,20 @@ import {
   ownerFilter,
   resolveOwner,
 } from '@/lib/earlyBird/ownership';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The rule that a caller naming NO owner may not touch a
+// page-owned row. It already behaved this way; the writer calls it so the rule
+// is named and testable rather than emergent from a `!==` here.
+import { canWrite, refusesOwnerlessWrite } from '@/lib/earlyBird/ownership';
 import {
   listSchedulesByCourse,
   PUBLIC_SCHEDULE_STATUSES,
 } from '@/lib/api/schedules';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The admin read names the OWNING PAGE of a page-owned row,
+// so the course tab can send an author to the one screen that can edit it
+// instead of leaving them at a disabled form with no next step.
+import PageBuilder from '@/models/PageBuilder';
 
 function serialize(value) {
   if (value == null) return value;
@@ -216,12 +226,50 @@ export async function getAllActiveEarlyBirdMap() {
   return map;
 }
 
-/** Admin read — always returns (even if inactive/expired). */
+/**
+ * Admin read — always returns (even if inactive/expired).
+ *
+ * ── IT NAMES THE OWNING PAGE, WHEN THERE IS ONE ──────────────────────────
+ * A row carrying `owner_page_id` is written by a promotion PAGE's save, and the
+ * course tab must not offer to edit it: two writers on one row is the
+ * silent-overwrite shape this collection's whole rule exists to refuse. The tab
+ * disables itself for such a row — and a disabled form with no explanation is a
+ * dead end, so the read carries the page's slug and title and the tab links to
+ * it.
+ *
+ * `ownerPage` is null for every row nobody's page owns, which today is all four
+ * live rows. A page id that no longer resolves (the page was deleted between
+ * the write-through's own delete and this read) also gives null, so the tab
+ * falls back to being editable rather than locking a row to a page that is
+ * gone — fail OPEN, because the alternative strands the row exactly as an
+ * unowned one would be stranded.
+ *
+ * A PROJECTION, not the page: `slug` and `title` are what a link needs, and a
+ * page document carries its whole section tree.
+ */
 export async function getEarlyBirdAdminByCourse(courseId) {
   await requireAdmin('courses');
   await dbConnect();
   const doc = await EarlyBirdConfig.findOne({ course_id: courseId }).lean();
-  return serialize(doc);
+  if (!doc) return serialize(doc);
+
+  const owner = String(doc.owner_page_id ?? '').trim();
+  let ownerPage = null;
+  if (owner) {
+    // `.catch(() => null)` because a malformed id throws a CastError rather
+    // than missing: an unreadable owner must not take the whole tab down.
+    const page = await PageBuilder.findById(owner, { slug: 1, title: 1 })
+      .lean()
+      .catch(() => null);
+    if (page) {
+      ownerPage = {
+        id: String(page._id),
+        slug: String(page.slug ?? ''),
+        title: String(page.title ?? ''),
+      };
+    }
+  }
+  return serialize({ ...doc, ownerPage });
 }
 
 // ── ONE COURSE, ONE EARLY BIRD ─────────────────────────────────────────────
@@ -306,12 +354,24 @@ async function claimedRefusal(courseId, holderId, { forPage = false } = {}) {
  * module has no business importing the page model to write a sentence. The
  * page-side surface that renders this already knows its own pages.
  */
-function pageClaimedRefusal(courseId, holderPageId) {
+/**
+ * ── THE WORDING DEPENDS ON WHO IS BEING REFUSED ──────────────────────────
+ * It used to end "…จึงจะย้ายมาที่หน้านี้ได้" — "so it can be moved to THIS
+ * page" — for every caller. For the two callers that are not a page (the course
+ * tab and the promotion screen) there IS no "this page", so the sentence named
+ * a destination the author was not standing on and could not act on. Both
+ * halves still say the row belongs to a promotion page and must be released
+ * there; only the destination clause is caller-specific.
+ */
+function pageClaimedRefusal(courseId, holderPageId, { forPage = false } = {}) {
+  const base = `หลักสูตร ${courseId} ถูกผูกไว้กับหน้าโปรโมชันอื่นแล้ว — ` +
+    'ต้องยกเลิกการผูกในหน้านั้นก่อน';
   return {
     ok: false,
     code: EB_PAGE_CLAIMED,
-    error: `หลักสูตร ${courseId} ถูกผูกไว้กับหน้าโปรโมชันอื่นแล้ว — ` +
-      'ต้องยกเลิกการผูกในหน้านั้นก่อน จึงจะย้ายมาที่หน้านี้ได้',
+    error: forPage
+      ? `${base} จึงจะย้ายมาที่หน้านี้ได้`
+      : `${base} จึงจะแก้ไข Early Bird ของหลักสูตรนี้จากที่นี่ได้`,
     claim: { course_id: courseId, owner_page_id: holderPageId, promotion_id: '' },
   };
 }
@@ -441,8 +501,26 @@ async function writeEarlyBird(courseId, data) {
    * belongs to its page, and the checks below read `promotion_id`, so an
    * unordered version would hand a promotion caller a refusal naming `''`.
    */
-  if (claim.owner === 'page_owned' && claim.owner_page_id !== incomingPage) {
-    return pageClaimedRefusal(courseId, claim.owner_page_id);
+  /**
+   * TWO WAYS TO BE REFUSED BY A PAGE-OWNED ROW, and both read the shared rule
+   * rather than comparing ids here:
+   *
+   *   · `refusesOwnerlessWrite` — the caller named NO owner at all. That is the
+   *     course tab with its promotion select left empty, and it is the caller
+   *     with no ownership of its own to compare against, so it gets its own
+   *     named predicate. (Round 3's UI lock is the courtesy; THIS is the rule.)
+   *   · `!canWrite` — the caller named an owner, and it is not this row's page.
+   *
+   * Behaviour is unchanged either way; what changed is that the comparison now
+   * lives in ownership.js, where a test executes it and where narrowing it can
+   * no longer look like a tidy-up.
+   */
+  const callerOwner = { pageId: incomingPage, promotionId: incoming };
+  if (
+    claim.owner === 'page_owned' &&
+    (refusesOwnerlessWrite(claim, callerOwner) || !canWrite(claim, callerOwner))
+  ) {
+    return pageClaimedRefusal(courseId, claim.owner_page_id, { forPage: isPageCaller });
   }
   if (claim.owner === 'legacy_owned' && (isPageCaller || claim.promotion_id !== incoming)) {
     return claimedRefusal(courseId, claim.promotion_id, { forPage: isPageCaller });
@@ -507,7 +585,7 @@ async function writeEarlyBird(courseId, data) {
        */
       const raced = await readEarlyBirdClaim(courseId);
       if (raced.owner === 'page_owned' && raced.owner_page_id !== incomingPage) {
-        return pageClaimedRefusal(courseId, raced.owner_page_id);
+        return pageClaimedRefusal(courseId, raced.owner_page_id, { forPage: isPageCaller });
       }
       return claimedRefusal(courseId, raced.promotion_id || incoming, {
         forPage: isPageCaller,

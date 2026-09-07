@@ -10,6 +10,10 @@ import { getActivePromotionsForAdmin } from '@/lib/actions/promotions';
 // adoption confirm never appears and the save reports a bare refusal instead.
 import { EB_NEEDS_ADOPTION } from '@/lib/earlyBird/codes';
 import { cn } from '@/lib/utils';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. A page-owned row's lock links to the page that owns it; a
+// disabled form with no next step is a dead end.
+import Link from 'next/link';
 
 /**
  * EarlyBirdTab — single-form editor for the per-course Early Bird
@@ -55,6 +59,28 @@ export function EarlyBirdTab({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
 
+  /**
+   * ── A ROW A PROMOTION PAGE OWNS IS READ-ONLY HERE ────────────────────────
+   * `owner_page_id` means a page's save writes this row. Two writers on one row
+   * is the silent-overwrite shape this collection's rule exists to refuse — and
+   * unlike the promotion-side refusal, nothing on the server would stop this
+   * one: `saveEarlyBird` funnels into `writeEarlyBird`, which refuses a row held
+   * by ANOTHER owner but would happily let the course tab edit a page-owned row
+   * out from under its page, because the tab supplies no owner of its own.
+   *
+   * So this is a UI GUARD, and it is the honest description of one: it is not a
+   * permission change (`saveEarlyBird` keeps `requireAdmin('courses')`) and it
+   * is not a server refusal. Closing that hole properly means teaching
+   * `writeEarlyBird` that a caller supplying NEITHER owner may not touch a
+   * page-owned row — a rule change with its own blast radius, and its own
+   * ticket.
+   *
+   * A row nobody's page owns — all four live rows today — is untouched and
+   * fully editable, which is the whole point of the transition being gradual.
+   */
+  const ownerPage = initialData?.ownerPage ?? null;
+  const pageOwned = Boolean(ownerPage);
+
   useEffect(() => {
     if (!initialPromos?.length) {
       getActivePromotionsForAdmin().then((list) => {
@@ -65,6 +91,14 @@ export function EarlyBirdTab({
 
   async function handleSubmit(e) {
     e.preventDefault();
+    /**
+     * The `disabled` attributes are a rendering hint; this is the guard. A form
+     * can still be submitted by Enter in a text field, and a stale render could
+     * outlive the row becoming page-owned. One refusal at the one submit path
+     * makes read-only a property of the component rather than of its markup —
+     * the same call the binding panel's `patchBinding` makes.
+     */
+    if (pageOwned) return;
     setSaving(true);
     setMessage(null);
     const payload = {
@@ -114,16 +148,20 @@ export function EarlyBirdTab({
         <input
           type="checkbox"
           checked={isActive}
+          disabled={pageOwned}
           onChange={(e) => setIsActive(e.target.checked)}
         />
         เปิดใช้งาน Early Bird
       </label>
+
+      {pageOwned && <PageOwnedLock page={ownerPage} />}
 
       <ClaimNotice claim={initialClaim} selectedPromotionId={promotionId} />
 
       <Field label="โปรโมชันที่แสดง (ใช้ thumbnail จากโปรโมชันนี้)">
         <select
           value={promotionId}
+          disabled={pageOwned}
           onChange={(e) => setPromotionId(e.target.value)}
           className="rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
         >
@@ -140,6 +178,7 @@ export function EarlyBirdTab({
         <input
           type="text"
           value={scheduleId}
+          disabled={pageOwned}
           onChange={(e) => setScheduleId(e.target.value)}
           placeholder="65fa1234567890abcdef..."
           className="rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
@@ -150,6 +189,7 @@ export function EarlyBirdTab({
         <input
           type="text"
           value={labelTh}
+          disabled={pageOwned}
           onChange={(e) => setLabelTh(e.target.value)}
           placeholder="Early Bird"
           className="rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
@@ -162,6 +202,7 @@ export function EarlyBirdTab({
           min="0"
           step="1"
           value={specialPrice}
+          disabled={pageOwned}
           onChange={(e) => setSpecialPrice(e.target.value)}
           placeholder="0"
           className="rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
@@ -172,6 +213,7 @@ export function EarlyBirdTab({
         <input
           type="datetime-local"
           value={deadline}
+          disabled={pageOwned}
           onChange={(e) => setDeadline(e.target.value)}
           className="rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
         />
@@ -185,7 +227,7 @@ export function EarlyBirdTab({
       <div className="flex items-center gap-3 border-t border-[var(--surface-border)] pt-4">
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || pageOwned}
           className="rounded-9e-md bg-9e-action px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-9e-brand disabled:opacity-50"
         >
           {saving ? 'กำลังบันทึก...' : 'บันทึก'}
@@ -202,6 +244,32 @@ export function EarlyBirdTab({
         )}
       </div>
     </form>
+  );
+}
+
+/**
+ * The lock, when a promotion PAGE owns this row.
+ *
+ * It LINKS rather than only explaining: an author told "you cannot edit this
+ * here" and left on a dead form will edit it anyway, from whatever screen they
+ * can find. Naming the page and offering its settings is what makes the single
+ * writer the easy path rather than the obstructed one.
+ */
+function PageOwnedLock({ page }) {
+  const name = page?.title || page?.slug || 'หน้าโปรโมชัน';
+  return (
+    <p className="rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface-muted)] p-3 text-xs text-[var(--text-secondary)]">
+      Early Bird นี้ถูกตั้งค่าจากหน้าโปรโมชัน «{name}» จึงแก้ไขที่นี่ไม่ได้ —
+      แก้ไขได้ที่การตั้งค่าของหน้านั้น{' '}
+      {page?.id && (
+        <Link
+          href={`/admin/pages/builder/${page.id}/edit`}
+          className="font-medium text-9e-action underline underline-offset-2"
+        >
+          เปิดหน้านั้น
+        </Link>
+      )}
+    </p>
   );
 }
 
