@@ -156,6 +156,56 @@ export function buildBundleTag({ pageId, sectionId, requestId, name } = {}) {
 }
 
 /**
+ * The Early Bird tag for one registration, or `undefined`.
+ *
+ * ── BUILT FROM WHAT THE SERVER RESOLVED, LIKE `buildBundleTag` ────────────
+ * Its input is the `EarlyBirdConfig` document `getEarlyBirdByCourse` returned,
+ * never the request body. That read is itself the authority on whether an
+ * Early Bird applies at all: it returns null for an inactive config AND null
+ * once the deadline has passed, so a submit that arrives one second late is
+ * handed nothing to mint from. `publicRegistrationSchema` has no `earlyBird`
+ * key and is a plain `z.object()`, so a posted one is stripped before it could
+ * reach here.
+ *
+ * ── THE ROUND MUST MATCH, AND THAT CHECK IS THE CALLER'S ─────────────────
+ * An Early Bird belongs to exactly ONE round. This function refuses a tag whose
+ * `scheduleId` does not equal the `classId` being registered, so a customer
+ * booking a different round of the same course cannot pick the discount up by
+ * association. It is checked HERE rather than only at the route so that a second
+ * caller cannot forget it — the same reason `buildBundleTag` refuses a partial
+ * tag rather than trusting its callers.
+ *
+ * `undefined` rather than `null` for every refusal: the field's default on the
+ * model is `undefined`, so an ordinary registration writes no key at all and
+ * `earlyBird == null` stays the whole test.
+ *
+ * `specialPrice` is copied as a NUMBER or null — never coerced through
+ * `Number(undefined)`, which is NaN and would store a price nobody can read.
+ */
+export function buildEarlyBirdTag(config, { classId } = {}) {
+  if (!config) return undefined;
+
+  const scheduleId = String(config.schedule_id ?? '').trim();
+  const courseCode = String(config.course_id ?? '').trim();
+  const round = String(classId ?? '').trim();
+
+  // Partial is worse than absent — the same rule buildBundleTag applies. A tag
+  // that cannot name its course or its round can be checked against nothing.
+  if (!scheduleId || !courseCode) return undefined;
+  // THE ROUND GATE. Not the round this Early Bird is for → no tag.
+  if (scheduleId !== round) return undefined;
+
+  const price = config.special_price;
+  return {
+    courseCode,
+    scheduleId,
+    specialPrice: price == null || price === '' ? null : Number(price),
+    labelTh: String(config.label_th ?? '').trim(),
+    deadline: config.deadline ?? null,
+  };
+}
+
+/**
  * The document the quote route hands to RegisterPublic.create().
  *
  * `pricing` and `payment` stay unset: a quote has no charge. `consent` is
@@ -170,11 +220,23 @@ export function buildBundleTag({ pageId, sectionId, requestId, name } = {}) {
  * apart. It is spread conditionally so an ordinary registration writes no
  * `bundle` key at all.
  */
-export function buildQuoteRegistration({ data, attendees, ipAddress = null, bundle = undefined }) {
+export function buildQuoteRegistration({
+  data, attendees, ipAddress = null, bundle = undefined, earlyBird = undefined,
+}) {
   return {
     ...baseRegistration({ data, attendees, ipAddress }),
     consent: buildConsentRecord(data.consent, ipAddress),
     ...(bundle ? { bundle } : {}),
+    /**
+     * Spread conditionally for the same reason `bundle` is: an ordinary
+     * registration must write no key at all rather than an explicit undefined,
+     * so `earlyBird == null` stays the whole test.
+     *
+     * The two are never both present — one promotion per registration — and the
+     * refusal that guarantees it is written down at the bundle route rather than
+     * left to the fact that bundles happen to take a different path.
+     */
+    ...(earlyBird ? { earlyBird } : {}),
   };
 }
 

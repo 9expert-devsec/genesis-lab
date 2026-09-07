@@ -170,6 +170,15 @@ export async function POST(req) {
   // branch anyone expects to take, and it must never write an untagged leg.
   if (!bundle) return refusal('unresolved_items');
 
+  /**
+   * ── AND NO EARLY BIRD TAG, BY RULING ──────────────────────────────────────
+   * This route deliberately makes no `getEarlyBirdByCourse` call and passes no
+   * `earlyBird` to `buildBundleLegs`. One promotion per registration: a bundle
+   * carries its own package pricing, and a leg wearing both tags would leave
+   * the admin writing the quotation by hand unable to say which price applies.
+   * The full argument, and what a future edit here would be changing, is at the
+   * leg builder in lib/registration/bundleLegs.js.
+   */
   const attendees = buildAttendees(data);
 
   const built = buildBundleLegs({

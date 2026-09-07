@@ -24,6 +24,10 @@ import { normalizeScheduleStatus } from "@/lib/scheduleStatus";
 // note where formatClassDates used to live.
 import { formatClassDates } from "@/lib/registrations/roundSelection";
 import { trainingTypeLabel } from "@/lib/schedule/trainingTypeLabel";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The zone-pinned Thai date, so the Early Bird notice names
+// the Bangkok day the offer ends on rather than a UTC one.
+import { formatThaiDate } from "@/lib/promotions/promotionDateLabel";
 import { CoordinatorFields } from "@/components/registration/CoordinatorFields";
 import { AttendeesList } from "@/components/registration/AttendeesList";
 import { InvoiceFields } from "@/components/registration/InvoiceFields";
@@ -77,6 +81,7 @@ export function RegisterWizard({
   startedScheduleIds = [],
   initialClassId,
   earlyBirdScheduleId = null,
+  earlyBirdDeadline = null,
   step = 1,
   basePath = "/registration/public",
   // Where "← กลับไปดูหลักสูตร" returns to. Resolved by RegisterPageContent,
@@ -339,6 +344,7 @@ export function RegisterWizard({
           initialValues={formData ?? restoredFromStorage}
           onSubmit={handleFormSubmit}
           earlyBirdScheduleId={earlyBirdScheduleId}
+          earlyBirdDeadline={earlyBirdDeadline}
           courseDetailHref={courseDetailHref}
           currentYear={currentYear}
         />
@@ -404,6 +410,7 @@ export function StepForm({
   initialValues,
   onSubmit,
   earlyBirdScheduleId = null,
+  earlyBirdDeadline = null,
   courseDetailHref = "/training-course",
   // The Bangkok year for the round cards. NO DEFAULT — see RegisterWizard.
   currentYear,
@@ -530,6 +537,20 @@ export function StepForm({
    * point at "รายการด้านบน" (the list above): collapsing the box on an
    * unselectable round would make those sentences point at nothing.
    */
+  /**
+   * ── IS THE ROUND THE CUSTOMER HAS CHOSEN THE EARLY BIRD ONE? ────────────
+   * The whole of the notice's gating. Changing round is pure client state
+   * (`setSelectedScheduleId`; the `router.replace` beside it only syncs the URL
+   * for shareability), and `earlyBirdScheduleId` is a stable server prop that
+   * does not depend on `?class=` — so switching to a round without an Early
+   * Bird removes the notice on the same render, with nothing built for it.
+   */
+  const isEarlyBirdRound =
+    Boolean(earlyBirdScheduleId) && selectedScheduleId === earlyBirdScheduleId;
+  const earlyBirdDeadlineLabel = earlyBirdDeadline
+    ? formatThaiDate(earlyBirdDeadline)
+    : null;
+
   const roundChosen = roundSelectable(selectedScheduleId);
   const [pickerForcedOpen, setPickerForcedOpen] = useState(false);
   const showPickerBox = !roundChosen || pickerForcedOpen;
@@ -834,6 +855,43 @@ export function StepForm({
               <div className="text-xs text-[var(--text-secondary)]">
                 {trainingTypeLabel(activeSchedule.type)}
               </div>
+              {/**
+                * ── THE EARLY BIRD NOTICE ────────────────────────────────────
+                * A CONFIRMATION, NOT A SALES PITCH. The person reading it is
+                * already mid-form on the round it names — they have chosen. So
+                * it says what is true and stops: this round is in an Early Bird
+                * period, until when.
+                *
+                * NO PRICE. This form shows no prices anywhere today and this
+                * round does not change that. The discount reaches the customer
+                * on the quotation an admin sends, which is the surface that
+                * carries prices.
+                *
+                * NO COUNTDOWN, deliberately. A ticking clock on a form someone
+                * is typing into raises a question nobody has answered — what
+                * happens when it reaches zero mid-form — and the honest answer
+                * is that the SUBMIT decides, which a countdown would imply
+                * without ever saying. The date says the same thing and asks
+                * nothing.
+                *
+                * NO LINK AWAY, for the plainest reason: the customer is inside
+                * a form and every link out of it costs the registration.
+                *
+                * The deadline clause is conditional because the notice is still
+                * true without it — the map knows WHICH round is Early Bird even
+                * when the by-course read that carries the deadline failed, and
+                * a half-sentence ending in "ถึง" would be worse than the
+                * shorter true one.
+                */}
+              {isEarlyBirdRound && (
+                <p
+                  data-testid="early-bird-round-notice"
+                  className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400"
+                >
+                  รอบนี้อยู่ในช่วง Early Bird
+                  {earlyBirdDeadlineLabel ? ` ถึง ${earlyBirdDeadlineLabel}` : ''}
+                </p>
+              )}
               {!showPickerBox && (
                 <button
                   type="button"

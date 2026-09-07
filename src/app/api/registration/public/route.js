@@ -7,6 +7,11 @@ import { sendPublicRegistrationEmails } from '@/lib/email/template-senders/publi
 import { resolveScheduleStatus } from '@/lib/schedule-status';
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { buildAttendees, buildQuoteRegistration } from '@/lib/registration/build-public';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The Early Bird tag is DERIVED HERE, at submit, from the
+// server's own read — never from the request body.
+import { buildEarlyBirdTag } from '@/lib/registration/build-public';
+import { getEarlyBirdByCourse } from '@/lib/actions/course-promos';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { refNo } from '@/lib/refNo';
 
@@ -68,10 +73,41 @@ export async function POST(req) {
   const attendees = buildAttendees(data);
 
   await dbConnect();
+
+  /**
+   * ── THE EARLY BIRD DECISION, AND IT IS MADE HERE ─────────────────────────
+   *
+   * WHY AT SUBMIT AND NOT ON THE FORM. The form renders once and the customer
+   * then types for several minutes. If the deadline passes in between, a flag
+   * decided at render would file a discount that had already expired — and
+   * nothing downstream could tell, because an admin issues the quotation by
+   * hand from this document. `getEarlyBirdByCourse` is the authority and it
+   * answers as of NOW: it returns null for an inactive config and null once
+   * `deadline < new Date()`. A submit one second late is handed nothing.
+   *
+   * It sits beside `resolveScheduleStatus` above deliberately — that is the
+   * other thing this route re-decides server-side at submit rather than
+   * trusting from a page that may be minutes stale.
+   *
+   * `buildEarlyBirdTag` applies the round gate: an Early Bird belongs to ONE
+   * round, so booking a different round of the same course picks up nothing.
+   *
+   * ── IT NEVER FAILS THE REGISTRATION ──────────────────────────────────────
+   * `.catch(() => null)` because a promotion is not what the customer came for.
+   * If this read fails, the registration is still filed — untagged, which an
+   * admin can correct — rather than 500ing a form the customer has just spent
+   * five minutes on. Same posture as `courseCoverUrl` below, and for a stronger
+   * reason: that one costs a picture, this one costs a customer.
+   */
+  const earlyBirdConfig = await getEarlyBirdByCourse(
+    data.courseCode || data.courseId
+  ).catch(() => null);
+  const earlyBird = buildEarlyBirdTag(earlyBirdConfig, { classId: data.classId });
+
   // Step 2 shows a consent checkbox on the quote path too, so the acceptance
   // is recorded here rather than being displayed and thrown away.
   const doc = await RegisterPublic.create(
-    buildQuoteRegistration({ data, attendees, ipAddress })
+    buildQuoteRegistration({ data, attendees, ipAddress, earlyBird })
   );
 
   const referenceNumber = refNo(doc._id);

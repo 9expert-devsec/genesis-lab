@@ -199,6 +199,21 @@ export function foldLegsIntoRows(keys, legs) {
       attendanceMode: primary?.attendanceMode,
       status,
       bundle:         primary?.bundle,
+      /**
+       * ── AND THE OTHER PROMOTION TAG ───────────────────────────────────────
+       * MEASURED: this function rebuilds EVERY row explicitly — a single
+       * registration as well as a folded request — so a field absent from this
+       * object is dropped for both, not just for bundles. Probed before the
+       * chip was written: a one-row result carrying `earlyBird` came back
+       * without it, which would have rendered an empty chip on every Early Bird
+       * registration in the list and looked exactly like "this was not Early
+       * Bird".
+       *
+       * From `primary`, like `bundle` above it. The two are never both set —
+       * one promotion per registration, ruled at the bundle route — so there is
+       * no precedence question here to answer.
+       */
+      earlyBird:      primary?.earlyBird,
 
       /**
        * EVERY LEG, for the multi-course cell. Only the fields the table draws —
