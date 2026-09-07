@@ -269,6 +269,12 @@ test('CONTROL: the store list covers every store the A3 audit named', () => {
     'courseOutlineFile', 'earlyBirdConfig', 'featuredCourse', 'featuredOnlineCourse',
     'navFeaturedOnlineCourse', 'programOrder', 'promotion', 'registerPublic',
     'scheduleLocal', 'skillOrder',
+    // A promotion PAGE's Early Bird binding caches the course CODE for display,
+    // and the write-through reads that cache to address
+    // EarlyBirdConfig.course_id. A rename that skipped it would leave the page
+    // showing an old code and writing its Early Bird under a code that names
+    // nothing. The BINDING itself is an ObjectId and is untouched by a rename.
+    'pageBuilderEarlyBird',
   ].sort());
 });
 

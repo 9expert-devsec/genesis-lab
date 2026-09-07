@@ -30,8 +30,11 @@ test('the editable surface partitions into content / identity / status / server'
     ...DRAFT_CONTENT_KEYS, ...IDENTITY_KEYS, ...STATUS_KEYS, ...SERVER_COMPUTED_KEYS,
   ].sort();
   assert.deepEqual(union, surface, 'a key belongs to no group, or to two');
+  // 17 → 19: `promotionKind` and `earlyBird` joined IDENTITY_KEYS with the
+  // page-level Early Bird binding. Identity rather than content because a save
+  // RESERVES the claim on EarlyBirdConfig — see the note beside IDENTITY_KEYS.
   assert.deepEqual(DRAFT_CONTENT_KEYS.length + IDENTITY_KEYS.length
-    + STATUS_KEYS.length + SERVER_COMPUTED_KEYS.length, 17);
+    + STATUS_KEYS.length + SERVER_COMPUTED_KEYS.length, 19);
 });
 
 test('identity, status and server-computed together are exactly the live-only half', () => {
@@ -61,6 +64,16 @@ const LIVE = {
   theme: 'default', showHeader: true, showFooter: true, showStickyCta: false,
   publishStartDate: null, publishEndDate: null, promotionId: '', promotionOrder: 0,
   promotionCover: '', sections: [{ id: 'live-1', type: 'heading' }],
+  // Identity, like the promotion trio above it: a page save reserves the Early
+  // Bird claim, so the binding cannot live on the draft side. Present on the
+  // fixture because both assertions below enumerate the key sets and compare
+  // against this object — a fixture missing a live-only key reads as the key
+  // failing to come from the live document.
+  promotionKind: 'none',
+  earlyBird: {
+    courseRef: '', courseCode: '', scheduleId: '',
+    specialPrice: null, deadline: null, labelTh: 'Early Bird',
+  },
   seo: { metaTitle: 'live meta' }, jsonLd: { mode: 'auto' }, slugHistory: ['older'],
 };
 

@@ -67,6 +67,8 @@ export const RENAME_STORES = Object.freeze([
   { key: 'skillOrder',      model: 'SkillOrder',             field: 'courseOrder[]',       regime: REGIME.UPPER,
     note: 'Same as ProgramOrder, once per skill the course belongs to.' },
   { key: 'earlyBirdConfig', model: 'EarlyBirdConfig',        field: 'course_id',           regime: REGIME.EXACT, unique: true },
+  { key: 'pageBuilderEarlyBird', model: 'PageBuilder',       field: 'earlyBird.courseCode', regime: REGIME.EXACT,
+    note: 'A promotion PAGE\'s Early Bird binding caches the course CODE for display. The binding itself is `earlyBird.courseRef`, an ObjectId, which a rename does not touch — but a stale cache would show the author the old code and, because the write-through reads the cache to address EarlyBirdConfig.course_id, would write the Early Bird under a code that no longer names anything.' },
   { key: 'coursePromoLink', model: 'CoursePromoLink',        field: 'course_id',           regime: REGIME.EXACT },
   { key: 'featuredCourse',  model: 'FeaturedCourse',         field: 'course_id',           regime: REGIME.EXACT, unique: true },
   { key: 'featuredOnlineCourse', model: 'FeaturedOnlineCourse', field: 'course_id',        regime: REGIME.EXACT, unique: true },

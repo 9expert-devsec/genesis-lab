@@ -68,6 +68,20 @@ import {
   effectiveContent,
   hasUnpublishedDraft,
 } from "@/lib/pageBuilder/draftState";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The Early Bird write-through: a promotion page owns an
+// EarlyBirdConfig row, because the course detail page cannot find a promotion
+// by scanning page sections. The derivation is pure; the two writers are the
+// SAME `writeEarlyBird` the course tab and the promotion screen already funnel
+// into, reached through their page-side door.
+import {
+  deriveEarlyBirdRow,
+  hasEarlyBirdBinding,
+} from "@/lib/earlyBird/pageWriteThrough";
+import {
+  savePageEarlyBird,
+  clearPageEarlyBird,
+} from "@/lib/actions/course-promos";
 // Round 38, ADDED beside the statements above rather than folded into any —
 // the standing rule in this repo.
 import PageAuditLog from "@/models/PageAuditLog";
@@ -733,6 +747,26 @@ export async function deletePageBuilderPage(id) {
   const doc = await PageBuilder.findByIdAndDelete(id);
   if (!doc) return { ok: false, error: "ไม่พบหน้าเพจ" };
 
+  /**
+   * ── THE EARLY BIRD ROW THIS PAGE OWNED GOES WITH IT ──────────────────────
+   * AFTER the delete, unlike the other two call sites, and the difference is
+   * the point: those run first because a refusal must abort the save, and a
+   * delete has no refusal to abort for — the page is gone either way. Leaving
+   * the row behind would strand a claim on a course, held by a page that no
+   * longer exists and therefore by nobody who can release it.
+   *
+   * OWNER-SCOPED (`owner_page_id` alone), so it cannot reach a row this page
+   * did not own — see clearPageEarlyBird. A page that owned none deletes none
+   * and reports ok.
+   *
+   * NOT best-effort like the Cloudinary cleanup below: a stranded claim is a
+   * course nobody can use again, so a failure here should surface rather than
+   * be swallowed. It is a single indexed delete on a small collection.
+   */
+  await clearPageEarlyBird(id, {
+    revalidateCourseId: String(doc.earlyBird?.courseCode ?? "").trim(),
+  });
+
   // Best-effort OG image cleanup — never block deletion on Cloudinary.
   //
   // SOUNDNESS (item 5): this destroys a Cloudinary asset, which is silent and
@@ -1138,6 +1172,22 @@ export async function publishPageStatus(id, statusPatch, expectedUpdatedAt) {
   const notReady = publishBlockers(resulting, coercedStatus);
   if (notReady.length) return { ok: false, error: notReady[0].message };
 
+  /**
+   * ── PUBLISHING IS WHAT WAKES AN EARLY BIRD UP ─────────────────────────────
+   * The binding was already written and its claim already reserved when the
+   * page was saved; what changes HERE is `is_active`, which is derived from
+   * `isPubliclyVisible` and so flips with the status and both ends of the
+   * publish window. Closing or unpublishing a page runs the identical call and
+   * turns the row off — the same one function, so publish and unpublish cannot
+   * disagree about what a page's Early Bird should be doing.
+   *
+   * On the RESULTING page and before the write, for the reasons on
+   * syncPageEarlyBird. `resulting` is the same object publishBlockers just
+   * judged, so both read one description of what this save will produce.
+   */
+  const eb = await syncPageEarlyBird(resulting);
+  if (!eb.ok) return eb;
+
   const actor = await currentUserStamp(session);
 
   try {
@@ -1367,6 +1417,77 @@ export async function discardDraftContent(id, expectedUpdatedAt) {
  * DOES NOT snapshot: a snapshot records what was once actually PUBLIC, and
  * renaming a slug is not a publish. Both are asserted, not assumed.
  */
+/**
+ * Reconcile a page's Early Bird binding with its `EarlyBirdConfig` row.
+ *
+ * ONE function, called from the three actions that can change the answer:
+ * `updatePageIdentity` (the binding itself), `publishPageStatus` (visibility,
+ * which decides `is_active`) and `deletePageBuilderPage` (the page is gone).
+ * Three call sites, one rule — a second copy would let a page publish without
+ * its Early Bird waking up, and nothing would report it.
+ *
+ * ── IT TAKES THE *RESULTING* PAGE, NEVER THE STALE ONE ────────────────────
+ * The same call `publishBlockers` already makes two functions down: a page
+ * becoming a promotion, gaining a binding, or going live in THIS save has to be
+ * judged as what it will be, not as what it was.
+ *
+ * ── AND IT RUNS BEFORE THE PAGE WRITE ─────────────────────────────────────
+ * Deliberately, because a refused claim must FAIL THE SAVE. Saving the page and
+ * silently skipping the write-through would leave the settings screen showing a
+ * binding that does not exist anywhere — the author would see their Early Bird
+ * configured and the course page would never show it. Running first means the
+ * refusal is returned before anything is written.
+ *
+ * THE RESIDUAL RISK, STATED: if the claim is written and the page write then
+ * fails (a slug E11000 is the only realistic path), the row is reserved for a
+ * page whose identity did not change. The binding is unchanged in that case, so
+ * the claim is for the course it was already for — a no-op, not a leak. The
+ * alternative, writing the page first, trades that for the failure this
+ * ordering exists to prevent.
+ *
+ * ── THE COURSE CODE, AND WHY IT COMES FROM THE CACHE ──────────────────────
+ * `EarlyBirdConfig.course_id` stores the human CODE; the page's authoritative
+ * binding is `courseRef`, the upstream ObjectId. Resolving one to the other
+ * needs an ObjectId → code lookup, and THE REPO HAS NONE: `lib/api/resolveIds`
+ * goes the other way (code → ObjectId), and `getCourseByCode`'s own
+ * curl-verified note says upstream ignores an `_id` filter on that endpoint.
+ * Inventing an upstream call here was ruled out, so the code is read from
+ * `earlyBird.courseCode` — and `page_builder_pages` is added to
+ * `course-rename`'s store table in the same commit, so a rename keeps that
+ * cache correct instead of silently orphaning the binding.
+ *
+ * Returns `{ ok: true }` or a refusal to return straight up to the caller.
+ */
+async function syncPageEarlyBird(resulting) {
+  const pageId = String(resulting?._id ?? "").trim();
+  if (!pageId) return { ok: true };
+
+  // No binding — or one that just stopped being a binding, because the page
+  // changed type, changed kind, or had its course cleared. All of those are a
+  // RELEASE, and the delete is owner-scoped so it can only reach this page's
+  // own rows.
+  if (!hasEarlyBirdBinding(resulting)) {
+    return clearPageEarlyBird(pageId, {
+      revalidateCourseId: String(resulting?.earlyBird?.courseCode ?? "").trim(),
+    });
+  }
+
+  const courseCode = String(resulting?.earlyBird?.courseCode ?? "").trim();
+  const row = deriveEarlyBirdRow(resulting, courseCode);
+  if (!row) {
+    // Bound to a course whose CODE we cannot name. Refused rather than skipped:
+    // a silent skip is the "binding that does not exist" failure above.
+    return {
+      ok: false,
+      error:
+        "ยังไม่ทราบรหัสหลักสูตรของ Early Bird นี้ — เลือกหลักสูตรใหม่อีกครั้งก่อนบันทึก",
+    };
+  }
+
+  const { course_id: code, ...data } = row;
+  return savePageEarlyBird(pageId, code, data);
+}
+
 export async function updatePageIdentity(id, patch, expectedUpdatedAt) {
   const session = await requireAdmin("pages");
   if (!id) return { ok: false, error: "Missing page id" };
@@ -1409,7 +1530,18 @@ export async function updatePageIdentity(id, patch, expectedUpdatedAt) {
     pageType: parsed.data.pageType,
     promotionId: parsed.data.promotionId,
     promotionOrder: parsed.data.promotionOrder,
+    promotionKind: parsed.data.promotionKind,
+    earlyBird: parsed.data.earlyBird,
   };
+
+  /**
+   * The write-through, on the RESULTING page and BEFORE the page write — see
+   * syncPageEarlyBird. A refused claim (held by an MSDB promotion, held by
+   * another page, or an unowned row awaiting confirmation) fails this save with
+   * its own reason rather than saving a binding that reserves nothing.
+   */
+  const eb = await syncPageEarlyBird({ ...existing, ...set });
+  if (!eb.ok) return eb;
 
   // Retire the old slug into history on a rename (deduped; the NEW slug never
   // lingers in its own history, or the 301 lookup would resolve to itself).

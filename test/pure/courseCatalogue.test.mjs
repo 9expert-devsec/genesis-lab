@@ -126,15 +126,36 @@ test('upstream order is preserved', () => {
 
 test('a row with no course_id is dropped; a missing name becomes an empty string', () => {
   const rows = projectCourseCatalogue([
-    { course_id: 'A', course_name: 'Alpha' },
+    { course_id: 'A', course_name: 'Alpha', _id: '69cf396d91bb52363c6bde1d' },
     { course_name: 'no code at all' },
     { course_id: 'B' },
     { course_id: '', course_name: 'blank code' },
   ]);
   assert.deepEqual(rows, [
-    { course_id: 'A', course_name: 'Alpha' },
-    { course_id: 'B', course_name: '' },
+    { course_id: 'A', course_name: 'Alpha', _id: '69cf396d91bb52363c6bde1d' },
+    { course_id: 'B', course_name: '', _id: '' },
   ]);
+});
+
+test('a missing _id becomes an empty string, never the word "undefined"', () => {
+  /**
+   * Sharper than the name's normalisation, because this value reaches a URL
+   * query parameter: `course=undefined` is a request that returns nothing and
+   * looks exactly like a course with no rounds. '' is the honest absence and
+   * every reader already treats it as one.
+   */
+  const [row] = projectCourseCatalogue([{ course_id: 'A' }]);
+  assert.equal(row._id, '');
+  assert.equal(JSON.stringify(row).includes('undefined'), false);
+});
+
+test('a non-string _id is stringified rather than crossing as an object', () => {
+  // A driver can hand back an ObjectId instance, whose JSON form is not the
+  // hex string the schedules endpoint expects.
+  const [row] = projectCourseCatalogue([
+    { course_id: 'A', _id: { toString: () => '69cf396d91bb52363c6bde1d' } },
+  ]);
+  assert.equal(row._id, '69cf396d91bb52363c6bde1d');
 });
 
 test('a non-array is survived', () => {
@@ -153,7 +174,7 @@ test('catalogueOrEmpty asks for the WHOLE catalogue, hidden courses included', (
     fetchList: async (opts) => { asked = opts; return { items: [{ course_id: 'A', course_name: 'Alpha' }] }; },
   }).then((rows) => {
     assert.deepEqual(asked, { includeHidden: true });
-    assert.deepEqual(rows, [{ course_id: 'A', course_name: 'Alpha' }]);
+    assert.deepEqual(rows, [{ course_id: 'A', course_name: 'Alpha', _id: '' }]);
   });
 });
 
@@ -212,9 +233,9 @@ test('CONTROL: the same call succeeds when the read does', async () => {
   // Without this, the fail-open case passes against a function that always
   // returns [] and never calls anything.
   const rows = await catalogueOrEmpty({
-    fetchList: async () => ({ items: [{ course_id: 'A', course_name: 'Alpha' }] }),
+    fetchList: async () => ({ items: [{ course_id: 'A', course_name: 'Alpha', _id: 'oid-A' }] }),
   });
-  assert.deepEqual(rows, [{ course_id: 'A', course_name: 'Alpha' }]);
+  assert.deepEqual(rows, [{ course_id: 'A', course_name: 'Alpha', _id: 'oid-A' }]);
 });
 
 test('catalogueOrEmpty survives a response with no items', async () => {

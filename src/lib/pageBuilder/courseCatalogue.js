@@ -48,7 +48,43 @@ import { listPublicCourses } from '@/lib/api/public-courses';
  * set rather than on a sample of it — a third key added without thinking about
  * the cost is the regression, and a spot check of two would not see it.
  */
-export const CATALOGUE_KEYS = Object.freeze(['course_id', 'course_name']);
+export const CATALOGUE_KEYS = Object.freeze(['course_id', 'course_name', '_id']);
+
+/**
+ * ── WHY `_id` IS THE THIRD KEY, AND WHAT IT COST ──────────────────────────
+ * The header above says a third key added without thinking about the cost is
+ * the regression this module exists to prevent. So: the thinking, and the cost.
+ *
+ * THE NEED. Upstream is asymmetric about how it addresses a course.
+ * `/public-course` takes the CODE (`course_id=MSE-AI`); `/schedules` takes the
+ * upstream ObjectId (`course=<_id>`) and lib/api/schedules.js records that the
+ * `_id` filter on the other endpoint is silently ignored. So a picker that must
+ * choose a course AND then list that course's rounds needs both identifiers,
+ * and only one of them was crossing.
+ *
+ * THE DEFECT IT FIXES, MEASURED ON THE LIVE PANEL. The page-level Early Bird
+ * binding read `_id` off these rows, got `undefined` for every one of them, and
+ * therefore stored an empty `courseRef` for a course the author had just picked
+ * from the list. The panel then told them the course was not in the catalogue —
+ * a catalogue it had itself just listed — and the round picker, handed an empty
+ * ObjectId, came back empty. The binding could not be completed at all.
+ *
+ * THE COST. An ObjectId is 24 hex characters; with its key and JSON punctuation
+ * that is ~32 bytes a row, ~2.5 KB across the 79 live courses. Against the
+ * measured 6,318 the projection already ships it is a 1.4x increase, and
+ * against the 1,229,727 bytes of the full payload the ratio moves from 194.6x
+ * to roughly 139x. The size assertion in test/pure/courseCatalogue is unchanged
+ * and still passes with room to spare, which is the point of its being a bound
+ * rather than a pinned number.
+ *
+ * WHAT WAS REJECTED. Resolving the code to an ObjectId on the server at pick
+ * time (`lib/api/resolveIds.resolveCourseObjectId` exists and does exactly
+ * that) would keep this projection at two keys — but it makes the picker's
+ * setter ASYNC and failable, and the two fields would then be settable
+ * independently. That is the exact state the binding's own guard now refuses:
+ * a course code with no ObjectId beside it. One catalogue row carrying both is
+ * what lets them be written together, atomically, by one setter.
+ */
 
 /**
  * Upstream rows → the picker's rows.
@@ -63,7 +99,7 @@ export const CATALOGUE_KEYS = Object.freeze(['course_id', 'course_name']);
  * and would render as a blank line in the picker.
  *
  * @param {unknown} items rows from listPublicCourses
- * @returns {{ course_id: string, course_name: string }[]}
+ * @returns {{ course_id: string, course_name: string, _id: string }[]}
  */
 export function projectCourseCatalogue(items) {
   const rows = Array.isArray(items) ? items : [];
@@ -77,6 +113,14 @@ export function projectCourseCatalogue(items) {
       // renders it directly, and `undefined` would render the word "undefined"
       // beside a perfectly good code.
       course_name: typeof row?.course_name === 'string' ? row.course_name : '',
+      /**
+       * Normalised to a string for the same reason `course_name` is, and with a
+       * sharper consequence: an ObjectId reaches a URL query parameter, and
+       * `String(undefined)` there is the literal `"undefined"` — a request that
+       * returns nothing and looks like a course with no rounds. `''` is the
+       * honest absence, and every reader already treats it as one.
+       */
+      _id: row?._id == null ? '' : String(row._id),
     });
   }
   return out;

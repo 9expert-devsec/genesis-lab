@@ -39,6 +39,24 @@ export const PAGE_TYPES = [
 
 export const PAGE_STATUSES = ['draft', 'scheduled', 'published', 'closed', 'archived'];
 
+/**
+ * What KIND of promotion a `pageType: 'promotion'` page is.
+ *
+ * Meaningless on every other page type, exactly as `promotionId` /
+ * `promotionOrder` / `promotionCover` already are — the settings dialog gates
+ * all of them behind one `pageType === 'promotion'` branch.
+ *
+ * `bundle` is declared and has NO UI. That is deliberate rather than an
+ * oversight: the vocabulary is decided here in one place, and shipping the
+ * value now means the day a bundle surface lands it does not also have to
+ * migrate every stored page onto a widened enum. Nothing reads it, and
+ * `promotionKind === 'bundle'` renders exactly what `'none'` renders.
+ *
+ * `none` is the default, so every page stored before this field existed reads
+ * back as "not an Early Bird" and the write-through does nothing for it.
+ */
+export const PROMOTION_KINDS = ['none', 'early_bird', 'bundle'];
+
 // §7 Page Theme. `default` = 9Expert Blue. Each maps to a CI token bundle.
 export const PAGE_THEMES = [
   'default', 'promotion_blue', 'early_bird_orange', 'ai_purple',
@@ -154,6 +172,94 @@ const nullableDate = z
   .preprocess((v) => (v === '' || v == null ? null : v), z.union([z.string(), z.date(), z.null()]))
   .default(null);
 
+/**
+ * The Early Bird binding a promotion PAGE owns — course, round, price, deadline
+ * and label, at PAGE level rather than inside any section.
+ *
+ * ── WHY NOT A SECTION ─────────────────────────────────────────────────────
+ * The course detail page has to find this, and it cannot scan page sections to
+ * do it: it knows a course code and nothing about which page mentions it. So
+ * the binding lives where a page-save can see it whole and write it through to
+ * `EarlyBirdConfig`, which stays the read model. Sections are content; this is
+ * configuration, and it is on the identity side of the draft split for that
+ * reason (see IDENTITY_KEYS below).
+ *
+ * ── TWO IDENTIFIERS, NEITHER AUTHORITATIVE OVER THE OTHER ────────────────
+ * CORRECTED. This block used to call `courseRef` "AUTHORITATIVE" and
+ * `courseCode` a cache of it. That was the design as first drafted and it is
+ * not what shipped: nothing recomputes the code from the ref, the WRITE PATH
+ * reads the CODE (it addresses `EarlyBirdConfig.course_id`), and
+ * `course-rename` maintains the code as a first-class store
+ * (`pageBuilderEarlyBird` in RENAME_STORES). A comment calling the other field
+ * authoritative would send the next reader looking for a resolver that does not
+ * exist.
+ *
+ * What is actually true is that upstream is ASYMMETRIC and each identifier is
+ * the only one accepted somewhere:
+ *
+ *   courseCode  addresses `EarlyBirdConfig.course_id`; read by the
+ *               write-through; rewritten by `course-rename`.
+ *   courseRef   the upstream course ObjectId; the ONLY thing `/schedules`
+ *               accepts (`course=<_id>`) — lib/api/schedules.js records that
+ *               the code is ignored there, and lib/api/public-courses.js
+ *               records the mirror-image fact for `_id` on its own endpoint.
+ *
+ * So neither derives from the other on any path this code owns, and a binding
+ * carrying one without the other is not a partial success: it is a row that
+ * either cannot be written or can never show a round. They are written
+ * TOGETHER by one setter (EarlyBirdBinding.pickCourse, off one catalogue row)
+ * and the refinement below refuses the pair if anything else ever tries.
+ *
+ * ── EVERY FIELD DEFAULTS TO EMPTY, AND THE BLOCK DEFAULTS TO `{}` ─────────
+ * Same shape as `seo` above. A page nobody has bound stores an empty binding
+ * rather than a missing key, and `promotionKind` — not the emptiness of this
+ * object — is what says whether the binding is meant to do anything. Two ways
+ * to spell "no Early Bird" would be two things to keep in agreement.
+ *
+ * `specialPrice` is nullable rather than 0-defaulted: `0` is a real price (a
+ * free course) and `null` is "not set", which is the same distinction
+ * `EarlyBirdConfig.special_price` already makes.
+ */
+export const earlyBirdBindingSchema = z
+  .object({
+    courseRef:    z.string().trim().default(''), // upstream course ObjectId — AUTHORITATIVE
+    courseCode:   z.string().trim().default(''), // display cache only; never the binding
+    scheduleId:   z.string().trim().default(''), // the round's upstream _id
+    specialPrice: z.number().nullable().default(null),
+    deadline:     nullableDate,
+    labelTh:      z.string().trim().max(60).default('Early Bird'),
+  })
+  /**
+   * ── BOTH IDENTIFIERS, OR NEITHER ─────────────────────────────────────────
+   * The server's half of the pairing. `pickCourse` makes the half-set state
+   * unreachable from the panel; this makes it unstorable at all, including by
+   * a hand-crafted payload or a directly seeded document that later passes
+   * through a save.
+   *
+   * NEITHER set is the normal empty binding and must stay legal — that is what
+   * every page that has no Early Bird stores, and what clearing the selection
+   * produces. Only the MIXED pair is refused.
+   *
+   * `.superRefine` rather than two `.refine`s so ONE message can name which
+   * half is missing; an author reading "the binding is invalid" learns nothing
+   * they can act on.
+   */
+  .superRefine((v, ctx) => {
+    const ref = String(v?.courseRef ?? '').trim();
+    const code = String(v?.courseCode ?? '').trim();
+    if (ref === '' && code === '') return; // no binding at all — legal
+    if (ref !== '' && code !== '') return; // fully bound — legal
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [ref === '' ? 'courseRef' : 'courseCode'],
+      message:
+        ref === ''
+          ? 'หลักสูตรนี้ยังไม่มีรหัสอ้างอิงสำหรับดึงรอบอบรม — เลือกหลักสูตรจากรายการอีกครั้ง'
+          : 'การผูกหลักสูตรไม่สมบูรณ์ (ไม่มีรหัสหลักสูตร) — เลือกหลักสูตรจากรายการอีกครั้ง',
+    });
+  })
+  .default({});
+
 // ── The page schema ──────────────────────────────────────────────────
 
 /**
@@ -192,6 +298,11 @@ export const pageBuilderSchema = z.object({
   // URL ONLY (no publicId token — option B, see the model + PageSettingsDialog).
   promotionOrder: z.number().int().default(0),
   promotionCover: z.string().trim().default(''),
+
+  // Promotion KIND + the Early Bird binding. Both are live-only (IDENTITY_KEYS
+  // below says why), and both are inert for `pageType !== 'promotion'`.
+  promotionKind: z.enum(PROMOTION_KINDS).default('none'),
+  earlyBird:     earlyBirdBindingSchema,
 
   sections: z.array(sectionSchema).default([]),
 
@@ -274,7 +385,30 @@ export const LIVE_ONLY_KEYS = Object.keys(pageBuilderSchema.shape)
  * dirty flag to raise, so they must stay importable from a client component —
  * this module imports only zod, which is what makes that safe.
  */
-export const IDENTITY_KEYS = ['slug', 'pageType', 'promotionId', 'promotionOrder'];
+/**
+ * ── `promotionKind` AND `earlyBird` ARE IDENTITY, NOT CONTENT ─────────────
+ * The same call `pageType` and `promotionId` above already take, and for a
+ * sharper version of the same reason.
+ *
+ * A page SAVE writes the Early Bird through to `EarlyBirdConfig`, where it
+ * reserves a claim on a course that no other page or promotion may then take.
+ * If the binding were drafted, the draft and the live row would disagree about
+ * something the author cannot see: the draft would say "this page has no Early
+ * Bird" while the claim stayed reserved on the live half, and the course would
+ * be unavailable to everyone else with nothing on screen explaining why. The
+ * reverse is worse — a drafted binding that reserved nothing would let two
+ * pages both appear to hold a course until whichever published second was
+ * refused, long after the author had stopped looking.
+ *
+ * So the binding takes effect when it is saved, exactly as a slug does. What
+ * the PUBLISH state still controls is `is_active` on the written row: the claim
+ * is reserved on save, and the course page only ADVERTISES it once the page is
+ * publicly visible. Reserved and advertised are different questions, and this
+ * split is what lets them have different answers.
+ */
+export const IDENTITY_KEYS = [
+  'slug', 'pageType', 'promotionId', 'promotionOrder', 'promotionKind', 'earlyBird',
+];
 
 export const STATUS_KEYS = ['status', 'publishStartDate', 'publishEndDate'];
 
