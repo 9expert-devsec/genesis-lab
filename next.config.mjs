@@ -223,6 +223,28 @@ const nextConfig = {
     const prefix = LEGACY_PREFIX;
     const rawExt = RAW_EXTENSION_LIST.join('|');
 
+    /**
+     * THE CHARACTERS THAT FORCE A PATH OFF THE STATIC TIER.
+     *
+     * `&` and `#` are refused in a Cloudinary public_id, so the migration
+     * substituted them (`&`→`and`, `#`→`sharp`). Those rules are lossy and
+     * non-invertible, so no static pattern can express the mapping and the
+     * request has to reach the resolver, which looks the file up by its stored
+     * source path.
+     *
+     * BOTH SPELLINGS OF EACH, because Next matches on the RAW pathname: a
+     * client that percent-encodes sends `%26`/`%23` and the literal character
+     * never arrives. For `#` the encoded form is the ONLY one that can arrive.
+     *
+     * ── ONE DEFINITION, TWO CONSUMERS ──────────────────────────────────────
+     * This was written out inline when the per-root fallback was the only rule
+     * that needed it. The derivative-aware pair added below needs the IDENTICAL
+     * class, and two copies that drifted would route a file to the resolver in
+     * one shape and to Cloudinary in the other — which is the defect this whole
+     * block exists to fix, reintroduced one level down.
+     */
+    const substitutedChars = '(?:&|%26|#|%23)';
+
     const image = (transform, id) =>
       `${base}/image/upload/${transform ? `${transform}/` : ''}${prefix}/${id}`;
 
@@ -237,6 +259,50 @@ const nextConfig = {
      * even though neither has a width.
      */
     const rulesFor = (at, transform) => [
+      // ── SUBSTITUTION-CARRYING DERIVATIVES FIRST OF ALL ──────────────────
+      //
+      // MEASURED DEFECT, 2026-09-07: three article covers returned HTTP 400.
+      // A styles/ path whose filename contains `&` was claimed by the ordinary
+      // derivative rules below — they are listed before the per-root fallback,
+      // and first match wins — and forwarded to Cloudinary with a literal `&`
+      // in the public_id, which Cloudinary refuses.
+      //
+      // The isolating evidence: the same three characters in a DIRECT
+      // (non-derivative) reference returned 200 with `x-legacy-delivery:
+      // resolver`. Same character, same substitution, different rule. So the
+      // substitution side was never wrong — the precedence was.
+      //
+      // ── WHY ORDERING ALONE COULD NOT FIX IT ────────────────────────────
+      // The obvious repair is to hoist the per-root fallback above the
+      // derivative rules. It does not work, and the reason is worth writing
+      // down so nobody tries it again: that fallback passes `:rest` through
+      // verbatim, so the resolver would be handed
+      // `styles/large_cover/public/articles/cover/foo & bar.png.webp` and it
+      // looks up by EXACT stored sourcePath. No such row exists — the registry
+      // holds the source, not the derivative — so every one of them would turn
+      // a 400 into a 404 `resolver-miss`.
+      //
+      // The resolver cannot be taught to strip a derivative without putting
+      // that vocabulary in a second place. So the strip stays here, in the
+      // rewrite, where it already lives: these two rules are the existing
+      // derivative pair with the substitution class added and the destination
+      // pointed at the resolver instead of Cloudinary. They hand it the SOURCE
+      // path, which is exactly what it indexes.
+      //
+      // NOT A WIDENING. `:rest` must contain a substitution character, so an
+      // ordinary derivative matches neither rule and falls through to the
+      // static pair below untouched. That is checkable rather than asserted:
+      // a static hit carries NO `x-legacy-delivery` header, so its appearance
+      // on an ordinary image would be this change overreaching.
+      {
+        source: `${at}${FILES_DIR}/styles/:style/public/:rest(.*${substitutedChars}${DERIVATIVE_SOURCE_PATTERN}).:appended(${DERIVATIVE_APPENDED_PATTERN})`,
+        destination: `/legacy-file${FILES_DIR}/:rest`,
+      },
+      {
+        source: `${at}${FILES_DIR}/styles/:style/public/:rest(.*${substitutedChars}.*)`,
+        destination: `/legacy-file${FILES_DIR}/:rest`,
+      },
+
       // ── DERIVATIVES FIRST ───────────────────────────────────────────────
       // These must precede the ampersand and catch-all rules for the same
       // root: a styles/ path IS a `sites/default/files` path, and whichever
@@ -271,6 +337,13 @@ const nextConfig = {
         // in a public_id and the migration substituted them (`&`→`and`,
         // `#`→`sharp`) — lossy, non-invertible rules.
         //
+        // THIS RULE HANDLES THE DIRECT SHAPE ONLY. A substitution-carrying
+        // path wearing a `styles/` prefix is claimed earlier, by the
+        // derivative-aware pair at the top of this array, because the resolver
+        // needs the SOURCE path and this rule passes `:rest` through verbatim.
+        // The two share `substitutedChars` so they cannot disagree about what
+        // counts as substitution-carrying.
+        //
         // Narrow ON PURPOSE. It matches 19 paths: the 6 ampersand files and the
         // 13 C# ones. Everything else stays on the static path below, where no
         // function of ours runs.
@@ -298,7 +371,7 @@ const nextConfig = {
         // The resolver serves the DEFAULT variant regardless of `at`. Nineteen
         // files is not worth threading a variant through a database lookup.
         {
-          source: `${at}/${root}/:rest(.*(?:&|%26|#|%23).*)`,
+          source: `${at}/${root}/:rest(.*${substitutedChars}.*)`,
           destination: `/legacy-file/${root}/:rest`,
         },
         // RAW: the extension decides, so this has to win over the image
