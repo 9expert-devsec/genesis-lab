@@ -42,11 +42,23 @@ const BRANCH_WRITE = /\bbranch(?!Type|Code|Free|Label)\b\s*:(?!:)|\[['"][\w.]*\b
 /**
  * OUT OF SCOPE BY INSTRUCTION, and useful precisely for that: these files still
  * carry the old shape, so they are the control anchor below.
+ *
+ * ── THE CAREER-PATH CLIENT IS NO LONGER ONE OF THEM ─────────────────────────
+ * It was listed here, and it was the control anchor, because its zod invoice
+ * shape declared a bare `branch` that `InvoiceFields` had already stopped
+ * writing. That was not a file "left alone" — it was the bug, and it cost every
+ * career-path registration its branch. It now declares the structured trio, so
+ * it can no longer serve as proof that the matcher fires and the anchor moves to
+ * the masterclass model, which is genuinely untouched.
+ *
+ * The career-path DIRECTORY is still excluded by `isOutOfScope` below, so the
+ * sweep does not read it; test/fs/careerPathInvoicePersistence.test.mjs asserts
+ * that seam POSITIVELY instead, which is the stronger claim and the same move
+ * test 2 makes for the two Mongoose models.
  */
 const OUT_OF_SCOPE = [
   'src/lib/email/template-senders/masterclass.js',
   'src/models/MasterclassRegistration.js',
-  'src/app/(public)/career-path-register/[slug]/_components/CareerPathRegisterClient.jsx',
 ];
 
 const isOutOfScope = (rel) =>
@@ -90,10 +102,28 @@ test('both models still DECLARE branch, and declare the pair that replaced it', 
 
 test('CONTROL: BRANCH_WRITE DOES match the untouched out-of-scope code', () => {
   // Without this the sweep above is vacuous: a matcher that can never fire
-  // reports "no offenders" forever. Fired at files that were deliberately left
-  // alone and still hold the old shape.
-  const career = readSource('src/app/(public)/career-path-register/[slug]/_components/CareerPathRegisterClient.jsx');
-  assert.ok(BRANCH_WRITE.test(career.code), 'the career-path copy still writes branch');
+  // reports "no offenders" forever. Fired at a file that was deliberately left
+  // alone and still holds the old shape — the masterclass model, which declares
+  // a bare `branch` and no structured pair at all.
+  const masterclass = readSource('src/models/MasterclassRegistration.js');
+  assert.ok(BRANCH_WRITE.test(masterclass.code), 'the masterclass copy still declares branch');
+});
+
+test('the career-path client no longer writes `branch` — the anchor moved for a reason', () => {
+  /**
+   * Asserted here as well as in the career-path guard, because THIS file is
+   * where the claim "nothing writes branch" lives and the career-path client
+   * was the standing exception to it. Recording only that the control anchor
+   * moved would leave the reason to a commit message.
+   */
+  const career = readSource(
+    'src/app/(public)/career-path-register/[slug]/_components/CareerPathRegisterClient.jsx'
+  );
+  assert.equal(
+    BRANCH_WRITE.test(career.code),
+    false,
+    'the career-path invoice shape is writing the retired key again'
+  );
 });
 
 test('CONTROL: BRANCH_WRITE matches an INJECTED write in each shape', () => {

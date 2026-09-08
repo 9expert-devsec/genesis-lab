@@ -82,14 +82,64 @@ const CareerPathRegistrationSchema = new mongoose.Schema(
     taxFirstName:  { type: String, default: '' },
     taxLastName:   { type: String, default: '' },
     companyName:   { type: String, default: '' },
+
+    /**
+     * `companyBranch` is LEGACY READ-ONLY, and its history is worth stating
+     * plainly: unlike its counterpart `invoice.branch` on RegisterPublic, which
+     * holds real free text on pre-split documents, THIS path has been the empty
+     * string on every document ever written. The form mapped it from
+     * `invoice.branch`, a key `InvoiceFields` stopped writing when the
+     * structured pair replaced it — so the customer's branch was collected on
+     * screen, stripped by zod, and never stored. The path stays declared because
+     * the admin screen still reads it and because dropping a path is how a
+     * historical value disappears silently; nothing writes it.
+     *
+     * `branchType` / `branchCode` are the Thai Revenue-Department concepts and
+     * apply to `invoiceCountry: 'TH'`. `branchFree` is the 'Other country'
+     * counterpart, where a 5-digit branch number is meaningless. These are the
+     * SAME THREE NAMES AND THE SAME ENUM RegisterPublic uses, deliberately: the
+     * label for any of them is computed by src/lib/registration/branchLabel.js,
+     * and a reader that has to translate dialects between two registration
+     * collections is a reader that will eventually translate one of them wrong.
+     */
     companyBranch: { type: String, default: '' },
+    branchType:    { type: String, enum: ['head_office', 'branch'], default: 'head_office' },
+    branchCode:    { type: String, default: '' },
+    branchFree:    { type: String, default: '' },
+
     companyTaxId:  { type: String, default: '' },
     personalTaxId: { type: String, default: '' },
+
+    /**
+     * WHICH ADDRESS SHAPE THE FIVE COLUMNS BELOW ARE HOLDING.
+     *
+     * A Thai and an international address are squashed into one flat set here —
+     * line1+line2 → taxAddress, state → province, city → subdistrict — and
+     * without this flag nothing downstream can tell which mapping produced them.
+     * `province` holding "California" reads as a Thai province to every reader
+     * that does not know to ask.
+     *
+     * The name mirrors what the public flow's routes call the same value
+     * (`invoiceCountry`, from src/lib/registration/build-public.js) and the enum
+     * mirrors `invoice.country` on RegisterPublic.
+     */
+    invoiceCountry: { type: String, enum: ['TH', 'OTHER'], default: 'TH' },
+
     taxAddress:    { type: String, default: '' },
     province:      { type: String, default: '' },
     district:      { type: String, default: '' },
     subdistrict:   { type: String, default: '' },
     zipcode:       { type: String, default: '' },
+
+    /**
+     * The country the customer TYPED — 'Singapore', 'Japan' — which the flat
+     * squash above had nowhere to put and simply discarded. RegisterPublic
+     * carries it at `invoice.internationalAddress.country` and marks it
+     * required; an invoice address without its country cannot be posted.
+     *
+     * Empty for `invoiceCountry: 'TH'`, where the country is the flag.
+     */
+    countryName:   { type: String, default: '' },
 
     note: { type: String, default: '' },
 

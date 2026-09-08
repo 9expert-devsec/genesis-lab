@@ -5,6 +5,7 @@ import { requirePage } from '@/lib/rbac/guard';
 import { getCareerPathRegistrationById } from '@/lib/actions/career-path-registrations';
 import { RegistrationStatusSelect } from '../_components/RegistrationStatusSelect';
 import { RecordHistory } from '@/components/audit/RecordHistory';
+import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'รายละเอียดการลงทะเบียน' };
@@ -14,6 +15,29 @@ const TYPE_BADGE = {
   Hybrid:    'bg-purple-100 text-purple-700 border-purple-200',
   Online:    'bg-green-100 text-green-700 border-green-200',
 };
+
+/**
+ * The สาขา label, from whichever of the three shapes this document carries.
+ *
+ * This row used to read `reg.companyBranch` directly, and that path has been the
+ * empty string on every career-path registration ever filed — the form collected
+ * a branch and zod stripped it before submit. So the row simply never appeared.
+ * Now the structured pair is stored, and the label comes from the one module
+ * that knows the country split (สำนักงานใหญ่ / สาขาที่ NNNNN are Thai Revenue-
+ * Department concepts and mean nothing on a Singapore invoice).
+ *
+ * `companyBranch` is still passed as the legacy free text, so a document that
+ * somehow carries one still says what it says.
+ */
+function branchLabelOf(reg) {
+  return formatInvoiceBranchLabel({
+    country:    reg.invoiceCountry,
+    branchType: reg.branchType,
+    branchCode: reg.branchCode,
+    branchFree: reg.branchFree,
+    branch:     reg.companyBranch,
+  });
+}
 
 function fmtDate(iso) {
   if (!iso) return '—';
@@ -133,13 +157,23 @@ export default async function RegistrationDetailPage({ params }) {
         ) : (
           <>
             <Row label="ชื่อบริษัท" value={reg.companyName} />
-            {reg.companyBranch && <Row label="สาขา" value={reg.companyBranch} />}
+            {branchLabelOf(reg) && <Row label="สาขา" value={branchLabelOf(reg)} />}
             <Row label="เลขผู้เสียภาษี" value={reg.companyTaxId} />
           </>
         )}
         <Row
           label="ที่อยู่"
-          value={[reg.taxAddress, reg.subdistrict, reg.district, reg.province, reg.zipcode]
+          value={[
+            reg.taxAddress,
+            reg.subdistrict,
+            reg.district,
+            reg.province,
+            reg.zipcode,
+            // Last, and only ever set on an 'OTHER' registration — an
+            // international invoice address is unpostable without it, and the
+            // flat columns had nowhere to put it until now.
+            reg.countryName,
+          ]
             .filter(Boolean)
             .join(' ')}
         />
