@@ -43,6 +43,11 @@ import { CoursePromoSection } from './_components/CoursePromoSection';
 // course. A SIBLING block, not rows inside the promo one — see its header for
 // the three reasons, of which the `slice(0, 2)` cap is the deciding one.
 import { CourseBundleSection } from './_components/CourseBundleSection';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Round G: the Early Bird deadline is formatted HERE, on
+// the server, because the banner is a client component and a date formatted
+// inside it is formatted twice against two different local timezones.
+import { earlyBirdDeadlineLabel } from '@/lib/earlyBird/deadlineLabel';
 import {
   getEarlyBirdByCourse,
   getActiveCoursePromos,
@@ -1068,6 +1073,11 @@ function CourseDetail({
   // `getEarlyBirdByCourse` joins the linked Promotion as `promotion` so
   // the banner can render the thumbnail without a second DB hit.
   const earlyBirdPromotion = earlyBird?.promotion ?? null;
+  // FORMATTED ONCE, HERE. This is a server component; the banner is not, so a
+  // deadline near midnight would otherwise render one calendar day during SSR
+  // and another after hydration. The helper is also zone-pinned to Bangkok, so
+  // the answer does not depend on which machine asked.
+  const deadlineLabel = earlyBirdDeadlineLabel(earlyBird?.deadline);
 
   // Hero gradient base — prefer the program's `programcolor` (carried on
   // `/programs`, not on the course detail). Fall back to the first
@@ -1139,6 +1149,7 @@ function CourseDetail({
               <EarlyBirdBanner
                 earlyBird={earlyBird}
                 earlyBirdPromotion={earlyBirdPromotion}
+                deadlineLabel={deadlineLabel}
                 schedules={schedules}
                 course={course}
               />
