@@ -107,3 +107,89 @@ lifetime, to scope assertions to the calls a test caused rather than to the
 array's whole contents, or to change the runner's isolation — has consequences
 for `test/run.mjs`'s single-process design, which exists for a documented reason
 (the loader does not propagate to `node --test` children).
+
+---
+
+## Update — 2026-09-08, still open, and the symptom has widened
+
+Six more full-suite runs across the Page Builder authored-colour rounds. The
+ticket above is unchanged in its diagnosis; what is new is that **it is not two
+assertions**, the flapping set moves between runs, and one attempt to rule it out
+was made with an instrument that cannot see it.
+
+### Four distinct names have now flapped
+
+Two were already recorded above. Two are new, and neither is in the same
+scenario as the originals:
+
+| name | first seen flapping |
+|---|---|
+| `discardDraftContent clears the draft and nothing else` | 2026-09-06 (above) |
+| `a promotion rename also revalidates /promotions` | 2026-09-06 (above) |
+| `PRECONDITION: the gate refuses an unauthenticated request in BOTH modes` | 2026-09-08 |
+| `the counter survives history being deleted — it is not derived from it` | 2026-09-08 |
+
+All four are in `test/fs/pageBuilderDraftActions.test.mjs`. Observed going
+**pass → fail → pass** on trees that differed only by edits which cannot reach
+that file (a Tailwind class string in a Page Builder component; a comment).
+
+The last two matter because they widen the mechanism. `PRECONDITION: the gate…`
+and `the counter survives…` do not assert on `revalidations` at all — the shared
+recorder above cannot be the whole story, and whatever pollutes it is reaching
+other shared state in the same file (`test/fakeDb.mjs`'s tables are the obvious
+candidate, and the "Related, but not the same" section above says no fakeDb
+flake had been observed at the time. One has now, or something else has).
+
+### The timings say it is load, not order
+
+From the run where `discardDraftContent` failed — neighbouring tests in the same
+file, against **milliseconds** for the same tests run alone:
+
+```
+✔ updatePageIdentity leaves slugHistory alone when the slug does not change   4440.8ms
+✔ a rename retires the old slug and never leaves the new one in history       7008.9ms
+✔ a draft survives an identity rename byte-identical                          3970.8ms
+✔ updatePageIdentity rejects a slug already taken by another builder page      4336.5ms
+✔ CONTROL: the same slug on the page ITSELF is not a collision                8326.0ms
+```
+
+Four to eight seconds for assertions that take single-digit milliseconds in
+isolation. Whatever the writer is, it is landing inside a window that is orders
+of magnitude wider under full-suite load than it is alone — which is why the
+same tree passes and fails without an edit between.
+
+### Isolation runs cannot observe this, and one round wrongly concluded it could
+
+Recorded because the wrong conclusion was reached and published before it was
+caught. The file was run **alone**, three times each at two commits, to test
+whether the flake was order-sensitivity:
+
+```
+HEAD    2 failed / 123 total, three runs, identical
+HEAD~2  2 failed / 123 total, three runs, identical
+```
+
+…and the round reported "**not** order-sensitive, therefore branch divergence".
+That inference does not hold. A single-file run has no other file writing to the
+shared recorder, no other file's un-awaited work in flight, and none of the load
+that produces the timings above — **it removes the cause and then reports the
+absence of the effect**. Isolation runs can establish that a failure is *not*
+caused by the file's own contents. They cannot establish that a failure is not
+order- or timing-dependent, and this ticket's whole subject is that it is.
+
+The two failures those runs did find (`updatePageIdentity changes exactly the
+four keys…` and its parent suite line) are a separate, **stable** matter —
+`updatePageIdentity` now writes `earlyBird` and `promotionKind`, which the
+four-key assertion predates. That one is real branch divergence and is not this
+ticket.
+
+### The sibling hazard, for whoever picks this up
+
+`test/fs/envMutationGuard.test.mjs` is the same shape solved: shared state a
+test mutates and must restore, with a sweep, an allow-list and a named helper
+whose restore "took a bug" to get right. It covers `NODE_ENV` and `TZ`. A third
+instance — a test that rewrites a tracked source file and restores it with the
+wrong line endings — is filed as
+`ticket-a-test-rewrites-a-source-file-and-restores-it-with-the-wrong-line-endings.md`.
+Three instances of one hazard suggests the guard's *idea* generalises further
+than its two keys, which is worth considering alongside any fix here.
