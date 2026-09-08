@@ -84,14 +84,20 @@ const imageContent = z.object({
  *
  * `style` absent ⇒ the section's own `buttonStyle` for the first button and the
  * outline treatment for every later one, which is round 57's cascade unchanged.
- * `newTab` absent ⇒ derived from isExternalUrl, as today. Both are `.optional()`
- * rather than defaulted for that reason: a default would erase the third state.
+ * `.optional()` rather than defaulted for that reason: a default would erase
+ * the absent state, and absent is what carries the cascade.
+ *
+ * THERE IS NO `newTab`. A first draft carried one; nothing could write it, so
+ * it was reachable only by hand-editing production, and it was removed whole
+ * rather than left honoured-but-invisible. Whether a link opens a tab is
+ * derived from the href. The decision, the measurement that closed it and the
+ * condition that would reopen it are recorded in lib/pageBuilder/ctaButtons.js
+ * — read that before adding the key back.
  */
 const ctaButton = z.object({
   label:  z.string().default(''),
   href:   z.string().default(''),
   style:  z.enum(BUTTON_STYLES).optional(),
-  newTab: z.boolean().optional(),
 }).passthrough();
 
 const ctaContent = z.object({

@@ -47,14 +47,48 @@ export const MAX_CTA_BUTTONS = 4;
 const isKnownStyle = (v) => typeof v === 'string' && BUTTON_STYLES.includes(v);
 
 /**
- * One row → a render-ready button, or null when it would draw nothing.
+ * ── THERE IS NO PER-BUTTON `newTab`, AND THAT IS A DECISION ──────────────
  *
- * `newTab` absent ⇒ the renderer derives it from `isExternalUrl`, exactly as
- * every cta has behaved since the first button. Present ⇒ the author's answer.
- * NO CONTROL OFFERS IT YET, stated rather than left to be found: a checkbox has
- * two states and this field has three (yes / no / derive), and the derived
- * answer is right for every link the panel can currently express. The field
- * exists so a document that carries one is honoured rather than ignored.
+ * A first draft of round C carried `newTab` on each button: absent meant
+ * "derive from isExternalUrl", present meant the author's answer. Nothing could
+ * write it — the schema declared it `.optional()` with no default, the
+ * repeater's add button seeded only label/href, and no control offered it — so
+ * it was reachable ONLY by writing to the database by hand, which on this
+ * system means writing to production. A value that is honoured at render but
+ * invisible to the panel is the worst of the three available states: the author
+ * cannot see it, cannot explain it, and cannot undo it. So it was removed
+ * whole, reads included. A hand-seeded `newTab` is now INERT.
+ *
+ * Whether a link opens a tab is therefore derived, once, from the href:
+ * external opens one, internal does not. That is what every cta has done since
+ * there was one button.
+ *
+ * ── WHAT WOULD REOPEN IT, AND THE MEASUREMENT THAT CLOSED IT ────────────
+ * The case for a control is a link the heuristic gets WRONG: a root-relative
+ * href that resolves to a FILE rather than a page, which the derivation sends
+ * to the same tab because it is internal. That is not hypothetical in general —
+ * reference-rewrite converted 1,651 absolute old-server URLs to root-relative,
+ * so links that once opened a tab by virtue of being external became internal
+ * without an author touching them.
+ *
+ * MEASURED 2026-09-08, read-only, across page_builder_pages (published and
+ * draft) and all 32 page_versions snapshots: 40 cta sections, 76 non-empty
+ * hrefs, and **ZERO root-relative hrefs of any kind** — every one is absolute
+ * https. So the rewrite did not reach this field, and there is no link on this
+ * system the derivation gets wrong.
+ *
+ * REOPEN IT when that stops being true: a cta button whose href is
+ * root-relative AND points at a file (`/sites/default/files/…`, `/legacy-file…`,
+ * `/root-file…`, or ending .pdf/.xlsx/.docx/.zip). Re-run that scan before
+ * arguing from memory. The shape to build then is a THREE-STATE select
+ * (อัตโนมัติ / เปิดแท็บใหม่ / เปิดแท็บเดิม, absent = อัตโนมัติ), because the
+ * field has three states and a checkbox has two — and note that the repeater's
+ * `select` writes STRINGS, so it needs either a value-mapper in `ItemList` or
+ * an enum in the schema, not a bare boolean.
+ */
+
+/**
+ * One row → a render-ready button, or null when it would draw nothing.
  */
 function toRenderable(row) {
   const text = typeof row?.label === 'string' ? row.label.trim() : '';
@@ -68,7 +102,6 @@ function toRenderable(row) {
     label: text,
     href: url,
     style: isKnownStyle(row?.style) ? row.style : undefined,
-    newTab: typeof row?.newTab === 'boolean' ? row.newTab : undefined,
   };
 }
 
@@ -115,11 +148,14 @@ function legacyPair(content) {
 export function ctaEditorRows(content) {
   const list = content?.buttons;
   if (Array.isArray(list)) {
+    // `newTab` is deliberately NOT carried through — see the decision block
+    // above. The key is no longer part of a button's shape, so the editor stops
+    // propagating it: a hand-seeded value sits untouched in storage until
+    // someone edits that row, and is inert at render either way.
     return list.map((b) => ({
       label: typeof b?.label === 'string' ? b.label : '',
       href: typeof b?.href === 'string' ? b.href : '',
       ...(isKnownStyle(b?.style) ? { style: b.style } : {}),
-      ...(typeof b?.newTab === 'boolean' ? { newTab: b.newTab } : {}),
     }));
   }
   return legacyPair(content)
