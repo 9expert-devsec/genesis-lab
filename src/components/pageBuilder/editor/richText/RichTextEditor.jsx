@@ -9,9 +9,15 @@ import {
   // Round B commit 1 — ADDED beside the names above rather than folded into
   // them, the standing rule in this directory.
   AlignLeft, AlignCenter, AlignRight, Eraser,
+  // Round B commit 2 — likewise added rather than folded in.
+  Ban,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { safeUrl } from '@/lib/pageBuilder/safeUrl';
+// ADDED beside the statement above rather than folded into it. The picker's
+// starting position is DERIVED from the pinned navy triple, never typed here —
+// round 30's ban is on a colour decided in source, and this file decides none.
+import { COLOR_INPUT_FALLBACK } from '@/lib/pageBuilder/customColor';
 import { richTextExtensions } from './tiptapExtensions';
 
 /**
@@ -276,6 +282,38 @@ export function RichTextEditor({ doc, onChange, placeholder }) {
           onClick={() => editor.chain().focus().toggleBlockquote().run()}><Quote className="h-3.5 w-3.5" /></ToolButton>
         <ToolButton label="เส้นคั่น"
           onClick={() => editor.chain().focus().setHorizontalRule().run()}><Minus className="h-3.5 w-3.5" /></ToolButton>
+
+        <span className="mx-1 h-4 w-px bg-[var(--surface-border)]" />
+
+        {/**
+          * ── THE ONE CONTROL ON THIS TOOLBAR THAT MUST NOT preventDefault ──
+          * Every button above cancels mousedown to keep the author's selection
+          * (see the block at the top of this file). An `<input type="color">`
+          * cannot: cancelling its mousedown is exactly what stops the native
+          * picker opening, so the control would be inert. It takes focus, and
+          * the selection is restored from ProseMirror's own state by
+          * `chain().focus()` when the value comes back — which is Tiptap's
+          * documented pattern for this element, not a workaround invented here.
+          * Stated rather than left as an inconsistency a reader would "fix".
+          *
+          * ── THE HINT IS THE DARK-MODE DECISION, IN THAI, HERE ─────────────
+          * An author's ink is used VERBATIM in both themes and no dark
+          * counterpart is derived — round 79's derivation is for a SURFACE,
+          * where the theme owns the text on top of it; deriving an author's
+          * text colour would repaint the exact thing they chose. A control that
+          * behaves differently in one theme without saying so is the defect
+          * this repo keeps removing, so it says so at the point of choosing.
+          */}
+        <input
+          type="color"
+          aria-label="สีตัวอักษร"
+          title="สีตัวอักษร — ใช้สีนี้เหมือนกันทั้งโหมดสว่างและโหมดมืด"
+          value={editor.getAttributes('textStyle')?.color || COLOR_INPUT_FALLBACK}
+          onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
+          className="h-6 w-7 shrink-0 cursor-pointer rounded border border-[var(--surface-border)] bg-[var(--surface)] p-0.5"
+        />
+        <ToolButton label="ล้างสี" disabled={!editor.getAttributes('textStyle')?.color}
+          onClick={() => editor.chain().focus().unsetColor().run()}><Ban className="h-3.5 w-3.5" /></ToolButton>
 
         <span className="mx-1 h-4 w-px bg-[var(--surface-border)]" />
 

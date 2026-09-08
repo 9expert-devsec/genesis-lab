@@ -6,6 +6,8 @@ import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
+import TextStyle from '@tiptap/extension-text-style';
+import Color from '@tiptap/extension-color';
 import { safeUrl } from '@/lib/pageBuilder/safeUrl';
 
 /**
@@ -30,8 +32,23 @@ import { safeUrl } from '@/lib/pageBuilder/safeUrl';
  * code block would publish as unformatted text. Off.
  *
  * Installed but deliberately NOT included (see RICH_TEXT_EXCLUDED): Table*,
- * Youtube, Subscript, Superscript, TextStyle, Color. Every one of them emits a
- * node/mark the walker drops or degrades.
+ * Youtube, Subscript, Superscript. Every one of them emits a node/mark the
+ * walker drops or degrades.
+ *
+ * ── TextStyle AND Color ARE IN, AND THE OLD REASON WAS WRONG ─────────────
+ * They were excluded as "a raw-hex route into the page, which MANIFESTO §7
+ * forbids". §7 forbids a colour DECIDED IN SOURCE — a hex in a class or a
+ * style opts that surface out of dark mode — and an author's hex arriving from
+ * the database at render time is DATA, which is the distinction customColor.js
+ * has drawn since round 39. The correction is written out in full in
+ * RICH_TEXT_EXCLUDED rather than left as a deletion.
+ *
+ * `Color` is configured `types: ['textStyle']` so it decorates exactly one
+ * mark. It contributes no name of its own — `color` is an ATTRIBUTE on
+ * textStyle — which is why the schema check sees `textStyle` and nothing else,
+ * and why the attribute's safety is `hexOrNull` at the walker rather than a
+ * name in a list. That is not the TextAlign problem in disguise: a mark
+ * attribute cannot arrive without its mark, and the mark IS in the schema.
  *
  * ── TextAlign IS IN NOW, AND getSchema STILL CANNOT SEE IT ───────────────
  * It was the sneakiest of that set and it was kept out for a reason that has
@@ -94,6 +111,11 @@ export function richTextExtensions({ placeholder = 'เริ่มพิมพ�
        */
       defaultAlignment: null,
     }),
+    TextStyle,
+    // `types` is the extension's own default and is restated for the same
+    // reason `defaultAlignment` is above: it is the line that keeps `color` to
+    // one mark, and a default nobody wrote down is a default nobody defends.
+    Color.configure({ types: ['textStyle'] }),
     Placeholder.configure({ placeholder }),
   ];
 }

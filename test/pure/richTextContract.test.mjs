@@ -124,6 +124,43 @@ test('the editor offers THREE alignments, not TextAlign\'s four', () => {
     'a non-null default would put an alignment on every paragraph the author never touched');
 });
 
+test('`color` is an ATTRIBUTE on the textStyle mark, and is named as a mark nowhere', () => {
+  /**
+   * Round B commit 2. `color` left RICH_TEXT_EXCLUDED without joining
+   * RICH_TEXT_MARKS, and that is not a gap — the Color extension contributes no
+   * name at all, only an attribute on `textStyle`. This pins both halves so the
+   * absence reads as a decision rather than an omission a later reader
+   * "corrects".
+   *
+   * It is NOT in RICH_TEXT_NODE_ATTRS either: that list exists for the
+   * schema-blindness problem, which is a NODE-attribute problem. A mark
+   * attribute cannot arrive without its mark, and the mark's name IS in the
+   * schema — so the exact-set assertion at the top of this file already covers
+   * the route in.
+   */
+  assert.ok(RICH_TEXT_MARKS.includes('textStyle'), 'the mark that carries the colour is not declared');
+  assert.ok(!RICH_TEXT_MARKS.includes('color'), '`color` is declared as a mark — it is an attribute');
+  assert.ok(!Object.values(RICH_TEXT_NODE_ATTRS).flat().includes('color'),
+    '`color` is declared as a NODE attribute — it belongs to the textStyle mark');
+  assert.ok(!RICH_TEXT_EXCLUDED.includes('color'), 'the excluded list still forbids the colour it now allows');
+
+  const textStyle = schema.marks.textStyle;
+  assert.ok(textStyle, 'the schema has no textStyle mark');
+  assert.ok('color' in (textStyle.spec.attrs ?? {}),
+    'textStyle declares no `color` attribute — the Color extension is missing or mis-typed');
+});
+
+test('the Color extension decorates exactly one mark', () => {
+  /**
+   * `types: ['textStyle']` is what keeps the attribute to one mark. Read off
+   * the configured instance rather than the source text, so a comment naming
+   * it cannot satisfy the check.
+   */
+  const color = extensions.find((e) => e.name === 'color');
+  assert.ok(color, 'the Color extension is not installed');
+  assert.deepEqual([...color.options.types], ['textStyle']);
+});
+
 test('CONTROL — the comparisons can fail', () => {
   /**
    * Each assertion above is a set equality, and a set equality nobody has seen
