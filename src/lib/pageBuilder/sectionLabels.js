@@ -202,7 +202,14 @@ export function sectionRendersEmpty(section) {
       return (
         !String(c.title ?? '').trim() &&
         !String(c.price ?? '').trim() &&
-        !(Array.isArray(c.features) && c.features.some((f) => String(f ?? '').trim()))
+        !(Array.isArray(c.features) && c.features.some((f) => String(f ?? '').trim())) &&
+        // ROUND D step 5 — a card whose only content is `details` is NOT empty.
+        // Same shape as the `features` clause beside it, and `Array.isArray`
+        // first for its reason: every card stored before this round reads the
+        // key back absent.
+        !(Array.isArray(c.details) && c.details.some(
+          (d) => String(d?.label ?? '').trim() || String(d?.value ?? '').trim(),
+        ))
       );
     case 'stat_card':
       return !String(c.value ?? '').trim() && !String(c.label ?? '').trim();

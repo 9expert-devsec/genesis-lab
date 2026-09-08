@@ -388,8 +388,16 @@ function PriceCardEditor({ content, patch }) {
   const price = String(content?.price ?? "").trim();
   const features = Array.isArray(content?.features) ? content.features : [];
   const hasFeature = features.some((f) => String(f ?? "").trim());
-  // Mirrors PriceCardSection's fail-closed guard exactly.
-  const empty = !title && !price && !hasFeature;
+  // ROUND D step 5 — `details` counts as content, so the warning must know
+  // about it too. Mirrors PriceCardSection's fail-closed guard exactly, which
+  // is the point: a panel that calls a card empty while the page renders it is
+  // worse than no warning.
+  const hasDetail =
+    Array.isArray(content?.details) &&
+    content.details.some(
+      (d) => String(d?.label ?? "").trim() || String(d?.value ?? "").trim(),
+    );
+  const empty = !title && !price && !hasFeature && !hasDetail;
 
   const href = String(content?.buttonHref ?? "").trim();
   const label = String(content?.buttonLabel ?? "").trim();
@@ -465,6 +473,18 @@ function PriceCardEditor({ content, patch }) {
           onChange={(v) => patch({ ribbon: v })}
         />
       </Field>
+      {/* ROUND D step 1 — one control, one input, in the same group as the
+          round-57 four because it qualifies the same thing: which round this
+          price is for. Blank by default and renders nothing when blank. */}
+      <Field
+        label="รอบที่ระบุ"
+        hint={'ป้ายกรอบมนเหนือราคา เช่น "เฉพาะรอบอบรมวันที่ 21 - 22 กันยายน 2569" — เว้นว่างถ้าไม่มี'}
+      >
+        <TextInput
+          value={content?.dateStrip}
+          onChange={(v) => patch({ dateStrip: v })}
+        />
+      </Field>
       <Field label="รายการ (บรรทัดละ 1 รายการ)">
         <TextArea
           value={features.join("\n")}
@@ -472,9 +492,34 @@ function PriceCardEditor({ content, patch }) {
           rows={4}
         />
       </Field>
+      {/**
+       * ── ROUND D STEP 5: THE DETAIL LIST ───────────────────────────────
+       * `ItemList`, not a repeater written here. It is the panel's ONE
+       * add/remove/move idiom, and it already carries two things this control
+       * would otherwise have to re-solve and get wrong: `FieldBlock` rather
+       * than `Field` for a row that contains buttons (round 55 — a `<label>`
+       * with no `for` hands a click to its first labelable descendant), and
+       * the focus bookkeeping that keeps the keyboard on the ITEM when a move
+       * shifts it out from under the button that was pressed.
+       *
+       * An author should not meet two list idioms in one panel, and this one
+       * is already used by checklist, timeline, accordion and tabs.
+       *
+       * Placed AFTER รายการ because that is the render order — features, then
+       * the rule, then this — and a panel that lists fields in a different
+       * order from the card is a panel an author has to translate.
+       */}
+      <FieldBlock label="รายละเอียด (ป้าย + ค่า)">
+        <ItemList
+          items={content?.details}
+          set={(details) => patch({ details })}
+          fields={DETAIL_FIELDS}
+          addLabel="เพิ่มรายละเอียด"
+        />
+      </FieldBlock>
       {empty && (
         <Warn>
-          ยังไม่มีหัวข้อ ราคา หรือรายการ — การ์ดนี้จะไม่แสดงผลบนหน้าเว็บ
+          ยังไม่มีหัวข้อ ราคา รายการ หรือรายละเอียด — การ์ดนี้จะไม่แสดงผลบนหน้าเว็บ
         </Warn>
       )}
       <label className="mb-2.5 flex items-center gap-1.5 text-[11px] text-9e-navy dark:text-white/90">
@@ -1787,6 +1832,13 @@ const CHECKLIST_FIELDS = [
 const ITEM_FIELDS = [
   { key: "title", label: "หัวข้อ" },
   { key: "body", label: "เนื้อหา", type: "area" },
+];
+// ROUND D step 5 — price_card's label/value rows. Two plain text inputs: the
+// label is a short noun ("รูปแบบการเรียน") and the value is one line, so
+// neither wants the textarea ITEM_FIELDS gives a body.
+const DETAIL_FIELDS = [
+  { key: "label", label: "ป้าย" },
+  { key: "value", label: "ค่า" },
 ];
 
 const CONTENT_EDITORS = {

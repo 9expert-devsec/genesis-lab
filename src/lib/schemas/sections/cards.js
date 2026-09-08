@@ -63,6 +63,46 @@ const priceCardContent = z.object({
   discountBadge: z.string().default(''), // the "ลด 20%" chip
   footnote:      z.string().default(''), // the VAT line — NOT a feature (§B #10)
   ribbon:        z.string().default(''), // corner text, e.g. "Early Bird ลด 20%"
+  /**
+   * ROUND D step 1 (docs/promo-card-style.md §I) — the one gap round 57 left on
+   * this type (round 56 §B #23).
+   *
+   * A FREE STRING: "เฉพาะรอบอบรมวันที่ 21 - 22 กันยายน 2569". Not a date, and
+   * not a pair of dates. Round 56 §F.3 refused a typed date on this surface for
+   * a reason that still holds — "a typed date is wrong the day the round moves
+   * and nothing catches it" — and a card that names a round is describing an
+   * offer, not scheduling one.
+   *
+   * Same shape as the four above and for their reason (§H): default '', gated
+   * on `.trim()` at the render, so absent renders nothing and every stored card
+   * is byte-identical until an author fills it in.
+   */
+  dateStrip:     z.string().default(''), // the bordered pill above the price
+  /**
+   * ROUND D step 5 (docs/promo-card-style.md §I) — the label/value list under
+   * the rule: "จำนวนจำกัด → รับเพียง 30 ที่นั่งเท่านั้น".
+   *
+   * NOT `features`, and §B #10 already settled why: a tick means SOMETHING THE
+   * BUYER GETS, and "รูปแบบการเรียน → Classroom" is a label/value pair, not a
+   * thing received. The two stay separate, `features` keeps its ticks, and no
+   * converter is offered — migrating one into the other would put a tick beside
+   * a fact.
+   *
+   * ── THE ONLY NEW *SHAPE* IN THIS ROUND, WHICH IS WHY IT IS LAST ─────────
+   * Round 39's absent-key trap bites hardest on an array: `.lean()` applies no
+   * Mongoose defaults and JSON serialisation drops `undefined`, so EVERY stored
+   * card reads this back ABSENT. `.default([])` covers the parse; the render
+   * must still read it as `Array.isArray(...) ? ... : []`, exactly as
+   * `features` is read, and never as `content.details.length`.
+   *
+   * Both fields default to '' rather than being required, because a
+   * half-filled row is an author mid-thought, not an error — the render decides
+   * what to do with one, and it renders the half that is there.
+   */
+  details: z.array(z.object({
+    label: z.string().default(''),
+    value: z.string().default(''),
+  })).default([]),
 }).passthrough();
 
 const statCardContent = z.object({
