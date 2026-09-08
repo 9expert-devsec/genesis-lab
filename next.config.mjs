@@ -13,6 +13,7 @@ import {
 } from './src/lib/legacyTransforms.mjs';
 import { LEGACY_BLOB_FILES } from './src/lib/legacyBlobFiles.mjs';
 import { webrootRewrites } from './src/lib/webrootDocuments.mjs';
+import { outlineRedirectEntries } from './src/lib/legacyOutlineRedirects.mjs';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -161,6 +162,30 @@ const nextConfig = {
         destination: '/refund-policy',
         permanent: true,
       },
+
+      // ── LEGACY COURSE-OUTLINE PDFs → THE CURRENT DOCUMENT ─────────────────
+      //
+      // 162 entries from 151 rows, generated from src/lib/legacyOutlineRedirects.mjs.
+      // NOT written out here on purpose: 162 hand-maintained lines in this file
+      // would bury the five rules above them, and the next batch is meant to be
+      // a data edit rather than a config edit. That module's header carries the
+      // provenance, the 8 held rows, and the both-spellings rule.
+      //
+      // ── WHY A REDIRECT WORKS HERE AT ALL, GIVEN THE REWRITES BELOW ────────
+      // Every one of these sources ALREADY RESOLVES — /sites/default/files/*
+      // and /images/* are served straight to Cloudinary by the delivery layer
+      // in rewrites(), and all 151 return 200 today. They just serve a STALE
+      // revision. Next evaluates redirects() BEFORE rewrites(), so a rule here
+      // intercepts the path before the Cloudinary rewrite can claim it. That
+      // ordering is the entire mechanism.
+      //
+      // It is also why the admin Redirect Panel cannot do this job: that table
+      // is consulted at the 404 boundary, and a path returning 200 never
+      // reaches it. See the model header in src/models/RedirectRule.js, which
+      // excludes file paths by name.
+      //
+      // TEMPORARY (307). See PERMANENT in the data module.
+      ...outlineRedirectEntries(),
     ];
   },
 

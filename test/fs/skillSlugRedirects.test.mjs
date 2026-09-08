@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import nextConfig from '../../next.config.mjs';
+// Only the entry builder: this file checks the SEAM between the module and the
+// config. The table's own claims — its size, its status code, its encoding rule
+// — belong to test/pure/legacyOutlineRedirects.test.mjs and are not restated
+// here, so a change to the batch reddens one file rather than two.
+import { outlineRedirectEntries } from '../../src/lib/legacyOutlineRedirects.mjs';
 
 // A renamed skill leaves its old catalog URL behind, and the catch-all does NOT
 // 404 it — it falls through to the generic `-all-courses` branch, which lists
@@ -99,7 +104,21 @@ test('CONTROL: a missing rule and a mis-aimed rule are reported differently', ()
   );
 });
 
-test('the redirect table is EXACTLY these five sources', () => {
+/**
+ * The five page-level rules, written out. Still an exact list, still bumped by
+ * hand — the legacy-outline batch below is enumerated separately rather than
+ * folded in here, because these five are the ones a human reads in review and
+ * 162 file paths would bury them.
+ */
+const PAGE_REDIRECT_SOURCES = [
+  '/cancellation-refund-policy',
+  '/online-course',
+  '/online-course/:path*',
+  '/promotion',
+  '/rpa-all-courses',
+];
+
+test('the page-level redirect table is EXACTLY these five sources', () => {
   // An exact set, not a `.some()`: the pre-existing rules
   // (/online-course, /online-course/:path*, /promotion) are load-bearing too,
   // and a subset check would let any of them be deleted in silence. Adding a
@@ -110,24 +129,72 @@ test('the redirect table is EXACTLY these five sources', () => {
   // Cancellation & Refund Policy throughout, so the longer URL is the one a
   // person guesses. Without the rule it falls through to [...slug] and gets
   // answered by a course lookup.
-  assert.deepEqual(
-    REDIRECTS.map((r) => r.source).sort(),
-    [
-      '/cancellation-refund-policy',
-      '/online-course',
-      '/online-course/:path*',
-      '/promotion',
-      '/rpa-all-courses',
-    ]
-  );
+  const pageRules = REDIRECTS
+    .map((r) => r.source)
+    .filter((s) => !s.startsWith('/sites/') && !s.startsWith('/images/'))
+    .sort();
+  assert.deepEqual(pageRules, PAGE_REDIRECT_SOURCES);
 });
 
-test('CONTROL: an extra source reddens the exact-set check', () => {
-  const extra = [...REDIRECTS, { source: '/anything', destination: '/', permanent: true }];
-  assert.notDeepEqual(
-    extra.map((r) => r.source).sort(),
-    REDIRECTS.map((r) => r.source).sort()
-  );
+test('CONTROL: deleting a page-level rule reddens, and the filter does not hide it', () => {
+  // Two things at once, because the filter above is new and could itself be the
+  // bug: a filter that dropped everything would make the assertion vacuous.
+  const withoutPromotion = REDIRECTS.filter((r) => r.source !== '/promotion');
+  const pageRules = withoutPromotion
+    .map((r) => r.source)
+    .filter((s) => !s.startsWith('/sites/') && !s.startsWith('/images/'))
+    .sort();
+  assert.notDeepEqual(pageRules, PAGE_REDIRECT_SOURCES);
+  assert.equal(pageRules.length, 4, 'the filter is dropping page rules it should keep');
+});
+
+// ── the legacy course-outline batch ────────────────────────────────────────
+
+test('the config carries EXACTLY the outline table, entry for entry', () => {
+  // Exact set, both directions: a row silently dropped from the data module and
+  // a rule appearing in the config that the module does not declare are
+  // different defects, and this catches both.
+  const declared = outlineRedirectEntries().map((e) => e.source).sort();
+  const inConfig = REDIRECTS
+    .map((r) => r.source)
+    .filter((s) => s.startsWith('/sites/') || s.startsWith('/images/'))
+    .sort();
+  assert.deepEqual(inConfig, declared);
+});
+
+test('CONTROL: a config that never spread the table reddens the entry-for-entry check', () => {
+  // The failure this guards against is the wiring being removed while the data
+  // module stays perfectly intact — the module's own tests would all still
+  // pass, and only this comparison would notice.
+  const unwired = REDIRECTS.filter((r) => !r.source.startsWith('/sites/') && !r.source.startsWith('/images/'));
+  const inConfig = unwired
+    .map((r) => r.source)
+    .filter((s) => s.startsWith('/sites/') || s.startsWith('/images/'));
+  assert.equal(inConfig.length, 0);
+  assert.notDeepEqual(inConfig, outlineRedirectEntries().map((e) => e.source).sort());
+});
+
+test('the config emits the batch at the SAME count the module declares', () => {
+  // Guards the spread itself: `...outlineRedirectEntries()` silently becoming a
+  // slice, a filter, or a single entry would leave every module-level test in
+  // test/pure/legacyOutlineRedirects green while the config shipped a fraction
+  // of the table.
+  const inConfig = REDIRECTS.filter((r) => r.source.startsWith('/sites/') || r.source.startsWith('/images/'));
+  assert.equal(inConfig.length, outlineRedirectEntries().length);
+});
+
+test('the config preserves each rule\'s destination and temporary status', () => {
+  // The seam could carry all 162 sources and still mangle where they point or
+  // what status they carry — `permanent` in particular is one key away from
+  // becoming a 308 nobody can recall.
+  const declared = new Map(outlineRedirectEntries().map((e) => [e.source, e]));
+  for (const rule of REDIRECTS) {
+    if (!rule.source.startsWith('/sites/') && !rule.source.startsWith('/images/')) continue;
+    const want = declared.get(rule.source);
+    assert.ok(want, `config carries ${rule.source}, which the module does not declare`);
+    assert.equal(rule.destination, want.destination, `${rule.source} points somewhere else`);
+    assert.equal(rule.permanent, false, `${rule.source} is not temporary`);
+  }
 });
 
 test('no redirect destination is itself a redirect source (no chain, no loop)', () => {

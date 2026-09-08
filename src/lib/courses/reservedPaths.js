@@ -93,6 +93,18 @@ export const RESERVED_PATHS = Object.freeze([
   { segment: 'online-course', source: 'redirect' },
   { segment: 'promotion', source: 'redirect' },
   { segment: 'rpa-all-courses', source: 'redirect' },
+  // The legacy course-outline redirects (src/lib/legacyOutlineRedirects.mjs).
+  // 162 rules, but only TWO segments: this list compares the FIRST segment
+  // only, and every one of those sources is /sites/default/files/… or
+  // /images/…. So the parity check needs these two entries and not 162 — the
+  // reason the check was written against top segments in the first place.
+  //
+  // Both were ALREADY unavailable to a course alias in practice: they are
+  // LEGACY_ROOTS, served to Cloudinary by rewrites(), so an alias of /images
+  // would have lost to the delivery layer silently. Listing them here is the
+  // first time that is written down rather than merely true.
+  { segment: 'images', source: 'redirect' },
+  { segment: 'sites', source: 'redirect' },
 
   // ── public/ — served at the root ─────────────────────────────────────────
   { segment: 'assets', source: 'static' },
