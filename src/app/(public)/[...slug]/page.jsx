@@ -38,10 +38,16 @@ import { siteCurrentYear } from '@/lib/articlePublishTime';
 import { CourseStickyCTA } from './_components/CourseStickyCTA';
 import { EarlyBirdBanner } from './_components/EarlyBirdBanner';
 import { CoursePromoSection } from './_components/CoursePromoSection';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Round F: the Genesis BUNDLE pages that contain this
+// course. A SIBLING block, not rows inside the promo one — see its header for
+// the three reasons, of which the `slice(0, 2)` cap is the deciding one.
+import { CourseBundleSection } from './_components/CourseBundleSection';
 import {
   getEarlyBirdByCourse,
   getActiveCoursePromos,
   getAllActiveEarlyBirdMap,
+  getBundlePagesForCourse,
 } from '@/lib/actions/course-promos';
 import { dbConnect } from '@/lib/db/connect';
 import ProgramPageConfig from '@/models/ProgramPageConfig';
@@ -730,7 +736,7 @@ export default async function CatchAllPage({ params, searchParams }) {
     // skillcolor fallback in CourseDetail.
     const [
       scheduleRes, programsRes, earlyBirdRes, coursePromosRes, faqsRes,
-      skillsRes, linkabilityRes,
+      skillsRes, linkabilityRes, bundlePagesRes,
     ] =
       await Promise.allSettled([
         // All three statuses — the detail page's ตารางอบรม block is where a
@@ -749,6 +755,11 @@ export default async function CatchAllPage({ params, searchParams }) {
         // both run inside the existing allSettled, so neither adds latency.
         listSkills(),
         getPageLinkability(),
+        // Genesis bundle pages naming this course. LAST in the array so every
+        // existing destructuring position is untouched, and inside the same
+        // allSettled so a failure here cannot take the page down — a missing
+        // promo block is the documented degradation for every row above.
+        getBundlePagesForCourse(course.course_id),
       ]);
     const schedules =
       scheduleRes.status === 'fulfilled' ? scheduleRes.value.items : [];
@@ -758,6 +769,8 @@ export default async function CatchAllPage({ params, searchParams }) {
       earlyBirdRes.status === 'fulfilled' ? earlyBirdRes.value : null;
     const coursePromos =
       coursePromosRes.status === 'fulfilled' ? coursePromosRes.value : [];
+    const bundlePages =
+      bundlePagesRes.status === 'fulfilled' ? bundlePagesRes.value : [];
     const faqs =
       faqsRes.status === 'fulfilled' ? faqsRes.value : [];
     const liveSkills =
@@ -876,6 +889,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           programs={programs}
           earlyBird={earlyBird}
           coursePromos={coursePromos}
+          bundlePages={bundlePages}
           faqs={faqs}
         />
       </>
@@ -1014,6 +1028,7 @@ function CourseDetail({
   programs,
   earlyBird,
   coursePromos,
+  bundlePages = [],
   faqs = [],
 }) {
   const hasSchedules = Boolean(schedules?.length);
@@ -1131,6 +1146,13 @@ function CourseDetail({
             {Array.isArray(coursePromos) && coursePromos.length > 0 && (
               <CoursePromoSection coursePromos={coursePromos} />
             )}
+            {/* AFTER the MSDB promotions, which is the block order the
+                /promotions grid already uses: Genesis-owned and MSDB rows are
+                not interleaved, because `promotionOrder` and MSDB's own sort
+                are two independent scales nobody has reconciled. The component
+                renders null on an empty list, so a course with no bundles has
+                exactly the promo area it had before this round. */}
+            <CourseBundleSection bundles={bundlePages} />
             {!isInhouseOnly && (
               <ScheduleSection
                 course={course}

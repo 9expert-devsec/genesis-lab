@@ -850,6 +850,31 @@ export async function getCourseRoundsForPage(courseObjectId) {
  * already revalidates on every page save, publish, identity change and delete.
  * No new invalidation path, and therefore no second one to keep in step.
  *
+ * ── WHAT REVALIDATION COVERS, AND WHAT IT DOES NOT ──────────────────────
+ * WRITTEN DOWN because it is an accepted outcome, not an oversight, and the
+ * difference is only visible if somebody says so before it is reported as a bug.
+ *
+ * `bustCaches` revalidates: the `page-builder` TAG (so this reader's cached DB
+ * read is dropped immediately), the admin list, the page's own `/<slug>` and
+ * its previous slug on a rename, and `/promotions`.
+ *
+ * It does NOT revalidate the COURSE DETAIL PAGES a bundle names, and it cannot
+ * cheaply: `bustCaches` takes a page and would have to walk its sections to
+ * learn which courses to bust — the same walk this reader does — on every save
+ * of every builder page, including the ones that are not bundles.
+ *
+ * So publishing or unpublishing a bundle drops the data cache at once, but
+ * `/<code>-training-course` keeps its rendered HTML until its own ISR window
+ * turns over. That route is `export const revalidate = 3600`, so the worst case
+ * is ONE HOUR between a publish and the bundle appearing on a course page.
+ *
+ * That is the same latency the Early Bird scheduling note in the settings panel
+ * already describes for the same reason, and it is acceptable here for a
+ * stronger one: a bundle appearing an hour late is a missing link, while the
+ * Early Bird case is a missing PRICE. If it ever needs to be immediate, the fix
+ * is `revalidateCourse(code)` — already in this file — called for each code the
+ * page names, from the publish path rather than from `bustCaches`.
+ *
  * `scheduled` is in the status filter beside `published` on purpose: a scheduled
  * page whose start has passed IS publicly visible (see lib/pageBuilder/visibility.js),
  * and nothing flips scheduled → published. Narrowing to `published` here would
