@@ -110,7 +110,17 @@ function HeadingEditor({ content, patch }) {
           onChange={(v) => patch({ eyebrow: v })}
         />
       </Field>
-      <Field label="ข้อความ">
+      {/**
+       * Round B commit 2 — the hint exists because of what this field CANNOT
+       * do. `content.text` is a plain string, so a heading can only ever be one
+       * colour; colouring part of a sentence is a MARK and lives in the
+       * `ข้อความ` (rich_text) section. Saying it here beats leaving the author
+       * to hunt for a control that is not going to exist.
+       */}
+      <Field
+        label="ข้อความ"
+        hint="ทั้งหัวข้อใช้สีเดียวกัน — ถ้าต้องการเน้นสีเฉพาะบางคำ ให้ใช้ section ข้อความ"
+      >
         <TextInput
           value={content?.text}
           onChange={(v) => patch({ text: v })}
@@ -165,7 +175,17 @@ function HeadingEditor({ content, patch }) {
  */
 function RichTextSectionEditor({ content, patch }) {
   return (
-    <FieldBlock label="เนื้อหา">
+    <FieldBlock
+      label="เนื้อหา"
+      /**
+       * Round B commit 2 — the same statement the colour input's own title
+       * carries, repeated where a reader scanning the panel will meet it. An
+       * author's colour is used verbatim in both themes on purpose (see the
+       * walker's doc block); a control that behaves differently in dark mode
+       * without saying so is the defect this repo keeps removing.
+       */
+      hint="สีตัวอักษรที่เลือกเองจะใช้สีเดิมทั้งโหมดสว่างและโหมดมืด"
+    >
       <RichTextEditor doc={content?.doc} onChange={(doc) => patch({ doc })} />
     </FieldBlock>
   );

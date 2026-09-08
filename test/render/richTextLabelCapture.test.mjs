@@ -66,8 +66,29 @@ test('the source uses FieldBlock, which is the thing that has no label', () => {
    * source says it.
    */
   const src = readSource('src/components/pageBuilder/editor/SectionContentEditor.jsx').code;
-  assert.match(src, /<FieldBlock label="เนื้อหา">/, 'the rich text field is no longer a FieldBlock');
-  assert.ok(!/<Field label="เนื้อหา">/.test(src), 'the label-rendering wrapper is back');
+  /**
+   * ── WIDENED IN ROUND B, AND THE CLAIM IS UNCHANGED ──────────────────────
+   * The pattern used to require `<FieldBlock label="เนื้อหา">` on one line, so
+   * it went red the moment the element gained a second prop — round B added a
+   * `hint` saying an author's text colour is used verbatim in both themes, and
+   * the wrapper became multi-line.
+   *
+   * That is the guard failing for a reason its own docstring says is not the
+   * subject: the distinction it pins is FieldBlock (renders a `<div>`) versus
+   * Field (renders a `<label>`, which forwards a click to the toolbar's first
+   * button — round 55's bug). A prop the element carries is orthogonal to that.
+   *
+   * So the tag and its label are matched with anything else permitted between
+   * them, and the negative assertion below is widened the same way — a `Field`
+   * that gained a hint must still be caught, or the widening would open the
+   * exact hole the file exists to close.
+   */
+  assert.match(src, /<FieldBlock[^<>]{0,200}\slabel="เนื้อหา"/, 'the rich text field is no longer a FieldBlock');
+  // `<Field(?!Block)` — without the lookahead this pattern matches the
+  // FieldBlock the assertion above just demanded, and the guard contradicts
+  // itself. `[^<>]` keeps the span inside ONE opening tag, so neither pattern
+  // can reach across an unrelated element to a label further down the file.
+  assert.ok(!/<Field(?!Block)[^<>]{0,200}\slabel="เนื้อหา"/.test(src), 'the label-rendering wrapper is back');
 });
 
 // ── THE MECHANISM, PINNED ON A FIXTURE ────────────────────────────────────

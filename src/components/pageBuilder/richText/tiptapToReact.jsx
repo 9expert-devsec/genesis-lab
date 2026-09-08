@@ -9,7 +9,7 @@
  * │                                                                        │
  * │ Nodes: doc, paragraph, heading(1-6), text, bulletList, orderedList,    │
  * │        listItem, blockquote, horizontalRule, hardBreak, image          │
- * │ Marks: bold, italic, underline, strike, code, link                     │
+ * │ Marks: bold, italic, underline, strike, code, link, textStyle          │
  * │ Attrs: textAlign, on paragraph and heading                             │
  * │                                                                        │
  * │ The editor's Tiptap extensions are built to produce exactly this set   │
@@ -34,6 +34,9 @@
 
 import { safeUrl } from '@/lib/pageBuilder/safeUrl';
 import { RICH_TEXT_NODES, RICH_TEXT_MARKS, RICH_TEXT_NODE_ATTRS } from '@/lib/pageBuilder/richTextContract';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this directory. hexOrNull is the ONE gate on the author's colour.
+import { hexOrNull } from '@/lib/pageBuilder/customColor';
 
 const MAX_DEPTH = 20;    // rich text nests a few levels (nested lists); 20 is slack
 const MAX_NODES = 5000;  // total nodes processed before we stop
@@ -48,12 +51,47 @@ function devWarn(kind, value) {
 }
 
 // ── marks ────────────────────────────────────────────────────────────
+/**
+ * ── AN AUTHOR'S TEXT COLOUR, AND WHY hexOrNull IS THE WHOLE STORY ────────
+ * `textStyle` is the one mark whose ATTRIBUTE reaches a `style` attribute, and
+ * the document is untrusted input — a directly-seeded Mongo document can carry
+ * anything, which presets.js has warned about since Phase 2. `HEX_COLOR_RE` is
+ * anchored over a six-character alphabet, so a value containing a `;`, a `)`,
+ * a quote or a space cannot be EXPRESSED. A style injection is not blocked
+ * here by a blocklist a new escape could get past; it is unsayable.
+ *
+ * `hexOrNull` returning null DROPS THE MARK ENTIRELY and the text survives —
+ * the same degradation every unknown mark already gets, and the reason there is
+ * no fallback colour and no empty `<span>` to explain. Only the six-digit form
+ * is accepted: `rgb()`, `#abc`, `#rrggbbaa` and named colours are each rejected
+ * FOR A STATED REASON in customColor.js, and a second vocabulary here would
+ * contradict the module that owns the question.
+ *
+ * ── DARK MODE: THE AUTHOR'S COLOUR, VERBATIM, IN BOTH THEMES ─────────────
+ * Decided, not defaulted. Round 79 derives a dark counterpart for a custom
+ * BACKGROUND, and that is right for a SURFACE: the theme still owns the text
+ * sitting on top of it, so adjusting the surface adjusts nothing the author
+ * chose to be read. This is the author's INK. Deriving it would silently
+ * repaint the exact thing they picked — the failure round 79's own doc block
+ * describes, pointed at the opposite half of the problem.
+ *
+ * So there is no `.dark` form of this and there is no variable to hang one on;
+ * the value goes straight into `color`. The author is told so in Thai at the
+ * point of choosing (the control's hint in RichTextEditor.jsx), because a
+ * control that behaves differently in one theme without saying so is the defect
+ * this repo has spent several rounds removing.
+ */
 const MARK_WRAPPERS = {
   bold:      (child, key) => <strong key={key}>{child}</strong>,
   italic:    (child, key) => <em key={key}>{child}</em>,
   underline: (child, key) => <u key={key}>{child}</u>,
   strike:    (child, key) => <s key={key}>{child}</s>,
   code:      (child, key) => <code key={key}>{child}</code>,
+  textStyle: (child, key, mark) => {
+    const color = hexOrNull(mark?.attrs?.color);
+    if (!color) return child; // refused → the mark is dropped, the text is not
+    return <span key={key} style={{ color }}>{child}</span>;
+  },
 };
 
 function applyMarks(text, marks, key) {
@@ -65,7 +103,7 @@ function applyMarks(text, marks, key) {
     const type = mark?.type;
     if (type === 'link') { linkMark = mark; continue; }
     const wrap = MARK_WRAPPERS[type];
-    if (wrap) node = wrap(node, `${key}-${type}`);
+    if (wrap) node = wrap(node, `${key}-${type}`, mark);
     else if (type) devWarn('mark', type);
   }
   if (linkMark) {

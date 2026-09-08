@@ -53,6 +53,12 @@ export const RICH_TEXT_MARKS = Object.freeze([
   'strike',
   'code',
   'link',
+  // An author's colour on PART of a sentence — which is what makes it a mark
+  // and not a section control. `heading.content.text` is a plain string and can
+  // only ever be one colour; a run inside a paragraph is the only place the
+  // request can be expressed. The COLOUR itself is an attribute on this mark,
+  // not a mark of its own — see the `color` note in RICH_TEXT_EXCLUDED.
+  'textStyle',
 ]);
 
 /**
@@ -98,9 +104,28 @@ export const RICH_TEXT_NODE_ATTRS = Object.freeze({
  *       must be switched OFF or a code block publishes as unformatted text.
  *   youtube
  *       an embed is an `embed` SECTION's job, not an inline rich-text node.
- *   subscript / superscript / textStyle / color
- *       no walker support; textStyle+color would also be a raw-hex route into
- *       the page, which MANIFESTO §7 forbids.
+ *   subscript / superscript
+ *       no walker support.
+ *   textStyle
+ *       ADMITTED — it is in RICH_TEXT_MARKS above, and the note that stood here
+ *       was WRONG rather than merely superseded. It said a colour would be "a
+ *       raw-hex route into the page, which MANIFESTO §7 forbids". §7 forbids a
+ *       colour DECIDED IN SOURCE, because a hex written into a class or a style
+ *       opts that surface out of dark mode — customColor.js has made exactly
+ *       this distinction at length since round 39. An author's hex arriving
+ *       from the DATABASE at render time is DATA: the source scanner cannot see
+ *       it and correctly should not, and there is still no hex literal anywhere
+ *       on this path. Leaving the old prohibition standing next to the thing it
+ *       prohibited would have been a contract arguing with itself.
+ *   color
+ *       OFF BOTH LISTS, and not by oversight. It is not a mark — it is an
+ *       ATTRIBUTE on the `textStyle` mark, and the Color extension is
+ *       configured `types: ['textStyle']` so it can decorate nothing else. It
+ *       is not in RICH_TEXT_NODE_ATTRS either: that list is for NODE
+ *       attributes, which is where the schema-blindness problem lives. A mark
+ *       attribute has no such problem — the mark's NAME is in the schema, so
+ *       an unrenderable colour cannot arrive without `textStyle` arriving too.
+ *       Its safety is hexOrNull() at the walker, not a name in a list.
  *   textAlign
  *       MOVED, not deleted — it is now in RICH_TEXT_NODE_ATTRS above, and the
  *       reasoning it was excluded FOR is why that list exists. It is NOT a node
@@ -113,5 +138,5 @@ export const RICH_TEXT_NODE_ATTRS = Object.freeze({
  */
 export const RICH_TEXT_EXCLUDED = Object.freeze([
   'table', 'tableRow', 'tableCell', 'tableHeader',
-  'codeBlock', 'youtube', 'subscript', 'superscript', 'textStyle', 'color',
+  'codeBlock', 'youtube', 'subscript', 'superscript',
 ]);
