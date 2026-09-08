@@ -19,7 +19,7 @@ export function TimelineSection({ content }) {
           />
           {it.title && <h3 className="font-heading text-lg font-bold">{it.title}</h3>}
           {it.body && (
-            <p className="mt-1 whitespace-pre-line text-9e-slate-dp-50 dark:text-[#94a3b8]">{it.body}</p>
+            <p className="mt-1 whitespace-pre-line text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]">{it.body}</p>
           )}
         </li>
       ))}

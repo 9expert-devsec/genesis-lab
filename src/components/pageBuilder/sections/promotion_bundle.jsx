@@ -200,7 +200,22 @@ function BundleItemCard({ entry, item, todayKey, currentYear }) {
 
         The PANEL's own soft-grey and the ROUND BOX's cream are untouched.
       */
-      className="flex flex-col overflow-hidden rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)]"
+      /*
+        ROUND 80-FIX. `--text-primary` added beside the surface it belongs to:
+        this `<li>` paints an OPAQUE, theme-aware surface (`--surface` is #FFFFFF
+        light / #132638 dark) and named no text colour, so anything inside it
+        that does not name one takes whatever the SECTION is declaring — which
+        round 80 made author-dependent.
+
+        LATENT, NOT LIVE, and stated so rather than dressed up: every text node
+        in this card already pins its own colour today (the title, both lines of
+        the round box, the status chip, the detail link), so this changes the
+        class attribute and changes no rendered colour. It is here because the
+        rule is about the SURFACE, not about which descendants happen to exist
+        this week — the next text node added inside would inherit, and would do
+        it silently.
+      */
+      className="flex flex-col overflow-hidden rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] text-[var(--text-primary)]"
     >
       <div className="relative aspect-video w-full bg-9e-ice dark:bg-9e-navy">
         {cover ? (

@@ -28,19 +28,27 @@ import {
   accentVarsFor,
   backgroundKindFor,
   backgroundPinFor,
+  autoTextClassFor,
+  autoTextVarsFor,
+  autoTextAttrFor,
 } from "@/lib/pageBuilder/presets";
 /**
- * ADDED beside the statement above rather than folded into it — the standing
- * rule in this repo. Round 78: the renderer needs to know whether the author's
- * own colour owns this surface, because a surface that does not follow the
- * theme cannot inherit text that does. It is the same predicate presets.js
- * uses to suppress the preset class, so the class and the text colour cannot
- * disagree about who owns the background.
+ * ROUND 80 REMOVED THE PAIR THAT USED TO BE IMPORTED HERE.
+ *
+ * `hasCustomBackground` and `isBackgroundPinned` came straight from
+ * customColor.js so this file could assemble the text-colour rule itself. That
+ * assembly now lives in `autoTextClassFor` above, and the import is gone with
+ * it — the same removal, for the same reason, that took `backgroundClass` and
+ * `isDarkBackground` out of this file when the mode-aware wrappers landed:
+ * a rule the renderer can build on its own is a second path, and the editor
+ * canvas would not have it. There is ONE path through presets.js.
+ *
+ * The named-import guard in test/render/customColorRender covers the three
+ * mode-blind resolvers by name and does NOT cover these two — it was written
+ * for the resolvers, and widening it to a general "customColor.js is
+ * unreachable" rule is a bigger claim than this round measured. What holds the
+ * removal is that nothing here has a use for them any more.
  */
-import {
-  hasCustomBackground,
-  isBackgroundPinned,
-} from "@/lib/pageBuilder/customColor";
 /**
  * Round 45, ADDED beside the statements above.
  *
@@ -407,30 +415,28 @@ export function SectionRenderer({
    * rather than merely overridden — see backgroundClassFor.
    */
   /**
-   * ── ROUND 78: A CUSTOM BACKGROUND PINS THE TEXT THAT SITS ON IT ──────────
-   * Round 78 made the page shell theme-aware, so `--text-primary` now flips to
-   * near-white under `.dark`. A section with a CUSTOM background does not flip
-   * — round 39 promised the author's colour verbatim in both themes — so
-   * without this the theme's dark text landed on the author's light surface.
-   * MEASURED on /promotions/early-bird-claude-code before this line existed:
-   * the hero went 14.4 -> 1.16 and the second custom section 5.88 -> 2.83.
+   * ── ROUNDS 78-80: THE TEXT THAT SITS ON A BACKGROUND THE AUTHOR PAINTED ──
+   * Round 78 made the page shell theme-aware, so `--text-primary` flips to
+   * near-white under `.dark`, and a custom surface that did not flip with it
+   * was left carrying the wrong half of the pair. Round 78 answered with a flat
+   * `text-9e-navy`; round 79 narrowed that to PINNED sections, because an
+   * unpinned surface now derives to dark in CSS and the theme's light text is
+   * already right on it.
    *
-   * `text-9e-navy` is the literal the page shell carried before round 78, so
-   * this reproduces EXACTLY the behaviour a custom-background section already
-   * had, rather than introducing a new rule. It is the same promise applied
-   * consistently: if the surface is verbatim in both themes, the text on it
-   * has to be too, or the pair answers two different axes — the defect round
-   * 59 named and round 75 measured four more instances of.
+   * Round 80 removes the last assumption in that line — that the author's
+   * colour is a LIGHT one. It never had to be: a dark authored hex took the
+   * theme's near-navy in light mode unpinned, and the pinned literal in both
+   * themes, and either way it was dark ink on a dark surface.
    *
-   * This is NOT deriving a dark counterpart for an author's colour. Nothing
-   * here reads or transforms the author's hex; it pins the theme half of the
-   * pair to the value it had, which is what keeps the contract coherent.
-   * Deriving the surface itself remains a separate, unbuilt proposal
-   * (docs/custom-colour-dark-mode.md).
+   * `autoTextClassFor` replaces the literal with a ranking of the theme's own
+   * two text tokens against the author's hex. It mints nothing and reads
+   * nothing but that hex; presets.js states what D4 now permits and why the
+   * pinned and unpinned cases emit different classes.
    *
    * ORDER MATTERS: it sits after `isDarkBackgroundFor`, and the two are
    * mutually exclusive by construction — `isDarkBackgroundFor` returns false
-   * for every custom background (presets.js says why), so a section can never
+   * for every custom background, and `autoTextClassFor` returns `undefined`
+   * for every section without one (presets.js says why), so a section can never
    * receive both classes.
    */
   const outerClass = cn(
@@ -438,16 +444,14 @@ export function SectionRenderer({
     spacingTopClass(settings.spacingTop),
     spacingBottomClass(settings.spacingBottom),
     isDarkBackgroundFor(settings) && "text-9e-ice",
-    // ROUND 79 narrowed this to PINNED sections only. Round 78 added it
-    // because a custom surface stayed light while `--text-primary` flipped —
-    // but a DERIVED surface now goes dark with the theme, so pinning navy text
-    // on it would put dark ink on a dark panel. Measured: the hero derives to
-    // L 0.267 and needs the theme's light text, exactly as any other dark
-    // surface does. A PINNED section still does not move, so it still needs
-    // the literal.
-    hasCustomBackground(settings) &&
-      isBackgroundPinned(settings) &&
-      "text-9e-navy",
+    // ROUND 80. This was an unconditional `text-9e-navy` on every PINNED
+    // custom background — right for a light authored colour, and dark ink on a
+    // dark one, in both themes, which is the defect this round is for. The
+    // resolver ranks the theme's OWN two text tokens against the author's hex
+    // and returns whichever survives it; for an unpinned section it returns the
+    // light-mode override only, handing dark mode back to the theme exactly as
+    // round 79 left it. presets.js carries the rule and what D4 now says.
+    autoTextClassFor(settings),
     visibilityClass(settings.visibility),
     advanced.customClass || null,
   );
@@ -466,6 +470,15 @@ export function SectionRenderer({
   const outerStyle = {
     ...accentVarsFor(style),
     ...backgroundStyleFor(settings),
+    /**
+     * ROUND A-fix 2. The MUTED counterpart of the token `autoTextClassFor`
+     * chose above, from the SAME decision, so the two inks cannot disagree
+     * about which surface they are on. Spread beside the other two for the same
+     * reason they are: disjoint properties, one style attribute, and
+     * `undefined` for every section without an authored background so nothing
+     * new is emitted. presets.js says why it is a variable and not a class.
+     */
+    ...autoTextVarsFor(settings),
   };
   const hasOuterStyle = Object.keys(outerStyle).length > 0;
 
@@ -512,6 +525,14 @@ export function SectionRenderer({
        */
       data-pb-custom-bg={backgroundKindFor(settings)}
       data-pb-bg-pin={backgroundPinFor(settings)}
+      /**
+       * ROUND A-fix 3. Says the automatic text decision is LIVE here, which is
+       * a narrower claim than `data-pb-custom-bg` above: that one is emitted
+       * even when the author set `textMode: 'theme'`. globals.css keys the
+       * prose-variable override on THIS, so the opt-out has no hole.
+       * `undefined` for every other section, so nothing new is published.
+       */
+      data-pb-auto-text={autoTextAttrFor(settings)}
       className={outerClass || undefined}
       style={hasOuterStyle ? outerStyle : undefined}
     >

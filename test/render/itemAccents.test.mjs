@@ -104,15 +104,30 @@ test("accordion: no item body is ever accented — the first negative rule", () 
    * render, so the rule is asserted where it lives instead: the source has
    * exactly one body element and its classes carry no accent.
    */
+  /**
+   * ── ROUND A-fix 2 MOVED THE MUTED STRING, NOT THE RULE ────────────────
+   * `text-9e-slate-dp-50` became `text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))]`:
+   * the same colour, now reached through a section-scoped variable so it can
+   * follow a background the AUTHOR painted rather than one the theme owns.
+   *
+   * The NEGATIVE RULE this test is for is untouched and is what to read on a
+   * failure: the class still carries no `--pb-accent-*`. `--pb-text-muted` is
+   * a different variable with a different owner, and the accent assertions
+   * below discriminate on the `--pb-accent-` prefix specifically, so they
+   * still say what they always said.
+   */
   const { code } = readSource(ACCORDION_SRC);
   const body = code.match(/className="(whitespace-pre-line[^"]*)"/g) ?? [];
   assert.deepEqual(
     body,
     [
-      'className="whitespace-pre-line px-4 pb-4 text-9e-slate-dp-50 dark:text-[#94a3b8]"',
+      'className="whitespace-pre-line px-4 pb-4 text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]"',
     ],
     "the accordion body element changed — it must keep its muted prose colour in both themes",
   );
+  // The rule, stated so a failure names it rather than only the diff.
+  assert.equal(/--pb-accent-/.test(body[0]), false,
+    "the accordion body took the accent — prose is never accented");
 });
 
 // ── accordion — the OPEN branch, as a source claim ─────────────────────────
@@ -205,8 +220,15 @@ test("CONTROL: tabs really does accent its active tab, and only that one", () =>
   );
   assert.equal(
     buttons[1],
-    "-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors border-transparent text-9e-slate-dp-50 hover:text-9e-navy dark:hover:text-white",
+    "-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors border-transparent text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] hover:text-9e-navy dark:hover:text-white",
   );
+  // Round A-fix 2 moved the RESTING label onto the section-scoped muted ink.
+  // The rule is unchanged and is asserted as a rule: only the ACTIVE tab may
+  // carry an accent variable, and `--pb-text-muted` is not one.
+  assert.equal(/--pb-accent-/.test(buttons[1]), false,
+    "the resting tab took the accent — only the active one may");
+  assert.ok(/--pb-accent-/.test(buttons[0]),
+    "the active tab lost the accent, so the contrast above proves nothing");
 });
 
 // ── instructor_card — fully server-rendered, so fully visible here ─────────
@@ -281,8 +303,8 @@ test("instructor_card: the name, role and bio are NOT accented — the first neg
     [
       "mx-auto flex h-full max-w-sm flex-col items-center rounded-9e-lg border border-[var(--surface-border)] p-6 text-center",
       "mt-3 font-heading text-lg font-bold",
-      "mt-0.5 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]",
-      "mt-2 whitespace-pre-line text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]",
+      "mt-0.5 text-sm text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]",
+      "mt-2 whitespace-pre-line text-sm text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]",
       "mt-3 flex flex-wrap justify-center gap-1.5",
       "rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-[var(--pb-accent-fill)] dark:bg-[#0D1B2A]",
       "rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-[var(--pb-accent-fill)] dark:bg-[#0D1B2A]",

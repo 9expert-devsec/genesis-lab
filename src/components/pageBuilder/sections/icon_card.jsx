@@ -103,7 +103,7 @@ export function IconCardSection({ content, style }) {
       )}
       {title.trim() && <h3 className="font-heading text-lg font-bold">{title}</h3>}
       {description.trim() && (
-        <p className="mt-1.5 whitespace-pre-line text-9e-slate-dp-50 dark:text-[#94a3b8]">{description}</p>
+        <p className="mt-1.5 whitespace-pre-line text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]">{description}</p>
       )}
     </div>
   );

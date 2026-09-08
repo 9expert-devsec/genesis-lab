@@ -34,7 +34,7 @@ export function ImageSection({ content }) {
         className="h-auto w-full rounded-9e-lg"
       />
       {caption.trim() && (
-        <figcaption className="mt-2 text-center text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+        <figcaption className="mt-2 text-center text-sm text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]">
           {caption}
         </figcaption>
       )}

@@ -72,6 +72,18 @@ original panel is a border *and* a gradient *and* a shadow at once. Today that
 combination is unreachable at any setting. This is the single strongest argument
 for a new composite value rather than more controls.
 
+> **SUPERSEDED IN PART — rounds 79 and 80-fix.** Left as written, because this
+> document is a dated survey rather than a live rule, but the two values it
+> measures have both moved since. Round 79 gave `filled` a theme-aware SURFACE
+> (`bg-[var(--pb-bg-light)]`, #F8FAFD light / #132638 dark). The round-80 fix
+> gave BOTH of them `text-[var(--text-primary)]`, because a surface that paints
+> itself must own the text on it — without that, a `price_card` inside a
+> section whose custom background is dark inherited the section's light text
+> onto the card's own light surface. What remains true of `gradient` is exactly
+> the sentence below about its SURFACE: it is still light-only, and closing that
+> needs two colours nobody has chosen. `src/lib/pageBuilder/presets.js`
+> (`CARD_STYLE_CLASS`) carries the current statement.
+
 **A2 — `filled` and `gradient` are theme-blind.** `border` resolves through
 `--surface-border` and `shadow` through `--shadow-color`, both of which
 globals.css redefines under `.dark`. `bg-9e-ice` (`#F8FAFD`) and

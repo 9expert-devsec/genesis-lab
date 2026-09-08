@@ -66,6 +66,11 @@ import {
 // the light token, and a pale one gets the dark token. Same question the
 // contrast warning asks, so the control and the render cannot disagree.
 import { accentContrastOk } from "@/lib/pageBuilder/customColor";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule here. Round 80: the one function that ranks the theme's two text tokens
+// against an author's own background. It DECIDES nothing on its own; the
+// resolver below turns its answer into the class the renderer applies.
+import { autoTextToken } from "@/lib/pageBuilder/customColor";
 
 // ── settings.containerWidth → inner max-width ────────────────────────
 const CONTAINER_WIDTH_CLASS = {
@@ -252,15 +257,49 @@ const CARD_STYLE_CLASS = {
    * the same conversion round 78 applied to the section-background table,
    * reaching the one card style that a change in this round made visible.
    *
-   * `gradient` is NOT converted, and that is a decision. It is
+   * `gradient`'s SURFACE is NOT converted, and that is still a decision. It is
    * `bg-9e-gradient-subtle` — a two-stop gradient, so a dark form means TWO
    * new colours, which is the reason round 78 left `brand_gradient` alone.
    * ZERO stored sections use it (the corpus histogram is `filled` 5,
    * `shadow` 20), so nothing renders it today and inventing two colours to
    * fix nothing is the wrong trade. Reported, not folded in.
+   *
+   * ── ROUND 80-FIX: BOTH NOW OWN THEIR TEXT ───────────────────────────────
+   * The rule `promo` states below, applied to the two values that were left
+   * out of it: TEXT PLACED ON A SURFACE THE THEME DOES NOT OWN IS CHOSEN BY
+   * WHOEVER OWNS THE SURFACE. These two paint an opaque surface and named no
+   * text colour, so their text was whatever the SECTION happened to be
+   * declaring — and `autoTextClassFor` (round 80) made the section declare
+   * `text-9e-ice` whenever the author's background is dark. A `price_card`
+   * inside such a section rendered its title and its `features` rows in the
+   * light token on the card's own light surface. Invisible, on a live
+   * promotion hero.
+   *
+   * That is the SAME shape round 79 hit and the same shape the paragraph above
+   * reported as "known, reachable only under some conditions". Round 80 made
+   * it reachable in general, so it stops being a report and becomes this line.
+   *
+   * WHY `--text-primary` AND NOT THE ROUND-80 TOKEN. The card's surface follows
+   * the SITE theme (`.dark`), not the author's colour — `--pb-bg-light` is
+   * #F8FAFD/#132638, switched by `.dark` alone. So its text must follow the
+   * site theme too. Calling `autoTextToken` here would answer a question about
+   * a surface this card does not sit on.
+   *
+   * WHAT IT DOES NOT FIX, said out loud: `gradient`'s surface is still a
+   * LIGHT-ONLY gradient, so in site-dark this pins near-white text on a pale
+   * gradient — 1.05:1, exactly what it already rendered by inheritance. The
+   * pin is a strict improvement (light mode goes from broken to correct, dark
+   * mode is unchanged) and it is not a repair. Repairing it needs the two
+   * colours the paragraph above declines to mint.
+   *
+   * `plain`, `border` and `shadow` are deliberately NOT given this class. They
+   * paint no surface, so their text SHOULD inherit the section's — pinning a
+   * colour there would break the very case round 80 just fixed.
    */
-  filled: "bg-[var(--pb-bg-light)]",
-  gradient: "bg-9e-gradient-subtle",
+  filled:
+    "bg-[var(--pb-bg-light)] text-[var(--text-primary)] [--pb-text-muted:var(--9e-slate-dp-50)]",
+  gradient:
+    "bg-9e-gradient-subtle text-[var(--text-primary)] [--pb-text-muted:var(--9e-slate-dp-50)]",
   /**
    * ── ROUND 59: THE PROMOTION SURFACE ─────────────────────────────────────
    * docs/promo-card-style.md §A1: the five values above are MUTUALLY EXCLUSIVE,
@@ -320,17 +359,48 @@ const CARD_STYLE_CLASS = {
    * the surface. Children that set their own colour (the accent price, the
    * muted footnote) still win; this only replaces the inherited default.
    *
-   * ── A PRE-EXISTING DEFECT THIS MAKES VISIBLE, AND DOES NOT FIX ──────────
-   * `filled` scores 1.00 on `corporate_navy` in BOTH site modes — ice text on
-   * an ice card, invisible — and `gradient` has the same shape. They are
-   * literal light hexes answering NEITHER axis. No stored section uses either
-   * (all seven carry `cardStyle` absent), so nothing is broken today, but
-   * changing what those two values mean is a separate decision from adding a
-   * sixth. Reported, not folded in. See docs/promo-card-style.md §A2.
+   * ── THE MAP'S CONTRACT, NOW THAT BOTH HALVES ARE HERE ──────────────────
+ * WHOEVER PAINTS THE SURFACE OWNS BOTH TOKENS ON IT.
+ *
+ * That is one rule, and it is the reason these entries carry what they carry.
+ * A value that paints nothing — `plain`, `border`, `shadow` — owns neither and
+ * lets the section's cascade through, which is CORRECT: the text on it really
+ * is on the section's surface. A value that paints — `filled`, `gradient`,
+ * `promo` — covers that surface, so both inks placed on it become the card's
+ * business:
+ *
+ *   text-[var(--text-primary)]              the primary ink   (round 80-fix)
+ *   [--pb-text-muted:var(--9e-slate-dp-50)] the muted ink     (round A-fix 3)
+ *
+ * The muted half was the gap the previous round measured and reported. A
+ * section with an authored background hands `--pb-text-muted` DOWN, and the
+ * three `cardStyle` readers now consume it — which is right when the card is
+ * unframed and wrong the moment it paints over that surface. Re-declaring the
+ * variable here is the whole fix, and it is preferred to a per-component branch
+ * for the reason above: one rule, stated once, in the map that is already where
+ * "does this value paint" is decided.
+ *
+ * It re-declares to the LIGHT value only because only light mode can reach it:
+ * the consumers keep a `dark:` class, and a variant always out-specifies the
+ * base rule this variable feeds — the same asymmetry autoTextVarsFor documents.
+ *
+ * ── THE DEFECT THIS ONCE ONLY REPORTED IS NOW CLOSED ────────────────────
+   * This block used to end: `filled` scores 1.00 on `corporate_navy` in BOTH
+   * site modes — ice text on an ice card, invisible — and `gradient` has the
+   * same shape; reported, not folded in.
+   *
+   * Round 79 converted `filled`'s SURFACE to `--pb-bg-light`, and the round-80
+   * fix gives BOTH of them `text-[var(--text-primary)]` — the second half of
+   * the pair, which is what makes them answer one axis instead of neither. The
+   * text half is closed for both; `gradient`'s SURFACE half remains open and
+   * the block above says exactly what is still wrong with it and why minting
+   * two colours to close it is not this round's call.
+   *
+   * See docs/promo-card-style.md §A2.
    */
   promo:
     "border border-[var(--surface-border)] bg-[var(--surface)] " +
-    "text-[var(--text-primary)] shadow-9e-lg",
+    "text-[var(--text-primary)] [--pb-text-muted:var(--9e-slate-dp-50)] shadow-9e-lg",
 };
 
 // ── style.buttonStyle → button treatment (accent via --pb-accent-*) ──
@@ -690,19 +760,203 @@ export function backgroundPinFor(settings) {
 /**
  * Does this section need light text on its background?
  *
- * A CUSTOM background answers NO — always, whatever its luminance.
+ * A CUSTOM background answers NO — always, whatever its luminance. This
+ * function is about the PRESET list and only the preset list, and it is
+ * unchanged: `isDarkBackground` and `DARK_BACKGROUNDS` are a hand-made
+ * judgement about six known colours, and they stay one.
  *
- * That is D4 stated as code. Deriving the answer from the author's colour would
- * make the section's text colour a function of its background, which is a
- * SECOND AUTHORITY beside the theme — the exact thing rounds 21-25 spent four
- * rounds removing from container.jsx, arriving somewhere new. The preset list
- * is a hand-made judgement about six known colours and stays one; a custom
- * colour gets the theme's text and a warning at the control.
+ * ── D4, AS IT NOW STANDS ────────────────────────────────────────────────
+ * D4 used to read: a section's text colour is NEVER derived from its
+ * background, because that is a SECOND AUTHORITY beside the theme — the exact
+ * thing rounds 21-25 spent four rounds removing from container.jsx. Round 80
+ * narrows that, and the narrowing is the whole of the change:
+ *
+ *   · On a PRESET background the theme still owns text, wholly. Nothing reads
+ *     a preset's luminance; the six named colours are judged by hand, here.
+ *   · On a background THE AUTHOR PAINTED, the theme's two text tokens are
+ *     RANKED by contrast against that author's hex, and the better one is used.
+ *     Nothing new is minted — `autoTextClassFor` chooses between
+ *     `text-9e-navy` and `text-9e-ice`, both of which are the theme's own.
+ *
+ * The old rule was written to stop a colour NOBODY CHOSE from appearing under a
+ * theme that had not been asked. That risk does not exist on this path: the
+ * surface is the author's, they asked for it by name, and the two candidates
+ * are the theme's. What existed instead was a measured defect — the theme's
+ * near-navy landing on whatever hex the author typed, so a dark authored colour
+ * rendered dark ink on a dark surface, in light mode unpinned and in BOTH
+ * themes when pinned. Refusing to look at the author's colour did not keep one
+ * authority over text; it kept one authority over an unreadable section.
+ *
+ * ── WHAT IS OVERTURNED, SAID PLAINLY RATHER THAN RECLASSIFIED ───────────
+ * docs/custom-colour-dark-mode.md §G2 refused exactly this, in those words:
+ * deriving a dark variant of a colour the author chose is translating one
+ * authority's decision into a second context, and deriving a TEXT colour from
+ * a background is a second authority overruling the theme. By that test this
+ * round does the second thing. It is not being reclassified as the first.
+ *
+ * It is overturned on evidence §G2 did not have: the theme's authority, applied
+ * here, produces an unreadable section, and the choice being taken from it is a
+ * choice between ITS OWN two tokens. One authority over an unreadable section
+ * is not a property worth keeping, and `textMode: 'theme'` hands the whole
+ * decision back to any author who disagrees. §G2's reasoning is untouched
+ * everywhere it was aimed — the preset path, and the page's own text.
  */
 export function isDarkBackgroundFor(settings) {
   return hasCustomBackground(settings)
     ? false
     : isDarkBackground(settings?.background);
+}
+
+/**
+ * The text class for a section whose background the AUTHOR painted — or
+ * `undefined`, which is every other section in the corpus.
+ *
+ * Three cases, and each returns exactly one class string:
+ *
+ *   no custom background, or `textMode: 'theme'`  →  undefined
+ *   custom + PINNED                               →  the token's class, bare
+ *   custom + not pinned                           →  the token's class, plus a
+ *                                                    `dark:` fallback to the theme
+ *
+ * ── WHY PINNED AND UNPINNED DIFFER ──────────────────────────────────────
+ * A PINNED surface is the author's hex verbatim in both themes (round 79), so
+ * the text on it must not move either — one class, no variant, exactly the
+ * shape the unconditional `text-9e-navy` had in SectionRenderer before this
+ * round. This REPLACES that literal: it was right for a light authored colour
+ * and dark-on-dark for a dark one.
+ *
+ * An UNPINNED surface goes dark with the theme, by a rule in globals.css, and
+ * the theme's dark text is already correct on it — round 79 built that and
+ * nothing here may fight it. So the override is LIGHT MODE ONLY: the token's
+ * class as the base, and `dark:text-[color:var(--text-primary)]` handing dark
+ * mode straight back to the theme, which is what it renders today.
+ *
+ * ── TWO MECHANICAL RULES, BOTH LOAD-BEARING ─────────────────────────────
+ * · The class strings are LITERALS IN THIS FILE. Tailwind's JIT emits only what
+ *   it can see as text, and `./src/lib/**` is in the content globs
+ *   (test/pure/tailwindContentCoverage). Building one by interpolating the
+ *   token name would render perfect markup against a rule that was never
+ *   compiled — the exact defect test/fs/tailwindArbitraryValueRules exists for.
+ * · Exactly ONE of the two is ever returned, by construction. `twMerge` does
+ *   not merge this repo's custom `9e-*` scales, so emitting both and trusting
+ *   one to win would be trusting stylesheet order — which is not a decision
+ *   anyone here made.
+ */
+export function autoTextClassFor(settings) {
+  if (!hasCustomBackground(settings)) return undefined;
+  // The opt-out, read before anything is measured: an author who asked for the
+  // theme's text gets it, and no contrast arithmetic runs at all.
+  if (settings?.textMode === "theme") return undefined;
+  const token = autoTextToken(settings.backgroundCustom);
+  // Unreachable while hasCustomBackground holds — both ask hexOrNull the same
+  // question — and kept so this function is total rather than nearly total.
+  if (!token) return undefined;
+  if (isBackgroundPinned(settings)) {
+    return token === "ice" ? "text-9e-ice" : "text-9e-navy";
+  }
+  return token === "ice"
+    ? "text-9e-ice dark:text-[color:var(--text-primary)]"
+    : "text-9e-navy dark:text-[color:var(--text-primary)]";
+}
+
+/**
+ * The MUTED counterpart of the token `autoTextClassFor` just chose — as a
+ * section-scoped custom property, or `undefined`.
+ *
+ * ── THE DEFECT THIS IS FOR ──────────────────────────────────────────────
+ * `autoTextClassFor` fixes text that INHERITS. It cannot reach an element that
+ * names its own colour, and the muted ones all do: `text-9e-slate-dp-50` is
+ * #5E6A7E, chosen against a surface the THEME owns. On a section whose surface
+ * the author owns and has painted dark, that is dark slate on dark — measured
+ * 2.32:1 on #123456 and 3.18:1 on #0D1B2A. The cta description and the heading
+ * eyebrow are the reported instances; the same token appears on eight surfaces.
+ *
+ * ── ONE DECISION, TWO OUTPUTS, WHICH IS THE WHOLE POINT ─────────────────
+ * This reads the SAME `autoTextToken` answer the class resolver reads. Handing
+ * the muted consumers a second hardcoded pair is how the codebase arrived here
+ * — a colour chosen against an assumed surface, in a component that cannot see
+ * the surface. Deriving both from one call means the muted ink and the primary
+ * ink cannot disagree about which surface they are on.
+ *
+ * ── NO COLOUR IS MINTED ─────────────────────────────────────────────────
+ * Both values are EXISTING tokens, referenced as the CSS variables globals.css
+ * already declares, so nothing here is a hex and nothing is a new decision:
+ *
+ *   navy (a LIGHT authored surface) -> --9e-slate-dp-50  #5E6A7E
+ *        which is byte-identical to the `text-9e-slate-dp-50` the consumers
+ *        already carry, so this case changes no colour at all.
+ *   ice  (a DARK authored surface)  -> --9e-slate-dp-700 #CFD2D8
+ *        the same scale, read from the other end. MEASURED against the dark
+ *        beds an author reaches: 11.48 on #0D1B2A, 8.40 on #123456, 3.39 on
+ *        #55708d — the last being a mid-blue where the PRIMARY token only makes
+ *        4.91 either, so the muted ink is not the limiting factor there.
+ *
+ * Both are declared identically under `:root` and `.dark` (globals.css 318/325
+ * and 506/513), which they must be: the author's surface does not follow the
+ * site theme, so the ink on it cannot either.
+ *
+ * ── IT IS AN INLINE STYLE, AND THAT IS SOUND HERE ───────────────────────
+ * Round 79's lesson is that an inline declaration has no `.dark` form. It does
+ * not bite here, because the consumers keep their `dark:` class untouched and a
+ * variant always out-specifies the base rule this variable feeds. So the
+ * variable governs LIGHT mode only, which is exactly the half that is broken —
+ * dark mode already renders #94a3b8, a light slate that reads correctly on both
+ * a derived-dark surface and a pinned dark one. Same shape as
+ * `autoTextClassFor`'s unpinned branch, reached by a different mechanism.
+ *
+ * The gate is `autoTextClassFor`'s, exactly: no custom background, or
+ * `textMode: 'theme'`, and nothing is emitted — so every other section keeps
+ * the theme's cascade untouched and publishes no new attribute.
+ */
+export function autoTextVarsFor(settings) {
+  if (!hasCustomBackground(settings)) return undefined;
+  if (settings?.textMode === "theme") return undefined;
+  const token = autoTextToken(settings.backgroundCustom);
+  if (!token) return undefined;
+  return {
+    /**
+     * ── ROUND A-fix 3 ADDED THE PRIMARY HALF ──────────────────────────
+     * `autoTextClassFor` publishes the primary ink as a CLASS, which is right
+     * for anything that inherits — but a CLASS cannot be read by a stylesheet
+     * rule, and @tailwindcss/typography sets its palette as VARIABLES on
+     * `.prose` itself. So the same decision is published a second way, as a
+     * variable, for the one consumer that can only be reached that way.
+     *
+     * The SAME two theme tokens the class uses, referenced as the CSS
+     * variables globals.css declares — `--9e-ice` / `--9e-navy`, both under
+     * `:root` only, so they are theme-invariant, which they must be: the
+     * author's surface does not follow the site theme.
+     *
+     * This is not a second authority over the primary ink. It is the same
+     * answer in a second spelling, from one call, which is the whole reason
+     * both live in this function.
+     */
+    "--pb-text": token === "ice" ? "var(--9e-ice)" : "var(--9e-navy)",
+    "--pb-text-muted":
+      token === "ice" ? "var(--9e-slate-dp-700)" : "var(--9e-slate-dp-50)",
+  };
+}
+
+/**
+ * `""` when the automatic text decision is LIVE for this section, else
+ * `undefined` — emitted as a bare `data-pb-auto-text` attribute.
+ *
+ * ── WHY NOT KEY THE STYLESHEET ON data-pb-custom-bg ────────────────────
+ * That attribute is emitted for EVERY honourable custom background, including
+ * one whose author set `textMode: 'theme'`. Keying the prose rule on it would
+ * override the theme's prose palette on a section that asked, by name, to keep
+ * the theme's text — a hole in the escape hatch, which is the one thing the
+ * opt-out exists to prevent.
+ *
+ * So the attribute answers the question the stylesheet is actually asking:
+ * is the automatic decision live here? It is emitted from the same gate
+ * `autoTextVarsFor` uses, so the attribute and the variables cannot disagree —
+ * a rule that matched without the variables being set would make every prose
+ * colour invalid-at-computed-value-time, which is a blank page rather than a
+ * wrong colour.
+ */
+export function autoTextAttrFor(settings) {
+  return autoTextVarsFor(settings) ? "" : undefined;
 }
 
 /**

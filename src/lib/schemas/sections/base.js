@@ -208,6 +208,41 @@ export const settingsSchema = z
      * re-validated" exists to catch.
      */
     backgroundPin: z.boolean().optional(),
+    /**
+     * ROUND 80 — who picks the text colour on a background the author painted.
+     *
+     * `auto` ranks the theme's two text tokens by WCAG contrast against the
+     * author's own hex and uses the better one. `theme` is the opt-out: the
+     * section takes `--text-primary` exactly as it does today.
+     *
+     * ── ABSENT MEANS `auto`, AND THAT CHANGES STORED PAGES ──────────────
+     * Deliberately, and it is the same break round 79 made one round earlier
+     * for `backgroundPin`. Round 56 §H's rule — an absent value must render
+     * what it rendered before — exists so a feature cannot change stored pages
+     * silently. Three things put this round outside it:
+     *
+     *   · The incumbent rendering is a MEASURED DEFECT, not a preference. The
+     *     theme's near-navy on a dark authored hex is dark ink on a dark
+     *     surface, unreadable, in light mode unpinned and in both themes when
+     *     pinned. "What it rendered before" is the thing being fixed.
+     *   · The author asked for this by name. It is not a behaviour arriving
+     *     unbidden under a section nobody touched.
+     *   · Absent-means-`theme` would ship a feature that does nothing until
+     *     every stored section is found and re-edited by hand — round 79's
+     *     argument for `backgroundPin`, and the precedent this follows.
+     *
+     * It is STATED rather than hidden: the control defaults visibly to
+     * อัตโนมัติ and its hint says the choice is read from the section's own
+     * background, so an author learns the rule at the point of choosing.
+     *
+     * `.optional()` with NO default, the round-39 shape of the two fields
+     * above, and load-bearing for their reason: a `.default('auto')` would
+     * WRITE the key into every section that merely passes through a parse,
+     * which test/pure/customColor's "a stored section gains NOTHING when it is
+     * re-validated" exists to catch. Absent is the default, and it is spelled
+     * by absence.
+     */
+    textMode: z.enum(["auto", "theme"]).optional(),
   })
   .default({});
 

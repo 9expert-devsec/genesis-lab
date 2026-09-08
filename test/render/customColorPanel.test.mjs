@@ -149,9 +149,11 @@ test("the accent select keeps its ตามธีม sentinel and gains กำ�
 });
 
 test("choosing กำหนดเอง reveals the colour fields, and only then", () => {
-  // ROUND 79 added the pin toggle to the BACKGROUND custom block only. The
-  // accent list below is unchanged, and that asymmetry is the point: only a
-  // background is derived, so only a background has anything to pin.
+  // ROUND 79 added the pin toggle and ROUND 80 the text-colour select, both to
+  // the BACKGROUND custom block only. The accent list below is unchanged, and
+  // that asymmetry is the point: only a background is derived and only a
+  // background has text sitting on it, so only a background has either to
+  // choose.
   assert.deepEqual(fieldsIn(tab({ settings: CUSTOM_BG })), [
     "ความกว้าง",
     "ระยะห่างด้านบน",
@@ -160,6 +162,7 @@ test("choosing กำหนดเอง reveals the colour fields, and only then
     "สีเริ่มต้น",
     "สีที่สอง",
     "ตรึงสีไว้ (ไม่ปรับตามโหมดมืด)",
+    "สีข้อความ",
     "สีองค์ประกอบ",
     "แสดงบน",
   ]);
@@ -235,8 +238,12 @@ const CUSTOM_COLOR_CAVEAT =
   "สีที่กำหนดเองจะถูกใช้ตามที่ระบุในทุกธีมของหน้า — " +
   'และจะถูกปรับให้เข้ากับโหมดมืดโดยอัตโนมัติ เว้นแต่จะเลือก "ตรึงสีไว้"';
 
+// ROUND 80 reworded it. The trigger and the threshold are unchanged; what
+// changed is what reaching the threshold MEANS, now that autoTextToken has
+// already picked the better of the two theme text tokens before this fires.
 const BACKGROUND_CONTRAST_WARNING =
-  "สีนี้อาจทำให้ตัวอักษรบนพื้นหลังอ่านยาก — ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG";
+  "เลือกสีข้อความที่อ่านชัดที่สุดให้แล้ว แต่ยังอ่านยากบนสีพื้นหลังนี้ — " +
+  "ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG";
 
 const ACCENT_CONTRAST_WARNING =
   "สีนี้อาจอ่านยากเมื่อใช้เป็นตัวอักษรบนพื้นหลังสว่าง — ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG";

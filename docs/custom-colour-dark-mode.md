@@ -371,6 +371,18 @@ derivation, which is this document.
 
 ### G2 — Do not auto-derive the TEXT colour as well.
 
+> **SUPERSEDED IN PART, round 80.** This section is left as it was written —
+> the document is a dated survey, not a live rule — but it no longer describes
+> what the code does. On a background **the author painted**, the section's text
+> is now chosen between the theme's own two tokens by contrast against that
+> author's hex (`autoTextToken` / `autoTextClassFor`), with `settings.textMode:
+> 'theme'` as the opt-out. What overturned it is evidence this survey did not
+> have: the theme's near-navy on a dark authored hex is dark ink on a dark
+> surface, so "one authority over text" was buying an unreadable section. The
+> refusal stands, untouched, everywhere else it was aimed — the PRESET
+> background path and the page's own text. `src/lib/pageBuilder/presets.js`
+> (`isDarkBackgroundFor`) carries the current statement of D4.
+
 Round 39 §D4 refused this and **the refusal still holds**. The distinction the
 brief asks about is real and it is worth stating precisely:
 

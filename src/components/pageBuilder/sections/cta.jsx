@@ -50,8 +50,30 @@ const BTN_BASE =
  * pinned to a comment claiming a gap is closed. Widening it would have made
  * that sentence false for a decoration.
  */
+/**
+ * ── ROUND A-fix 2: THE LABEL FOLLOWS THE SECTION, THE FRAME DOES NOT ─────
+ * `text-9e-navy` is #0D1B2A — chosen against a surface the THEME owns. On a
+ * section whose surface the author painted dark it measured 1.37:1 on #123456
+ * and 1.00:1 on #0D1B2A, which is the "very nearly invisible" in the report.
+ *
+ * The label now reads the section-scoped muted ink, with today's navy as the
+ * var() fallback, so a section with no authored background paints exactly what
+ * it painted before. On an authored section it takes the ink chosen FOR that
+ * surface — muted rather than primary, which is what a secondary action should
+ * be and is the only variable this round defines.
+ *
+ * ── THE BORDER AND THE HOVER ARE DELIBERATELY LEFT ───────────────────────
+ * `--surface-border` and `--surface-muted` are chosen against a THEME surface
+ * too, so on an authored background they are as wrong as the label was. They
+ * are not fixed here because neither can be resolved from an existing token:
+ * a border needs a value that reads against an arbitrary author hex, and the
+ * hover needs a surface tint that does the same. Both are palette decisions.
+ * A readable label inside a faint frame beats a minted colour — reported, not
+ * folded in.
+ */
 const BTN_SECONDARY =
-  'border border-[var(--surface-border)] text-9e-navy dark:text-white ' +
+  'border border-[var(--surface-border)] ' +
+  'text-[color:var(--pb-text-muted,var(--9e-navy))] dark:text-white ' +
   'hover:bg-[var(--surface-muted)]';
 
 export function CtaSection({ content, style }) {
@@ -71,7 +93,7 @@ export function CtaSection({ content, style }) {
         <h2 className="font-heading text-2xl font-bold md:text-3xl">{heading}</h2>
       )}
       {description.trim() && (
-        <p className="mx-auto mt-3 max-w-2xl text-9e-slate-dp-50 dark:text-[#94a3b8]">{description}</p>
+        <p className="mx-auto mt-3 max-w-2xl text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]">{description}</p>
       )}
       {(showPrimary || showSecondary) && (
         <div
