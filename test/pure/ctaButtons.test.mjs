@@ -151,16 +151,36 @@ test('a per-button style survives; an unknown one is treated as ABSENT', () => {
   assert.deepEqual(out.map((b) => b.style), ['outline', undefined, undefined, undefined]);
 });
 
-test('newTab is read only as a real boolean, so absent stays derivable', () => {
+test('a hand-seeded newTab is INERT — it is not part of a button', () => {
+  /**
+   * The field was removed whole, reads included. It could never be written —
+   * no control offered it and the schema never defaulted it — so the only way
+   * to set one was to edit the database by hand, which on this system means
+   * editing production. A value that is honoured at render but invisible to
+   * the panel cannot be seen, explained or undone by the author who owns the
+   * page, which is why "read it if it is there" was the wrong compromise.
+   *
+   * Asserted on the RESOLVER's output rather than by grepping for the word, so
+   * re-adding the read without re-adding a control turns this red. Whether a
+   * link opens a tab is derived from the href, and nothing overrides it — see
+   * the decision block in lib/pageBuilder/ctaButtons.js for the measurement
+   * that closed this and the condition that would reopen it.
+   */
   const out = resolveCtaButtons({
     buttons: [
       { label: 'a', href: '/a' },
       { label: 'b', href: '/b', newTab: true },
-      { label: 'c', href: '/c', newTab: false },
-      { label: 'd', href: '/d', newTab: 'yes' },
+      { label: 'c', href: 'https://9expert.co.th', newTab: false },
     ],
   });
-  assert.deepEqual(out.map((b) => b.newTab), [undefined, true, false, undefined]);
+  assert.equal(out.length, 3, 'a seeded newTab changed which buttons render');
+  for (const b of out) {
+    assert.ok(!('newTab' in b), 'newTab survived into a resolved button');
+  }
+  // ...and the editor does not carry it back into storage either, so it cannot
+  // reappear on a row an author edits.
+  const rows = ctaEditorRows({ buttons: [{ label: 'a', href: '/a', newTab: true }] });
+  assert.deepEqual(rows, [{ label: 'a', href: '/a' }]);
 });
 
 test('the cap is not enforced here — it is a UI bound, not a data truth', () => {

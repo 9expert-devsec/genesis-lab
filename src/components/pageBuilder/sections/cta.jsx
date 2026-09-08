@@ -165,9 +165,12 @@ export function CtaSection({ content, style }) {
           )}
         >
           {buttons.map((button, i) => {
-            // `newTab` absent ⇒ derive from the href, which is what every cta
-            // has done since the first button. Present ⇒ the author's answer.
-            const external = button.newTab ?? isExternalUrl(button.href);
+            // Derived from the href, once, which is what every cta has done
+            // since there was one button: external opens a tab, internal does
+            // not. There is deliberately no per-button override — see the
+            // decision block in lib/pageBuilder/ctaButtons.js, which records
+            // the measurement that closed it and what would reopen it.
+            const external = isExternalUrl(button.href);
             return (
               <Link
                 key={`${i}-${button.href}`}
