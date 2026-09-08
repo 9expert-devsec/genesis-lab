@@ -31,6 +31,7 @@ import {
   ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Loader2, Lock,
 } from 'lucide-react';
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
+import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { createCareerPathRegistration } from '@/lib/actions/career-path-registrations';
 import { isValidThaiPhone } from '@/lib/registration/thaiPhone';
 import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
@@ -151,7 +152,24 @@ const invoiceShape = z.object({
   firstName:   z.string().default(''),
   lastName:    z.string().default(''),
   companyName: z.string().default(''),
-  branch:      z.string().default(''),
+  /**
+   * THE THREE FIELDS `InvoiceFields` ACTUALLY WRITES.
+   *
+   * This shape declared a single `branch` string, which `InvoiceFields` and
+   * `BranchFields` stopped writing when the structured pair replaced it. zod is
+   * in strip mode, so `branchType`, `branchCode` and `branchFree` were deleted
+   * from the submission before `handleConfirm` ever saw them and the payload's
+   * `companyBranch: inv.branch` was the empty string on every registration ever
+   * filed. The customer picked สำนักงานใหญ่ or typed a branch number, saw it on
+   * the review step, and it was gone by the time the document was created.
+   *
+   * Same names, same enum and same default as the public flow's schema — see
+   * the note on the model, and src/lib/registration/branchLabel.js for the one
+   * place any of the three becomes a label.
+   */
+  branchType:  z.enum(['head_office', 'branch']).default('head_office'),
+  branchCode:  z.string().default(''),
+  branchFree:  z.string().default(''),
   taxId:       z.string().default(''),
   thaiAddress:          thaiAddressShape.nullable().optional(),
   internationalAddress: intlAddressShape.nullable().optional(),
@@ -228,7 +246,9 @@ const EMPTY_INVOICE = {
   firstName: '',
   lastName: '',
   companyName: '',
-  branch: '',
+  branchType: 'head_office',
+  branchCode: '',
+  branchFree: '',
   taxId: '',
   thaiAddress: EMPTY_THAI_ADDRESS,
   internationalAddress: null,
@@ -606,9 +626,21 @@ export function CareerPathRegisterClient({ careerPath }) {
         taxFirstName:  inv.firstName    ?? '',
         taxLastName:   inv.lastName     ?? '',
         companyName:   inv.companyName  ?? '',
-        companyBranch: inv.branch       ?? '',
+        // `companyBranch` is NOT written — it is the legacy path, and mapping
+        // it from `inv.branch` (a key nothing writes any more) is exactly how
+        // the branch was being lost. The three the form fills go through
+        // instead; branchLabel.js turns whichever applies into text.
+        branchType:    inv.branchType ?? 'head_office',
+        branchCode:    inv.branchCode ?? '',
+        branchFree:    inv.branchFree ?? '',
         companyTaxId:  inv.type === 'corporate' ? (inv.taxId ?? '') : '',
         personalTaxId: inv.type === 'individual' ? (inv.taxId ?? '') : '',
+        // WHICH MAPPING produced the five flat columns below, and the country
+        // the customer typed. Without the flag `province` holding "California"
+        // reads as a Thai province; without the name an international invoice
+        // address has no country on it at all.
+        invoiceCountry: isThai ? 'TH' : 'OTHER',
+        countryName:    isThai ? '' : (intl.country ?? ''),
         taxAddress: isThai
           ? (inv.thaiAddress?.addressLine ?? '')
           : `${intl.line1 ?? ''} ${intl.line2 ?? ''}`.trim(),
@@ -1464,7 +1496,13 @@ function InvoicePreview({ invoice }) {
       {isCorp ? (
         <>
           <ReadRow label="ชื่อบริษัท" value={invoice.companyName} />
-          {invoice.branch && <ReadRow label="สาขา" value={invoice.branch} />}
+          {/* `invoice.branch` was read here and nothing has written that key
+              since the structured pair replaced it — so the row never appeared,
+              however the customer answered สาขา one step earlier. The label for
+              any of the three shapes has one definition; this asks it. */}
+          {formatInvoiceBranchLabel(invoice) && (
+            <ReadRow label="สาขา" value={formatInvoiceBranchLabel(invoice)} />
+          )}
           {invoice.taxId  && <ReadRow label="เลขผู้เสียภาษี" value={invoice.taxId} />}
         </>
       ) : (
