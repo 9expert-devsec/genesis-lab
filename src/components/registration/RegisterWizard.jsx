@@ -681,7 +681,11 @@ export function StepForm({
       scheduleType: activeSchedule?.type || undefined,
       attendanceMode:
         activeSchedule?.type !== "hybrid" ? "classroom" : undefined,
-      attendeesListProvided: false,
+      // Spread from publicRegistrationDefaults above, and repeated here only
+      // because this override already existed and removing it silently would
+      // hide that it USED to disagree. The checkbox renders as
+      // `checked={!attendeesListProvided}`, so true = unchecked.
+      attendeesListProvided: true,
       requestInvoice: true,
       ...(initialValues ?? {}),
     },

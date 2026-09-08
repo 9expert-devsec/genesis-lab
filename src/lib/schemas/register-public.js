@@ -335,7 +335,12 @@ export const publicRegistrationDefaults = {
     // lineId removed — field no longer in the form
   },
   attendeesCount:        1,
-  attendeesListProvided: false,
+  // TRUE = the roster is expected, so the opt-out checkbox that renders as
+  // `checked={!attendeesListProvided}` starts UNCHECKED. The field asks "did
+  // they give us the list?" and the checkbox asks the opposite ("I would
+  // rather not"), so a `false` here silently pre-ticked the opt-out and every
+  // untouched submission carried zero attendee rows.
+  attendeesListProvided: true,
   attendees:      [],
   requestInvoice: false,
   invoice:        null,

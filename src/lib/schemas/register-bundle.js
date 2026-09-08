@@ -174,7 +174,9 @@ export const bundleRegistrationDefaults = {
     isAttending: false,
   },
   attendeesCount:        1,
-  attendeesListProvided: false,
+  // TRUE, and for the reason spelled out in register-public.js's defaults:
+  // the checkbox is the INVERSE of this field, so false pre-ticks the opt-out.
+  attendeesListProvided: true,
   attendees:      [],
   // `true`, unlike publicRegistrationDefaults — see the note above this object.
   requestInvoice: true,
