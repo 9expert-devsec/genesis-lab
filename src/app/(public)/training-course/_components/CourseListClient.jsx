@@ -9,6 +9,7 @@ import { ViewToggle } from './ViewToggle';
 import { CourseCardGroup } from './CourseCardGroup';
 import { CourseTableGroup } from './CourseTableGroup';
 import { EmptyState } from './EmptyState';
+import { CatalogDownload } from './CatalogDownload';
 
 /**
  * Client-side list view for /training-course.
@@ -287,6 +288,8 @@ export function CourseListClient({
           ))
         )}
       </div>
+
+      <CatalogDownload />
     </div>
   );
 }
