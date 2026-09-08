@@ -4,36 +4,37 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, Settings, Check, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { OPTIONAL_CATEGORIES } from "@/lib/consentCategories";
 import { CookieMascot } from "./CookieMascot";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  CookieBanner — PRESENTATION ONLY. STILL NOT WIRED TO CONSENT.
+ *  CookieBanner — PRESENTATION ONLY. The consent it collects IS honoured.
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Built from the Figma frame `cookie-banner` (file lWoAUx7CkpGmY79jAKAtWe,
- * node 7:2). Round CB-A; mounted for team review in round CB-A2.
+ * node 7:2). Round CB-A; mounted for team review in CB-A2; wired in CB-B.
  *
- * ── WHAT IT STILL DOES NOT DO ───────────────────────────────────────────────
- * This component holds its four category states in `useState` and does NOTHING
- * ELSE with them. It does not write a cookie, does not touch localStorage, and
- * does not call gtag('consent', 'update', …). Consent Mode defaults elsewhere
- * in the app are untouched by this file and remain `granted`.
+ * ── PRESENTATION ONLY IS A RULE, NOT A STATUS ───────────────────────────────
+ * This component holds its four category states in `useState` and hands the
+ * result to `onDecision`. It does NOT write a cookie, touch localStorage, or
+ * call gtag itself — and that has not changed now that consent is wired,
+ * because the side effects belong to the mount (CookieConsentBanner.jsx) where
+ * they can be read in one place.
  *
- * ── IT IS NOW ON SCREEN, AND THAT NEEDED A GUARD ────────────────────────────
- * CB-A left this unmounted on the grounds that a banner whose
- * "ปฏิเสธคุกกี้ที่ไม่จำเป็น" visibly moves three toggles but changes no tracking
- * tells users they have a control they do not have. That reasoning has not
- * changed — genesis-lab simply is not in production yet (real users are still
- * on the old site), so the only people who can see it are the team.
+ * test/render/cookieBannerMarkup.test.mjs scans this file for `gtag`,
+ * `dataLayer`, `document.cookie`, `localStorage` and `sessionStorage` and fails
+ * if any appears. That guard began life as a temporary hold during the preview
+ * rounds; it is KEPT because the separation is permanent. Do not "simplify" by
+ * calling gtag from here.
  *
- * The mount therefore comes with a compensating control: CookieBannerPreview
- * passes a Thai warning strip through the `notice` prop saying in plain words
- * that the choices do not yet take effect. That strip is TEMPORARY and is
- * deleted in the wiring round along with the preview wrapper.
- *
- * If this component ever renders WITHOUT that notice on a site real users can
- * reach, the CB-A objection is live again and mounting is a defect.
+ * ── THE `notice` PROP IS STILL HERE, AND SHOULD STAY EMPTY ──────────────────
+ * During CB-A2/CB-A3 the mount passed an amber strip through it saying the
+ * choices did not take effect. CB-B deleted that strip because the sentence
+ * became false. The prop remains as the seam: if consent is ever unwired
+ * again — a tag change, a rollback — the honest strip goes back through it
+ * rather than the banner silently pretending. A banner that does nothing and
+ * no longer says so is strictly worse than one that admits it.
  *
  * ── THE INITIAL STATE DIVERGES FROM THE MOCKUP ON PURPOSE ───────────────────
  * The Figma renders all three optional pills in their CHECKED state. They start
@@ -55,17 +56,21 @@ import { CookieMascot } from "./CookieMascot";
  */
 
 /**
- * The three optional categories, in the Figma's pill order. `key` is the local
- * state key; there is deliberately no mapping to Consent Mode signal names
- * (ad_storage / analytics_storage / …) in this round — that mapping is the
- * wiring round's job and inventing it here would invite someone to wire it up
- * halfway.
+ * The three optional categories, in the Figma's pill order.
+ *
+ * MOVED to src/lib/consentCategories.js in round CB-B and re-exported here, so
+ * the imports and tests that reach for it at this path keep working. The list
+ * had to leave a `'use client'` module because the consent bootstrap — a plain
+ * inline script with no React around it — validates a stored record against
+ * the same key set, and importing a component just to read three strings would
+ * pull its icon dependencies into that graph.
+ *
+ * The Consent Mode signal mapping (ad_storage / analytics_storage / …) is
+ * still deliberately NOT here: it lives in src/lib/analytics/consentMode.js,
+ * with the `consent default` that uses it. This component remains
+ * presentational and names only its own state keys.
  */
-export const OPTIONAL_CATEGORIES = [
-  { key: "analytics", label: "คุกกี้วิเคราะห์" },
-  { key: "functional", label: "คุกกี้ด้านฟังก์ชัน" },
-  { key: "marketing", label: "คุกกี้การตลาด" },
-];
+export { OPTIONAL_CATEGORIES };
 
 /**
  * ── WHY THE STATE TRANSITIONS ARE PURE FUNCTIONS OUT HERE ───────────────────
