@@ -204,7 +204,40 @@ export async function getEarlyBirdByCourse(courseId) {
   if (doc.promotion_id) {
     promotion = await Promotion.findOne({ promotion_id: doc.promotion_id }).lean();
   }
-  return serialize({ ...doc, promotion });
+
+  /**
+   * ── ROUND G: THE OWNING PAGE, FOR THE BANNER'S ดูรายละเอียด LINK ────────
+   * Joined HERE, beside the Promotion join, because this is the one read that
+   * already answers "what is this Early Bird attached to" and a second reader
+   * would be a second chance to disagree with it.
+   *
+   * ONLY WHEN A PAGE OWNS THE ROW. `owner_page_id` is empty on every row nobody
+   * has bound — all four live rows today — so this costs those callers nothing.
+   * That matters: `getEarlyBirdByCourse` is also read by the public
+   * registration route and the register page, neither of which renders a link.
+   *
+   * A PROJECTION, not the page: these are exactly the fields `publicPageHref`
+   * reads, and a page document carries its whole section tree. `pageType` and
+   * the window are in it because the helper refuses on both — status alone is
+   * not the destination's gate.
+   *
+   * `.catch(() => null)` because a malformed id throws a CastError rather than
+   * missing, and an unreadable owner must not take a course page down. Failing
+   * to null means no link, which is the same outcome as no owner — see
+   * lib/earlyBird/detailHref.js: a dead link is worse than an absent one.
+   */
+  let ownerPage = null;
+  const owner = String(doc.owner_page_id ?? '').trim();
+  if (owner) {
+    ownerPage = await PageBuilder.findById(owner, {
+      slug: 1, title: 1, pageType: 1, status: 1,
+      publishStartDate: 1, publishEndDate: 1,
+    })
+      .lean()
+      .catch(() => null);
+  }
+
+  return serialize({ ...doc, promotion, ownerPage });
 }
 
 /**
