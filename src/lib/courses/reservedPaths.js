@@ -116,6 +116,12 @@ export const RESERVED_PATHS = Object.freeze([
   // that is very hard to see. The `-img` suffix is deliberate.
   { segment: 'policies-img', source: 'static' },
   { segment: 'port', source: 'static' },
+  // The legacy asset tree recovered from the old server, served at the URLs it
+  // always had (/resources/flag/thai.png and 139 more). Not a route and not
+  // part of the Cloudinary migration — `resources` is absent from LEGACY_ROOTS,
+  // so public/ answers these directly. It is listed here for the reason spelled
+  // out at /avatar above: an alias that loses to a static file loses SILENTLY.
+  { segment: 'resources', source: 'static' },
   // The /masterclass landing page's artwork. Same shadowing concern as
   // policies-img above — not `masterclass`, which is the route itself.
   { segment: 'masterclass-element', source: 'static' },
