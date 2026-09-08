@@ -41,6 +41,16 @@ const SCHEDULE_SURFACES = [
   // formatter, so it is a Thai-year surface and this is what stops the next
   // `+ 543` appearing on it.
   'src/app/admin/schedules/_components/SchedulesAdminClient.jsx',
+  // Added with the Career Path registration mail. It renders a round's days in
+  // Thai — through `formatRoundDays`, like every surface above it — so it is a
+  // Thai-year surface by the same definition, and this is the guard that stops
+  // it growing a ninth MONTH_TH array or a `+ 543` the next time someone wants
+  // the label "just slightly different" in an email.
+  //
+  // It is the first NON-SCREEN member of this list, and that is the point: an
+  // email is the surface where a wrong year is least likely to be noticed and
+  // least possible to correct after the fact.
+  'src/lib/email/models/careerPathRegistrationModel.js',
 ];
 
 test('no schedule surface contains a 543 literal', () => {
