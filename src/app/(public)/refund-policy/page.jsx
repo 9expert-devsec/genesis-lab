@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { PolicyLayout, PolicyStatusNotice } from '@/components/policies/PolicyLayout';
+import { PolicyLayout } from '@/components/policies/PolicyLayout';
 import { PolicyAccordion } from '@/components/policies/PolicyAccordion';
 import { PolicyIcon } from '@/components/policies/PolicyIcon';
 import { POLICY_HUB, POLICY_ENTITY, findPolicy } from '@/config/policies';
@@ -18,10 +18,10 @@ export const metadata = {
  *  ROUND R-B — APPROVED COPY, PORTED FROM นโยบายการยกเลิกและคืนเงิน.docx
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Every section body below is the approved Cancellation & Refund Policy text.
- * This is the real thing PolicyStatusNotice describes: reviewed and signed off
- * by the person who owns it, not yet reviewed by counsel, and not yet in force
- * because the site is not in production. The previous copy — invented refund
+ * Every section body below is the approved Cancellation & Refund Policy text:
+ * reviewed and signed off by the person who owns it, though not reviewed by
+ * counsel. The pre-force notice that used to say so above the content was
+ * removed when the legal centre went live. The previous copy — invented refund
  * percentages and notice-period tiers behind PolicyDraftNotice — is dropped
  * wholesale, not edited; the source policy is a flat no-refund rule per course
  * type, not a percentage schedule.
@@ -91,9 +91,6 @@ export default function RefundPolicyPage() {
       updated={policy.updated}
       toc={TOC}
       currentSlug={policy.slug}
-      notice={
-        <PolicyStatusNotice detail="เนื้อหาในหน้านี้จะมีผลบังคับใช้เมื่อเว็บไซต์เปิดให้บริการอย่างเป็นทางการ หากมีข้อสงสัยติดต่อ training@9expert.co.th" />
-      }
       help={{
         icon: 'help',
         title: 'ต้องการความช่วยเหลือ?',

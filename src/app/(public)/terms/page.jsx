@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { PolicyLayout, PolicyStatusNotice } from '@/components/policies/PolicyLayout';
+import { PolicyLayout } from '@/components/policies/PolicyLayout';
 import { PolicyAccordion } from '@/components/policies/PolicyAccordion';
 import { PolicyIcon } from '@/components/policies/PolicyIcon';
 import { POLICY_HUB, POLICY_ENTITY, findPolicy } from '@/config/policies';
@@ -19,9 +19,9 @@ export const metadata = {
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Every section body below is the approved Terms & Conditions text, ported
- * verbatim. This is the real thing PolicyStatusNotice describes: reviewed and
- * signed off by the person who owns it, not yet reviewed by counsel, and not
- * yet in force because the site is not in production.
+ * verbatim: reviewed and signed off by the person who owns it, though not
+ * reviewed by counsel. The pre-force notice that used to say so above the
+ * content was removed when the legal centre went live.
  *
  * Thirteen sections replace the previous nine placeholder ones. Two of the old
  * ids — `intro` and `scope` — are retired rather than reused: their content is
@@ -104,9 +104,6 @@ export default function TermsPage() {
       updated={policy.updated}
       toc={TOC}
       currentSlug={policy.slug}
-      notice={
-        <PolicyStatusNotice detail="ข้อกำหนดฉบับนี้จะมีผลบังคับใช้เมื่อเว็บไซต์เปิดให้บริการอย่างเป็นทางการ" />
-      }
       help={{
         icon: 'help',
         title: 'ต้องการความช่วยเหลือ?',

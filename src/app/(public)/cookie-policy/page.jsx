@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { SiYoutube, SiGoogleanalytics, SiGoogleads } from 'react-icons/si';
-import { PolicyLayout, PolicyStatusNotice } from '@/components/policies/PolicyLayout';
+import { PolicyLayout } from '@/components/policies/PolicyLayout';
 import { PolicyAccordion } from '@/components/policies/PolicyAccordion';
 import { PolicyIcon } from '@/components/policies/PolicyIcon';
 import { POLICY_HUB, POLICY_ENTITY, findPolicy } from '@/config/policies';
@@ -219,23 +219,6 @@ export default function CookiePolicyPage() {
       toc={TOC}
       numbered={false}
       currentSlug={policy.slug}
-      /*
-        TIER 1, not the amber draft banner. This page's copy came from the
-        company's own source document, so calling it "ตัวอย่างประกอบการออกแบบ"
-        was false. What is still true is that the site is not in production and
-        counsel has not reviewed the text — which is all PolicyStatusNotice
-        claims.
-
-        ROUND C-B: the detail line used to cover the whole §02/§03 provider
-        list as unverified. That's no longer true — YouTube, Google Analytics
-        and Google Ads are confirmed running (see THIRD_PARTY's header
-        comment), so restating that blanket caveat here would be stale in the
-        opposite direction. Narrowed to the one row this investigation did not
-        resolve: §02's Functional-cookie provider.
-      */
-      notice={
-        <PolicyStatusNotice detail="ผู้ให้บริการของคุกกี้ประเภท &quot;ฟังก์ชันการใช้งาน&quot; ในหัวข้อ 02 ยังไม่ได้ระบุ และยังไม่ได้ตรวจสอบกับทีมพัฒนาระบบ" />
-      }
       help={{
         icon: 'settings',
         title: 'จัดการคุกกี้ของท่าน',
