@@ -42,6 +42,70 @@ import { IMAGE_EXTENSIONS, RAW_EXTENSION_LIST } from './legacyTransforms.mjs';
  */
 export const FILES_SEGMENT = 'files';
 
+/**
+ * THE ROOTS THE FILE MANAGER OWNS — for LISTING and DELETING, and nothing else.
+ *
+ * ── WHY THIS IS A SET AND `FILES_SEGMENT` IS STILL A SCALAR ─────────────────
+ *
+ * They answer two different questions and only one of them has two answers.
+ *
+ *   OWNS  (this set)      — "may /admin/media list and destroy it?"
+ *   WRITES (FILES_SEGMENT) — "where does a browser upload land?"
+ *
+ * `publicPathFor()` must produce exactly ONE path for a category + filename, so
+ * the upload destination cannot be a set without the uploader also growing a
+ * root picker. That would let an admin with a file picker write new files into
+ * the legacy `resources/` tree — a widening of the WRITE surface that admitting
+ * a read/delete root does not require and nobody asked for. So uploads stay in
+ * `files/`, and the dropdown that feeds them is filtered to `files/` keys.
+ *
+ * ── WHAT ADMITTING A ROOT COSTS, MEASURED BEFORE IT WAS ADMITTED ────────────
+ *
+ * Widening ownership widens what `cloudinary.uploader.destroy` can be pointed
+ * at, and a destroyed asset does not come back cleanly: Cloudinary keeps a
+ * `bytes: 0, placeholder: true` tombstone at that public_id, and
+ * signMediaUpload refuses any id that still resolves — so the re-upload an
+ * admin reaches for is refused by the screen that deleted it.
+ *
+ * At the time `resources` was admitted, the live account held:
+ *
+ *   9exp-genesis/legacy/resources/     0 assets   ← the widening exposed NOTHING
+ *   9exp-genesis/legacy/files/       395 assets   ← already owned
+ *   9exp-genesis/legacy/sites/      5557 assets ┐
+ *   9exp-genesis/legacy/images/     1195 assets ├ 6,759 that stay REFUSED
+ *   9exp-genesis/legacy/download/      7 assets ┘
+ *
+ * `resources` is also the safest root to admit, and that is not a coincidence:
+ * its 140 assets are COPIES. public/resources/ serves those URLs from the repo,
+ * so destroying the Cloudinary copy changes nothing a visitor sees and the
+ * bytes are recoverable from git. That is not true of `sites/`, which is why
+ * `sites/` is not here.
+ *
+ * ── ADDING A THIRD ──────────────────────────────────────────────────────────
+ * Answer the two questions above for it, and read test/pure/legacyOwnedRoots
+ * first: that file names the unowned roots literally rather than deriving them,
+ * so a new entry here does NOT silently stop them being tested.
+ */
+export const OWNED_ROOTS = Object.freeze(['files', 'resources']);
+
+/**
+ * The owned root a public path sits in, or null.
+ *
+ * Compares a WHOLE SEGMENT — `/resources/` and never a bare `/resources`
+ * prefix, so `resourcesX/` and `resources-old/` are near-misses rather than
+ * members. The delete guard is the one place a near-miss must not be generous.
+ */
+export function ownedRootOfPath(publicPath) {
+  const p = String(publicPath ?? '');
+  return OWNED_ROOTS.find((root) => p.startsWith(`/${root}/`)) ?? null;
+}
+
+/** The owned root a public_id sits in, or null. Same whole-segment rule. */
+export function ownedRootOfPublicId(publicId, prefix) {
+  const id = String(publicId ?? '');
+  return OWNED_ROOTS.find((root) => id.startsWith(`${prefix}/${root}/`)) ?? null;
+}
+
 /** Cloudinary's raw-asset ceiling on this plan. Above it → the Blob track (v2). */
 export const RAW_MAX_BYTES = 10 * 1024 * 1024;
 
@@ -211,15 +275,18 @@ export function publicPathFor(category, filename) {
 export function refuseDeletePath(publicPath) {
   const p = String(publicPath ?? '');
 
-  if (!p.startsWith(`/${FILES_SEGMENT}/`)) {
-    return `ลบได้เฉพาะไฟล์ใน /${FILES_SEGMENT}/ เท่านั้น`;
+  // WHOLE-SEGMENT match against every owned root — see ownedRootOfPath.
+  if (!ownedRootOfPath(p)) {
+    const roots = OWNED_ROOTS.map((r) => `/${r}/`).join(' หรือ ');
+    return `ลบได้เฉพาะไฟล์ใน ${roots} เท่านั้น`;
   }
   if (p.includes('\\')) return 'เส้นทางไฟล์ต้องไม่มีเครื่องหมาย \\';
   if (p.includes('..')) return 'เส้นทางไฟล์ต้องไม่มี ..';
   if (p.includes('//')) return 'เส้นทางไฟล์ต้องไม่มี //';
 
-  // ['files', <category>, …, <name>] — at least three, or the path names a
-  // category rather than a file inside one.
+  // [<root>, <category>, …, <name>] — at least three, or the path names a
+  // category rather than a file inside one. The root having been matched as a
+  // whole segment above, segments[1] is the category in EITHER root.
   const segments = p.slice(1).split('/');
   if (segments.length < 3) {
     return `เส้นทางไฟล์ต้องอยู่ในหมวดหมู่ เช่น /${FILES_SEGMENT}/<หมวดหมู่>/<ชื่อไฟล์>`;
@@ -260,9 +327,12 @@ export function refuseDeletePath(publicPath) {
  */
 export function isWithinFilesCategory(publicId, prefix) {
   const id = String(publicId ?? '');
-  const base = `${prefix}/${FILES_SEGMENT}/`;
+  // Any OWNED root, matched as a whole segment. `filesX/` and `resources-old/`
+  // are near-misses, not members — see ownedRootOfPublicId.
+  const root = ownedRootOfPublicId(id, prefix);
+  if (!root) return false;
+  const base = `${prefix}/${root}/`;
 
-  if (!id.startsWith(base)) return false;
   if (id.includes('..')) return false;
   if (id.includes('//')) return false;
 

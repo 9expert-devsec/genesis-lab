@@ -49,6 +49,8 @@ import { legacyPathToPublicId, LEGACY_PUBLIC_ID_PREFIX } from '@/lib/legacyPubli
 import {
   extensionOf,
   FILES_SEGMENT,
+  OWNED_ROOTS,
+  ownedRootOfPublicId,
   isValidCategory,
   isWithinFilesCategory,
   publicPathFor,
@@ -60,8 +62,31 @@ import {
 
 const PAGE_KEY = 'media';
 
-/** Where the file manager works. A subfolder of the legacy tree, not a new one. */
-const ROOT_FOLDER = `${LEGACY_PUBLIC_ID_PREFIX}/${FILES_SEGMENT}`;
+/** Where the file manager works, per owned root. Subfolders of the legacy tree. */
+const rootFolder = (root) => `${LEGACY_PUBLIC_ID_PREFIX}/${root}`;
+
+/**
+ * A TAB IS `<root>/<category>`, NOT `<category>`.
+ *
+ * With one owned root a bare category name addressed exactly one folder. With
+ * two it does not: `files/flag` and `resources/flag` are different folders that
+ * would collapse into one tab, and a delete aimed at the tab would be aimed at
+ * whichever the walk happened to see. So the key carries its root.
+ *
+ * The two halves are validated SEPARATELY — the root against the owned set, the
+ * category against isValidCategory, which forbids the `/` that joins them. A
+ * key is therefore unambiguous to parse and cannot smuggle a third segment.
+ */
+function parseCategoryKey(key) {
+  const s = String(key ?? '');
+  const cut = s.indexOf('/');
+  if (cut <= 0) return null;
+  const root = s.slice(0, cut);
+  const category = s.slice(cut + 1);
+  if (!OWNED_ROOTS.includes(root)) return null;
+  if (!isValidCategory(category)) return null;
+  return { root, category };
+}
 
 /** The two resource types the legacy tree holds. Nothing else is addressable. */
 const RESOURCE_TYPES = ['image', 'raw'];
@@ -209,35 +234,42 @@ export async function listMediaCategories() {
   let complete = true;
 
   try {
-    for (const resourceType of RESOURCE_TYPES) {
-      let cursor = null;
-      let pages = 0;
-      do {
-        const page = await fetchResourcePage({
-          resourceType,
-          prefix: `${ROOT_FOLDER}/`,
-          pageSize: DISCOVERY_PAGE_SIZE,
-          cursor,
-        });
-        for (const r of page.resources) {
-          // A category whose every file has been deleted must stop being a tab,
-          // and a category's count must not include files that are gone.
-          if (isDestroyedRecord(r)) continue;
-          const rest = String(r.public_id).slice(ROOT_FOLDER.length + 1);
-          const cut = rest.indexOf('/');
-          // No slash means a file sitting directly under files/ with no
-          // category. Not addressable as a tab, so it is not invented as one.
-          if (cut <= 0) continue;
-          const cat = rest.slice(0, cut);
-          counts.set(cat, (counts.get(cat) ?? 0) + 1);
-        }
-        cursor = page.nextCursor;
-        pages += 1;
-        if (pages >= MAX_DISCOVERY_PAGES) {
-          if (cursor) complete = false;
-          break;
-        }
-      } while (cursor);
+    // ONE WALK PER OWNED ROOT. Not one walk of the whole legacy prefix filtered
+    // afterwards: `sites/` alone holds 5,557 assets the manager does not own,
+    // and paging through them to discard them would cost several seconds and a
+    // large slice of the Admin API rate limit on every load of this screen.
+    for (const root of OWNED_ROOTS) {
+      const ROOT_FOLDER = rootFolder(root);
+      for (const resourceType of RESOURCE_TYPES) {
+        let cursor = null;
+        let pages = 0;
+        do {
+          const page = await fetchResourcePage({
+            resourceType,
+            prefix: `${ROOT_FOLDER}/`,
+            pageSize: DISCOVERY_PAGE_SIZE,
+            cursor,
+          });
+          for (const r of page.resources) {
+            // A category whose every file has been deleted must stop being a tab,
+            // and a category's count must not include files that are gone.
+            if (isDestroyedRecord(r)) continue;
+            const rest = String(r.public_id).slice(ROOT_FOLDER.length + 1);
+            const cut = rest.indexOf('/');
+            // No slash means a file sitting directly under the root with no
+            // category. Not addressable as a tab, so it is not invented as one.
+            if (cut <= 0) continue;
+            const cat = rest.slice(0, cut);
+            counts.set(`${root}/${cat}`, (counts.get(`${root}/${cat}`) ?? 0) + 1);
+          }
+          cursor = page.nextCursor;
+          pages += 1;
+          if (pages >= MAX_DISCOVERY_PAGES) {
+            if (cursor) complete = false;
+            break;
+          }
+        } while (cursor);
+      }
     }
   } catch (err) {
     // An empty store is a legitimate first-run state, not a failure.
@@ -330,11 +362,13 @@ function normalizeCursors(cursors) {
  */
 export async function listMediaFiles(category, cursors) {
   await requirePageAction(PAGE_KEY);
-  if (!isValidCategory(category)) {
+  // `category` is a TAB KEY — `<root>/<category>` — and both halves are checked.
+  const parsed = parseCategoryKey(category);
+  if (!parsed) {
     return { ok: false, error: 'ชื่อหมวดหมู่ไม่ถูกต้อง', files: [], cursors: null, hasMore: false };
   }
 
-  const prefix = `${ROOT_FOLDER}/${category}/`;
+  const prefix = `${rootFolder(parsed.root)}/${parsed.category}/`;
   const start = normalizeCursors(cursors);
   const next = { image: EXHAUSTED, raw: EXHAUSTED };
   const files = [];
@@ -568,7 +602,8 @@ export async function deleteMediaFile({ publicPath, resourceType, expectedPublic
   if (!isWithinFilesCategory(publicId, LEGACY_PUBLIC_ID_PREFIX)) {
     return {
       ok: false,
-      error: `ปฏิเสธการลบ: ไฟล์อยู่นอก /${FILES_SEGMENT}/<หมวดหมู่>/ ที่หน้านี้ดูแล`,
+      error: `ปฏิเสธการลบ: ไฟล์อยู่นอก ${OWNED_ROOTS.map((r) => `/${r}/`).join(' หรือ ')}`
+        + '<หมวดหมู่>/ ที่หน้านี้ดูแล',
     };
   }
 
@@ -579,8 +614,14 @@ export async function deleteMediaFile({ publicPath, resourceType, expectedPublic
     };
   }
 
-  const category = publicId.slice(`${LEGACY_PUBLIC_ID_PREFIX}/${FILES_SEGMENT}/`.length)
-    .split('/')[0];
+  // The root is whichever owned root the guard above just matched, so this
+  // cannot slice against the wrong one — deriving it again from FILES_SEGMENT
+  // would mis-slice every `resources/` id and report the wrong category in the
+  // audit record for the one operation that cannot be undone.
+  const deletedRoot = ownedRootOfPublicId(publicId, LEGACY_PUBLIC_ID_PREFIX);
+  const category = `${deletedRoot}/${publicId
+    .slice(`${LEGACY_PUBLIC_ID_PREFIX}/${deletedRoot}/`.length)
+    .split('/')[0]}`;
 
   // ── DESTROY ───────────────────────────────────────────────────────────────
   // `invalidate: true` purges the CDN copies as well. Without it the bytes are

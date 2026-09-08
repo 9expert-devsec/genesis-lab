@@ -9,7 +9,7 @@ import {
 import {
   deleteMediaFile, listMediaCategories, listMediaFiles, signMediaUpload,
 } from '@/lib/actions/media';
-import { ALLOWED_UPLOAD_EXTENSIONS } from '@/lib/legacyUploadPolicy.mjs';
+import { ALLOWED_UPLOAD_EXTENSIONS, FILES_SEGMENT } from '@/lib/legacyUploadPolicy.mjs';
 import { formatBytes } from '@/lib/formatBytes.mjs';
 
 const ACCEPT = ALLOWED_UPLOAD_EXTENSIONS.map((e) => `.${e}`).join(',');
@@ -138,7 +138,12 @@ export default function MediaClient({ initialCategories, initialCounts, initialE
   }, []);
 
   const [file, setFile] = useState(null);
-  const [targetCategory, setTargetCategory] = useState(initialCategories[0] ?? '');
+  // A BARE category, not a tab key: this feeds signMediaUpload. Seeded from the
+  // first `files/` key, because the uploader can only target that root.
+  const [targetCategory, setTargetCategory] = useState(
+    () => (initialCategories.find((c) => c.startsWith(`${FILES_SEGMENT}/`)) ?? '')
+      .slice(FILES_SEGMENT.length + 1),
+  );
   const [newCategory, setNewCategory] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -151,6 +156,26 @@ export default function MediaClient({ initialCategories, initialCounts, initialE
     () => (newCategory.trim() ? newCategory.trim() : targetCategory),
     [newCategory, targetCategory],
   );
+
+  /**
+   * UPLOADS GO TO `files/` AND ONLY `files/`.
+   *
+   * A tab key is `<root>/<category>` and the manager owns two roots, but the
+   * uploader owns one: `publicPathFor()` has a single answer, and offering the
+   * other root here would let a file picker write into the legacy `resources/`
+   * tree — a widening of the WRITE surface that admitting a read/delete root
+   * deliberately did not include. So the dropdown is fed the `files/` keys with
+   * their root stripped, which is also the bare category signMediaUpload wants.
+   */
+  const uploadCategories = useMemo(
+    () => categories
+      .filter((c) => c.startsWith(`${FILES_SEGMENT}/`))
+      .map((c) => c.slice(FILES_SEGMENT.length + 1)),
+    [categories],
+  );
+
+  /** A bare upload category back to the tab key the list and tabs address. */
+  const uploadKeyFor = useCallback((category) => `${FILES_SEGMENT}/${category}`, []);
 
   /**
    * Load the FIRST page of a category, discarding whatever was on screen.
@@ -311,13 +336,17 @@ export default function MediaClient({ initialCategories, initialCounts, initialE
       setUploaded({ publicPath: signed.publicPath, bytes: file.size, name: file.name });
       setFile(null);
       if (inputRef.current) inputRef.current.value = '';
+      // `effectiveCategory` is a BARE category (the uploader's unit); the tabs
+      // and the file list address a KEY. Converting here rather than storing the
+      // key is what keeps signMediaUpload's input a plain category.
+      const uploadedKey = uploadKeyFor(effectiveCategory);
       if (newCategory.trim()) {
         setTargetCategory(effectiveCategory);
         setNewCategory('');
-        await refreshCategories(effectiveCategory);
+        await refreshCategories(uploadedKey);
       }
-      setActive(effectiveCategory);
-      await loadFiles(effectiveCategory);
+      setActive(uploadedKey);
+      await loadFiles(uploadedKey);
     } catch (err) {
       setUploadError(err?.message ?? 'อัปโหลดไม่สำเร็จ');
     } finally {
@@ -337,11 +366,11 @@ export default function MediaClient({ initialCategories, initialCounts, initialE
             <select
               value={targetCategory}
               onChange={(e) => { setTargetCategory(e.target.value); setNewCategory(''); }}
-              disabled={uploading || !categories.length}
+              disabled={uploading || !uploadCategories.length}
               className="w-full rounded-9e-sm border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy disabled:opacity-50 dark:bg-[#0d1926] dark:text-white"
             >
-              {categories.length === 0 ? <option value="">— ยังไม่มีหมวดหมู่ —</option> : null}
-              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              {uploadCategories.length === 0 ? <option value="">— ยังไม่มีหมวดหมู่ —</option> : null}
+              {uploadCategories.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </label>
 
@@ -438,7 +467,15 @@ export default function MediaClient({ initialCategories, initialCounts, initialE
                   : 'text-9e-slate-dp-50 hover:bg-9e-action/10 hover:text-9e-action'
               }`}
             >
-              {c}
+              {/*
+                THE ROOT IS SHOWN, NOT INFERRED. Two roots are owned and both can
+                hold a category of the same name, so a bare label would make
+                `files/flag` and `resources/flag` indistinguishable — on the
+                screen that can DELETE either one. The root reads as a dimmer
+                prefix so the category still leads.
+              */}
+              <span className="opacity-60">{c.slice(0, c.indexOf('/') + 1)}</span>
+              {c.slice(c.indexOf('/') + 1)}
             </button>
           ))}
           <button

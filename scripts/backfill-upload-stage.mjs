@@ -324,10 +324,34 @@ for (const f of staged) {
   // as a routing decision, not as a Blob decision, even though it is also big.
   if (!resourceType || MEDIA_EXTENSIONS.has(ext)) { deferredUnroutable.push({ ...f, ext }); continue; }
 
-  // TRUNCATED-PULL GUARD. The manifest is the authority; disk is the copy.
+  /* ── TRUNCATED-PULL GUARD. The manifest is the authority; disk is the copy.
+   *
+   * EXEMPT: the `resources/` root, and ONLY that root.
+   *
+   * The guard exists because stage 1 was pulled off the old server over a link
+   * that could truncate, so `optwww-tree.txt` — captured on the box on 8 Aug —
+   * is the authority on what a complete file weighs. That premise does not hold
+   * for `resources/`: its bytes are not a pull at all. They are copied from
+   * public/resources/ in this repo, committed in 001bf777, and every one of
+   * them is checked by git's own content hashes on the way in.
+   *
+   * Concretely, 13 of the 140 (CategoryIcon/, SchoolLogo/) are absent from the
+   * manifest because those folders were created on 7 Sep, a month AFTER the
+   * snapshot. Against a manifest that predates them, "missing" means "newer",
+   * not "truncated" — so the guard would refuse exactly the files it has no
+   * evidence about, and 127 of 140 would upload.
+   *
+   * SCOPED DELIBERATELY, not disabled. Every other root still answers to the
+   * manifest: those really were pulled over the wire and really can arrive
+   * short. Widening this to all roots would retire the guard for the 7,154
+   * assets it was written for in order to admit 13.
+   */
+  const exemptFromManifest = f.publicPath.startsWith('/resources/');
   const expected = manifestBytes.get(f.publicPath);
-  if (expected == null) { notInManifest.push(f); continue; }
-  if (expected !== f.diskBytes) { byteMismatch.push({ ...f, expected }); continue; }
+  if (!exemptFromManifest) {
+    if (expected == null) { notInManifest.push(f); continue; }
+    if (expected !== f.diskBytes) { byteMismatch.push({ ...f, expected }); continue; }
+  }
 
   if (f.diskBytes > CLOUDINARY_MAX_BYTES) { deferredBig.push({ ...f, ext }); continue; }
 
