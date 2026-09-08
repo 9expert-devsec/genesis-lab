@@ -648,6 +648,98 @@
   }
 }
 
+/* ──────────────────────────────────────────────────────────────
+   PROSE ON AN AUTHOR-CHOSEN SECTION BACKGROUND
+   Round A-fix 3. The last gap the muted-token round measured.
+
+   ── WHY A STYLESHEET RULE AND NOT A CLASS ────────────────────────────────
+   Every other consumer of the section's ink was reachable by inheritance or by
+   a class. `rich_text` is not: @tailwindcss/typography sets its palette as
+   custom properties ON `.prose` ITSELF, and a property set on an element is not
+   inherited into it. So the section can hand a value down all it likes and
+   `.prose` will still overwrite it — the only way in is a rule that out-ranks
+   the plugin's own.
+
+   MEASURED, on the near-navy bed the report describes (#0D1B2A), light mode:
+
+     --tw-prose-body      gray-700  #374151   1.69:1   dim but present
+     --tw-prose-bold      gray-900  #111827   1.02:1   the disappearing run
+     --tw-prose-headings  gray-900  #111827   1.02:1   same value, same fate
+
+   That 1.02-vs-1.69 split is exactly the reported symptom: one run vanishes
+   while the paragraph around it is merely dark.
+
+   ── FOUR VARIABLES, AND THE LINE THEY ARE ON ─────────────────────────────
+   The rule is the MEASUREMENT, not a judgement about which elements matter.
+   Everything the plugin paints gray-900 lands at 1.02 on this bed — invisible,
+   not dim — and every one of those is in:
+
+     --tw-prose-bold      1.02   the reported disappearing run
+     --tw-prose-headings  1.02   same value, same fate
+     --tw-prose-quotes    1.02   same again
+     --tw-prose-body      1.69   dim rather than gone, and the paragraph the
+                                 other three sit inside
+
+   `--tw-prose-quotes` was left out when this rule first shipped and that was an
+   ERROR, not a decision: it was written up beside `counters` and `captions` as
+   though it shared their 2.63-3.60 band, when the measurement on the line above
+   it said 1.02. A blockquote on an authored dark background was as invisible as
+   the bold run this rule exists for.
+
+   REFUSED, and these really are decisions. `--tw-prose-links` fails too, but
+   `prose-a:text-[var(--pb-accent-text)]` already overrides links to the accent,
+   so the variable is not what paints them. `counters` and `captions` are
+   gray-500 and land at 2.63-3.60 — under AA, but legible, and a different
+   question from ink that vanishes; moving them is a legibility decision about
+   secondary furniture rather than the repair this rule is. `bullets`, `hr`,
+   `code`, `kbd`, `pre-*` and the table borders are untouched for the same
+   reason: overriding the whole palette is a design change.
+
+   The values are the tokens the section already chose, so the prose body and
+   the section's own muted text cannot disagree about one surface.
+
+   ── SCOPED ON data-pb-auto-text, NOT data-pb-custom-bg ───────────────────
+   The narrower attribute, and the difference is the escape hatch: the custom
+   background attribute is emitted even when the author set `textMode: 'theme'`,
+   and overriding the prose palette there would defeat the one control that
+   exists to keep the theme's text. See presets.autoTextAttrFor.
+
+   ── LIGHT MODE ONLY, WHICH IS NOT A COMPROMISE ───────────────────────────
+   `dark:prose-invert` already gives dark mode a light palette that reads
+   correctly on both a derived-dark surface and a pinned dark one, so there is
+   nothing to repair there. This rule therefore does not match under `.dark` at
+   all — the same shape as `autoTextClassFor`'s unpinned branch, which also
+   overrides light and hands dark straight back to the theme.
+
+   ── THE THREE SELECTORS, READ OFF THE COMPILED STYLESHEET ────────────────
+   Not arithmetic done here — measured:
+
+     .prose                            0,1,0   the plugin's own palette
+     .dark\:prose-invert:is(.dark *)   0,2,0   what `dark:prose-invert` compiles to
+     html:not(.dark) [data-pb-auto-text] .prose
+                                       0,3,1   this rule
+
+   So this beats the plugin with no `!important`, and it also lands LATER in
+   source order — the win does not depend on either reading alone.
+
+   AND IT WOULD BEAT `prose-invert` TOO, which is the real reason the
+   `html:not(.dark)` scope is load-bearing rather than tidy. At 0,3,1 against
+   0,2,0 this rule would win in DARK mode as well if the scope were dropped,
+   and it would win with LIGHT-mode values — replacing a correct dark palette
+   with one chosen for a light surface. The scope is what stops that, and
+   test/fs/proseOnAuthoredBackground asserts the scope is still there for
+   exactly this reason.
+
+   All of it pinned by that test, which compiles the real stylesheet rather
+   than asserting any of this from source text.
+   ────────────────────────────────────────────────────────────── */
+html:not(.dark) [data-pb-auto-text] .prose {
+  --tw-prose-body:     var(--pb-text-muted);
+  --tw-prose-bold:     var(--pb-text);
+  --tw-prose-headings: var(--pb-text);
+  --tw-prose-quotes:   var(--pb-text);
+}
+
 /* Native form controls and scrollbars follow the active theme */
 html        { color-scheme: light; }
 html.dark   { color-scheme: dark; }

@@ -395,15 +395,47 @@ const PIN_LABEL = "ตรึงสีไว้ (ไม่ปรับตาม�
 const PIN_HINT =
   "ใช้สีนี้ตามที่ระบุทั้งในโหมดสว่างและโหมดมืด — สำหรับสีแบรนด์ที่ต้องคงเดิม";
 
+/**
+ * ── ROUND 80: THE TEXT-COLOUR CONTROL ───────────────────────────────────
+ *
+ * Two options, not three, and no sentinel: an author is choosing WHO picks the
+ * text colour on their background — the background itself, or the theme — and
+ * that is a two-way question. Picking a text colour by hand is a third thing
+ * and is deliberately not offered; it would be a second colour control inside
+ * the background block, which §G1 of docs/custom-colour-dark-mode.md costed and
+ * refused for its accent twin.
+ *
+ * The hint says WHAT IS READ, not what the answer will be. An author cannot
+ * verify "the text will be readable" from the panel — the surface is behind the
+ * canvas and the ratio is not shown — but they can verify "it reads this
+ * section's own background colour", which is the thing that would surprise them
+ * if it were untrue. Round 18: a control says what it does.
+ */
+const TEXT_MODE_LABEL = "สีข้อความ";
+const TEXT_MODE_OPTIONS = ["auto", "theme"];
+const TEXT_MODE_LABELS = {
+  auto: "อัตโนมัติ (ตามพื้นหลัง)",
+  theme: "ตามธีม",
+};
+const TEXT_MODE_HINT =
+  "อัตโนมัติ: ระบบจะอ่านสีพื้นหลังของ section นี้ แล้วเลือกสีข้อความของธีมที่อ่านชัดกว่าระหว่างสีเข้มกับสีอ่อน";
+
 /** The hex box's placeholder. Not a colour — six letters standing for digits. */
 const HEX_PLACEHOLDER = "#RRGGBB";
 
 /**
  * ── THE CONTRAST WARNINGS: THEY WARN, THEY DO NOT ENFORCE ──────────────────
- * Neither one changes a value, blocks a save, or picks a text colour. Deriving
- * text from the author's background would put a second authority beside the
- * theme, which is what rounds 21-25 spent four rounds removing from
- * container.jsx; the warning is the whole of the intervention.
+ * Neither one changes a value and neither blocks a save. That is still the
+ * whole of the intervention — an author's colour is never rewritten, and a
+ * page with a warning on it saves and publishes exactly like any other.
+ *
+ * ROUND 80 CHANGED WHAT THE BACKGROUND ONE MEANS, not what it does. The text
+ * colour on a custom background is now CHOSEN, between the theme's own two
+ * tokens, by the section's own background colour — presets.js states what D4
+ * now permits. So this warning no longer fires on "the theme's text may not be
+ * readable here"; it fires on the narrower and more useful state where even the
+ * BETTER of the two tokens is short of AA, which is the only case left that the
+ * author has to act on. Neither warning picks anything, then or now.
  *
  * 4.5:1 is WCAG 2.1 SC 1.4.3 (Contrast (Minimum)) for normal text — the 3:1
  * large-text allowance is not used, because the control cannot know what size
@@ -415,8 +447,17 @@ const HEX_PLACEHOLDER = "#RRGGBB";
  * yellow is 16.20:1 against the dark text token and 1.03:1 against the light
  * one, so it is a perfectly readable BACKGROUND and an unreadable ACCENT TEXT.
  */
+/**
+ * ROUND 80 REWORDED IT to match the meaning above. The old sentence — "this
+ * colour may make the text on it hard to read" — now reads as though nothing
+ * had been attempted, and would send an author off to fix by hand a choice that
+ * has already been made as well as it can be. The new one says the better token
+ * was taken and is still short of the threshold, which is the true remaining
+ * state and the only one where changing the colour is the answer.
+ */
 const BACKGROUND_CONTRAST_WARNING =
-  "สีนี้อาจทำให้ตัวอักษรบนพื้นหลังอ่านยาก — ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG";
+  "เลือกสีข้อความที่อ่านชัดที่สุดให้แล้ว แต่ยังอ่านยากบนสีพื้นหลังนี้ — " +
+  "ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG";
 
 const ACCENT_CONTRAST_WARNING =
   "สีนี้อาจอ่านยากเมื่อใช้เป็นตัวอักษรบนพื้นหลังสว่าง — ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG";
@@ -677,6 +718,25 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
                 }
                 onLabel="ตรึง"
                 offLabel="ปรับอัตโนมัติ"
+              />
+            </Field>
+
+            {/* ROUND 80 — offered only in custom mode, for the pin control's
+                reason directly above: a PRESET background already carries a
+                hand-made text decision, so there is nothing here to choose.
+                `auto` stores NOTHING — absence is what it is spelled with, the
+                shape backgroundMode and backgroundPin both use — so a section
+                whose author never opened this keeps the byte-shape it had. */}
+            <Field label={TEXT_MODE_LABEL} hint={TEXT_MODE_HINT}>
+              <Select
+                value={settings.textMode ?? "auto"}
+                options={TEXT_MODE_OPTIONS}
+                labels={TEXT_MODE_LABELS}
+                onChange={(v) =>
+                  patchKey("settings", {
+                    textMode: v === "theme" ? "theme" : undefined,
+                  })
+                }
               />
             </Field>
           </>

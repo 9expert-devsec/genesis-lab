@@ -115,7 +115,7 @@ export function PriceCardSection({ content, style }) {
       {(originalPrice || discountBadge) && (
         <p className="mt-2 flex items-center gap-2 text-sm">
           {originalPrice && (
-            <span className="text-9e-slate-dp-50 line-through dark:text-[#94a3b8]">{originalPrice}</span>
+            <span className="text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] line-through dark:text-[#94a3b8]">{originalPrice}</span>
           )}
           {discountBadge && (
             <span className="rounded-9e-sm bg-[color:var(--pb-accent-fill)]/10 px-1.5 py-0.5 text-xs font-bold text-[var(--pb-accent-text)]">
@@ -128,7 +128,7 @@ export function PriceCardSection({ content, style }) {
         <p className="mt-2 font-heading text-3xl font-bold text-[var(--pb-accent-text)]">
           {price}
           {period.trim() && (
-            <span className="ml-1 text-sm font-normal text-9e-slate-dp-50 dark:text-[#94a3b8]">{period}</span>
+            <span className="ml-1 text-sm font-normal text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]">{period}</span>
           )}
         </p>
       )}
@@ -139,7 +139,7 @@ export function PriceCardSection({ content, style }) {
         * would put a tick beside "ราคาดังกล่าวยังไม่รวม VAT 7%".
         */}
       {footnote && (
-        <p className="mt-2 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">{footnote}</p>
+        <p className="mt-2 text-xs text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]">{footnote}</p>
       )}
       {features.length > 0 && (
         <ul

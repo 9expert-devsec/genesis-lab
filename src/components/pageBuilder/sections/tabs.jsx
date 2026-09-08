@@ -30,7 +30,12 @@ export function TabsSection({ content }) {
               '-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors',
               i === idx
                 ? 'border-[color:var(--pb-accent-fill)] text-[var(--pb-accent-text)]'
-                : 'border-transparent text-9e-slate-dp-50 hover:text-9e-navy dark:hover:text-white'
+                // ROUND A-fix 2 — the RESTING label is the muted token and
+                // moves. The HOVER pair below it is primary-weight
+                // (`text-9e-navy`/`white`) and is left alone: this round
+                // defines a muted counterpart only, and a primary one is a
+                // separate decision. Reported.
+                : 'border-transparent text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] hover:text-9e-navy dark:hover:text-white'
             )}
           >
             {t.title || `แท็บ ${i + 1}`}

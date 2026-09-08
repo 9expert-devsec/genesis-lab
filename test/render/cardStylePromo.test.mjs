@@ -144,13 +144,51 @@ test('ADDITIVE — every pre-existing input resolves exactly as before', () => {
    * What moved is the class STRING, and only because the colour now has two
    * values instead of one.
    */
+  /**
+   * ── ROUND 80-FIX CHANGED THE OTHER HALF OF THOSE SAME TWO ──────────────
+   * `filled` and `gradient` now also carry `text-[var(--text-primary)]`.
+   *
+   * WHAT THIS TEST PINS IS UNAFFECTED, and the distinction is the reason the
+   * strings can move without the claim moving. Round 59's claim is that adding
+   * `promo` did not change what the other five PAINT — the `bg-` half — and
+   * that is still exactly true: `--pb-bg-light` and `bg-9e-gradient-subtle` are
+   * byte-identical to what they were, and the ONLY addition is on the text
+   * axis, which `promo` was already on.
+   *
+   * WHY THE TEXT AXIS MOVED. Round 80 made a section declare `text-9e-ice`
+   * whenever the author's background is dark, and inheritance carried it into
+   * any descendant naming no colour — so a `filled` price_card rendered its
+   * title and `features` rows in the light token on its own light surface.
+   * Invisible, on a live promotion hero. The block above this map already
+   * recorded the same shape for round 79; round 80 made it reachable in
+   * general, so the report became a fix. presets.js states it at the values.
+   *
+   * `plain`, `border` and `shadow` are unchanged and MUST be: they paint no
+   * surface, so their text SHOULD inherit the section's.
+   */
   const EXPECTED = {
     plain: '',
     border: 'border border-[var(--surface-border)]',
     shadow: 'shadow-9e-md',
-    filled: 'bg-[var(--pb-bg-light)]',
-    gradient: 'bg-9e-gradient-subtle',
+    filled: 'bg-[var(--pb-bg-light)] text-[var(--text-primary)] [--pb-text-muted:var(--9e-slate-dp-50)]',
+    gradient: 'bg-9e-gradient-subtle text-[var(--text-primary)] [--pb-text-muted:var(--9e-slate-dp-50)]',
   };
+  /**
+   * ── ROUND A-fix 3 ADDED THE SECOND TOKEN TO THE SAME TWO ───────────────
+   * `--pb-text-muted` joins the `--text-primary` pin above, and for the same
+   * reason: WHOEVER PAINTS THE SURFACE OWNS BOTH TOKENS ON IT. A section with
+   * an authored background now hands its muted ink DOWN, so a card that paints
+   * over that surface has to hand it back — otherwise the card's muted lines
+   * are coloured for a surface the card is covering.
+   *
+   * The claim this test was written for is still untouched: what these values
+   * PAINT is unchanged, and the assertions below read the paint half on its own
+   * so a token edit can never be mistaken for a surface edit.
+   */
+  // The paint half, asserted SEPARATELY from the whole string, so a future edit
+  // to the text axis cannot be mistaken for a change to what these two paint.
+  assert.equal(EXPECTED.filled.split(' ')[0], 'bg-[var(--pb-bg-light)]');
+  assert.equal(EXPECTED.gradient.split(' ')[0], 'bg-9e-gradient-subtle');
   for (const [value, cls] of Object.entries(EXPECTED)) {
     for (const type of READERS) {
       assert.equal(cardSurfaceClass(type, { cardStyle: value }), cls,

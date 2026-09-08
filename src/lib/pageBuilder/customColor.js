@@ -289,23 +289,29 @@ export const CONTRAST_MIN = 4.5;
 /**
  * Is an author's background readable under EITHER theme text colour?
  *
- * ── IT WARNS. IT DOES NOT DECIDE ANYTHING ─────────────────────────────────
- * Nothing here picks a text colour. Deriving one from the background's
- * luminance would put a second authority over text beside the theme — the exact
- * shape rounds 21-25 spent four rounds taking out of `container.jsx` — and it
- * would do it invisibly, at render, on a page the author had already approved.
- * The theme owns text colour; this tells the author when their choice fights it
- * and then gets out of the way.
+ * ── IT WARNS. IT STILL DECIDES NOTHING, AND IT NOW MEANS MORE ─────────────
+ * `autoTextToken` below picks WHICH of the two theme text tokens sits on an
+ * author's surface. This function picks nothing and changes nothing: it asks
+ * whether the BETTER of the two clears AA, which is the same question it always
+ * asked, and is exactly the question left over once the choice is made.
+ *
+ * So the warning got SHARPER rather than redundant. It used to mean "the
+ * theme's text may be unreadable here, and only you can fix it". It now means
+ * "even the BETTER of the two tokens is below AA on this colour" — a state no
+ * automatic choice can rescue, and the only state left in which the author's
+ * own colour is the thing that has to change.
  *
  * Measured against the BETTER of the two theme text colours, because a page can
  * be in either. A background that fails both cannot be read on any theme; one
  * that passes one is fine on that theme and is not warned about, which is the
  * conservative direction for a warning nobody can dismiss.
  *
- * The FIRST stop only. A gradient's second stop is a real surface too, and
- * warning per-stop would need the control to say which stop it meant — a second
- * message for a control that has one warning line. The first stop is where an
- * author starts and is the stop a flat background has.
+ * The FIRST stop only, and that is DELIBERATELY not what `autoTextToken` does.
+ * Warning per-stop would need the control to say which stop it meant — a second
+ * message for a control that has one warning line — so it warns on the stop an
+ * author starts from and the only stop a flat background has. A TEXT COLOUR has
+ * no such escape: one colour is painted across the whole surface, so it has to
+ * be judged across the whole surface. Different jobs, different reach.
  */
 export function backgroundContrastOk(custom) {
   const from = hexOrNull(custom?.from);
@@ -317,6 +323,62 @@ export function backgroundContrastOk(custom) {
       contrastRatio(rgb, THEME_TEXT_RGB.ice),
     ) >= CONTRAST_MIN
   );
+}
+
+/**
+ * ── ROUND 80: WHICH OF THE TWO THEME TEXT TOKENS SURVIVES THIS SURFACE ───
+ *
+ * `'navy'` | `'ice'` | `null`. `null` when there is no honourable custom
+ * background — the same contract as `customBackgroundStyle` and
+ * `customBackgroundVars`, so a caller can treat all three the same way.
+ *
+ * ── WHAT THIS IS AND, PRECISELY, WHAT IT IS NOT ─────────────────────────
+ * It reads the AUTHOR'S OWN HEX and nothing else, and it CHOOSES BETWEEN THE
+ * TWO TOKENS THE THEME ALREADY OWNS. It mints no colour, and there is no hex
+ * literal in the answer — the return value is one of two names.
+ *
+ * That is what keeps it inside the rule presets.js §D4 was protecting. The
+ * theme still owns text on every PRESET background; `isDarkBackground` and the
+ * `DARK_BACKGROUNDS` set are untouched. What is overturned is narrower: on a
+ * surface THE AUTHOR PAINTED, and only there, the theme's two text tokens are
+ * ranked by the one measurement that decides whether text can be read at all.
+ * The alternative was measured and is not neutral — the incumbent puts the
+ * theme's near-navy on whatever hex the author typed, so a dark authored colour
+ * renders dark ink on a dark surface and the section is unreadable.
+ *
+ * ── GRADIENTS: BOTH STOPS, WHICH backgroundContrastOk DELIBERATELY DOES NOT ─
+ * A warning is a message on one control, and warning per-stop would need it to
+ * say which stop it meant — so `backgroundContrastOk` judges the first stop,
+ * and that stays as it is. A text colour has no such escape: ONE colour is
+ * painted from the first stop to the second, and a token that is legible at the
+ * top and invisible at the bottom has failed. So each token is scored by its
+ * WORST contrast across the two stops, and the better worst-case wins.
+ *
+ * MEASURED, on `#555555 → #ffffff`: judged on the first stop alone `ice` wins
+ * (7.13 vs navy's 2.33), and it is the wrong answer — `ice` on the white second
+ * stop is 1.05:1. Across both stops navy's worst case is 2.33 and ice's is
+ * 1.05, so navy wins. The test carries that fixture with the first-stop
+ * judgement as its control.
+ *
+ * ── TIES GO TO NAVY, SAID OUT LOUD SO THE FUNCTION IS TOTAL ─────────────
+ * Two identical ratios is reachable (a mid grey that sits exactly between the
+ * tokens is the obvious one), and a function whose answer depends on which way
+ * a `>` was written is a function nobody can predict. `>=` on navy: navy is
+ * the incumbent — it is the literal every pinned custom section carried before
+ * this round — so a tie changes nothing rather than flipping something.
+ */
+export function autoTextToken(custom) {
+  const from = hexOrNull(custom?.from);
+  if (!from) return null;
+  const to = hexOrNull(custom?.to);
+  // One stop or two — the same distinction the rest of this file keeps, and
+  // the reason a flat colour is not a gradient with equal stops.
+  const stops = (to ? [from, to] : [from]).map(channels);
+  const worst = (text) =>
+    Math.min(...stops.map((stop) => contrastRatio(stop, text)));
+  return worst(THEME_TEXT_RGB.navy) >= worst(THEME_TEXT_RGB.ice)
+    ? "navy"
+    : "ice";
 }
 
 /**

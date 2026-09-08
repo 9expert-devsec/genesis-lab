@@ -28,7 +28,7 @@ export function StatCardSection({ content, style }) {
         <div className="font-heading text-3xl font-bold text-[var(--pb-accent-text)] md:text-4xl">{value}</div>
       )}
       {label.trim() && (
-        <div className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">{label}</div>
+        <div className="mt-1 text-sm text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]">{label}</div>
       )}
     </div>
   );

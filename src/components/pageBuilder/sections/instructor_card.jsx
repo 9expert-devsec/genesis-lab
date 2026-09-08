@@ -52,9 +52,9 @@ export function InstructorCardSection({ data }) {
         />
       )}
       {name && <h3 className="mt-3 font-heading text-lg font-bold">{name}</h3>}
-      {title && <p className="mt-0.5 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">{title}</p>}
+      {title && <p className="mt-0.5 text-sm text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]">{title}</p>}
       {bio.trim() && (
-        <p className="mt-2 whitespace-pre-line text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">{bio}</p>
+        <p className="mt-2 whitespace-pre-line text-sm text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]">{bio}</p>
       )}
       {specialties.length > 0 && (
         <div className="mt-3 flex flex-wrap justify-center gap-1.5">

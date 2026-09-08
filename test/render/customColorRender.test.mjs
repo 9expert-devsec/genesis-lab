@@ -12,6 +12,13 @@ import {
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo.
 import { backgroundClass, accentVars } from "@/lib/pageBuilder/presets";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. `isDarkBackground` is the mode-blind resolver the "one
+// path" test forbids SectionRenderer.jsx from importing; importing it HERE is
+// the opposite of that rule rather than an exception to it — the test tier has
+// to be able to state what the preset path would have answered in order to
+// assert that the derived path answered something else.
+import { isDarkBackground } from "@/lib/pageBuilder/presets";
 import { readSource } from "../sourceScan.mjs";
 
 /**
@@ -139,9 +146,30 @@ const customBg = (backgroundCustom) =>
  * What is no longer asserted here is the CSS property name, because this file
  * is no longer where it is decided.
  */
+/**
+ * ── ROUND A-fix 2 NARROWED THESE TWO TO THE --pb-cbg-* FAMILY ────────────
+ * They asserted the WHOLE style attribute by deepEqual. That was exact while
+ * the background was the only thing writing to it; it is now also where the
+ * section-scoped muted ink lands (`--pb-text-muted`, presets.autoTextVarsFor),
+ * which is a different subject that happens to share one attribute — the same
+ * sharing the accent variables have always had, and which the "share ONE style
+ * attribute" test below is about.
+ *
+ * So the comparison is scoped to the family these tests are FOR. That is not a
+ * weakening: the claim was never "nothing else may set a variable" — the accent
+ * bundle already could — it was "the author's hexes, the direction and the
+ * one-stop/two-stop distinction reach the page, and no colour is emitted when
+ * there is none". All of that is still asserted, exactly, and the absence
+ * checks below are unchanged.
+ */
+const cbgVars = (el) =>
+  Object.fromEntries(
+    Object.entries(styleMap(el)).filter(([k]) => k.startsWith("--pb-cbg-")),
+  );
+
 test("ONE stop reaches the page as a flat custom background", () => {
   const el = wrapperOf(customBg({ from: "#123456" }));
-  assert.deepEqual(styleMap(el), { "--pb-cbg-from": "#123456" });
+  assert.deepEqual(cbgVars(el), { "--pb-cbg-from": "#123456" });
   assert.equal(
     el.getAttribute("data-pb-custom-bg"),
     "flat",
@@ -166,7 +194,7 @@ test("TWO stops reach the page with the stated direction", () => {
     [right, "to right"],
   ]) {
     assert.equal(el.getAttribute("data-pb-custom-bg"), "gradient");
-    assert.deepEqual(styleMap(el), {
+    assert.deepEqual(cbgVars(el), {
       "--pb-cbg-from": "#123456",
       "--pb-cbg-to": "#abcdef",
       "--pb-cbg-dir": dir,
@@ -199,12 +227,75 @@ test("the preset background CLASS is gone when a custom colour takes over", () =
     false,
     "the preset class survived under the custom colour",
   );
-  // …and the light-text class the preset carries is gone with it: a custom
-  // background does not decide the section's text colour (D4).
+  // …and the light-text class the PRESET carries is gone with it. Round 80
+  // narrowed D4 rather than removing it: the preset's own hand-made judgement
+  // must not survive under a colour that replaced the preset, so what is
+  // asserted here is that this class is not the PRESET's any more.
+  //
+  // `#123456` is dark, so the section does now carry `text-9e-ice` — chosen by
+  // ranking the theme's two text tokens against the author's hex, which is the
+  // subject of test/render/autoTextOnCustomBackground. What proves the preset
+  // did not survive is the `dark:` half: the preset path never emits one, and
+  // an unpinned custom background always does.
+  const textish = el.className
+    .split(/\s+/)
+    .filter((c) => c.startsWith("text-") || c.startsWith("dark:text-"));
+  assert.deepEqual(textish, [
+    "text-9e-ice",
+    "dark:text-[color:var(--text-primary)]",
+  ]);
+});
+
+test("the preset answer and the derived answer are SEPARABLE — a light hex under a dark preset", () => {
+  /**
+   * ── WHY THE TEST ABOVE CANNOT STAND ALONE ─────────────────────────────
+   * Its fixture is `background: 'dark'` (whose PRESET answer is the light
+   * token) carrying a custom `#123456` (whose DERIVED answer is also the light
+   * token). The two paths agree, so `text-9e-ice` on that wrapper is consistent
+   * with both "the derivation ran" and "the preset's class leaked through the
+   * suppression". It cannot tell them apart, and neither can the `dark:` half
+   * on its own: that only says SOME custom-background rule ran, not that the
+   * rule read the author's colour.
+   *
+   * This fixture makes the two paths DISAGREE. Same `background: 'dark'`, same
+   * unpinned custom mode, but the author's hex is LIGHT:
+   *
+   *   preset   'dark'      → isDarkBackground → text-9e-ice
+   *   derived  '#f8e7d5'   → navy 14.40:1, ice 1.16:1 → text-9e-navy
+   *
+   * So the wrapper carrying navy is only explicable by the derivation having
+   * read the hex, and `text-9e-ice` being ABSENT is the proof the preset's
+   * hand-made judgement did not survive its own suppression. Asserted both
+   * ways round, because the set equality alone would pass on a build that
+   * emitted nothing at all.
+   *
+   * `#f8e7d5` is not invented for the test: it is the first stop of the hero on
+   * /promotions/early-bird-claude-code, which is the surface this round's
+   * defect was measured on.
+   */
+  const el = wrapperOf(customBg({ from: "#f8e7d5" }));
+  const textish = el.className
+    .split(/\s+/)
+    .filter((c) => c.startsWith("text-") || c.startsWith("dark:text-"));
+  assert.deepEqual(textish, [
+    "text-9e-navy",
+    "dark:text-[color:var(--text-primary)]",
+  ]);
   assert.equal(
-    el.className.includes("text-9e-ice"),
+    el.className.split(/\s+/).includes("text-9e-ice"),
     false,
-    "a custom background set the section text colour — that authority is the theme's",
+    "the DARK preset's light-text class survived under a LIGHT author colour — " +
+      "the preset judgement leaked past its own suppression",
+  );
+  // CONTROL, in the same test because it is the same claim read backwards: the
+  // preset really would have said ice here, so the absence above is a
+  // difference the fixture can actually express.
+  assert.equal(isDarkBackground("dark"), true);
+  assert.deepEqual(
+    wrapperOf(sec({ settings: { background: "dark" } }))
+      .className.split(/\s+/)
+      .filter((c) => c.startsWith("text-") || c.startsWith("dark:text-")),
+    ["text-9e-ice"],
   );
 });
 

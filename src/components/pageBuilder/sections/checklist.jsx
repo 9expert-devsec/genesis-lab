@@ -42,7 +42,11 @@ export function ChecklistSection({ content }) {
         return (
           <li key={i} className="flex items-start gap-2.5">
             <Icon
-              className={cn('mt-0.5 h-5 w-5 shrink-0', checked ? 'text-[var(--pb-accent-fill)]' : 'text-9e-slate-dp-50')}
+              // ROUND A-fix 2 — the UNCHECKED glyph is the muted token with no
+              // surface of its own. The checked one is the accent and is left
+              // alone: an accent is the author's colour, not the theme's, and
+              // it is not what this round is about.
+              className={cn('mt-0.5 h-5 w-5 shrink-0', checked ? 'text-[var(--pb-accent-fill)]' : 'text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))]')}
               strokeWidth={2}
               aria-hidden
             />

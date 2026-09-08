@@ -94,7 +94,7 @@ export function AccordionSection({ content }) {
                 UNTOUCHED, and it is the rule rather than a preference: the item
                 body is prose. It keeps its muted text in both themes.
               */
-              <div className="whitespace-pre-line px-4 pb-4 text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              <div className="whitespace-pre-line px-4 pb-4 text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]">
                 {it.body}
               </div>
             )}

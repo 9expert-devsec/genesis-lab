@@ -57,7 +57,10 @@ const ICON_BRANCH = '<div class="h-full rounded-9e-lg p-6 text-center">'
   + '<div class="mb-3 inline-flex h-20 w-20 items-center justify-center rounded-9e-md '
   + 'bg-[color:var(--pb-accent-fill)]/10 text-[var(--pb-accent-fill)]"><svg/></div>'
   + '<h3 class="font-heading text-lg font-bold">ก</h3>'
-  + '<p class="mt-1.5 whitespace-pre-line text-9e-slate-dp-50 dark:text-[#94a3b8]">ข</p>'
+  // Round A-fix 3 — the muted line reads the section-scoped token now, with
+  // today's value as the fallback, so the COLOUR is unchanged and the class is
+  // not. The byte-for-byte claim is about the icon branch, which is untouched.
+  + '<p class="mt-1.5 whitespace-pre-line text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))] dark:text-[#94a3b8]">ข</p>'
   + '</div>';
 
 // ── 1. ABSENT imageSrc RENDERS THE ICON, UNCHANGED ─────────────────────────

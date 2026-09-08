@@ -60,7 +60,9 @@ export function HeadingSection({ content }) {
 
   return (
     <div className={alignClass}>
-      <p className="mb-1.5 font-en text-xs font-bold uppercase tracking-wider text-9e-slate-dp-50">
+      {/* ROUND A-fix 2 — the eyebrow is muted text with no surface of its own,
+          so it takes the section-scoped ink. Today's token is the fallback. */}
+      <p className="mb-1.5 font-en text-xs font-bold uppercase tracking-wider text-[color:var(--pb-text-muted,var(--9e-slate-dp-50))]">
         {eyebrow}
       </p>
       {headingEl}
