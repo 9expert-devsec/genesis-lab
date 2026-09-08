@@ -35,6 +35,13 @@ const links = (markup) => [...doc(markup).querySelectorAll('a')];
 
 /** A cta an author could already have stored. */
 const STORED = { heading: 'สนใจสมัคร', description: 'ทักได้เลย', buttonLabel: 'สอบถาม', buttonHref: '/contact' };
+// Round C — the legacy PAIR as a stored document carries it, for the editor
+// tests at the foot of this file. They need a cta that opens on two rows, and
+// the pair is the only way a document written before round C can say that.
+const STORED_PAIR = {
+  buttonLabel: 'สอบถาม', buttonHref: '/contact',
+  secondaryButtonLabel: 'ดูตาราง', secondaryButtonHref: '/schedule',
+};
 
 // ── ABSENT RENDERS NOTHING ─────────────────────────────────────────────────
 
@@ -134,31 +141,84 @@ const panel = (content) => renderToStaticMarkup(createElement(SectionContentEdit
   type: 'cta', content, patch: () => {}, resolved: undefined, courses: [],
 }));
 
-test('the editor offers the second pair, and warns on a half-filled one', () => {
-  const markup = panel({ heading: 'x' });
-  assert.ok(markup.includes('ข้อความบนปุ่มที่สอง'), 'the second label control is missing');
-  assert.ok(markup.includes('ลิงก์ปุ่มที่สอง'), 'the second href control is missing');
+/**
+ * ── ROUND C: THESE THREE MOVED WITH THEIR SUBJECT ───────────────────────
+ * Round 57 gave the cta a fixed SECOND PAIR of controls, and the three tests
+ * below pinned it: the pair is offered, a half-filled pair warns, an unsafe
+ * href warns, and no label captures a click.
+ *
+ * Round C replaces both pairs with a repeater, so `ข้อความบนปุ่มที่สอง` and
+ * `ลิงก์ปุ่มที่สอง` no longer exist as controls — the legacy content fields
+ * behind them are now a read-compatibility path and are deliberately not
+ * offered. Deleting these tests would drop four real claims; leaving them
+ * would pin a UI that is gone. So each CLAIM is kept and re-pointed at the
+ * repeater, and the rest of this file — every RENDER test above — is untouched,
+ * because a stored second button still renders exactly as round 57 built it.
+ */
+
+test('the editor offers a SECOND button row, and warns on a half-filled one', () => {
+  /**
+   * "Offers a second" is now a question about the repeater rather than about a
+   * named control: a stored legacy pair opens as TWO rows, which is what makes
+   * round 57's second button still authorable after the pair stopped existing.
+   */
+  const stored = panel({ heading: 'x', ...STORED_PAIR });
+  const d = doc(stored);
+  const rows = [...d.querySelectorAll('[data-move="up"]')];
+  assert.equal(rows.length, 2, 'a stored legacy pair did not open as two editable rows');
 
   const half = panel({ heading: 'x', secondaryButtonLabel: 'ดูตาราง' });
-  assert.ok(half.includes('ปุ่มที่สองจะแสดงก็ต่อเมื่อมีทั้งข้อความและลิงก์'),
-    'a half-filled second pair drew no warning — the author would never learn why nothing appears');
+  assert.ok(half.includes('จะแสดงก็ต่อเมื่อมีทั้งข้อความและลิงก์'),
+    'a half-filled row drew no warning — the author would never learn why nothing appears');
 
   const complete = panel({ heading: 'x', secondaryButtonLabel: 'ดูตาราง', secondaryButtonHref: '/s' });
-  assert.ok(!complete.includes('ปุ่มที่สองจะแสดงก็ต่อเมื่อมีทั้งข้อความและลิงก์'),
-    'a complete pair still warned');
+  assert.ok(!complete.includes('จะแสดงก็ต่อเมื่อมีทั้งข้อความและลิงก์'),
+    'a complete row still warned');
 });
 
-test('the editor flags an unsafe secondary href', () => {
+test('the editor flags an unsafe href on the row that has one', () => {
   assert.ok(panel({ heading: 'x', secondaryButtonHref: 'javascript:alert(1)' })
-    .includes('ลิงก์ปุ่มที่สองใช้ไม่ได้'), 'an unsafe secondary href drew no warning');
+    .includes('ใช้ไม่ได้'), 'an unsafe href drew no warning');
+  // ...and the row is SHOWN rather than hidden, or the warning would be about
+  // something the author cannot see or fix.
+  const d = doc(panel({ heading: 'x', secondaryButtonHref: 'javascript:alert(1)' }));
+  assert.equal([...d.querySelectorAll('[data-move="up"]')].length, 1);
 });
 
 test('K — every label in this panel wraps exactly one control (round 55)', () => {
-  const d = doc(panel({ heading: 'x' }));
+  /**
+   * The fixture now carries a full pair, because the repeater renders per-row
+   * controls only for rows that exist — a cta with no buttons has just the two
+   * envelope fields, and a sweep over two labels proves nothing.
+   *
+   * The claim is unchanged and is the one that matters: `FieldBlock`, not
+   * `Field`, wraps the repeater, so the row's ย้ายขึ้น button is not the
+   * control for the whole field.
+   */
+  const d = doc(panel({ heading: 'x', ...STORED_PAIR }));
   const labels = [...d.querySelectorAll('label')];
   assert.ok(labels.length >= 6, `only ${labels.length} labels — the panel did not render`);
   for (const l of labels) {
     const n = l.querySelectorAll('button, input, select, textarea, output, meter, progress').length;
     assert.ok(n <= 1, `a label wraps ${n} controls — a stray click would activate the first`);
   }
+});
+
+test('the repeater stops at four, and says so', () => {
+  /**
+   * The cap is a UI bound: the ADD button disables and nothing truncates. A cap
+   * that deleted rows would be a design decision eating an author's content,
+   * which is why the schema carries no `.max()` either.
+   */
+  const four = { buttons: [1, 2, 3, 4].map((n) => ({ label: `ปุ่ม ${n}`, href: `/p${n}` })) };
+  const three = { buttons: four.buttons.slice(0, 3) };
+  const addButton = (content) =>
+    [...doc(panel(content)).querySelectorAll('button')].find((b) => b.textContent.includes('เพิ่มปุ่ม'));
+
+  assert.equal(addButton(three).hasAttribute('disabled'), false, 'the add button was disabled below the cap');
+  assert.equal(addButton(four).hasAttribute('disabled'), true, 'the add button stayed live at the cap');
+  assert.ok(panel(four).includes('เพิ่มได้สูงสุด 4 รายการ'), 'the cap is enforced silently');
+  // ...and a document already over the cap keeps every row rather than losing one.
+  const five = { buttons: [...four.buttons, { label: 'ปุ่ม 5', href: '/p5' }] };
+  assert.equal([...doc(panel(five)).querySelectorAll('[data-move="up"]')].length, 5);
 });

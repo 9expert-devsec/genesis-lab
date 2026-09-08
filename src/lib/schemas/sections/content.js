@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { defineSection } from './base';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Round C: a cta button may name its own treatment, and the
+// names come from the same enum style.buttonStyle uses, not a second list.
+import { BUTTON_STYLES } from './base';
 
 /**
  * §5.2 CONTENT sections (MVP — 6). These have well-established, unambiguous
@@ -51,9 +55,49 @@ const imageContent = z.object({
  * stored card shows. The renderer applies the SAME pair-guard the first button
  * has always used: a label without a safe href draws nothing, and vice versa.
  */
+/**
+ * ── ROUND C: THE PAIR BECOMES A LIST ──────────────────────────────────────
+ * The report: "the CTA allows at most 2 buttons; it should really be managed
+ * per button". Per-button management, inside the existing type — NOT one
+ * section per button, which would need a card_grid with a column count to put
+ * two side by side, i.e. a LAYOUT control answering a CONTENT question, and
+ * would turn one section into three on every promotion page.
+ *
+ * ── ABSENT MEANS THE LEGACY PAIR, AND THAT IS THE WHOLE COMPATIBILITY RULE ─
+ * `.lean()` applies no Mongoose defaults and a JSON round trip drops
+ * `undefined`, so every cta stored before this round reads back with `buttons`
+ * ABSENT rather than `[]`. lib/pageBuilder/ctaButtons.js resolves absent to the
+ * legacy pair AT READ TIME, so a stored section renders exactly what it
+ * rendered yesterday. Nothing migrates stored documents and nothing could —
+ * the dev database is production.
+ *
+ * The four legacy fields therefore STAY, and stay readable. They are a
+ * read-compatibility path, not a second way to author: the panel no longer
+ * offers them and nothing writes them again.
+ *
+ * ── THE CAP OF FOUR IS A UI BOUND, NOT A DATA TRUTH ──────────────────────
+ * `.max(4)` is deliberately NOT written here. A schema refusal would reject a
+ * hand-seeded five-button document AT SAVE — punishing an author for a design
+ * bound the design chose — and would fail on the way IN rather than telling
+ * anyone on the way out. The bound is enforced where it is a bound: the
+ * editor's add button disables at MAX_CTA_BUTTONS.
+ *
+ * `style` absent ⇒ the section's own `buttonStyle` for the first button and the
+ * outline treatment for every later one, which is round 57's cascade unchanged.
+ * `newTab` absent ⇒ derived from isExternalUrl, as today. Both are `.optional()`
+ * rather than defaulted for that reason: a default would erase the third state.
+ */
+const ctaButton = z.object({
+  label:  z.string().default(''),
+  href:   z.string().default(''),
+  style:  z.enum(BUTTON_STYLES).optional(),
+  newTab: z.boolean().optional(),
+}).passthrough();
+
 const ctaContent = z.object({
   heading:              z.string().default(''),
   description:          z.string().default(''),
+  buttons:              z.array(ctaButton).default([]),
   buttonLabel:          z.string().default(''),
   buttonHref:           z.string().default(''),
   secondaryButtonLabel: z.string().default(''),
