@@ -31,6 +31,7 @@ import {
   ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Loader2, Lock,
 } from 'lucide-react';
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
+import { SuccessPulseIcon } from '@/components/ui/SuccessPulseIcon';
 import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { typedAttendeeRows } from '@/lib/registration/careerPathRoster';
 import { createCareerPathRegistration } from '@/lib/actions/career-path-registrations';
@@ -670,7 +671,11 @@ export function CareerPathRegisterClient({ careerPath }) {
 
       const res = await createCareerPathRegistration(payload);
       if (res?.ok) {
-        setResult({ id: res.id });
+        // `res.id` is deliberately NOT kept. It was carried only to print on the
+        // success screen, and that line is gone; state whose last reader has
+        // been deleted is how a value comes back looking like it was always
+        // needed. The document's `_id` is unchanged — this is client state.
+        setResult({ submitted: true });
         if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         setSubmitError(res?.error || 'ส่งข้อมูลไม่สำเร็จ');
@@ -710,7 +715,7 @@ export function CareerPathRegisterClient({ careerPath }) {
       )}
 
       {result ? (
-        <CompletePanel id={result.id} email={formData?.contactEmail} />
+        <CompletePanel email={formData?.contactEmail} />
       ) : (
         <>
           {/* Step indicator only after the user leaves the course-
@@ -1404,30 +1409,103 @@ export function Step3Preview({
 
 // ── Complete panel ──────────────────────────────────────────────
 
-function CompletePanel({ id, email }) {
+/**
+ * The success screen — NO REFERENCE NUMBER, matching the public flow.
+ *
+ * ── WHAT WAS HERE ──────────────────────────────────────────────────────────
+ * A "เลขอ้างอิงการสมัคร" line printing the raw 24-character Mongo `_id`. Not
+ * even the 8-character `refNo(_id)` the other flows mint — the whole ObjectId,
+ * in a monospace face, as the one number the customer was asked to keep.
+ *
+ * ── WHY IT IS GONE RATHER THAN SHORTENED ───────────────────────────────────
+ * The public and in-house quote flows show NO reference on their success screen:
+ * the block is commented out in `StepComplete` (components/registration/
+ * RegisterWizard.jsx), deliberately, on both live paths. The note there records
+ * that a bundle once opted back in via a `showReference` prop on the argument
+ * that a quotation is answered by a human days later and the number was the
+ * customer's only handle on it — and that the argument was WITHDRAWN, because
+ * the confirmation email carries the number and is the copy a customer keeps.
+ *
+ * Career Path now sends that email too, so the same reasoning applies here and
+ * this screen stops being the odd one out. Making the number smaller, or moving
+ * it behind a tooltip, would be a third variant of a decision that has already
+ * been taken twice.
+ *
+ * `_id` is unchanged on the document and no other reader is touched. This is the
+ * only place it was ever shown to a customer.
+ *
+ * ── STRUCTURE AND WORDING BOTH MIRROR `StepComplete`'S QUOTE VARIANT ───────
+ * Icon, heading, confirmation-email line, follow-up promise, one outline link
+ * out — in that order, in public's words, with two deliberate exceptions:
+ *
+ *   · THE PROMISE. Public commits to a PDF quotation within three working days;
+ *     this flow commits to a sales contact within one to two. Different
+ *     deliverable, different service level, so the sentence is this flow's own
+ *     and stays that way. Matching a screen is not a reason to restate what a
+ *     customer was promised.
+ *   · THE LINK. Public's phrasing, this flow's noun and destination.
+ *
+ * The icon IS public's now — `SuccessPulseIcon` was written to replace the flat
+ * lucide `CheckCircle2` on the registration success screens and simply never
+ * reached this one. `CheckCircle2` is still imported for the step indicator.
+ */
+export function CompletePanel({ email }) {
   return (
     <div className="mt-6 rounded-2xl border border-[var(--surface-border)] bg-white p-10 text-center shadow-sm dark:bg-[#111d2c]">
-      <CheckCircle2 className="mx-auto h-16 w-16 text-9e-action" strokeWidth={1.5} />
+      {/* The mark `SuccessPulseIcon` was written to replace — its header names
+          the flat lucide CheckCircle2 on the public success screens as what it
+          supersedes, and this screen was simply not one of the three it reached. */}
+      <SuccessPulseIcon className="mx-auto" />
       <h2 className="mt-6 text-2xl font-bold text-9e-navy dark:text-white">
         ขอบคุณสำหรับการลงทะเบียน
       </h2>
-      <p className="mt-3 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-        เลขอ้างอิงการสมัคร:{' '}
-        <span className="font-mono text-base font-bold text-9e-action">{id}</span>
-      </p>
+
+      {/**
+        * PUBLIC'S WORDING, FOR A CLAIM THAT ONLY BECAME TRUE RECENTLY.
+        *
+        * This line used to read "เราได้รับข้อมูลของคุณแล้ว ทีมขายจะติดต่อกลับที่
+        * <email> ภายใน 1–2 วันทำการ" — one sentence doing two jobs, and
+        * under-claiming the first: it said only that the data had arrived,
+        * because until the Career Path sender shipped no mail was sent. One is
+        * now, so the screen can say what `StepComplete` says, in `StepComplete`'s
+        * words.
+        */}
       {email && (
-        <p className="mt-3 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-          เราได้รับข้อมูลของคุณแล้ว ทีมขายจะติดต่อกลับที่{' '}
+        <p className="mt-4 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          ทาง 9Expert ได้ส่งอีเมลยืนยันไปที่{' '}
           <span className="font-semibold text-9e-navy dark:text-white">{email}</span>{' '}
-          ภายใน 1–2 วันทำการ
+          เรียบร้อย
         </p>
       )}
+
+      {/**
+        * CAREER PATH'S OWN PROMISE, KEPT VERBATIM — IT IS NOT PUBLIC'S.
+        *
+        * Public's closing line promises a PDF quotation by email within THREE
+        * working days. This flow promises that the sales team will make contact
+        * within ONE TO TWO. Different deliverable, different service level: they
+        * occupy the same slot but they are not the same sentence said two ways,
+        * and adopting public's wording here would quietly change a commitment
+        * made to a customer in order to make two screens match.
+        *
+        * So the wording above follows public and this does not. The split is
+        * also what public's own screen does — a "we have emailed you" line and a
+        * "here is what happens next" line — which this screen previously ran
+        * together into one.
+        */}
+      <p className="mt-2 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+        ทั้งนี้ ทีมขายจะติดต่อกลับหาท่านภายใน 1–2 วันทำการ
+      </p>
+
       <div className="mt-8">
+        {/* Public's phrasing — `ดู‹noun›อื่นเพิ่มเติม` — with this flow's noun and
+            this flow's destination. The markup stays local: swapping in the
+            shared `Button` is a styling decision, not a wording one. */}
         <Link
           href="/career-path-project"
           className="inline-flex items-center gap-1 rounded-9e-md border border-9e-action px-4 py-2 text-sm font-bold text-9e-action hover:bg-9e-action hover:text-white"
         >
-          ดู Career Path อื่น
+          ดู Career Path อื่นเพิ่มเติม
         </Link>
       </div>
     </div>
