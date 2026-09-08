@@ -235,16 +235,35 @@ test("the union across all three tabs equals the exact set the panel rendered be
       ...ENVELOPE_FIELDS,
       ...ADVANCED_FIELDS,
     ],
-    // Round 57 step 2 added the second button pair, in render order after the
-    // first — the same kind of amendment as price_card's below, and forced by
-    // the same exact-set shape.
+    /**
+     * ── ROUND 57 ADDED A PAIR HERE; ROUND C REPLACED BOTH PAIRS WITH ONE ───
+     * Four entries left and one arrived, and that is a REMOVAL this test is
+     * right to have caught — it is the only kind of change that can make a
+     * field unreachable, which is the claim.
+     *
+     * The four that left are `ข้อความบนปุ่ม` / `ลิงก์ปุ่ม` and their
+     * `…ที่สอง` twins: the fixed primary/secondary controls. They are not
+     * unreachable, they are GONE from the panel by design — round C turns the
+     * pair into a repeater, and the legacy content fields behind them became a
+     * read-compatibility path rather than a second way to author (see
+     * lib/pageBuilder/ctaButtons.js).
+     *
+     * NOTHING REPLACES THEM IN THIS LIST, and that is not the repeater going
+     * missing. `fieldsIn` reads `label > span:first-child` — it enumerates
+     * `Field`, which renders a `<label>`, and cannot see `FieldBlock`, which
+     * renders a `<div>`. The repeater must be a FieldBlock (round 55: a
+     * `<label>` would forward a stray click to the row's first ย้ายขึ้น
+     * button), so its `ปุ่ม` caption and its per-row captions are invisible
+     * here by the same rule that has always hidden rich_text's `เนื้อหา`.
+     *
+     * The repeater's own coverage lives where it can be asserted properly —
+     * test/render/ctaSecondButton.test.mjs walks the rows, the cap and the
+     * warnings, and test/render/richTextLabelCapture.test.mjs sweeps this panel
+     * for a label that wraps more than one control.
+     */
     cta: [
       "หัวข้อ",
       "คำอธิบาย",
-      "ข้อความบนปุ่ม",
-      "ลิงก์ปุ่ม",
-      "ข้อความบนปุ่มที่สอง",
-      "ลิงก์ปุ่มที่สอง",
       "สไตล์ปุ่ม",
       ...ENVELOPE_FIELDS,
       ...ADVANCED_FIELDS,

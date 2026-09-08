@@ -34,6 +34,17 @@ import { newSectionId } from "@/lib/pageBuilder/reidSection";
 // and the field warning and the publish refusal cannot disagree about the
 // second. Pure and dependency-free, so it is safe in this client bundle.
 import { discountPercent, isInvertedPrice } from "@/lib/pageBuilder/bundlePricing";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Round C: the panel resolves a cta's button rows through
+// the SAME module the renderer reads, so the two cannot disagree about what a
+// stored document means.
+import { ctaEditorRows, MAX_CTA_BUTTONS } from "@/lib/pageBuilder/ctaButtons";
+// ADDED beside the statement above rather than folded into it. The per-button
+// style names come from the schema's own enum and the labels from the table the
+// SECTION-level buttonStyle control already uses — neither is retyped here, so
+// a per-button style cannot end up named differently from a section-level one.
+import { BUTTON_STYLES } from "@/lib/schemas/sections/base";
+import { BUTTON_STYLE_LABELS } from "@/lib/pageBuilder/presetLabels";
 import { IconPicker } from "./IconPicker";
 import {
   Field,
@@ -282,19 +293,90 @@ function ImageEditor({ content, patch }) {
 }
 
 // ── cta ──────────────────────────────────────────────────────────────
-function CtaEditor({ content, patch }) {
-  const href = String(content?.buttonHref ?? "").trim();
-  const label = String(content?.buttonLabel ?? "").trim();
-  const hrefUnsafe = href !== "" && !safeUrl(href);
-  // The component renders the button only with BOTH a label and a safe href —
-  // otherwise it silently renders no button at all.
-  const noButton = (label === "") !== (href === "");
-  // Round 57 — the second button, read the same way for the same reason.
-  const href2 = String(content?.secondaryButtonHref ?? "").trim();
-  const label2 = String(content?.secondaryButtonLabel ?? "").trim();
-  const href2Unsafe = href2 !== "" && !safeUrl(href2);
-  const noSecondButton = (label2 === "") !== (href2 === "");
+/**
+ * ── ROUND C: THE PAIR BECOMES A REPEATER ────────────────────────────────
+ * Four fixed fields became a list of rows. The report asked for per-button
+ * management and this is it, inside the existing type — one section per button
+ * would have needed a card_grid with a column count to put two side by side,
+ * which is a LAYOUT control answering a CONTENT question.
+ *
+ * ── THE ROWS ARE DERIVED, AND NOTHING IS MIGRATED ───────────────────────
+ * `ctaEditorRows` returns `content.buttons` when the key exists and the LEGACY
+ * PAIR when it does not, so a cta stored before this round opens showing the
+ * two buttons it already has. Touching anything writes `buttons` and the array
+ * takes precedence from then on; touching nothing writes nothing. That is the
+ * whole migration: a read, performed by the same module the renderer reads
+ * through, so the panel and the page cannot disagree about what a document
+ * means.
+ *
+ * The four legacy fields are therefore NO LONGER OFFERED here. They stay in the
+ * schema and stay readable — a read-compatibility path, not a second way to
+ * author, which is exactly what offering both would have made them.
+ *
+ * ── THE EDITOR ROWS ARE NOT THE RENDER ROWS, ON PURPOSE ─────────────────
+ * `resolveCtaButtons` fails closed and drops a half-filled row. Seeding the
+ * panel from it would present ZERO rows for a stored cta with a label and no
+ * href, and the author's data would vanish the first time they touched
+ * anything. `ctaEditorRows` keeps such a row so `ctaRowWarn` can tell them.
+ *
+ * FieldBlock, not Field, around the repeater — round 55: a `<label>` with no
+ * `for` forwards a click on any non-interactive part of itself to its first
+ * labelable descendant, and this control group's first is the row's ย้ายขึ้น
+ * button.
+ */
+const CTA_BUTTON_FIELDS = [
+  { key: "label", label: "ข้อความบนปุ่ม" },
+  {
+    key: "href",
+    label: "ลิงก์",
+    invalid: (item) => {
+      const href = String(item?.href ?? "").trim();
+      return href !== "" && !safeUrl(href);
+    },
+  },
+  {
+    key: "style",
+    label: "รูปแบบปุ่ม",
+    type: "select",
+    options: BUTTON_STYLES,
+    labels: BUTTON_STYLE_LABELS,
+    // The placeholder IS the default, and it says what the default does rather
+    // than being blank: absent means the first button takes the section's own
+    // treatment and every later one is outlined.
+    placeholder: "ตามค่าเริ่มต้นของ section",
+  },
+];
 
+/**
+ * The per-row warning. Same two cases the fixed pair warned about, for the same
+ * reason: the renderer draws a button only with BOTH a label and a safe href,
+ * so a half-filled row is silently invisible and the author has no way to learn
+ * why. It is a warning and not a refusal — the row is kept, and stays editable.
+ */
+function ctaRowWarn(item, i) {
+  const label = String(item?.label ?? "").trim();
+  const href = String(item?.href ?? "").trim();
+  if (href !== "" && !safeUrl(href)) {
+    return (
+      <Warn tone="red">
+        ลิงก์ของปุ่มที่ {i + 1} ใช้ไม่ได้ — ปุ่มนี้จะไม่แสดงผลเลย (รองรับ http,
+        https, mailto, tel, /path และ #anchor)
+      </Warn>
+    );
+  }
+  if ((label === "") !== (href === "")) {
+    return (
+      <Warn>
+        ปุ่มที่ {i + 1} จะแสดงก็ต่อเมื่อมีทั้งข้อความและลิงก์ — ตอนนี้ยังขาด
+        {label === "" ? " ข้อความบนปุ่ม" : " ลิงก์"}
+      </Warn>
+    );
+  }
+  return null;
+}
+
+function CtaEditor({ content, patch }) {
+  const rows = ctaEditorRows(content);
   return (
     <>
       <Field label="หัวข้อ">
@@ -309,76 +391,20 @@ function CtaEditor({ content, patch }) {
           onChange={(v) => patch({ description: v })}
         />
       </Field>
-      <Field label="ข้อความบนปุ่ม">
-        <TextInput
-          value={content?.buttonLabel}
-          onChange={(v) => patch({ buttonLabel: v })}
-        />
-      </Field>
-      <Field
-        label="ลิงก์ปุ่ม"
-        hint="http, https, mailto, tel, /path หรือ #anchor"
+      <FieldBlock
+        label="ปุ่ม"
+        hint={`สูงสุด ${MAX_CTA_BUTTONS} ปุ่ม — ปุ่มแรกใช้สีเน้นของ section ปุ่มถัดไปเป็นแบบเส้นขอบ`}
       >
-        <TextInput
-          value={content?.buttonHref}
-          onChange={(v) => patch({ buttonHref: v })}
-          invalid={hrefUnsafe}
+        <ItemList
+          items={rows}
+          set={(buttons) => patch({ buttons })}
+          fields={CTA_BUTTON_FIELDS}
+          addLabel="เพิ่มปุ่ม"
+          emptyWarn="ยังไม่มีปุ่ม — section นี้จะไม่แสดงปุ่มเลย"
+          max={MAX_CTA_BUTTONS}
+          rowWarn={ctaRowWarn}
         />
-      </Field>
-      {hrefUnsafe && (
-        <Warn tone="red">
-          ลิงก์นี้ใช้ไม่ได้ — ปุ่มจะไม่แสดงผลเลย (รองรับ http, https, mailto,
-          tel, /path และ #anchor)
-        </Warn>
-      )}
-      {!hrefUnsafe && noButton && (
-        <Warn>
-          ปุ่มจะแสดงก็ต่อเมื่อมีทั้งข้อความบนปุ่มและลิงก์ — ตอนนี้ยังขาด
-          {label === "" ? " ข้อความบนปุ่ม" : " ลิงก์"}
-        </Warn>
-      )}
-      {/**
-       * ── ROUND 57: THE SECOND BUTTON ─────────────────────────────────────
-       * Placed directly after the first pair, because it is the same control
-       * twice and an author reads them as a group. Blank by default, and blank
-       * renders nothing — a cta that ignores this pair is the cta it has
-       * always been.
-       *
-       * It gets the SAME pair warning as the first, for the same reason: the
-       * renderer draws a button only with both halves, so a half-filled pair
-       * is silently invisible and the author would have no way to learn why.
-       */}
-      <Field
-        label="ข้อความบนปุ่มที่สอง"
-        hint="ไม่บังคับ — เว้นว่างถ้าต้องการปุ่มเดียว"
-      >
-        <TextInput
-          value={content?.secondaryButtonLabel}
-          onChange={(v) => patch({ secondaryButtonLabel: v })}
-        />
-      </Field>
-      <Field
-        label="ลิงก์ปุ่มที่สอง"
-        hint="http, https, mailto, tel, /path หรือ #anchor"
-      >
-        <TextInput
-          value={content?.secondaryButtonHref}
-          onChange={(v) => patch({ secondaryButtonHref: v })}
-          invalid={href2Unsafe}
-        />
-      </Field>
-      {href2Unsafe && (
-        <Warn tone="red">
-          ลิงก์ปุ่มที่สองใช้ไม่ได้ — ปุ่มที่สองจะไม่แสดงผลเลย (รองรับ http,
-          https, mailto, tel, /path และ #anchor)
-        </Warn>
-      )}
-      {!href2Unsafe && noSecondButton && (
-        <Warn>
-          ปุ่มที่สองจะแสดงก็ต่อเมื่อมีทั้งข้อความและลิงก์ — ตอนนี้ยังขาด
-          {label2 === "" ? " ข้อความบนปุ่มที่สอง" : " ลิงก์ปุ่มที่สอง"}
-        </Warn>
-      )}
+      </FieldBlock>
     </>
   );
 }
@@ -1670,16 +1696,41 @@ function PromotionBundleEditor({ content, patch, resolved, courses }) {
  * reducer's PATCH_SECTION_KEY merges at the KEY level, so handing it a mutated
  * copy of the array is the only way to change one item without a bespoke action.
  */
-function ItemList({ items, set, fields, addLabel, emptyWarn }) {
+/**
+ * ── ROUND C: THREE ADDITIONS, ALL OPT-IN ────────────────────────────────
+ * `max`, a `select` field type, and `rowWarn`. Every one is inert when the
+ * prop is absent, so the five existing callers (checklist / timeline /
+ * accordion / price_card details / promotion_bundle items) are unchanged —
+ * which is why this extends the shared repeater instead of a sixth one being
+ * written next to it.
+ *
+ *   max      caps the list. The ADD BUTTON disables; nothing truncates. A cap
+ *            that deleted rows would be a design bound eating an author's
+ *            content, and it is deliberately not in the schema either.
+ *   select   a field whose ABSENCE is meaningful — for cta's per-button style,
+ *            absent means "use the section's own treatment". See `add` below:
+ *            a select key is NOT seeded, because seeding `''` would store a
+ *            value the enum rejects at save.
+ *   rowWarn  a per-row warning, because a repeater's rows can be individually
+ *            invalid in ways the list as a whole cannot express — cta's
+ *            half-filled pair is the case, and a row the renderer silently
+ *            drops must say so where the author is looking.
+ */
+function ItemList({ items, set, fields, addLabel, emptyWarn, max, rowWarn }) {
   const list = Array.isArray(items) ? items : [];
   const update = (i, patch) =>
     set(list.map((it, j) => (j === i ? { ...it, ...patch } : it)));
   const remove = (i) => set(list.filter((_, j) => j !== i));
+  const full = typeof max === "number" && list.length >= max;
   const add = () =>
     set([
       ...list,
       Object.fromEntries(
-        fields.map((f) => [f.key, f.type === "check" ? true : ""]),
+        fields
+          // A `select` carries no seed. Its absence IS its default value, and
+          // `''` is not in any enum the schema would accept.
+          .filter((f) => f.type !== "select")
+          .map((f) => [f.key, f.type === "check" ? true : ""]),
       ),
     ]);
 
@@ -1818,29 +1869,52 @@ function ItemList({ items, set, fields, addLabel, emptyWarn }) {
                   rows={2}
                 />
               </Field>
+            ) : f.type === "select" ? (
+              <Field key={f.key} label={f.label} hint={f.hint}>
+                <Select
+                  value={item?.[f.key]}
+                  options={f.options}
+                  labels={f.labels}
+                  placeholder={f.placeholder}
+                  // `''` is the placeholder's value and means "no choice". It
+                  // is written back as UNDEFINED, not as an empty string: the
+                  // schema's enum would reject `''` at save, and absence is
+                  // what the renderer reads as "use the section's own value".
+                  onChange={(v) => update(i, { [f.key]: v || undefined })}
+                />
+              </Field>
             ) : (
               <Field key={f.key} label={f.label}>
                 <TextInput
                   value={item?.[f.key]}
                   onChange={(v) => update(i, { [f.key]: v })}
+                  invalid={f.invalid?.(item)}
                 />
               </Field>
             ),
           )}
+          {rowWarn?.(item, i)}
         </div>
       ))}
       {!list.length && emptyWarn && <Warn>{emptyWarn}</Warn>}
       <button
         type="button"
         onClick={add}
+        disabled={full}
         className={cn(
           "flex w-full items-center justify-center gap-1 rounded-9e-md border border-dashed",
           "border-[var(--surface-border)] px-2 py-1 text-[11px] text-9e-slate-dp-50",
-          "hover:border-9e-action/40 hover:text-9e-action",
+          "enabled:hover:border-9e-action/40 enabled:hover:text-9e-action",
+          "disabled:cursor-not-allowed disabled:opacity-40",
         )}
       >
         <Plus className="h-3 w-3" /> {addLabel}
       </button>
+      {full && (
+        <p className="mt-1 text-[11px] text-9e-slate-dp-50">
+          เพิ่มได้สูงสุด {max} รายการ
+        </p>
+      )}
     </div>
   );
 }

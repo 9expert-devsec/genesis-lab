@@ -1,6 +1,10 @@
 import { slotsOf } from './containerSlots';
 import { isValidSectionId } from './scopeCss';
 import { embedSrc } from './embedSrc';
+// ADDED beside the statements above rather than folded into any — the standing
+// rule in this repo. Round C: `cta` content is a button LIST that may still be
+// stored as the legacy pair, and both readers below need the same resolution.
+import { ctaIsEmpty, ctaEditorRows } from './ctaButtons';
 
 /**
  * Human labels for section types, and a short content summary for each.
@@ -125,7 +129,11 @@ export function sectionSummary(section) {
     case 'notice':
       return trim(c.text);
     case 'cta':
-      return trim(c.heading || c.buttonLabel);
+      // ROUND C — the summary reads the LIST first, then the legacy label, for
+      // the same reason the renderer does: a cta authored after round C has no
+      // `buttonLabel`, and a tree row that went blank the moment an author
+      // touched the buttons would look like data loss.
+      return trim(c.heading || ctaEditorRows(c)[0]?.label);
     case 'image':
       return trim(c.alt || c.caption);
     case 'checklist': {
@@ -149,8 +157,16 @@ export function sectionSummary(section) {
  * must change with it — the marker would otherwise lie. Kept narrow and pinned
  * to the exact guard lines on purpose; a loader check asserts these stay in
  * sync with the component sources. Only the components that return null
- * OUTRIGHT are covered — cta and the item-based blocks render a wrapper even
- * when empty, so marking them would be a FALSE "won't render".
+ * OUTRIGHT are covered — the item-based blocks (timeline / tabs / accordion)
+ * render a wrapper even when empty, so marking them would be a FALSE
+ * "won't render".
+ *
+ * cta WAS in that sentence and left it in round C, by the component changing
+ * rather than the rule: an empty cta returned a bare `<div class="text-center">`
+ * and now returns null, so it belongs in the covered set on the same terms as
+ * everything else here. See the `cta` case below.
+ *
+ *   cta        no heading, description, or resolvable button → sections/cta.jsx
  *
  *   heading    image.jsx-adjacent: !text.trim()            → sections/heading.jsx
  *   notice     !text.trim()                                 → sections/notice.jsx
@@ -211,6 +227,25 @@ export function sectionRendersEmpty(section) {
           (d) => String(d?.label ?? '').trim() || String(d?.value ?? '').trim(),
         ))
       );
+    /**
+     * ── ROUND C: cta JOINS THE COVERED SET, BY THE COMPONENT MOVING ────────
+     * The note above says cta could not be marked because it "renders a
+     * wrapper even when empty", and that was true: an empty cta emitted a bare
+     * `<div class="text-center">`, so marking it would have been a FALSE
+     * "won't render" by this module's own strict rule (mirror.test.mjs
+     * operationalises the marker as markup === '').
+     *
+     * The rule did not bend — sections/cta.jsx now returns null when there is
+     * nothing at all, so the exclusion genuinely stopped applying. This is the
+     * mirror of `ctaIsEmpty`, which the component calls for the same decision,
+     * so the two cannot disagree: they are one function with two callers.
+     *
+     * `buttons: []` is the case the round was asked about, and it falls out
+     * rather than being special-cased — an empty array resolves to no buttons,
+     * and a section with no heading, no description and no buttons is ว่าง.
+     */
+    case 'cta':
+      return ctaIsEmpty(c);
     case 'stat_card':
       return !String(c.value ?? '').trim() && !String(c.label ?? '').trim();
     case 'icon_card':
