@@ -1,9 +1,14 @@
 'use client';
 
 import { RATIOS, COLUMNS, BUTTON_STYLES, CARD_STYLES } from '@/lib/schemas/pageBuilder';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this directory. Round E: card_grid's per-item box.
+import { ITEM_FRAMES } from '@/lib/schemas/pageBuilder';
 import {
   RATIO_LABELS, COLUMNS_LABELS, BUTTON_STYLE_LABELS, MOBILE_BEHAVIOR_LABELS, CARD_STYLE_LABELS,
 } from '@/lib/pageBuilder/presetLabels';
+// ADDED beside the statement above rather than folded into it. Same round.
+import { ITEM_FRAME_LABELS } from '@/lib/pageBuilder/presetLabels';
 import { SECTION_STYLE_CAPS } from '@/lib/pageBuilder/presets';
 import { Field, Group, Select } from './fields';
 
@@ -27,10 +32,18 @@ import { Field, Group, Select } from './fields';
  * raw class fns stay private) — see the test/ tier.
  *
  * ── LAYOUT controls: still hardcoded (a separate correspondence) ─────────
- * `layout.ratio` → two_column · `layout.columns` → card_grid, highlight_grid.
+ * `layout.ratio` → two_column · `layout.columns` → card_grid, highlight_grid ·
+ * `layout.itemFrame` → card_grid (round E).
  * These stay a hardcoded per-type map: 2C.3 folded in only the STYLE props. The
  * same single-source pattern applies here later — but only after confirming the
  * layout readers are uniform first (the precondition that made 2C.3 safe).
+ *
+ * ROUND E is evidence for that precondition rather than against it: `itemFrame`
+ * is read by ONE type and would have to be declared per-type in any single
+ * source too, so folding the layout map in is still a real change and still
+ * needs the uniformity check it has always needed. The list above is amended,
+ * because a prop read without its control listed here is exactly the silent
+ * drift these notes exist to prevent.
  *
  * ── mobileBehavior is scoped per type, not offered whole ─────────────────
  * The schema vocabulary is [stack, reverse_stack, hide, carousel], but no
@@ -97,9 +110,11 @@ export function styleControlsFor(type) {
 }
 
 // LAYOUT controls stay hardcoded per type — a SEPARATE correspondence
-// (ratio/columns/mobileBehavior ↔ two_column/card_grid/highlight_grid) that 2C.3
-// deliberately does NOT fold in (see the doc: apply the same pattern later, after
-// checking those readers are uniform first).
+// (ratio/columns/mobileBehavior/itemFrame ↔ two_column/card_grid/highlight_grid)
+// that 2C.3 deliberately does NOT fold in (see the doc: apply the same pattern
+// later, after checking those readers are uniform first). Round E added
+// `itemFrame`, on card_grid alone; highlight_grid's entry below is untouched and
+// the type stays retired.
 const LAYOUT_FIELDS = {
   two_column: ({ layout, patchLayout }) => (
     <Group title="เลย์เอาต์">
@@ -117,6 +132,16 @@ const LAYOUT_FIELDS = {
       <Field label="จำนวนคอลัมน์">
         <Select value={layout?.columns ?? 3} options={COLUMNS} labels={COLUMNS_LABELS}
           onChange={(v) => patchLayout({ columns: v === 'auto_fit' ? v : Number(v) })} />
+      </Field>
+      {/* Round E — the per-item box, offered on card_grid ONLY. highlight_grid
+          is retired and its entry below is untouched: giving the retired type a
+          control for a prop it does not read would be the shape this map exists
+          to avoid, and giving it one it DOES read would be re-opening a type the
+          author closed. `??` defaults the display to 'none', which is what an
+          absent value renders. */}
+      <Field label="กรอบรายการ์ด">
+        <Select value={layout?.itemFrame ?? 'none'} options={ITEM_FRAMES} labels={ITEM_FRAME_LABELS}
+          onChange={(v) => patchLayout({ itemFrame: v })} />
       </Field>
       {/* card_grid honours carousel only. */}
       <MobileBehaviorField layout={layout} patch={patchLayout} options={['stack', 'carousel']} />

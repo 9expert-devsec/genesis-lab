@@ -40,6 +40,14 @@ export const BACKGROUNDS = [
 export const COLUMNS = [1, 2, 3, 4, "auto_fit"]; // mixed number|string per requirement
 export const RATIOS = ["50-50", "40-60", "60-40", "30-70", "70-30"];
 export const MOBILE_BEHAVIORS = ["stack", "reverse_stack", "hide", "carousel"];
+/**
+ * ROUND E — whether a `card_grid` draws a box around each item.
+ *
+ * TWO values, not a scale. `highlight_grid`'s box was one treatment, and the
+ * question an author is answering is "is there a frame or not". A third value
+ * would be a new design decision rather than the return of an existing one.
+ */
+export const ITEM_FRAMES = ["none", "bordered"];
 export const VISIBILITY = ["all", "desktop_only", "mobile_only", "hidden"];
 export const ACCENTS = [
   "brand_blue",
@@ -244,6 +252,31 @@ export const layoutSchema = z
     ratio: z.enum(RATIOS).optional(),
     mobileBehavior: z.enum(MOBILE_BEHAVIORS).optional(),
     columns: columnsSchema.optional(),
+    /**
+     * ROUND E — the per-item box `card_grid` never had.
+     *
+     * `highlight_grid` drew one. Round 78 removed the accent bar that was that
+     * type's distinguishing idea, and round 80 retired it from the picker —
+     * neither of which was a complaint about the BOX. `card_grid`, the type
+     * authors are now pointed at, has no way to draw one. This is that way.
+     *
+     * ── ABSENT MEANS `none`, AND THAT IS THE WHOLE SAFETY ────────────────
+     * Round 56 §H applied straight: this is an ADD, so an absent value must
+     * render what it rendered before, and `none` emits the exact class
+     * attribute `card_grid` emits today. Every stored `card_grid` is byte-
+     * identical, and test/render/cardGridItemFrame asserts it by EQUALITY
+     * against markup captured before the change rather than by `includes`.
+     *
+     * That is the OPPOSITE of round 79/80's deliberate break, and the reason
+     * is the difference: those rounds changed stored pages because the
+     * incumbent rendering was a measured defect. Nothing here is defective —
+     * an unframed grid is a grid, and the author is gaining an option.
+     *
+     * `.optional()` with NO default, the shape the three fields above use, and
+     * load-bearing for their reason: a `.default('none')` would WRITE the key
+     * into every section that merely passes through a parse.
+     */
+    itemFrame: z.enum(ITEM_FRAMES).optional(),
   })
   .default({});
 

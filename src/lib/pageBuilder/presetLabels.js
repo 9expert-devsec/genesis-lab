@@ -63,6 +63,13 @@ export const MOBILE_BEHAVIOR_LABELS = {
   stack: 'วางซ้อนกัน', reverse_stack: 'สลับลำดับบนมือถือ', hide: 'ซ่อนบนมือถือ', carousel: 'เลื่อนแนวนอนบนมือถือ',
 };
 
+// Round E — card_grid's per-item box. `none` is NAMED rather than left as a
+// blank option: the absence of a frame is a choice the author makes, and a
+// select whose first entry is empty reads as "not set yet" instead.
+export const ITEM_FRAME_LABELS = {
+  none: 'ไม่มี', bordered: 'มีเส้นขอบ',
+};
+
 export const BUTTON_STYLE_LABELS = {
   primary: 'หลัก', secondary: 'รอง', outline: 'เส้นขอบ', ghost: 'โปร่ง',
 };

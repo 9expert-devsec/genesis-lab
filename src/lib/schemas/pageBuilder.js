@@ -93,6 +93,7 @@ export const ALL_SECTION_TYPES = [
 export {
   CONTAINER_WIDTHS, SPACING, BACKGROUNDS, COLUMNS, RATIOS,
   MOBILE_BEHAVIORS, VISIBILITY, ACCENTS, CARD_STYLES, BUTTON_STYLES,
+  ITEM_FRAMES,
 } from './sections/base';
 
 // ── Section union ────────────────────────────────────────────────────

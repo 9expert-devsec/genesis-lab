@@ -223,8 +223,14 @@ test("the union across all three tabs equals the exact set the panel rendered be
       ...ENVELOPE_FIELDS,
       ...ADVANCED_FIELDS,
     ],
+    // Round E added กรอบรายการ์ด, in render order between the two that were
+    // already here — an ENTRY, not a change of claim. The claim is still that
+    // every field the panel can edit is reachable from some tab; the set grew
+    // because card_grid gained a control, and this exact-ordered shape is what
+    // forces that to be written down here rather than noticed later.
     card_grid: [
       "จำนวนคอลัมน์",
+      "กรอบรายการ์ด",
       "บนมือถือ",
       ...ENVELOPE_FIELDS,
       ...ADVANCED_FIELDS,

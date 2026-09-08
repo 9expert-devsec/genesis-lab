@@ -128,6 +128,8 @@ import { useEditor } from "./EditorProvider";
  *   layout.columns        → card_grid, highlight_grid
  *   layout.mobileBehavior → two_column honours ONLY reverse_stack;
  *                           card_grid honours ONLY carousel
+ *   layout.itemFrame      → card_grid only (round E — the per-item box that
+ *                           came back from the retired highlight_grid)
  *   style.buttonStyle     → cta, price_card
  *   style.cardStyle       → price_card, stat_card, icon_card (2C Card surfaces)
  *
