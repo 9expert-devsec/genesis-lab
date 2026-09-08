@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { PolicyLayout, PolicyStatusNotice } from '@/components/policies/PolicyLayout';
 import { PolicyAccordion } from '@/components/policies/PolicyAccordion';
 import { PolicyIcon } from '@/components/policies/PolicyIcon';
@@ -201,8 +202,16 @@ export default function RefundPolicyPage() {
               title: 'E-Learning',
               body: (
                 <p>
-                  เมื่อชำระเงินแล้ว ถือว่าผู้ใช้บริการได้รับสิทธิ์เข้าถึงเนื้อหาทันที
-                  บริษัทจะไม่คืนเงินในทุกกรณี
+                  สิทธิ์เข้าถึงเนื้อหาเริ่มนับเมื่อระบบตรวจสอบและยืนยันการชำระเงินสำเร็จ
+                  ตามที่ระบุใน{' '}
+                  <Link
+                    href="/terms#service-types"
+                    className="font-semibold text-9e-action hover:underline dark:text-[#48B0FF]"
+                  >
+                    ข้อกำหนดและเงื่อนไข
+                  </Link>{' '}
+                  (Terms &amp; Conditions) ข้อ 7
+                  เมื่อระบบเปิดสิทธิ์เข้าถึงเนื้อหาให้แล้ว บริษัทจะไม่คืนเงินในทุกกรณี
                   ไม่ว่าผู้ใช้บริการจะเข้าเรียนหรือเปิดดูเนื้อหาแล้วหรือไม่ก็ตาม
                 </p>
               ),
