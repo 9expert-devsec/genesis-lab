@@ -26,6 +26,30 @@ const SelectedCourseSchema = new mongoose.Schema(
     round:      { type: String, default: '' },
     startDate:  { type: String, default: '' },
     endDate:    { type: String, default: '' },
+
+    /**
+     * THE ROUND'S ACTUAL TRAINING DAYS — raw ISO `YYYY-MM-DD` strings, exactly
+     * as they come off the MSDB schedule. Never a formatted label.
+     *
+     * ── WHY THE THREE FIELDS ABOVE ARE NOT ENOUGH ────────────────────────────
+     * `round` is a label formatted in the visitor's BROWSER at submit, and
+     * `startDate`/`endDate` are the first and last day. A round on 8, 10 and 12
+     * ต.ค. — nothing on the 9th or the 11th — reduces to "8–12" under all three,
+     * which advertises two days of training that do not exist. That is the
+     * defect src/lib/schedule/roundDateLabel.js was written to end; the day list
+     * is what lets a reader state the round correctly instead of assuming the
+     * days between the endpoints are real.
+     *
+     * FORWARD-ONLY: documents written before this field existed have no day list
+     * and keep the "8–12" defect. Nothing backfills them, because the day list
+     * is not recoverable from what they stored — a reader falls back to `round`.
+     *
+     * NOT FORMATTED HERE, and not by the form either. Turning days into a label
+     * is one job with one home (roundDateLabel.js); a second copy alongside the
+     * raw data is how `round` came to disagree with the schedule in the first
+     * place.
+     */
+    dates:      { type: [String], default: [] },
     type:       { type: String, default: '' },
     scheduleId: { type: String, default: '' },  // MSDB schedule _id, for traceability
   },
