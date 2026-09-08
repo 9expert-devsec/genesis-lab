@@ -14,12 +14,11 @@ import Link from "next/link";
 import {
   ChevronDown,
   ChevronRight,
-  Download,
-  FileText,
   HelpCircle,
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import { HeroPdfButton } from "@/components/ui/HeroPdfButton";
 import { courseLinkHref } from "@/lib/courses/courseLinkHref";
 import { siteDateParts } from "@/lib/articlePublishTime";
 import {
@@ -453,17 +452,14 @@ export function ScheduleBoard({
             คิดค่าใช้จ่ายแบบรายท่าน
           </p>
 
+          {/* The treatment moved to HeroPdfButton in round TC-CAT so
+              /training-course could render the SAME element rather than a copy
+              of these classes. The conditional stays here: whether there is a
+              PDF to offer is this page's question, not the button's. */}
           {schedulePDF?.url ? (
-            <a
-              href={schedulePDF.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-9e-action shadow-md transition-colors hover:bg-9e-ice"
-            >
-              <FileText className="h-4 w-4" />
+            <HeroPdfButton href={schedulePDF.url}>
               ดาวน์โหลดตารางการฝึกอบรม
-              <Download className="h-4 w-4" />
-            </a>
+            </HeroPdfButton>
           ) : null}
         </div>
       </section>

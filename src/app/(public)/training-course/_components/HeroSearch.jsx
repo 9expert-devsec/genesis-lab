@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
+import { HeroPdfButton } from '@/components/ui/HeroPdfButton';
 
 /**
  * Gradient hero with centered pill search input.
@@ -54,6 +55,35 @@ export function HeroSearch({ defaultValue = '', onDebouncedChange }) {
             className="min-w-0 flex-1 border-0 bg-transparent text-9e-navy placeholder:text-9e-slate-lt-400 dark:placeholder:text-9e-slate-dp-400 focus:outline-none focus:ring-0 dark:text-white"
           />
         </div>
+
+        {/*
+          ── THE CATALOG PDF, MOVED HERE IN ROUND TC-CAT ────────────────────
+          It used to be a full-width card section after the results grid — an
+          icon tile, a heading, a two-line description, this button, and a
+          caption reading "ไฟล์ PDF · ขนาดประมาณ 44.6 MB · เปิดในแท็บใหม่".
+          All of that is deleted; only the button survives, and it now sits in
+          the hero the way /schedule's does.
+
+          THE CAPTION IS GONE ON PURPOSE — not shortened, not moved into a
+          tooltip, and the size is not folded into the label. The file is still
+          44.6 MB and that is still a real cost on a phone; the bare button was
+          chosen anyway, with that known.
+
+          IT IS SAFE ABOVE THE STICKY BAR, WHICH THE OLD PLACEMENT WAS NOT.
+          The deleted section's own comment argued it could not live near the
+          top because FilterBar is `sticky top-20` and a block above it would
+          push the bar, the results count and every card down. That reasoning
+          was about being a SIBLING between the hero and the bar. Inside the
+          hero's own container it displaces nothing outside the band.
+
+          The href is a hardcoded site-root path — one of the three
+          WEBROOT_DOCUMENTS rewritten to Vercel Blob. NOT CMS-managed, unlike
+          /schedule's, whose url comes from Mongo. Moving the button changed
+          neither the URL nor how the bytes are served.
+        */}
+        <HeroPdfButton href="/9expert-training-course-catalog.pdf">
+          ดาวน์โหลดแคตตาล็อกหลักสูตร
+        </HeroPdfButton>
       </div>
     </section>
   );
