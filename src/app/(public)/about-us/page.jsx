@@ -3,6 +3,7 @@ import MissionSection from "@/components/about/MissionSection";
 import KPISection from "@/components/about/KPISection";
 import HowWeTeachSection from "@/components/about/HowWeTeachSection";
 import InstructorSection2 from "@/components/about/InstructorSection2";
+import CompanyProfileSection from "@/components/about/CompanyProfileSection";
 import JoinUsSection from "@/components/about/JoinUsSection";
 import AtmosphereSection from "@/components/portfolio/AtmosphereSection";
 
@@ -42,6 +43,7 @@ export default async function AboutUsPage() {
       <KPISection stats={stats} />
       <HowWeTeachSection />
       <InstructorSection2 instructors={instructors} />
+      <CompanyProfileSection />
       <AtmosphereSection photos={atmospherePhotos} />
       <JoinUsSection />
     </main>
