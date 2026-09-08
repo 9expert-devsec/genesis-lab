@@ -178,8 +178,45 @@ test('card_grid and two_column keep their gutters — neither compounds at mobil
   assert.match(src('two_column'), /'grid grid-cols-1 gap-8'/, 'two_column between-columns gap moved');
   assert.equal((src('two_column').match(/flex flex-col gap-6/g) ?? []).length, 2,
     'two_column no longer has exactly two inside-column stacks at gap-6');
-  for (const t of ['card_grid', 'two_column']) {
-    assert.equal(/(?<![\w-])(?:md:)?p[xlr]?-\d/.test(src(t)), false,
-      `${t} gained a padding — round 73 was a shell + highlight_grid change and nothing else`);
-  }
+
+  const PADDING = /(?<![\w-])(?:md:)?p[xlr]?-\d/;
+  assert.equal(PADDING.test(src('two_column')), false,
+    'two_column gained a padding — round 73 was a shell + highlight_grid change and nothing else');
+
+  /**
+   * ── ROUND E NARROWED THIS FOR card_grid, AND MADE THE ARGUMENT ─────────
+   * The blanket check above used to cover `card_grid` too. It fired this round,
+   * which is the guard working: round 73 pinned the exclusion "so a later round
+   * has to make the argument rather than let the exclusion erode", and round E
+   * is that round.
+   *
+   * THE ARGUMENT. What round 73 was protecting is card_grid's own LAYOUT
+   * wrapper — the element that lays the grid out — from silently acquiring
+   * padding as a side effect of a spacing change. That element is untouched and
+   * is still asserted above at `'grid gap-6'`, with no padding of any kind.
+   *
+   * What round E added is an OPT-IN per-item box (`layout.itemFrame:
+   * 'bordered'`), absent by default, whose padding is `highlight_grid`'s
+   * `p-4 md:p-6` copied verbatim — round 73's OWN scale, at round 73's own
+   * breakpoint. So this is not a new padding decision reaching card_grid; it is
+   * round 73's padding travelling with the box it has always belonged to.
+   *
+   * The check is therefore narrowed, not dropped: card_grid may hold padding
+   * inside THAT ONE STRING and nowhere else, and the string must still be the
+   * one highlight_grid uses.
+   */
+  const cardGrid = src('card_grid');
+  const BOX_STRING = /["'`]([^"'`]*\bbg-9e-ice\/50\b[^"'`]*)["'`]/;
+  const box = BOX_STRING.exec(cardGrid);
+  assert.notEqual(box, null,
+    'card_grid no longer holds the item-frame box — if the option was removed, restore the blanket padding check');
+  assert.match(box[1], /(?<![\w-])p-4 md:p-6(?![\w-])/,
+    'the item-frame box no longer carries round 73 own p-4 md:p-6 scale');
+  assert.equal(PADDING.test(cardGrid.replace(box[1], '')), false,
+    'card_grid gained a padding OUTSIDE the opt-in item-frame box — that is the thing round 73 pinned');
+  // …and the box is still highlight_grid's, not a scale invented here.
+  const hg = BOX_STRING.exec(src('highlight_grid'));
+  assert.notEqual(hg, null, 'highlight_grid no longer holds the box this one was copied from');
+  assert.equal(box[1], hg[1],
+    'the two copies of the item-frame box have drifted apart');
 });
