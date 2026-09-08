@@ -21,6 +21,11 @@ import { formatThaiDate } from '@/lib/promotions/promotionDateLabel';
 // The SAME derivation the write-through uses, so the panel shows the date that
 // will actually be stored rather than a second opinion about it.
 import { earlyBirdDeadline } from '@/lib/earlyBird/pageWriteThrough';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Round F: the `bundle` hint counts the page's own
+// `promotion_bundle` sections with the SAME walk the public join uses, so the
+// panel cannot report a number the course pages disagree with.
+import { countBundleSections } from '@/lib/pageBuilder/bundleCoursePages';
 
 /**
  * The page-level Early Bird binding — course, round, price, deadline, label.
@@ -32,20 +37,40 @@ import { earlyBirdDeadline } from '@/lib/earlyBird/pageWriteThrough';
  * (see lib/earlyBird/pageWriteThrough.js). Nothing here writes anything: every
  * control dispatches a page patch, and the save path owns the rest.
  *
- * ── `bundle` HAS NO BRANCH IN THIS FILE, DELIBERATELY ─────────────────────
- * It is a declared `promotionKind` with no UI. The select below offers two
- * values, and a page already stored as `bundle` keeps that value — the control
- * shows it, unchanged, rather than silently rewriting an author's data to
- * something this round happens to render.
+ * ── `bundle` IS SELECTABLE NOW, AND IT HAS NO FIELDS ─────────────────────
+ * This block used to say `bundle` was "a declared promotionKind with no UI",
+ * offered nowhere and kept only as a stored value. Round F offers it. The
+ * sentence is rewritten rather than deleted because the SHAPE it described is
+ * still the interesting part: `bundle` has no branch of fields, and that is not
+ * an unfinished half of this change.
+ *
+ * A bundle's content lives in `promotion_bundle` SECTIONS, authored on the
+ * canvas, several to a page if the author wants. There is nothing for a page
+ * settings panel to bind — no course, no round, no price — so the `bundle`
+ * branch below is a read-only hint that says where the content is and counts
+ * what the page already holds. A picker here would be a second, worse authoring
+ * surface for sections that already have one.
+ *
+ * ── THE GROUP IS `โปรโมชัน`, NOT `Early Bird` ────────────────────────────
+ * The kind select decides between three kinds and only one of them is Early
+ * Bird; a control that sets `bundle` inside a group named after the other kind
+ * reads as a mistake. Renaming the group was chosen over lifting the select out
+ * into the general group, because the select and the fields it reveals are one
+ * control — separating them would put the question in one place and its answer
+ * in another, and the general group is already the longest in the dialog.
+ *
+ * The FILE keeps its name: it still owns the Early Bird binding, which is
+ * everything here except the select and one hint.
  */
 
-/** The two kinds this panel can SET. `bundle` is storable and not offerable. */
+/** The three kinds this panel can SET. */
 const OFFERED_KINDS = [
   { value: 'none', label: 'ไม่มี' },
   { value: 'early_bird', label: 'Early Bird' },
+  { value: 'bundle', label: 'แพ็กเกจ (Bundle)' },
 ];
 
-const KIND_LABELS = { none: 'ไม่มี', early_bird: 'Early Bird', bundle: 'แพ็กเกจ (ยังไม่รองรับ)' };
+const KIND_LABELS = { none: 'ไม่มี', early_bird: 'Early Bird', bundle: 'แพ็กเกจ (Bundle)' };
 
 /**
  * ── THE LOCAL `dateValue` IS GONE — IT READ THE UTC CALENDAR ──────────────
@@ -109,6 +134,36 @@ function DeadlineSummary({ binding, page }) {
     <p className="mb-3 rounded-9e-sm border border-[var(--surface-border)] px-2.5 py-2 text-[11px] leading-relaxed text-9e-slate-dp-50">
       โปรจะสิ้นสุด <strong>{formatThaiDate(resolved)}</strong> ({source})
     </p>
+  );
+}
+
+/**
+ * What a `bundle` page holds, counted from the editor's own section tree.
+ *
+ * Read-only by design — see the header. It reports rather than binds, and the
+ * one number it reports is the one an author cannot get from this dialog: how
+ * many `promotion_bundle` sections are on the canvas right now, including any
+ * nested inside containers, which is exactly what the public join will look
+ * for.
+ */
+function BundleHint({ page }) {
+  const count = countBundleSections(page?.sections);
+  return (
+    <>
+      <p className="mb-3 rounded-9e-sm border border-[var(--surface-border)] px-2.5 py-2 text-[11px] leading-relaxed text-9e-slate-dp-50">
+        เนื้อหาของแพ็กเกจอยู่ใน section <strong>“ชุดโปรโมชัน”</strong> บนหน้านี้ —
+        เพิ่มหรือแก้ไขได้จากแคนวาส ไม่ต้องตั้งค่าที่นี่
+        หน้านี้มี <strong>{count}</strong> ชุดโปรโมชัน
+        {' '}หลักสูตรในชุดเหล่านี้จะแสดงลิงก์กลับมาที่หน้านี้บนหน้ารายละเอียดหลักสูตร
+        เมื่อหน้านี้เผยแพร่แล้ว
+      </p>
+      {count === 0 && (
+        <Warn>
+          ยังไม่มี section “ชุดโปรโมชัน” บนหน้านี้ — หน้านี้ถูกตั้งเป็นแพ็กเกจแต่ยังไม่มีหลักสูตรใดผูกอยู่
+          จึงจะไม่ปรากฏบนหน้ารายละเอียดหลักสูตรใดเลย
+        </Warn>
+      )}
+    </>
   );
 }
 
@@ -231,15 +286,18 @@ export function EarlyBirdBinding({ page, patch, courses = [], canEdit = true }) 
   const roundMissing = savedRound !== '' && !rounds.some((r) => String(r?._id) === savedRound);
 
   return (
-    <Group title="Early Bird">
+    <Group title="โปรโมชัน">
       {!canEdit && (
         <p className="mb-3 rounded-9e-sm border border-[var(--surface-border)] px-2.5 py-2 text-[11px] leading-relaxed text-9e-slate-dp-50">
-          คุณดูการตั้งค่า Early Bird ได้ แต่แก้ไขไม่ได้ —
+          คุณดูการตั้งค่าโปรโมชันได้ แต่แก้ไขไม่ได้ —
           ต้องมีสิทธิ์เข้าถึงเมนู “โปรโมชัน” จึงจะเปลี่ยนได้
           ส่วนอื่นของหน้านี้ยังแก้ไขและบันทึกได้ตามปกติ
         </p>
       )}
-      <Field label="ชนิดโปรโมชัน" hint="เลือก Early Bird เพื่อผูกหลักสูตรและรอบอบรมกับหน้านี้">
+      <Field
+        label="ชนิดโปรโมชัน"
+        hint="Early Bird ผูกหลักสูตรและรอบอบรมกับหน้านี้ · แพ็กเกจ ใช้ section “ชุดโปรโมชัน” บนหน้า"
+      >
         <select
           className={INPUT_CLASS}
           value={kind}
@@ -253,8 +311,11 @@ export function EarlyBirdBinding({ page, patch, courses = [], canEdit = true }) 
             patch({ promotionKind: next });
           }}
         >
-          {/* A stored `bundle` stays selectable-as-current rather than being
-              rewritten to something this panel happens to render. */}
+          {/* All three declared kinds are offered now, so this branch is only
+              reached by a value the enum does not carry — a hand-seeded
+              document. It stays for that: showing an unknown kind as itself
+              beats silently re-selecting the author's page to `none` on the
+              first render of a panel nobody meant to change anything in. */}
           {!OFFERED_KINDS.some((k) => k.value === kind) && (
             <option value={kind}>{KIND_LABELS[kind] ?? kind}</option>
           )}
@@ -263,6 +324,21 @@ export function EarlyBirdBinding({ page, patch, courses = [], canEdit = true }) 
           ))}
         </select>
       </Field>
+
+      {/**
+        * ── `bundle`: A HINT, NOT A PICKER ──────────────────────────────────
+        * The content is authored as `promotion_bundle` sections on the canvas,
+        * so the only useful thing a page panel can do is say so and say how
+        * many the page currently has. The count comes from the editor's OWN
+        * state — `page.sections`, walked by the same helper the public reader
+        * uses, so the panel cannot report a number the join disagrees with —
+        * and costs no fetch.
+        *
+        * ZERO IS A WARNING because it is the silent failure: the page is marked
+        * as a bundle, the course pages will look for it, and it holds nothing
+        * to find. Nothing errors and no customer sees anything.
+        */}
+      {kind === 'bundle' && <BundleHint page={page} />}
 
       {kind === 'early_bird' && (
         <>

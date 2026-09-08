@@ -7,7 +7,7 @@
  * All mutations and admin-only reads require an authenticated admin session.
  */
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, unstable_cache } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import CoursePromoLink from '@/models/CoursePromoLink';
 import EarlyBirdConfig from '@/models/EarlyBirdConfig';
@@ -48,6 +48,12 @@ import {
 // so the course tab can send an author to the one screen that can edit it
 // instead of leaving them at a disabled form with no next step.
 import PageBuilder from '@/models/PageBuilder';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Round F: the pure half of "which bundle pages contain this
+// course". It lives in a module rather than here because the settings panel
+// needs the same section walk, and a `'use server'` module cannot export a
+// non-async helper for it to import.
+import { selectBundlePagesForCourse } from '@/lib/pageBuilder/bundleCoursePages';
 
 function serialize(value) {
   if (value == null) return value;
@@ -810,4 +816,75 @@ export async function clearPageEarlyBird(pageId, { revalidateCourseId = '' } = {
  */
 export async function getCourseRoundsForPage(courseObjectId) {
   return getCourseRoundsForPromotion(courseObjectId);
+}
+
+// ── Genesis bundle pages on a course detail page ─────────────────────
+
+/**
+ * The published bundle PAGES that contain a given course.
+ *
+ * ── GENESIS PROMOTION PAGES NEVER WRITE TO MSDB, AND THIS IS WHY IT IS A
+ *    READ RATHER THAN A ROW ─────────────────────────────────────────────
+ * The promotions union is read-time only. So a builder bundle creates no
+ * `CoursePromoLink` and no `Promotion` document — nothing above this line is
+ * touched — and the course page reads Genesis directly instead. That keeps the
+ * join a query, which cannot drift, rather than a pair of rows somebody has to
+ * remember to delete when a bundle changes.
+ *
+ * ── WHY A SCAN, AND THE MEASUREMENT BEHIND IT ───────────────────────────
+ * A bundle's courses live in section content at any depth, so the alternative
+ * was a derived, indexed field on the page — which would then have to be
+ * recomputed at every path that writes live `sections`, and a path that forgot
+ * would drop a page from its own courses silently. MEASURED 2026-09-08: 6
+ * promotion pages, 64.2 KB of `sections` in total, 2 bundle sections. The full
+ * reasoning and the revisit threshold are in lib/pageBuilder/bundleCoursePages.js.
+ *
+ * ── WHAT IS CACHED, AND WHAT DELIBERATELY IS NOT ────────────────────────
+ * The DB READ is cached; the per-course WALK is not. At this corpus the walk is
+ * a few hundred objects and the read is the only cost worth removing, and
+ * caching it per course would mean a cache entry per course code — many entries
+ * that all invalidate together — for a saving the measurement says is not there.
+ * Revisit alongside the threshold in the module above.
+ *
+ * Tagged `page-builder`, which is the tag `bustCaches` in lib/actions/pageBuilder.js
+ * already revalidates on every page save, publish, identity change and delete.
+ * No new invalidation path, and therefore no second one to keep in step.
+ *
+ * `scheduled` is in the status filter beside `published` on purpose: a scheduled
+ * page whose start has passed IS publicly visible (see lib/pageBuilder/visibility.js),
+ * and nothing flips scheduled → published. Narrowing to `published` here would
+ * drop a live page. The real gate is `publicPageHref` inside the selector, which
+ * is the same predicate the destination route runs.
+ */
+const readBundlePages = unstable_cache(
+  async () => {
+    await dbConnect();
+    const pages = await PageBuilder.find(
+      {
+        pageType: 'promotion',
+        promotionKind: 'bundle',
+        status: { $in: ['published', 'scheduled'] },
+      },
+      // A projection, not the whole document: `draft` alone can double a page's
+      // size and is never read here — a bundle an author is still assembling
+      // must not advertise itself, so only LIVE `sections` are fetched.
+      {
+        slug: 1, title: 1, pageType: 1, promotionKind: 1, status: 1,
+        promotionOrder: 1, promotionCover: 1,
+        publishStartDate: 1, publishEndDate: 1, sections: 1,
+      },
+    ).lean();
+    return serialize(pages);
+  },
+  ['bundle-course-pages'],
+  { tags: ['page-builder'] },
+);
+
+/**
+ * @param {string} courseId a course CODE (`course_id`), any case
+ * @returns {Promise<Array<{href: string, title: string, cover: string, label: string}>>}
+ */
+export async function getBundlePagesForCourse(courseId) {
+  if (!courseId) return [];
+  return selectBundlePagesForCourse(await readBundlePages(), courseId);
 }
