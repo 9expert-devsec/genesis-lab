@@ -489,6 +489,233 @@ test('CONTROL: the src/ scan can still SEE POSTMARK_ADMIN_EMAIL where it legitim
   assert.match(mc.code, /POSTMARK_ADMIN_EMAIL/, 'masterclass no longer reads it — delete the exemption above');
 });
 
+// ── (i) The CAREER PATH sender — the one with no fallback ──────────────────
+
+/**
+ * ── WHY IT IS GUARDED HERE AND NOT IN A FILE OF ITS OWN ────────────────────
+ * The claim is about the SET of send paths — "each reads its own alias and no
+ * other flow's", "no path grows a second send", "these four are untouched" —
+ * and a set claim asserted in two files is a set claim asserted in neither. The
+ * careerpath path is also the one that BREAKS the pattern the rest of this file
+ * describes, so its exemption belongs beside the rule it is an exemption from.
+ */
+const CAREERPATH_SENDER = 'src/lib/email/template-senders/careerpath-registration.js';
+const CAREERPATH_ACTION = 'src/lib/actions/career-path-registrations.js';
+const CAREERPATH_MODEL = 'src/lib/email/models/careerPathRegistrationModel.js';
+
+/** The 1-based lines of `raw` matching `re`. `raw` is newline-normalised. */
+function linesMatching(raw, re) {
+  return raw
+    .split('\n')
+    .map((line, i) => [i + 1, line])
+    .filter(([, line]) => re.test(line))
+    .map(([n]) => n);
+}
+
+/** The single line `re` sits on, asserted to be one real line number, printed. */
+function soleLineOf(raw, re, label) {
+  const hits = linesMatching(raw, re);
+  assert.equal(hits.length, 1, `${label}: expected exactly one line, found ${hits.length}`);
+
+  const [line] = hits;
+  assert.notEqual(line, undefined, `${label}: no line number was computed`);
+  assert.equal(typeof line, 'number', `${label}: line number is not numeric`);
+  assert.ok(Number.isInteger(line) && line > 0, `${label}: ${line} is not a real line number`);
+
+  console.log(`[emailTemplateSenders] ${label} → line ${line}`);
+  return line;
+}
+
+test('(i) the careerpath sender reads its OWN alias and no other flow\'s', () => {
+  const src = readSource(CAREERPATH_SENDER);
+  assert.match(src.code, /process\.env\.POSTMARK_TEMPLATE_ALIAS_REG_CAREERPATH/);
+
+  for (const other of [
+    'POSTMARK_TEMPLATE_ALIAS_REG_USER',
+    'POSTMARK_TEMPLATE_ALIAS_PAID_USER',
+    'POSTMARK_TEMPLATE_ALIAS_INHOUSE_USER',
+    'POSTMARK_TEMPLATE_ALIAS_REG_BUNDLE',
+    'POSTMARK_TEMPLATE_ALIAS_MC_PAID',
+    'POSTMARK_TEMPLATE_ALIAS_MC_QUOTE',
+  ]) {
+    assert.equal(src.code.includes(other), false, `careerpath reads ${other}`);
+  }
+});
+
+test('(i) THE EXEMPTION: there is NO hard-coded fallback body, by construction', () => {
+  /**
+   * The other three keep an HTML body and choose between it and the template
+   * with `decideSendPlan`. That machinery is a MIGRATION safety net: those flows
+   * were already mailing customers, so an unset alias there would take a mail
+   * away. Career Path has never sent anything, so an unset alias is the status
+   * quo, there is no second body, and a planner that picks between two bodies
+   * would have to invent one.
+   *
+   * Asserted as four absences rather than as prose, because "there is only one
+   * way to send this" is only true while nothing imports a second one.
+   */
+  const src = readSource(CAREERPATH_SENDER);
+
+  assert.equal(/\bsendEmail\b/.test(src.withImports), false, 'a raw-HTML send path appeared');
+  assert.equal(/decideSendPlan/.test(src.withImports), false, 'a planner for one body');
+  assert.equal(/email\/templates\//.test(src.withImports), false, 'a hard-coded template was imported');
+  assert.equal(/\bhtml:\s*/.test(src.code), false, 'an inline HTML body');
+});
+
+test('(i) exactly ONE send call site, and it is the template send', () => {
+  const src = readSource(CAREERPATH_SENDER);
+  assert.equal(countCallSites(src.code, 'sendTemplateEmail'), 1, 'exactly one send');
+});
+
+test('(i) the alias-UNSET path logs at INFO and returns — it is not an error or a throw', () => {
+  /**
+   * Same rule the other three follow for the same reason: a blank alias is the
+   * rollout switch, not a failure. The difference is only what happens next, and
+   * that difference is the whole exemption above.
+   */
+  const src = readSource(CAREERPATH_SENDER);
+  const m = src.code.match(/if\s*\(!alias\)\s*\{([\s\S]*?)\n {4}\}/);
+  assert.ok(m, 'the alias-unset branch is gone — this guard has lost its subject');
+
+  assert.match(m[1], /console\.info\(/, 'an unset alias must log at info');
+  assert.equal(/console\.error\(/.test(m[1]), false, 'an unset alias is not an error');
+  assert.equal(/\bthrow\b/.test(m[1]), false, 'an unset alias must not throw');
+});
+
+test('(i) a FAILED send is console.error — this is the only mail the flow produces', () => {
+  const src = readSource(CAREERPATH_SENDER);
+  assert.match(src.code, /result\?\.error[\s\S]{0,60}console\.error\(/);
+});
+
+test('(i) the sender cannot reject — the registration is already written', () => {
+  /**
+   * By the time it runs the document is committed and the customer has been
+   * shown their reference number. A rejection would turn a filed registration
+   * into an error message about a registration that exists.
+   *
+   * Two catches, both required: the outer one around the whole body, and the
+   * cover lookup's own — which must NOT be the outer one, or a missing banner
+   * would take the mail with it.
+   */
+  const src = readSource(CAREERPATH_SENDER);
+  const catches = src.code.match(/\bcatch\s*\(/g) ?? [];
+  assert.equal(catches.length, 2, 'the body and the cover lookup each need their own');
+
+  assert.match(
+    src.code,
+    /export async function sendCareerPathRegistrationEmail\([\s\S]{0,80}?\btry\s*\{/,
+    'the whole body must sit inside a try'
+  );
+  assert.equal(/\bthrow\b/.test(src.code), false, 'nothing here may throw');
+});
+
+test('(i) the COVER is resolved in the sender, and the model stays pure', () => {
+  /**
+   * The one value the mail needs that the registration document does not carry.
+   * It is read at the send boundary — where a failure can be absorbed — and
+   * handed in, exactly as the bundle and course models state for their images.
+   */
+  const sender = readSource(CAREERPATH_SENDER);
+  assert.match(sender.withImports, /from\s*'@\/lib\/actions\/career-paths'/);
+  assert.match(sender.code, /getCareerPathForRegistration\(/);
+  assert.match(sender.code, /registerBannerUrl/);
+
+  // A failed or absent lookup yields '' — which the builder OMITS, not sends.
+  assert.match(sender.code, /catch[\s\S]{0,160}return\s*''/);
+
+  const model = readSource(CAREERPATH_MODEL);
+  for (const io of [/getCareerPathForRegistration/, /dbConnect/, /@\/models\//, /process\.env/, /fetch\(/]) {
+    assert.equal(io.test(model.withImports), false, `the model reached for I/O: ${io}`);
+  }
+});
+
+test('(i) the send is wired AFTER the create, in the action, with no route added', () => {
+  const action = readSource(CAREERPATH_ACTION);
+
+  const createLine = soleLineOf(action.raw, /CareerPathRegistration\.create\(/, 'the create');
+  const sendLine = soleLineOf(action.raw, /await sendCareerPathRegistrationEmail\(/, 'the send');
+  assert.ok(createLine < sendLine, `the send (${sendLine}) must follow the create (${createLine})`);
+
+  // AWAITED, not floating: a serverless invocation can be frozen the moment the
+  // action returns, and an un-awaited send is one that may never leave.
+  assert.match(action.code, /await sendCareerPathRegistrationEmail\(doc\.toObject\(\)\)/);
+
+  // No route was built for it.
+  assert.equal(sourceExists('src/app/api/registration/careerpath/route.js'), false);
+  assert.equal(sourceExists('src/app/api/registration/career-path/route.js'), false);
+});
+
+test('(i) every export of the careerpath action is still async', () => {
+  // A `'use server'` module may only export async functions; a sync export is a
+  // build error, not a test failure, and this is cheaper than discovering it there.
+  const action = readSource(CAREERPATH_ACTION);
+  assert.match(action.code, /^'use server';/m);
+  const exports = action.code.match(/export\s+(async\s+)?function\s+\w+/g) ?? [];
+  assert.ok(exports.length >= 5, 'the action module lost its exports');
+  for (const e of exports) {
+    assert.match(e, /export\s+async\s+function/, `${e} is not async`);
+  }
+});
+
+test('(i) the FOUR existing senders are untouched by the careerpath work', () => {
+  /**
+   * The set claim. None of them may learn about careerpath — not by import, not
+   * by alias, not by name — and each must still hold the fallback pair that
+   * makes it a migration path rather than a template-only one.
+   */
+  const BUNDLE = 'src/lib/email/template-senders/bundle-registration.js';
+  for (const rel of [PUBLIC_SENDER, INHOUSE_SENDER, BUNDLE, MASTERCLASS]) {
+    const src = readSource(rel);
+    assert.equal(
+      /careerpath|careerPath|career-path/i.test(src.withImports),
+      false,
+      `${rel} now references the careerpath flow`
+    );
+    assert.equal(
+      src.code.includes('POSTMARK_TEMPLATE_ALIAS_REG_CAREERPATH'),
+      false,
+      `${rel} reads the careerpath alias`
+    );
+  }
+
+  // And the three that HAVE a fallback still have exactly one of each send.
+  for (const rel of [PUBLIC_SENDER, INHOUSE_SENDER, BUNDLE]) {
+    const src = readSource(rel);
+    assert.equal(countCallSites(src.code, 'sendTemplateEmail'), 1, `${rel} template send`);
+    assert.equal(countCallSites(src.code, 'sendEmail'), 1, `${rel} html fallback`);
+  }
+});
+
+test('(i) .env.example documents the new alias AND the bundle one it was missing', () => {
+  /**
+   * `POSTMARK_TEMPLATE_ALIAS_REG_BUNDLE` shipped in code and was absent from
+   * this file, so a fresh checkout silently took the hard-coded HTML path and
+   * nothing said so. Added with the careerpath alias rather than left for the
+   * next person to rediscover.
+   */
+  const env = readSource('.env.example').raw;
+  assert.match(env, /^POSTMARK_TEMPLATE_ALIAS_REG_CAREERPATH=careerpath-quote$/m);
+  assert.match(env, /^POSTMARK_TEMPLATE_ALIAS_REG_BUNDLE=\S+$/m);
+});
+
+test('(i) CONTROL: the careerpath probes are reading real files, and CAN fail', () => {
+  // Every "does not include" above passes on an empty string, and every
+  // structural match above passes vacuously if the regex captured nothing.
+  const sender = readSource(CAREERPATH_SENDER);
+  assert.ok(sender.code.length > 1200, 'the sender was actually read');
+  assert.ok(readSource(CAREERPATH_ACTION).code.length > 1500, 'the action was actually read');
+  assert.ok(readSource(CAREERPATH_MODEL).code.length > 2000, 'the model was actually read');
+
+  // The absence probes fire on planted text.
+  assert.ok(/\bsendEmail\b/.test("await sendEmail({ to, html });"));
+  assert.ok(/decideSendPlan/.test("import { decideSendPlan } from '@/lib/email/sendPlan';"));
+  assert.ok(/careerpath|careerPath|career-path/i.test("import x from './careerpath-registration';"));
+
+  // And the line reader refuses both zero matches and two.
+  assert.throws(() => soleLineOf('a\nb', /zzz/, 'absent'), /found 0/);
+  assert.throws(() => soleLineOf('h\nx\nh', /h/, 'doubled'), /found 2/);
+});
+
 /**
  * ── WHAT THIS FILE CANNOT SEE ───────────────────────────────────────────────
  * Written down rather than left to be discovered. This is a TEXT scan, not a

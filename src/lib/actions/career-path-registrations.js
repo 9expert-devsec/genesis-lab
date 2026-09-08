@@ -13,6 +13,7 @@ import { dbConnect } from '@/lib/db/connect';
 import CareerPathRegistration from '@/models/CareerPathRegistration';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
+import { sendCareerPathRegistrationEmail } from '@/lib/email/template-senders/careerpath-registration';
 
 const ADMIN_PATH = '/admin/career-path-registrations';
 
@@ -38,6 +39,36 @@ export async function createCareerPathRegistration(data) {
   await dbConnect();
   const doc = await CareerPathRegistration.create(data);
   revalidatePath(ADMIN_PATH);
+
+  /**
+   * THE CONFIRMATION MAIL — AFTER the write, and unable to undo it.
+   *
+   * This is the only mail the flow produces, and until now the flow produced
+   * none: the success screen has been promising "ทีมขายจะติดต่อกลับ" with
+   * nothing behind it.
+   *
+   * ── WHY THERE IS NO ROUTE ────────────────────────────────────────────────
+   * The other three flows send from an API route because they have one for
+   * other reasons — a payment charge, a schedule-status re-check at submit.
+   * This form posts straight to this action, and adding a route purely to hold
+   * a send would mean a second entry point to a collection that has exactly one
+   * writer today.
+   *
+   * ── IT CANNOT FAIL THE REGISTRATION ─────────────────────────────────────
+   * The document is committed and `revalidatePath` has already run above.
+   * `sendCareerPathRegistrationEmail` never rejects — every failure inside it is
+   * caught and logged there — so this call cannot turn a filed registration into
+   * an error message about a registration that exists. It is awaited rather than
+   * left floating because a serverless invocation can be frozen the moment this
+   * function returns, and an un-awaited send is one that may simply never leave.
+   *
+   * `.toObject()` because the builder is pure and takes a plain document — and
+   * because reading the CREATED doc rather than `data` is what applies the
+   * schema defaults (`attendeeCount`, `invoiceCountry`, `dates: []`) that a
+   * partial payload would otherwise leave undefined in the mail.
+   */
+  await sendCareerPathRegistrationEmail(doc.toObject());
+
   return { ok: true, id: String(doc._id) };
 }
 
