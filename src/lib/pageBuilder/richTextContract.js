@@ -56,6 +56,37 @@ export const RICH_TEXT_MARKS = Object.freeze([
 ]);
 
 /**
+ * Node ATTRIBUTES the walker reads — the THIRD list, and the reason it has to
+ * be a list of its own rather than an entry in either of the two above.
+ *
+ * ── AN ATTRIBUTE IS NOT A NAME, SO THE SCHEMA CHECK IS BLIND TO IT ───────
+ * A node and a mark are both NAMES in the ProseMirror schema, which is what
+ * makes the verification in this module's header possible: `getSchema` can be
+ * asked "does the editor produce a name the walker doesn't render", and it can
+ * answer. An ATTRIBUTE has no name of its own in that sense. `TextAlign` adds
+ * `textAlign` to `paragraph` and `heading` and contributes NO node and NO mark
+ * at all — the schema still reads `paragraph`, the walker's renderer tables
+ * still cover exactly RICH_TEXT_NODES and RICH_TEXT_MARKS, and the fail-loudly
+ * assertion in tiptapToReact.jsx stays green while alignment is dropped at
+ * publish. The author sees a centred paragraph in the editor and a
+ * left-aligned one on the page, with no error anywhere.
+ *
+ * That is exactly the trap RICH_TEXT_EXCLUDED named when it kept `textAlign`
+ * out, and it is still true. What changed is that the trap is now CLOSED
+ * rather than avoided: the attribute is declared here, the walker reads it, and
+ * the check with teeth is a RENDER test — test/render/richTextAlign.test.mjs —
+ * which puts `attrs.textAlign` on a document and asserts the class comes out.
+ * A schema check structurally cannot do that; a render can.
+ *
+ * Keyed by node name, so a future attribute on some other node is an entry
+ * here rather than a second mechanism somewhere else.
+ */
+export const RICH_TEXT_NODE_ATTRS = Object.freeze({
+  paragraph: Object.freeze(['textAlign']),
+  heading: Object.freeze(['textAlign']),
+});
+
+/**
  * Deliberately absent, with the reason — so a future reader knows these were
  * decided, not forgotten:
  *
@@ -71,11 +102,16 @@ export const RICH_TEXT_MARKS = Object.freeze([
  *       no walker support; textStyle+color would also be a raw-hex route into
  *       the page, which MANIFESTO §7 forbids.
  *   textAlign
- *       NOT a node or a mark — an ATTRIBUTE on paragraph/heading. The walker
- *       reads neither, so alignment would be silently lost on publish. Section
- *       -level alignment already exists where it belongs (heading content.align).
+ *       MOVED, not deleted — it is now in RICH_TEXT_NODE_ATTRS above, and the
+ *       reasoning it was excluded FOR is why that list exists. It is NOT a node
+ *       or a mark but an ATTRIBUTE on paragraph/heading, so `getSchema` is blind
+ *       to it and the walker's contract assertion would have stayed green while
+ *       alignment vanished at publish. What changed is that the walker now reads
+ *       it and a RENDER test pins that it does — the only instrument that can
+ *       see an attribute. Section-level alignment (heading content.align) is
+ *       untouched and still owns the whole-section case.
  */
 export const RICH_TEXT_EXCLUDED = Object.freeze([
   'table', 'tableRow', 'tableCell', 'tableHeader',
-  'codeBlock', 'youtube', 'subscript', 'superscript', 'textStyle', 'color', 'textAlign',
+  'codeBlock', 'youtube', 'subscript', 'superscript', 'textStyle', 'color',
 ]);

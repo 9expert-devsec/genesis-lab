@@ -6,6 +6,9 @@ import { useCallback, useEffect, useMemo } from 'react';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code,
   List, ListOrdered, Quote, Minus, Link2, Link2Off,
+  // Round B commit 1 — ADDED beside the names above rather than folded into
+  // them, the standing rule in this directory.
+  AlignLeft, AlignCenter, AlignRight, Eraser,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { safeUrl } from '@/lib/pageBuilder/safeUrl';
@@ -69,6 +72,24 @@ function ToolButton({ onClick, active, disabled, label, children }) {
 }
 
 const HEADING_LEVELS = [2, 3, 4];
+
+/**
+ * ── ROUND B: THE ALIGNMENT BUTTONS ──────────────────────────────────────
+ * The three values the walker has a class for and the extension is configured
+ * to accept — no `justify`, because the walker would drop it and the author
+ * would get a button that publishes nothing.
+ *
+ * The fourth control is a CLEAR, not a fourth value, and that distinction is
+ * the round's whole byte-identity property: `unsetTextAlign` removes the
+ * attribute, so a paragraph the author aligned and then cleared renders exactly
+ * like one they never touched. A "left" button cannot do that — it stores
+ * `left`, which is a decision, and the walker emits `text-left` for it.
+ */
+const ALIGN_BUTTONS = [
+  { value: 'left', label: 'ชิดซ้าย', Icon: AlignLeft },
+  { value: 'center', label: 'กึ่งกลาง', Icon: AlignCenter },
+  { value: 'right', label: 'ชิดขวา', Icon: AlignRight },
+];
 
 export function RichTextEditor({ doc, onChange, placeholder }) {
   const extensions = useMemo(() => richTextExtensions({ placeholder }), [placeholder]);
@@ -144,11 +165,21 @@ export function RichTextEditor({ doc, onChange, placeholder }) {
      * three rounds chased the word `_bsontype` for a problem that has nothing
      * to do with MongoDB.
      *
-     * Only three nodes in this schema declare attributes — heading, image and
+     * Only three nodes in this schema declared attributes — heading, image and
      * orderedList — and a node with none omits the key entirely. That is why
      * documents of paragraphs and bullet lists saved for months and the first
      * heading broke it. Measured: 10 stored rich_text documents, ZERO nodes
      * carrying an `attrs` key.
+     *
+     * THAT IS NOW FOUR, AND THE FOURTH IS `paragraph` (round B). TextAlign
+     * hangs `textAlign` on paragraph and heading, so the commonest node in
+     * every document is attrs-bearing from this round on and the sentence above
+     * describes a window that has closed. Nothing about the fix changes —
+     * `toPlainJson` normalises whatever it is handed, so it covered this before
+     * the extension arrived — but the reassurance did, and a stale one next to
+     * a bug this expensive is worse than none. test/pure/richTextPlainJson
+     * reads the attrs-bearing set off the generated schema rather than a hand
+     * list, which is why it turned red here and got considered.
      *
      * `toPlainJson` rewrites the prototype and NOTHING else — no key added or
      * removed, no value changed, `undefined` preserved (which a JSON round trip
@@ -214,6 +245,26 @@ export function RichTextEditor({ doc, onChange, placeholder }) {
             <span className="px-0.5 text-[10px] font-bold">H{level}</span>
           </ToolButton>
         ))}
+
+        <span className="mx-1 h-4 w-px bg-[var(--surface-border)]" />
+
+        {ALIGN_BUTTONS.map(({ value, label, Icon }) => (
+          <ToolButton key={value} label={label} active={editor.isActive({ textAlign: value })}
+            onClick={() => editor.chain().focus().setTextAlign(value).run()}>
+            <Icon className="h-3.5 w-3.5" />
+          </ToolButton>
+        ))}
+        {/**
+          * ล้างการจัดวาง — removes the attribute rather than setting it to
+          * 'left'. Disabled when there is nothing to clear, so the button says
+          * whether the block carries an alignment at all; `isActive` with no
+          * value is not a thing, so the three values are asked one by one.
+          */}
+        <ToolButton label="ล้างการจัดวาง"
+          disabled={!ALIGN_BUTTONS.some(({ value }) => editor.isActive({ textAlign: value }))}
+          onClick={() => editor.chain().focus().unsetTextAlign().run()}>
+          <Eraser className="h-3.5 w-3.5" />
+        </ToolButton>
 
         <span className="mx-1 h-4 w-px bg-[var(--surface-border)]" />
 
