@@ -103,8 +103,22 @@ const COOKIE_TYPES = [
     icon: 'settings',
     name: 'ฟังก์ชันการใช้งาน',
     nameEn: 'Functional',
-    purpose: 'จดจำการตั้งค่าที่ท่านเลือกไว้',
-    provider: null,
+    purpose: 'จดจำการตั้งค่าที่ท่านเลือกไว้ เช่น โหมดสีสว่าง/มืด',
+    /*
+     * ── FILLED IN CB-B FROM A MEASUREMENT, NOT A GUESS ────────────────────
+     * This sat as `null` → "ยังไม่ระบุ" because nobody had established whether
+     * the site sets a functional cookie at all. It does: the dark-mode toggle
+     * persists through next-themes, which writes localStorage['theme']
+     * (storageKey defaults to "theme" and is not overridden in
+     * src/components/layout/ThemeProvider.jsx). Also ours: the dismissed-popup
+     * and dismissed-topbar keys.
+     *
+     * Every one of those is first-party, so the provider is us. The ruling
+     * that produced this line was: if the category had turned out to be empty,
+     * DELETE the card — never fill it with a plausible-sounding third party.
+     * It is not empty, so the card stays and names the real owner.
+     */
+    provider: 'ระบบของ 9Expert เอง',
   },
   {
     icon: 'cookie',
@@ -304,21 +318,26 @@ export default function CookiePolicyPage() {
             ))}
           </ul>
           {/*
-            ROUND C-A/C-B: the source document's "ต้องยืนยันรายชื่อ Cookie/Pixel
-            ที่ใช้จริงกับทีม IDev ก่อนเผยแพร่" caveat is now resolved for
-            everything ABOVE — YouTube, Google Analytics and Google Ads are all
-            confirmed running via a code search, not IDev sign-off, but
-            confirmed either way. Leaving the old blanket "ยังไม่ได้ตรวจสอบ"
-            wording here would be stale in the other direction: it would claim
-            these three are still unverified when they are not.
+            ── THE FOOTNOTE NOW REPORTS A COMPLETED REVIEW, NOT A PENDING ONE ──
+            ROUND C-A/C-B resolved YouTube, Google Analytics and Google Ads by
+            code search. The one row it could not resolve was §02's
+            "ฟังก์ชันการใช้งาน", so the footnote narrowed to saying that row's
+            provider was "ยังไม่ได้ระบุ และยังไม่ได้ตรวจสอบกับทีมพัฒนาระบบ".
 
-            The one thing this investigation did NOT resolve is §02's
-            "ฟังก์ชันการใช้งาน" (Functional) row, whose provider is still
-            unspecified — so the footnote narrows to that alone.
+            CB-B resolved it: next-themes writes localStorage['theme'] when the
+            dark-mode toggle is used, which is first-party functional storage,
+            so the row now names 9Expert. That made the old sentence false in
+            the same way the blanket "ยังไม่ได้ตรวจสอบ" before it was false —
+            it claimed a review was outstanding after the review had happened.
+
+            THE RULE, TWICE LEARNED: never claim a review that is not
+            happening, and never keep claiming one is pending once it is done.
+            A date and a method is a statement that can be checked; "อยู่ระหว่าง
+            การตรวจสอบ" is one that quietly never expires.
           */}
           <p className="mt-3 text-[13px] font-semibold text-[var(--text-muted)]">
-            * ผู้ให้บริการของคุกกี้ประเภท &quot;ฟังก์ชันการใช้งาน&quot; ในหัวข้อ 02
-            ยังไม่ได้ระบุ และยังไม่ได้ตรวจสอบกับทีมพัฒนาระบบ
+            * ตรวจสอบรายชื่อคุกกี้และสคริปต์ที่ทำงานจริงบนเว็บไซต์นี้แล้วเมื่อ 9 กันยายน 2569
+            โดยตรวจจากซอร์สโค้ดของระบบโดยตรง
           </p>
         </Section>
 
