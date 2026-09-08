@@ -20,6 +20,9 @@ import { cn } from '@/lib/utils';
  *   deadlineLabel       — the deadline as a FINISHED STRING, formatted on the
  *                         server. See below: this component must not format a
  *                         date itself.
+ *   detailHref          — where ดูรายละเอียด points, or null for NO link.
+ *                         Resolved on the server through resolveOwner; this
+ *                         component must not decide where it points.
  *   earlyBirdPromotion  — joined Promotion doc or null
  *   schedules           — full schedules array from page
  *   course              — course object (for course_id + name)
@@ -63,6 +66,7 @@ function formatScheduleRange(schedule) {
 export function EarlyBirdBanner({
   earlyBird,
   deadlineLabel = null,
+  detailHref = null,
   earlyBirdPromotion,
   schedules,
   course,
@@ -160,6 +164,24 @@ export function EarlyBirdBanner({
             >
               ลงทะเบียน
             </span>
+          )}
+          {/* A QUIET TEXT LINK, NOT A SECOND BUTTON. The card has one
+              action and it is ลงทะเบียน; two buttons side by side compete
+              for the same glance and make neither the obvious one.
+
+              NO TARGET ⇒ NOTHING RENDERED — not a disabled control, and
+              never a link back to the course page this banner is already
+              on. `detailHref` is null for an Early Bird nobody's promotion
+              owns AND for an owning page outside its publish window; both
+              reach the same outcome deliberately, because a dead or
+              self-referential link spends a click before failing. */}
+          {detailHref && (
+            <Link
+              href={detailHref}
+              className="font-thai text-xs font-medium text-9e-action underline-offset-2 hover:underline sm:text-right"
+            >
+              ดูรายละเอียด
+            </Link>
           )}
         </div>
       </div>

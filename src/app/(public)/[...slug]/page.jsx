@@ -48,6 +48,10 @@ import { CourseBundleSection } from './_components/CourseBundleSection';
 // the server, because the banner is a client component and a date formatted
 // inside it is formatted twice against two different local timezones.
 import { earlyBirdDeadlineLabel } from '@/lib/earlyBird/deadlineLabel';
+// ADDED beside the statement above rather than folded into it. Round G: the
+// banner is a client component and must not decide where it points, so the
+// target is resolved here — through resolveOwner's precedence, not a new one.
+import { earlyBirdDetailHref } from '@/lib/earlyBird/detailHref';
 import {
   getEarlyBirdByCourse,
   getActiveCoursePromos,
@@ -1078,6 +1082,9 @@ function CourseDetail({
   // and another after hydration. The helper is also zone-pinned to Bangkok, so
   // the answer does not depend on which machine asked.
   const deadlineLabel = earlyBirdDeadlineLabel(earlyBird?.deadline);
+  // `getEarlyBirdByCourse` joins the owning page as `ownerPage` alongside the
+  // promotion, so this needs no read of its own. Null means no link at all.
+  const detailHref = earlyBirdDetailHref(earlyBird);
 
   // Hero gradient base — prefer the program's `programcolor` (carried on
   // `/programs`, not on the course detail). Fall back to the first
@@ -1150,6 +1157,7 @@ function CourseDetail({
                 earlyBird={earlyBird}
                 earlyBirdPromotion={earlyBirdPromotion}
                 deadlineLabel={deadlineLabel}
+                detailHref={detailHref}
                 schedules={schedules}
                 course={course}
               />

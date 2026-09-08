@@ -132,3 +132,77 @@ test('the component formats NO date from an instant — the whole point', () => 
   assert.ok(src.includes('getDate()'), 'the fixture no longer contains the exempted reader');
   assert.ok(body.length > 500, 'the exemption stripped far more than one function');
 });
+
+// ── ROUND G COMMIT 2: ดูรายละเอียด ────────────────────────────────────────
+
+/**
+ * The link's TARGET is decided in lib/earlyBird/detailHref.js and pinned in
+ * test/pure/earlyBirdDetailHref. What can only be asserted here is what the
+ * banner DOES with the answer — in particular that `null` renders nothing at
+ * all rather than a disabled control, which is the outcome an expired owner
+ * page and an unowned row both have to reach.
+ */
+
+test('a resolved target renders a quiet link, beside the register button', () => {
+  const markup = html({ detailHref: '/promotions/super-sale' });
+  const d = doc(markup);
+  const link = [...d.querySelectorAll('a')].find((a) => a.textContent.includes('ดูรายละเอียด'));
+  assert.ok(link, 'no ดูรายละเอียด link rendered for a resolved target');
+  assert.equal(link.getAttribute('href'), '/promotions/super-sale');
+
+  // BESIDE the register button, in the same column — asserted structurally
+  // rather than by position in the string.
+  const register = [...d.querySelectorAll('a')].find((a) => a.textContent.includes('ลงทะเบียน'));
+  assert.ok(register, 'the register button is gone');
+  assert.equal(link.parentElement, register.parentElement,
+    'the detail link is not in the same column as the register action');
+
+  // NOT a second button: the card has one action. `btn-9e-cta` is the button
+  // treatment, and the quiet link must not carry it.
+  assert.ok(!String(link.getAttribute('class')).includes('btn-9e-cta'),
+    'the detail link is styled as a second button');
+  assert.ok(String(register.getAttribute('class')).includes('btn-9e-cta'),
+    'the register button lost its treatment — the comparison above is vacuous');
+});
+
+test('no target ⇒ NO link, not a disabled control', () => {
+  /**
+   * `null` is what an unowned row, a deleted owner page and an owner page
+   * outside its publish window all produce. Every one of them must render
+   * nothing: a dead or self-referential link spends a click before failing.
+   */
+  for (const detailHref of [null, undefined, '']) {
+    const markup = html({ detailHref });
+    assert.ok(!markup.includes('ดูรายละเอียด'),
+      `detailHref=${JSON.stringify(detailHref)} rendered a control anyway`);
+  }
+  // ...and specifically NOT a disabled span wearing the label.
+  const d = doc(html({ detailHref: null }));
+  assert.equal([...d.querySelectorAll('[aria-disabled]')]
+    .filter((el) => el.textContent.includes('ดูรายละเอียด')).length, 0);
+});
+
+test('the banner never points at the course page it is already on', () => {
+  /**
+   * The one target that is worse than none, because it looks like it works.
+   * There is no code path that could produce it — the resolver returns a
+   * promotion href or null — so this asserts the absence at the RENDER, where a
+   * later "helpful" fallback would land.
+   */
+  const markup = html({ detailHref: null });
+  const hrefs = [...doc(markup).querySelectorAll('a')].map((a) => a.getAttribute('href'));
+  assert.ok(!hrefs.some((h) => String(h).includes('-training-course')),
+    'the banner linked back to a course page');
+});
+
+test('CONTROL — the no-link banner is otherwise byte-identical', () => {
+  /**
+   * Both round G props absent must reproduce the banner exactly as it rendered
+   * before either commit, and a present target must change it — or "renders
+   * nothing" would be satisfied by a prop nothing reads.
+   */
+  const bare = html({});
+  assert.equal(html({ detailHref: null, deadlineLabel: null }), bare);
+  assert.notEqual(html({ detailHref: '/promotions/super-sale' }), bare,
+    'a resolved target did not change the markup — the prop is being ignored');
+});
