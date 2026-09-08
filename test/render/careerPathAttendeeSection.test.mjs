@@ -2,7 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { Step2Form } from '@/app/(public)/career-path-register/[slug]/_components/CareerPathRegisterClient';
+import {
+  Step2Form,
+  Step3Preview,
+} from '@/app/(public)/career-path-register/[slug]/_components/CareerPathRegisterClient';
 import { readSource } from '../sourceScan.mjs';
 
 /**
@@ -288,6 +291,231 @@ test('CONTROL: typedRowCount really counts, and the byte pin really fires', () =
   const drifted = PAYLOAD_AT_B40F2543.replace('note: formData.note,', 'note: formData.note ?? "",');
   assert.notEqual(drifted, PAYLOAD_AT_B40F2543, 'the mutation did not change anything');
   assert.throws(() => assert.equal(drifted, PAYLOAD_AT_B40F2543));
+});
+
+// ── 6. THE GHOST ROW — the review panel and the admin card ─────────────────
+
+/**
+ * The stored array can be LONGER than the slots it fills. Setting จำนวนผู้สมัคร
+ * to 2 with the box unticked registers `attendees.0` and `attendees.1`; ticking
+ * it re-renders one row, but the form leaves react-hook-form at its default
+ * `shouldUnregister: false`, so index 1 survives into the payload.
+ *
+ * Every reader then rendered the coordinator PLUS both stored rows — three ท่าน
+ * under a line reading "จำนวนผู้สมัคร 2 ท่าน", the third blank. A mail with that
+ * table was actually sent, so this is not a screen-only defect and the fixture
+ * below is the real document shape, not a contrived one.
+ */
+const GHOST_DOC = {
+  contactFirstName: 'สมชาย',
+  contactLastName: 'ใจดี',
+  contactEmail: 'somchai@example.co.th',
+  contactPhone: '0891112222',
+  isCoordinator: true,
+  attendeeCount: 2,
+  skipAttendee: false,
+  attendees: [
+    { firstName: 'สมหญิง', lastName: 'รักเรียน', email: 'somying@example.co.th', phone: '0812223333' },
+    // The ghost: registered while the box was unticked, never unregistered.
+    { firstName: '', lastName: '', email: '', phone: '' },
+  ],
+  invoice: {},
+  note: '',
+};
+
+const previewHtml = (data) =>
+  renderToStaticMarkup(
+    createElement(Step3Preview, {
+      curriculum: [],
+      selected: {},
+      data,
+      onBack: () => {},
+      onConfirm: () => {},
+      submitting: false,
+      error: null,
+    })
+  );
+
+/**
+ * The ท่านที่ numbers the review panel printed, in order.
+ *
+ * Anchored on the opening `>` — a real element boundary — rather than on a bare
+ * substring, because the row's text continues into interpolated names and there
+ * is no closing `<` to bound it with.
+ */
+const rowNumbers = (markup) =>
+  [...markup.matchAll(/>ท่านที่ (\d+) ·/g)].map((m) => Number(m[1]));
+
+test('(ghost) the review panel renders attendeeCount rows, ticked', () => {
+  const nums = rowNumbers(previewHtml(GHOST_DOC));
+
+  assert.deepEqual(nums, [1, 2], 'the third, blank ท่าน is back');
+  assert.equal(nums.length, GHOST_DOC.attendeeCount, 'row count must equal attendeeCount');
+  assert.equal(GHOST_DOC.attendees.length, 2, 'the fixture must actually carry a ghost');
+});
+
+test('(ghost) the review panel renders attendeeCount rows, UNticked', () => {
+  // Not correct by luck: three stored rows against a count of 2 breaks the
+  // unticked path in exactly the same way, so it is capped too.
+  const nums = rowNumbers(
+    previewHtml({
+      ...GHOST_DOC,
+      isCoordinator: false,
+      attendees: [
+        ...GHOST_DOC.attendees.slice(0, 1),
+        { firstName: 'ปิติ', lastName: 'มานะ', email: 'piti@example.co.th', phone: '0823334444' },
+        { firstName: '', lastName: '', email: '', phone: '' },
+      ],
+    })
+  );
+
+  assert.deepEqual(nums, [1, 2]);
+});
+
+test('(ghost) the review panel never invents a row it has no data for', () => {
+  /**
+   * The cap is a CAP. A request for three people with only one name typed shows
+   * the coordinator and that one name — not a blank third. Padding to the count
+   * is the defect, spelled the other way round.
+   */
+  const nums = rowNumbers(
+    previewHtml({ ...GHOST_DOC, attendeeCount: 3, attendees: [GHOST_DOC.attendees[0]] })
+  );
+  assert.deepEqual(nums, [1, 2], 'a row was invented for a person nobody named');
+});
+
+test('(ghost) the opt-out panel is unaffected', () => {
+  const markup = previewHtml({ ...GHOST_DOC, skipAttendee: true });
+  assert.deepEqual(rowNumbers(markup), []);
+  assert.equal(countLabel(markup, 'ยังไม่ประสงค์แจ้งรายชื่อ — ทีมขายจะติดต่อกลับ'), 1);
+});
+
+/**
+ * The admin detail card is a `'use server'`-adjacent async SERVER component that
+ * calls `requirePage` and reads Mongo inside itself, so there is no props seam
+ * to render it through and no stub for its guard. Source-scanned instead, and
+ * the limit is stated rather than left to be discovered: this pins that the
+ * card maps the CAPPED list and that the helper computes the cap, not that a
+ * browser draws two rows.
+ */
+const ADMIN_PAGE = readSource('src/app/admin/career-path-registrations/[id]/page.jsx');
+
+function linesMatching(raw, re) {
+  return raw
+    .split('\n')
+    .map((line, i) => [i + 1, line])
+    .filter(([, line]) => re.test(line))
+    .map(([n]) => n);
+}
+
+function soleLineOf(raw, re, label) {
+  const hits = linesMatching(raw, re);
+  assert.equal(hits.length, 1, `${label}: expected exactly one line, found ${hits.length}`);
+
+  const [line] = hits;
+  assert.notEqual(line, undefined, `${label}: no line number was computed`);
+  assert.equal(typeof line, 'number', `${label}: line number is not numeric`);
+  assert.ok(Number.isInteger(line) && line > 0, `${label}: ${line} is not a real line number`);
+
+  console.log(`[careerPathAttendeeSection] ${label} → line ${line}`);
+  return line;
+}
+
+test('(ghost) the admin card maps the CAPPED list, not the raw array', () => {
+  const importLine = soleLineOf(
+    ADMIN_PAGE.raw,
+    /^import \{ typedAttendeeRows \} from '@\/lib\/registration\/careerPathRoster';$/,
+    'the admin import'
+  );
+  const callSite = soleLineOf(ADMIN_PAGE.raw, /typedAttendeeRows\(reg\)\.map\(/, 'the admin call site');
+  assert.ok(importLine < callSite, `the import (${importLine}) must precede its use (${callSite})`);
+
+  // The raw array must not be what is mapped any more — that IS the defect.
+  assert.equal(
+    /\(reg\.attendees \?\? \[\]\)\.map\(/.test(ADMIN_PAGE.code),
+    false,
+    'the admin card is mapping the uncapped array again'
+  );
+});
+
+test('(ghost) all three surfaces IMPORT the one roster helper', () => {
+  /**
+   * ── THIS GUARD CHANGED SHAPE WITH THE CODE, AND THAT IS THE POINT ─────────
+   * It used to assert the three surfaces carried the same cap EXPRESSION, by
+   * text. That was the right shape while the arithmetic was duplicated — the
+   * three live in a server component, a client component and a pure module, and
+   * a fix to one that missed the others is exactly how the ghost row survived
+   * commit 3.
+   *
+   * There is one definition now (lib/registration/careerPathRoster), so matching
+   * its text in three places would pin a copy that no longer exists and would go
+   * red on a rename of a local variable inside it. Worse, leaving BOTH guards
+   * standing invites the next person to edit the guard instead of the code.
+   *
+   * The claim that survives is the one that still means something: all three
+   * read the same definition, and none of them has grown a private copy back.
+   */
+  const HELPER = '@/lib/registration/careerPathRoster';
+
+  const surfaces = {
+    'admin detail': ADMIN_PAGE,
+    'review panel': CLIENT,
+    'mail model': readSource('src/lib/email/models/careerPathRegistrationModel.js'),
+  };
+
+  for (const [name, src] of Object.entries(surfaces)) {
+    // `withImports`, deliberately: `code` strips import statements, so this
+    // assertion read from it would pass vacuously on every file.
+    assert.ok(
+      src.withImports.includes(`from '${HELPER}'`),
+      `${name} does not import the roster helper`
+    );
+
+    // And no local re-definition. A second copy beside the import is how one
+    // caller silently stops following the shared rule.
+    assert.equal(
+      /function (typedAttendeeRows|participantCount)\s*\(/.test(src.code),
+      false,
+      `${name} defines its own copy of the roster arithmetic`
+    );
+  }
+});
+
+test('(ghost) the helper is dependency-free, so the pure tier can import it', () => {
+  /**
+   * The condition that made three copies necessary in the first place: the mail
+   * model states its own purity — no env, no db, no clock — and could not have
+   * imported a helper that broke it. Asserted rather than assumed, because the
+   * cost of breaking it is that a future edit re-duplicates the arithmetic
+   * instead of fixing the import.
+   */
+  const helper = readSource('src/lib/registration/careerPathRoster.js');
+
+  for (const banned of [/process\.env/, /new Date\(/, /Date\.now\(/, /require\(/, /from ['"]next\//, /from ['"]react/, /dbConnect/, /@\/models\//]) {
+    assert.equal(banned.test(helper.withImports), false, `the helper reached for ${banned}`);
+  }
+
+  // It imports nothing at all, which is the strongest form of that claim.
+  assert.equal(/^import /m.test(helper.withImports), false, 'the helper grew a dependency');
+  assert.match(helper.code, /export function participantCount\(/);
+  assert.match(helper.code, /export function typedAttendeeRows\(/);
+});
+
+test('(ghost) CONTROL: the row counter and the cap matcher both fire', () => {
+  // Without this the deepEqual([1,2]) assertions are vacuous — a counter that
+  // matches nothing reports [] and an empty list is not [1,2], but a counter
+  // that matched the WRONG thing would still look plausible.
+  assert.deepEqual(rowNumbers('<div>ท่านที่ 1 · ก</div><div>ท่านที่ 2 · ข</div>'), [1, 2]);
+  assert.deepEqual(rowNumbers('<div>ท่านที่ 1 · ก</div><div>ท่านที่ 2 · ข</div><div>ท่านที่ 3 · </div>'), [1, 2, 3]);
+  assert.deepEqual(rowNumbers('<p>ผู้เข้าอบรมท่านที่ 1 (ผู้ประสานงาน)</p>'), [], 'the mirror card is not a row');
+
+  // And the import probes fire on planted text, in both directions — otherwise
+  // "all three import the helper" and "none re-defines it" are both vacuous.
+  assert.ok("import { typedAttendeeRows } from '@/lib/registration/careerPathRoster';".includes(
+    "from '@/lib/registration/careerPathRoster'"
+  ));
+  assert.ok(/function (typedAttendeeRows|participantCount)\s*\(/.test('function typedAttendeeRows(reg) {'));
+  assert.equal(/function (typedAttendeeRows|participantCount)\s*\(/.test('typedAttendeeRows(reg).map('), false);
 });
 
 test('CONTROL: the render and the reader both produced real content', () => {

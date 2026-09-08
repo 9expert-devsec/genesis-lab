@@ -297,6 +297,115 @@ test('blank attendee contact reads as the shared NOT_SPECIFIED marker', () => {
   assert.notEqual(piti.email, '', 'an empty cell reads as a rendering fault, not as a fact');
 });
 
+// ── 3b. THE GHOST ROW ───────────────────────────────────────────────────────
+
+/**
+ * `attendees` can be LONGER than the slots it fills, and this is the document
+ * shape that produced a sent mail with three rows over a "2 ท่าน" heading.
+ *
+ * The form registers `attendees.0` and `attendees.1` when จำนวนผู้สมัคร is 2
+ * with the coordinator box unticked. Ticking the box re-renders one row, but the
+ * form leaves react-hook-form at its default `shouldUnregister: false`, so index
+ * 1 survives in form state and reaches Mongo. The builder then emitted the
+ * coordinator plus BOTH stored rows, the third with an empty name and
+ * ไม่ได้ระบุ in both contact columns.
+ */
+const GHOST = {
+  ...TH_CORPORATE,
+  isCoordinator: true,
+  attendeeCount: 2,
+  attendees: [
+    { firstName: 'สมหญิง', lastName: 'รักเรียน', email: 'somying@example.co.th', phone: '0812223333' },
+    { firstName: '', lastName: '', email: '', phone: '' },
+  ],
+};
+
+test('(ghost) the table is capped at attendeeCount, ticked', () => {
+  const m = build(GHOST);
+
+  assert.equal(m.attendee_list.items.length, 2, 'the blank third row is back');
+  assert.equal(m.attendee_list.items.length, m.total_participants);
+  assert.deepEqual(m.attendee_list.items.map((a) => a.index), [1, 2]);
+  assert.deepEqual(m.attendee_list.items.map((a) => a.name), ['สมชาย ใจดี', 'สมหญิง รักเรียน']);
+
+  assert.equal(GHOST.attendees.length, 2, 'the fixture must actually carry a ghost');
+});
+
+test('(ghost) no row is ever empty-named with both contacts unspecified', () => {
+  /**
+   * The signature the customer saw. Asserted as a SHAPE rather than as a count,
+   * because a future off-by-one that produces the same row by another route
+   * should still be caught here.
+   */
+  for (const item of build(GHOST).attendee_list.items) {
+    assert.notEqual(
+      `${item.name}|${item.email}|${item.phone}`,
+      `|${NOT_SPECIFIED_LABEL}|${NOT_SPECIFIED_LABEL}`,
+      'a ghost row reached the mail'
+    );
+  }
+});
+
+test('(ghost) the table is capped at attendeeCount, UNticked', () => {
+  // The unticked path was correct only by luck — three stored rows against a
+  // count of 2 breaks it the same way.
+  const m = build({
+    ...GHOST,
+    isCoordinator: false,
+    attendees: [
+      GHOST.attendees[0],
+      { firstName: 'ปิติ', lastName: 'มานะ', email: 'piti@example.co.th', phone: '0823334444' },
+      { firstName: '', lastName: '', email: '', phone: '' },
+    ],
+  });
+
+  assert.equal(m.attendee_list.items.length, 2);
+  assert.deepEqual(m.attendee_list.items.map((a) => a.name), ['สมหญิง รักเรียน', 'ปิติ มานะ']);
+});
+
+test('(ghost) the cap NEVER pads — a missing name stays missing', () => {
+  /**
+   * The other half, and the one that matters for not re-introducing the bug from
+   * the opposite direction: three people requested, one name typed, coordinator
+   * attending. Two rows, not three. Inventing the third IS the defect.
+   */
+  const m = build({ ...GHOST, attendeeCount: 3, attendees: [GHOST.attendees[0]] });
+  assert.equal(m.attendee_list.items.length, 2);
+  assert.equal(m.total_participants, 3, 'the headcount still states what was asked for');
+});
+
+test('(ghost) total_participants and the table read the SAME count', () => {
+  /**
+   * They were two expressions — `attendeeCount ?? 1` and `1 + attendees.length`
+   * — and that is how they came to disagree. One helper now feeds both, so a
+   * broken count moves them together rather than apart.
+   */
+  for (const broken of [undefined, null, 0, -3, 'two', NaN]) {
+    const m = build({ ...GHOST, attendeeCount: broken, attendees: [GHOST.attendees[0]] });
+    assert.equal(m.total_participants, 1, `attendeeCount ${String(broken)} must fall back to 1`);
+    assert.equal(
+      m.attendee_list.items.length,
+      1,
+      `attendeeCount ${String(broken)} must cap the table to match`
+    );
+    assert.equal(m.attendee_list.items[0].name, 'สมชาย ใจดี', 'the coordinator holds slot 1');
+  }
+});
+
+test('(ghost) CONTROL: the pre-fix arithmetic really did produce three rows', () => {
+  /**
+   * Without this the count assertions above are vacuous — a fixture that never
+   * had a ghost proves nothing about removing one. This is the old expression,
+   * `1 + attendees.length`, run on the same fixture.
+   */
+  const preFix = (reg) => (reg.isCoordinator ? 1 : 0) + reg.attendees.length;
+  assert.equal(preFix(GHOST), 3, 'the fixture must reproduce the defect');
+  assert.equal(build(GHOST).attendee_list.items.length, 2, 'and the fix must remove it');
+
+  // And the skip path is untouched by any of it.
+  assert.equal('attendee_list' in build({ ...GHOST, skipAttendee: true }), false);
+});
+
 // ── 4. training_type_label — the trap this map exists for ───────────────────
 
 test('the four stored values map to the mode the customer will attend in', () => {

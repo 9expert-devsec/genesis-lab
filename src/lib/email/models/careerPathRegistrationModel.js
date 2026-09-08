@@ -2,6 +2,7 @@ import { textBlock } from './labels';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
+import { participantCount, typedAttendeeRows } from '@/lib/registration/careerPathRoster';
 import { orNotSpecified } from '@/lib/orNotSpecified';
 
 /**
@@ -122,7 +123,7 @@ export function buildCareerPathRegistrationModel({ registration, coverImage = ''
      * admin detail row and this mail all read it, and they agree because they
      * read the same field.
      */
-    total_participants: reg.attendeeCount ?? 1,
+    total_participants: participantCount(reg),
 
     ...maybe('attendee_list', attendees.length ? { items: attendees } : undefined),
 
@@ -194,7 +195,18 @@ function maybe(key, value) {
 function assembleAttendees(reg) {
   if (reg?.skipAttendee) return [];
 
-  const stored = Array.isArray(reg?.attendees) ? reg.attendees : [];
+  /**
+   * `typedAttendeeRows` caps the stored array at the slots this request has —
+   * see lib/registration/careerPathRoster for the ghost row it removes and why
+   * `attendees` cannot be read directly. It never pads, so a request for three
+   * people with one name typed produces two rows here and not a blank third.
+   *
+   * The coordinator is prepended HERE rather than there because that is the part
+   * each reader does in its own idiom: this one builds template rows, the review
+   * panel and the admin card build JSX. What they share is the cap.
+   */
+  const typed = typedAttendeeRows(reg);
+
   const people = reg?.isCoordinator
     ? [
         {
@@ -203,9 +215,9 @@ function assembleAttendees(reg) {
           email: reg.contactEmail,
           phone: reg.contactPhone,
         },
-        ...stored,
+        ...typed,
       ]
-    : stored;
+    : typed;
 
   return people.map((a, i) => ({
     index: i + 1,

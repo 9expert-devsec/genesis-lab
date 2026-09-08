@@ -6,6 +6,7 @@ import { getCareerPathRegistrationById } from '@/lib/actions/career-path-registr
 import { RegistrationStatusSelect } from '../_components/RegistrationStatusSelect';
 import { RecordHistory } from '@/components/audit/RecordHistory';
 import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
+import { typedAttendeeRows } from '@/lib/registration/careerPathRoster';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'รายละเอียดการลงทะเบียน' };
@@ -127,7 +128,7 @@ export default async function RegistrationDetailPage({ params }) {
                 </div>
               </li>
             )}
-            {(reg.attendees ?? []).map((a, i) => (
+            {typedAttendeeRows(reg).map((a, i) => (
               <li
                 key={i}
                 className="rounded-9e-md border border-[var(--surface-border)] p-3 text-sm"
