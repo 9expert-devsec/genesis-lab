@@ -222,7 +222,7 @@ export function PolicyDraftNotice({ detail }) {
           เนื้อหาทั้งหมดในหน้านี้จัดทำขึ้นเป็นตัวอย่างประกอบการออกแบบเท่านั้น
           ยังไม่ผ่านการตรวจสอบโดยฝ่ายกฎหมาย และไม่ใช่เงื่อนไขที่บริษัทกำหนด กรุณา
           <Link href="/contact-us" className="font-bold underline underline-offset-2">
-            ติดต่อทีมงาน 9EXPERT
+            ติดต่อทีมงาน 9Expert
           </Link>
           เพื่อขอข้อมูลที่เป็นทางการก่อนตัดสินใจใดๆ
         </>

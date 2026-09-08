@@ -100,7 +100,7 @@ export default function TermsPage() {
       illustration={policy.illustration}
       title={policy.title}
       titleEn={policy.titleEn}
-      lede={`ข้อกำหนดและเงื่อนไขนี้กำหนดข้อตกลงระหว่างผู้ใช้บริการกับ ${POLICY_ENTITY} (9EXPERT) ในการเข้าถึงและใช้งานเว็บไซต์ เนื้อหา และบริการทั้งหมดของเรา`}
+      lede={`ข้อกำหนดและเงื่อนไขนี้กำหนดข้อตกลงระหว่างผู้ใช้บริการกับ ${POLICY_ENTITY} (9Expert) ในการเข้าถึงและใช้งานเว็บไซต์ เนื้อหา และบริการทั้งหมดของเรา`}
       updated={policy.updated}
       toc={TOC}
       currentSlug={policy.slug}
@@ -112,7 +112,7 @@ export default function TermsPage() {
         title: 'ต้องการความช่วยเหลือ?',
         blurb: 'ทีมงานของเราพร้อมตอบทุกข้อสงสัยเกี่ยวกับการใช้บริการ',
         href: '/contact-us',
-        cta: 'ติดต่อทีมงาน 9EXPERT',
+        cta: 'ติดต่อทีมงาน 9Expert',
       }}
     >
       <PolicyAccordion

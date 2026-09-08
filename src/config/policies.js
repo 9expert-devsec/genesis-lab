@@ -127,7 +127,7 @@ export const POLICY_PAGES = [
     illustration: { src: '/policies-img/terms-hero.png', width: 360, height: 240 },
     title: 'ข้อกำหนดและเงื่อนไข',
     titleEn: 'Terms & Conditions',
-    blurb: 'เงื่อนไขการใช้บริการเว็บไซต์ เนื้อหา และบริการของ 9EXPERT',
+    blurb: 'เงื่อนไขการใช้บริการเว็บไซต์ เนื้อหา และบริการของ 9Expert',
     updated: NOT_YET_IN_FORCE,
   },
   {

@@ -87,7 +87,7 @@ export default function RefundPolicyPage() {
       illustration={policy.illustration}
       title={policy.title}
       titleEn={policy.titleEn}
-      lede={`${POLICY_ENTITY} (9EXPERT) กำหนดหลักเกณฑ์และเงื่อนไขการยกเลิกการสมัครอบรม การเลื่อนวันอบรม และการขอคืนเงิน เพื่อความชัดเจนและเป็นธรรมกับผู้เข้าอบรมทุกท่าน`}
+      lede={`${POLICY_ENTITY} (9Expert) กำหนดหลักเกณฑ์และเงื่อนไขการยกเลิกการสมัครอบรม การเลื่อนวันอบรม และการขอคืนเงิน เพื่อความชัดเจนและเป็นธรรมกับผู้เข้าอบรมทุกท่าน`}
       updated={policy.updated}
       toc={TOC}
       currentSlug={policy.slug}

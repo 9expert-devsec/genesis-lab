@@ -214,7 +214,7 @@ export default function PrivacyPolicyPage() {
       illustration={policy.illustration}
       title={policy.title}
       titleEn={policy.titleEn}
-      lede={`${POLICY_ENTITY} (9EXPERT) เคารพในสิทธิความเป็นส่วนตัวของผู้ใช้บริการทุกท่าน นโยบายนี้อธิบายการเก็บรวบรวม ใช้ เปิดเผย และรักษาความปลอดภัยของข้อมูลส่วนบุคคล ตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)`}
+      lede={`${POLICY_ENTITY} (9Expert) เคารพในสิทธิความเป็นส่วนตัวของผู้ใช้บริการทุกท่าน นโยบายนี้อธิบายการเก็บรวบรวม ใช้ เปิดเผย และรักษาความปลอดภัยของข้อมูลส่วนบุคคล ตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)`}
       updated={policy.updated}
       toc={TOC}
       currentSlug={policy.slug}

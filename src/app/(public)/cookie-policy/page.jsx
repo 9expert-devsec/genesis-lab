@@ -78,7 +78,7 @@ export const metadata = {
  * last only for the session — is stated in that row's purpose text instead.
  *
  * THE PROVIDER COLUMN IS RENDERED, but only two of its cells hold a real value:
- * 9EXPERT's own system, and Google Analytics. The other two were "[ระบุถ้ามี]"
+ * 9Expert's own system, and Google Analytics. The other two were "[ระบุถ้ามี]"
  * and "[ระบุ — เช่น Meta Pixel, TikTok Pixel ถ้ามีการใช้งานจริง]", i.e. the
  * document asking us a question, not answering one. Those render as an explicit
  * "ยังไม่ระบุ" rather than an empty cell: a blank reads as "none", which would
@@ -90,7 +90,7 @@ const COOKIE_TYPES = [
     name: 'จำเป็นต่อการทำงาน',
     nameEn: 'Strictly Necessary',
     purpose: 'ทำให้เว็บไซต์ทำงานได้ปกติ เช่น การเข้าสู่ระบบ ตะกร้าสินค้า โดยจัดเก็บเฉพาะช่วงที่ใช้งาน (Session)',
-    provider: 'ระบบของ 9EXPERT เอง',
+    provider: 'ระบบของ 9Expert เอง',
   },
   {
     icon: 'listChecks',
@@ -214,7 +214,7 @@ export default function CookiePolicyPage() {
       illustration={policy.illustration}
       title={policy.title}
       titleEn={policy.titleEn}
-      lede={`เอกสารนี้เป็นส่วนเสริมของนโยบายคุ้มครองข้อมูลส่วนบุคคลของ ${POLICY_ENTITY} (9EXPERT) อธิบายประเภทคุกกี้ที่เว็บไซต์ใช้งาน วัตถุประสงค์ และวิธีที่ท่านจัดการคุกกี้ได้`}
+      lede={`เอกสารนี้เป็นส่วนเสริมของนโยบายคุ้มครองข้อมูลส่วนบุคคลของ ${POLICY_ENTITY} (9Expert) อธิบายประเภทคุกกี้ที่เว็บไซต์ใช้งาน วัตถุประสงค์ และวิธีที่ท่านจัดการคุกกี้ได้`}
       updated={policy.updated}
       toc={TOC}
       numbered={false}
