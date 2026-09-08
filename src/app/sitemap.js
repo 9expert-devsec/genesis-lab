@@ -5,6 +5,7 @@ import CustomPage from '@/models/CustomPage';
 import CourseExtension from '@/models/CourseExtension';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { courseSitemapEntries } from '@/lib/courses/courseSitemapEntries';
+import { getPublishedMasterclasses } from '@/lib/masterclass/getMasterclass';
 
 // Regenerate hourly — fresh enough for new articles, cheap enough that
 // crawlers don't trigger a Mongo round-trip on every hit.
@@ -16,6 +17,7 @@ const STATIC_ROUTES = [
   '/schedule',
   '/promotions',
   '/articles',
+  '/masterclass',
   '/career-path-project',
   '/portfolio',
   '/about-us',
@@ -143,5 +145,50 @@ export default async function sitemap() {
     // swallow — static + article + custom-page entries still ship
   }
 
-  return [...staticEntries, ...articleEntries, ...customPageEntries, ...courseEntries];
+  /**
+   * ── MASTERCLASS, ONE URL EACH ────────────────────────────────────────────
+   * The detail pages were missing entirely: /masterclass/<slug> is served by
+   * this app and linked from the hub, and the sitemap said nothing about any
+   * of it. The hub itself is now a static route above, sitting with /articles
+   * and /promotions — the same shape of page, listed the same way.
+   *
+   * `getPublishedMasterclasses()` is dev's OWN reader, the one
+   * (public)/masterclass/page.jsx already lists from, so "published" here
+   * cannot drift from what the hub actually shows: both mean
+   * `is_published: true` because both are the same query. It pays for a
+   * batch join this file never reads, which is the price of having exactly
+   * one published-masterclass predicate on this branch instead of two.
+   *
+   * SLUGS ARE EMITTED EXACTLY AS STORED. getMasterclassBySlug() matches
+   * `findOne({ slug })` case-sensitively, so case-normalising a slug here
+   * would publish a URL that answers 404 — the course_id casing failure
+   * arriving through a different door. No .toLowerCase(), no "tidying".
+   *
+   * Serialised rows carry `updatedAt` as an ISO string, hence the
+   * `new Date()`; the blocks above get Date objects straight off .lean().
+   *
+   * Best-effort like every block above it: a masterclass outage must not cost
+   * the site its courses, articles and static routes.
+   */
+  let masterclassEntries = [];
+  try {
+    await dbConnect();
+    const masterclasses = await getPublishedMasterclasses();
+    masterclassEntries = (Array.isArray(masterclasses) ? masterclasses : [])
+      // A blank slug would emit the hub's own URL a second time.
+      .filter((m) => m?.slug)
+      .map((m) => ({
+        url: `${base}/masterclass/${m.slug}`,
+        lastModified: m.updatedAt ? new Date(m.updatedAt) : new Date(),
+        // Batches open and close continuously — the same cadence as courses.
+        changeFrequency: 'weekly',
+        // The same rung as courses: above articles (0.6) and custom pages
+        // (0.5), below the static hubs (0.8) that link to them.
+        priority: 0.7,
+      }));
+  } catch {
+    // swallow — every other entry type still ships
+  }
+
+  return [...staticEntries, ...articleEntries, ...customPageEntries, ...courseEntries, ...masterclassEntries];
 }
