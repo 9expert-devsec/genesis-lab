@@ -1044,7 +1044,17 @@ function Step1Courses({
 
 // ── Step 2: Personal info form ──────────────────────────────────
 
-function Step2Form({ defaultValues, selected, curriculum, onBack, onSubmit }) {
+/**
+ * EXPORTED, following the two sibling wizards rather than inventing a rule:
+ * RegisterWizard exports `StepForm` / `StepPreview` / `StepComplete` and
+ * BundleWizard exports `BundleStepForm` / `BundleStepReview`, for the same
+ * reason this one is exported now — a step that owns its own `useForm` is the
+ * only seam at which the rendered attendee block can be asserted, and the
+ * alternative is a test that clicks its way through course selection first.
+ *
+ * It is not rendered from anywhere but this file.
+ */
+export function Step2Form({ defaultValues, selected, curriculum, onBack, onSubmit }) {
   const {
     register,
     handleSubmit,
@@ -1075,6 +1085,12 @@ function Step2Form({ defaultValues, selected, curriculum, onBack, onSubmit }) {
   const isCoordinator  = watch('isCoordinator');
   const skipAttendee   = watch('skipAttendee');
 
+  /**
+   * TYPED rows only — the coordinator fills slot 1 without a form when the box
+   * is ticked. This is the count of `attendees` entries the payload carries, and
+   * it is deliberately NOT the number in the section heading: the heading counts
+   * PEOPLE and this counts forms, and conflating them is the defect below.
+   */
   const attendeeRows = Math.max(
     0,
     isCoordinator ? attendeeCount - 1 : attendeeCount
@@ -1126,8 +1142,26 @@ function Step2Form({ defaultValues, selected, curriculum, onBack, onSubmit }) {
         </div>
       </Section>
 
-      {!skipAttendee && attendeeRows > 0 && (
-        <Section title={`ข้อมูลผู้เข้าอบรม (${attendeeRows} ท่าน)`}>
+      {/**
+        * THE HEADING COUNTS PEOPLE, AND THE COORDINATOR IS ONE OF THEM.
+        *
+        * It counted `attendeeRows` — the number of FORMS — so a 2-person request
+        * with the box ticked read "ข้อมูลผู้เข้าอบรม (1 ท่าน)" above a card
+        * labelled "ท่านที่ 2". Two lines, three feet apart, contradicting each
+        * other, with nothing on screen saying who ท่านที่ 1 was.
+        *
+        * The section also has to survive `attendeeRows === 0`: one attendee who
+        * IS the coordinator has no form to fill, and the old gate hid the whole
+        * section, so the sole attendee was never shown at all. Ticking the box
+        * made the list of attendees disappear.
+        *
+        * `attendeeCount` is the headcount authority everywhere else on this
+        * document — the review step, the admin detail row and the mail all read
+        * it — so it is what the heading says too.
+        */}
+      {!skipAttendee && (attendeeRows > 0 || isCoordinator) && (
+        <Section title={`ข้อมูลผู้เข้าอบรม (${attendeeCount} ท่าน)`}>
+          {isCoordinator && <CoordinatorMirrorCard watch={watch} />}
           <div className="space-y-3">
             {Array.from({ length: attendeeRows }).map((_, i) => (
               <div
@@ -1196,6 +1230,49 @@ function Step2Form({ defaultValues, selected, curriculum, onBack, onSubmit }) {
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * The coordinator, shown as ท่านที่ 1 and NOT editable here.
+ *
+ * ── THE SAME TREATMENT THE PUBLIC FORM ALREADY SHIPS ────────────────────────
+ * `CoordinatorMirrorCard` in src/components/registration/AttendeesList.jsx does
+ * exactly this job on the public registration form, and the wording here is its
+ * wording — the heading, the name/contact line and the "แก้ไขไม่ได้ที่นี่"
+ * footnote — because a customer who has filled both forms should not have to
+ * work out that two differently-phrased cards mean the same thing. It is not
+ * IMPORTED: that component reads `coordinator.firstName` and its siblings, and
+ * this form's fields are `contactFirstName` and its siblings, flat. Sharing it
+ * would mean giving it a name-mapping prop for two call sites, which is more
+ * indirection than the ten lines it would save.
+ *
+ * PURELY DISPLAY. No `register`, no `Input` — it `watch`es, so editing the
+ * coordinator section above updates it live, and there is no second control that
+ * could disagree with the one source. Slot 1 is not a form field, which is
+ * exactly why `attendees` still carries only the typed rows.
+ */
+function CoordinatorMirrorCard({ watch }) {
+  const firstName = watch('contactFirstName') || '';
+  const lastName  = watch('contactLastName')  || '';
+  const email     = watch('contactEmail')     || '';
+  const phone     = watch('contactPhone')     || '';
+
+  const fullName = `${firstName} ${lastName}`.trim() || '—';
+
+  return (
+    <div className="mb-3 rounded-9e-md border border-9e-action/30 bg-9e-action/5 p-4">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-9e-action">
+        ผู้เข้าอบรมท่านที่ 1 (ผู้ประสานงาน)
+      </p>
+      <p className="text-sm font-semibold text-9e-navy dark:text-white">{fullName}</p>
+      <p className="mt-0.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+        {email || '—'} · {phone || '—'}
+      </p>
+      <p className="mt-2 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+        ข้อมูลนี้อ้างอิงจากผู้ประสานงานด้านบน ไม่สามารถแก้ไขได้ที่นี่
+      </p>
+    </div>
   );
 }
 
