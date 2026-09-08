@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
 import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
+import { typedAttendeeRows } from '@/lib/registration/careerPathRoster';
 import { createCareerPathRegistration } from '@/lib/actions/career-path-registrations';
 import { isValidThaiPhone } from '@/lib/registration/thaiPhone';
 import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
@@ -1278,7 +1279,13 @@ function CoordinatorMirrorCard({ watch }) {
 
 // ── Step 3: Preview + submit ────────────────────────────────────
 
-function Step3Preview({
+/**
+ * EXPORTED for the same reason `Step2Form` is, and on the same precedent
+ * (RegisterWizard's StepForm/StepPreview/StepComplete, BundleWizard's two): this
+ * panel is where the roster is rendered, and it is the only seam at which the
+ * row count can be asserted without clicking through two earlier steps.
+ */
+export function Step3Preview({
   curriculum, selected, data, onBack, onConfirm, submitting, error,
 }) {
   // Walk curriculum in order so preview matches the form order.
@@ -1339,7 +1346,7 @@ function Step3Preview({
                 <div className="text-xs text-9e-slate-dp-50">{data.contactEmail} · {data.contactPhone}</div>
               </li>
             )}
-            {(data.attendees ?? []).map((a, i) => (
+            {typedAttendeeRows(data).map((a, i) => (
               <li key={i} className="rounded-9e-md border border-[var(--surface-border)] p-3 text-sm">
                 <div className="font-semibold">
                   ท่านที่ {data.isCoordinator ? i + 2 : i + 1} · {a.firstName} {a.lastName}
