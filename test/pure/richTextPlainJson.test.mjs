@@ -36,13 +36,26 @@ const ATTRS_BEARING = Object.entries(schema.nodes)
   .filter(([, type]) => Object.keys(type.spec.attrs ?? {}).length > 0)
   .map(([name]) => name);
 
-test('exactly three node types declare attributes, and they are in the contract', () => {
+test('exactly four node types declare attributes, and they are in the contract', () => {
   /**
    * Not a hand-list: read off the generated schema, so an extension added later
-   * that brings a fourth attrs-bearing node turns this red and gets considered
+   * that brings another attrs-bearing node turns this red and gets considered
    * rather than silently inheriting the bug.
+   *
+   * ── IT FIRED, AND THIS IS THE CONSIDERATION IT ASKED FOR (round B) ──────
+   * `paragraph` is the fourth. TextAlign was admitted to the contract to give
+   * rich_text alignment, and it hangs `textAlign` on paragraph and heading — so
+   * the commonest node in every document became attrs-bearing, and round 68's
+   * bug now reaches it. That is a WIDENING of the defect's blast radius, not a
+   * new defect: `toPlainJson` sits at the one boundary that feeds app state and
+   * covers every attrs-bearing node by construction, which the two assertions
+   * below exercise across ATTRS_BEARING rather than a hand-list.
+   *
+   * It also retires the reassurance round 68 wrote down. "Documents of
+   * paragraphs and bullet lists saved for months" because a bare paragraph
+   * carried no `attrs` key; from this round on, every paragraph does.
    */
-  assert.deepEqual(ATTRS_BEARING.sort(), ['heading', 'image', 'orderedList']);
+  assert.deepEqual(ATTRS_BEARING.sort(), ['heading', 'image', 'orderedList', 'paragraph']);
   for (const name of ATTRS_BEARING) {
     assert.ok(RICH_TEXT_NODES.includes(name), `${name} is not in the walker's contract`);
   }
@@ -85,7 +98,12 @@ test('ProseMirror really does hand out null-prototype attrs — the bug, reprodu
 
   // ...and a node with no declared attrs omits the key entirely, which is why
   // documents of paragraphs and bullet lists saved fine for months.
-  for (const name of ['paragraph', 'blockquote', 'bulletList', 'listItem', 'horizontalRule']) {
+  //
+  // `paragraph` LEFT this list in round B, and did not merely stop being
+  // checked: TextAlign declares `textAlign` on it, so it is in ATTRS_BEARING
+  // above and is exercised by the loop over that set instead — the stronger
+  // half of the pair. Removing it silently would read as coverage shrinking.
+  for (const name of ['blockquote', 'bulletList', 'listItem', 'horizontalRule']) {
     const json = schema.nodes[name]?.createAndFill()?.toJSON();
     assert.equal(json?.attrs, undefined, `${name} unexpectedly carries an attrs key`);
   }

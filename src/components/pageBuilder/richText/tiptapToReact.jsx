@@ -10,10 +10,16 @@
  * │ Nodes: doc, paragraph, heading(1-6), text, bulletList, orderedList,    │
  * │        listItem, blockquote, horizontalRule, hardBreak, image          │
  * │ Marks: bold, italic, underline, strike, code, link                     │
+ * │ Attrs: textAlign, on paragraph and heading                             │
  * │                                                                        │
  * │ The editor's Tiptap extensions are built to produce exactly this set   │
  * │ (editor/richText/tiptapExtensions.js). Adding a node/mark is additive: │
  * │ the contract, a renderer here, and an extension there — all three.     │
+ * │                                                                        │
+ * │ THE THIRD ROW IS NOT COVERED BY THE ASSERTION BELOW, and cannot be.    │
+ * │ An attribute is not a NAME: `getSchema` reports `paragraph` whether or │
+ * │ not TextAlign is installed, and the tables here have no entry for it.  │
+ * │ Its check is a RENDER — test/render/richTextAlign.test.mjs.            │
  * └───────────────────────────────────────────────────────────────────────┘
  *
  * The doc is UNTRUSTED input (a DB seed today, Tiptap output later): nodes
@@ -27,7 +33,7 @@
  */
 
 import { safeUrl } from '@/lib/pageBuilder/safeUrl';
-import { RICH_TEXT_NODES, RICH_TEXT_MARKS } from '@/lib/pageBuilder/richTextContract';
+import { RICH_TEXT_NODES, RICH_TEXT_MARKS, RICH_TEXT_NODE_ATTRS } from '@/lib/pageBuilder/richTextContract';
 
 const MAX_DEPTH = 20;    // rich text nests a few levels (nested lists); 20 is slack
 const MAX_NODES = 5000;  // total nodes processed before we stop
@@ -80,10 +86,35 @@ function applyMarks(text, marks, key) {
   return node;
 }
 
+// ── node attributes ──────────────────────────────────────────────────
+/**
+ * ── ALIGNMENT: THE SAME THREE WORDS AND THE SAME THREE CLASSES THE
+ *    `heading` SECTION USES ──────────────────────────────────────────────
+ * Copied in VALUE from sections/heading.jsx's own ALIGN_CLASS, deliberately,
+ * so the two surfaces cannot end up disagreeing about what "center" means —
+ * an author who centres a heading SECTION and a paragraph INSIDE a rich_text
+ * section is saying the same word twice and must get the same result.
+ *
+ * ── AN ABSENT VALUE MAPS TO NOTHING, WHICH IS NOT WHAT THE SECTION DOES ──
+ * The section falls back to `text-left`, and it is right to: `content.align`
+ * has a schema default of 'left' and every stored heading already carries one,
+ * so a left class is what it has always emitted. A rich-text DOCUMENT has no
+ * such default — every document stored before this round has no `textAlign` at
+ * all — so emitting a class for an absent value would rewrite the markup of
+ * every paragraph on every published page, invisibly. Absent renders exactly
+ * what it rendered yesterday: no class, no wrapper, no attribute.
+ *
+ * It is also the whole of the safety story here. The map has three keys, so
+ * the only three strings that can reach a class attribute are written on the
+ * next line; an author's value is a lookup KEY and never an output.
+ */
+const ALIGN_CLASS = { left: 'text-left', center: 'text-center', right: 'text-right' };
+const alignClass = (node) => ALIGN_CLASS[node?.attrs?.textAlign];
+
 // ── nodes ────────────────────────────────────────────────────────────
 const NODE_RENDERERS = {
   doc:            (_n, kids) => <>{kids}</>,
-  paragraph:      (_n, kids, key) => <p key={key}>{kids}</p>,
+  paragraph:      (n, kids, key) => <p key={key} className={alignClass(n)}>{kids}</p>,
   bulletList:     (_n, kids, key) => <ul key={key}>{kids}</ul>,
   orderedList:    (_n, kids, key) => <ol key={key}>{kids}</ol>,
   listItem:       (_n, kids, key) => <li key={key}>{kids}</li>,
@@ -93,7 +124,7 @@ const NODE_RENDERERS = {
   heading: (n, kids, key) => {
     const lvl = Math.min(6, Math.max(1, Number(n?.attrs?.level) || 2));
     const Tag = `h${lvl}`;
-    return <Tag key={key}>{kids}</Tag>;
+    return <Tag key={key} className={alignClass(n)}>{kids}</Tag>;
   },
   image: (n, _k, key) => {
     const src = safeUrl(n?.attrs?.src);
@@ -122,6 +153,26 @@ const NODE_RENDERERS = {
         `[pageBuilder richText] ${kind} contract drift — ` +
         `declared-but-unimplemented: [${missing}]; implemented-but-undeclared: [${extra}]. ` +
         'Reconcile lib/pageBuilder/richTextContract.js with this file; the editor builds its Tiptap extensions from that list.'
+      );
+    }
+  }
+  /**
+   * The THIRD list cannot be checked the same way, and saying so is the point.
+   * An ATTRIBUTE has no entry in either table above, so there is nothing here
+   * to compare it against — which is precisely why `textAlign` was excluded for
+   * so long. What IS checkable at module load is that every node the contract
+   * hangs an attribute on is a node this file actually renders; a stale entry
+   * for a node nobody renders is a contract lying about its own coverage.
+   *
+   * That the attribute reaches the rendered page is a different claim needing a
+   * different instrument, and it has one: test/render/richTextAlign.test.mjs.
+   */
+  for (const name of Object.keys(RICH_TEXT_NODE_ATTRS)) {
+    if (!NODE_RENDERERS[name]) {
+      throw new Error(
+        `[pageBuilder richText] node-attribute contract drift — RICH_TEXT_NODE_ATTRS declares ` +
+        `attributes on "${name}", which this file has no renderer for. An attribute on a node ` +
+        'nobody renders is dead declaration; reconcile lib/pageBuilder/richTextContract.js.'
       );
     }
   }
