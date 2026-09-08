@@ -17,6 +17,9 @@ import { cn } from '@/lib/utils';
  *
  * Props:
  *   earlyBird           — EarlyBirdConfig doc (caller checks for null)
+ *   deadlineLabel       — the deadline as a FINISHED STRING, formatted on the
+ *                         server. See below: this component must not format a
+ *                         date itself.
  *   earlyBirdPromotion  — joined Promotion doc or null
  *   schedules           — full schedules array from page
  *   course              — course object (for course_id + name)
@@ -39,8 +42,27 @@ function formatScheduleRange(schedule) {
   return `${startStr} – ${endStr}`;
 }
 
+/**
+ * ── THIS COMPONENT FORMATS NO DATES FROM AN INSTANT, AND THAT IS A RULE ──
+ * It is `'use client'`, so anything it formats is formatted twice — once
+ * during SSR and once during hydration — against two different local
+ * timezones. A deadline near midnight renders one calendar day on the server
+ * and another in the browser, which React reports as a hydration mismatch.
+ *
+ * `deadlineLabel` therefore arrives FINISHED, from
+ * lib/earlyBird/deadlineLabel.js, which formats once and reads the Bangkok
+ * calendar rather than the runtime's. Do not replace it with a `Date` here.
+ *
+ * The COUNTDOWN below is the deliberate exception and needs no such care: it
+ * subtracts epoch milliseconds, which name no timezone at all.
+ *
+ * `formatScheduleRange` above DOES read the runtime calendar and is left
+ * alone — it is pre-existing, it is not this round's subject, and changing it
+ * would move a rendered string on every banner that shows a round.
+ */
 export function EarlyBirdBanner({
   earlyBird,
+  deadlineLabel = null,
   earlyBirdPromotion,
   schedules,
   course,
@@ -117,6 +139,15 @@ export function EarlyBirdBanner({
               deadline={earlyBird.deadline}
               onExpire={() => setExpired(true)}
             />
+          )}
+          {/* WITH the countdown, not in the left text block: it is the same
+              fact the countdown is counting, stated as a date for a reader who
+              wants one. Absent renders nothing — not a prefix with a blank
+              after it — so a row with no deadline is unchanged. */}
+          {deadlineLabel && (
+            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 sm:text-right">
+              {deadlineLabel}
+            </p>
           )}
           {registerHref ? (
             <Link href={registerHref} className="btn-9e-cta text-sm">
