@@ -9,7 +9,7 @@ import { FloatingActionDock } from '@/components/ui/FloatingActionDock';
 import { ChatLauncher } from '@/components/chat/ChatLauncher';
 import { ReadingProgressRing } from '@/components/ui/ReadingProgressRing';
 // TEMPORARY — round CB-A2 preview mount. Delete with the component.
-import { CookieBannerPreview } from '@/components/consent/CookieBannerPreview';
+import { CookieConsentBanner } from '@/components/consent/CookieConsentBanner';
 import './globals.css';
 
 // ── Fonts ────────────────────────────────────────────────────────
@@ -159,23 +159,24 @@ export default function RootLayout({ children }) {
             topSlot={<ReadingProgressRing />}
             bottomSlot={chatEnabled ? <ChatLauncher /> : null}
           />
-          {/* ── TEMPORARY: cookie-banner UI preview (round CB-A2) ─────────
-              REMOVE THIS LINE AND DELETE CookieBannerPreview.jsx when consent
-              is actually wired. The banner is on screen for team review only:
-              it carries a Thai warning strip saying the choices do not take
-              effect, and it writes no cookie, no localStorage, and no
-              gtag('consent','update',…). Consent Mode defaults are untouched.
+          {/* ── THE COOKIE CONSENT BANNER (wired, round CB-B) ─────────────
+              A decision here fires gtag('consent','update',…) before it
+              persists, against the defaults queued by <Analytics /> above.
+              Not a preview: the amber "UI Preview" strip was deleted in CB-B
+              once the wiring worked. If this ever stops being wired, the strip
+              comes BACK — a banner that does nothing and no longer says so is
+              strictly worse than one that admits it.
 
               MOUNTED HERE, NOT IN (public)/layout.jsx, for the same reason the
               dock above is — see the note there. The home page is outside the
               (public) group, so that layout would both miss the most-reviewed
-              page and reset the in-memory dismissal on every crossing.
+              page and reset the dismissal on every crossing.
 
               It renders null on /admin (client-side, via usePathname) by the
               same split the dock uses: the path rule lives in the component so
               it stays testable, not as a condition in this server layout which
               cannot see the path. */}
-          <CookieBannerPreview />
+          <CookieConsentBanner />
         </ThemeProvider>
       </body>
     </html>

@@ -318,10 +318,12 @@ test('decorative icons are hidden from assistive tech', () => {
   }
 });
 
-test('UI ONLY: the banner ships no consent persistence and no gtag call', async () => {
-  // The load-bearing guarantee of this round. If any of these appear, the
-  // component is doing something it is not yet allowed to do, and mounting it
-  // becomes a correctness question rather than a scheduling one.
+test('SEPARATION: the banner itself ships no persistence and no gtag call', async () => {
+  // Written in CB-A2 as a temporary hold ("not yet allowed to do"), KEPT after
+  // CB-B wired consent for real, because the rule it encodes is permanent and
+  // not a schedule: side effects live in the mount (CookieConsentBanner.jsx),
+  // where the order — update, persist, dismiss — can be read in one place.
+  // A gtag call added here would be a second, invisible consent write path.
   const { readFile } = await import('node:fs/promises');
   const src = await readFile(
     new URL('../../src/components/consent/CookieBanner.jsx', import.meta.url),

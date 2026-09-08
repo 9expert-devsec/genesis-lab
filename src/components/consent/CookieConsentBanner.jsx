@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { TriangleAlert } from 'lucide-react';
 import { matchesRoutePattern } from '@/lib/floatingDock';
 import { setOccupiedBox, clearOccupiedBox } from '@/lib/viewportBottomInset';
 import { stickyBarOccupancyHeight } from '@/lib/stickyBarOccupancy';
@@ -12,43 +11,43 @@ import {
   readConsentCookie,
   writeConsentCookie,
 } from '@/lib/cookieConsentStore';
+import { gtagConsentUpdate } from '@/lib/analytics/gtag';
+import { consentSignalsFor } from '@/lib/analytics/consentMode';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  CookieBannerPreview — TEMPORARY. DELETE THIS WHOLE FILE IN THE WIRING ROUND.
+ *  CookieConsentBanner — the mount. CONSENT IS WIRED (round CB-B).
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Round CB-A2 put CookieBanner on screen so the team can review it in real
- * page context. Round CB-A3 made the choice stick.
+ * Renamed from `CookieBannerPreview` in CB-B, because the old name recorded a
+ * status that is no longer true and a name that lies is worse than a stale
+ * comment — a comment is read once, a name is read every time.
  *
- * CONSENT IS STILL NOT WIRED. The distinction that matters, because it is
- * easy to misread now that a cookie is involved:
+ * What a decision does now, in this order:
  *
- *   IT DOES     write the visitor's per-category choice to a first-party
- *               cookie, and read it back to stay hidden on later visits.
- *   IT DOES NOT call gtag('consent','update',…), change any Consent Mode
- *               default, or touch Analytics.jsx. The defaults are still
- *               `granted` and the cookie's value changes NOTHING about what
- *               is tracked.
+ *   1. gtag('consent','update', …) with the categories mapped onto Consent
+ *      Mode v2 signals — see src/lib/analytics/consentMode.js
+ *   2. write the first-party cookie (src/lib/cookieConsentStore.js)
+ *   3. hide the banner
  *
- * Recording a preference and honouring it are separate commits on purpose:
- * this one can be reviewed for whether the RECORD is right without also
- * having to be right about the tag. The preview notice says exactly this in
- * Thai, and it was reworded in CB-A3 precisely because "we do not save your
- * setting" stopped being true.
+ * Why that order is in handleDecision below, not here.
  *
- * This file is the entire preview apparatus — the warning strip, the
- * positioning, and the glue to the consent store. The wiring round deletes it
- * and mounts CookieBanner through a real consent provider instead, which is
- * why none of the temporary parts live inside CookieBanner itself.
- * src/lib/cookieConsentStore.js is NOT temporary: the storage format is meant
- * to survive this round and be read by the server next round.
+ * ── WHAT THIS FILE OWNS, AND WHAT IT DELIBERATELY DOES NOT ─────────────────
+ * It owns the side effects: the tag call, the cookie, the route rule, the
+ * positioning and the bottom-inset bookkeeping. CookieBanner itself stays
+ * PRESENTATIONAL — no gtag, no storage, no document access — and
+ * test/render/cookieBannerMarkup.test.mjs enforces that separation by
+ * scanning the component's source for those very identifiers. That guard was
+ * written as a temporary hold during the preview rounds; it is kept because
+ * the separation it describes is permanent, not because the wiring is pending.
  *
- * ── WHY IT IS SAFE TO SHOW A NON-FUNCTIONAL CONSENT BANNER ──────────────────
- * genesis-lab is not in production. Real users are still on the old site, so
- * the audience for this is the team. The warning strip below is what keeps it
- * honest even for them: a reviewer who sees a cookie banner reasonably assumes
- * it works, and "it's only a preview" is not visible from the page.
+ * ── THE DEFAULTS ARE NOT SET HERE ──────────────────────────────────────────
+ * A `consent update` only means something after a `consent default`, and that
+ * default has to be queued before gtag.js runs — which is a different file and
+ * a different rendering phase. It lives in the inline bootstrap emitted by
+ * src/components/analytics/Analytics.jsx. A returning visitor's stored choice
+ * is applied as the DEFAULT there, so they are never denied-then-flipped; this
+ * component's update is for the decision made in THIS page view.
  *
  * ── WHY THE ROOT LAYOUT AND NOT (public)/layout.jsx ─────────────────────────
  * Two reasons, both measured rather than stylistic:
@@ -84,57 +83,16 @@ import {
  */
 const BANNER_HIDDEN_PREFIXES = ['/admin'];
 
-export function shouldRenderCookieBannerPreview(pathname) {
+export function shouldRenderCookieConsentBanner(pathname) {
   if (typeof pathname !== 'string' || pathname === '') return true;
   return !BANNER_HIDDEN_PREFIXES.some((p) => matchesRoutePattern(pathname, p));
 }
 
 /** Stable publisher key for the bottom-inset store — one per mount, and there
  *  is exactly one mount. Named for the publisher, not the measurement. */
-const OCCUPANCY_KEY = 'cookie-banner-preview';
+const OCCUPANCY_KEY = 'cookie-consent-banner';
 
-/**
- * The temporary warning strip.
- *
- * Amber rather than the CI blues on purpose: every other colour on this card
- * is brand chrome, and the point of this strip is that it is NOT part of the
- * design. It has to read as scaffolding. Amber is not in the 9e palette, so
- * these are literal hex — correct here, because a token would imply the strip
- * belongs to the design system, and it is scheduled for deletion.
- *
- * role="status" rather than "alert": it describes the page's condition and
- * should not interrupt whatever a screen-reader user is currently reading.
- */
-function PreviewNotice() {
-  return (
-    <div
-      role="status"
-      className="flex w-full items-start gap-2 rounded-lg border border-[#F59E0B] bg-[#FFFBEB] px-3 py-2 dark:border-[#B45309] dark:bg-[#2A2113]"
-    >
-      <TriangleAlert
-        className="mt-px h-4 w-4 shrink-0 text-[#B45309] dark:text-[#FBBF24]"
-        aria-hidden="true"
-      />
-      {/*
-        WORDING CHANGED IN CB-A3, and the change is the point. The previous
-        version ended "และระบบจะไม่บันทึกการตั้งค่าของคุณไว้" — the system does
-        not save your setting. That is now FALSE: the choice is written to a
-        first-party cookie. Leaving it would have made the one element on the
-        card whose job is to be accurate the only inaccurate thing on it.
-        The notice now separates the two facts a reviewer needs to hold apart:
-        the choice IS recorded, and it still does NOT affect tracking.
-      */}
-      <p className="text-xs leading-[1.5] text-[#78350F] dark:text-[#FDE68A]">
-        <strong className="font-semibold">ตัวอย่างหน้าตาเท่านั้น (UI Preview)</strong>{' '}
-        — แบนเนอร์นี้ยังไม่เชื่อมต่อระบบจัดการคุกกี้
-        ระบบจะจดจำตัวเลือกของคุณไว้ (และจะไม่แสดงแบนเนอร์นี้อีก)
-        แต่ตัวเลือกดังกล่าวยังไม่มีผลกับการเก็บคุกกี้หรือการติดตามข้อมูลจริงแต่อย่างใด
-      </p>
-    </div>
-  );
-}
-
-export function CookieBannerPreview() {
+export function CookieConsentBanner() {
   const pathname = usePathname();
 
   /**
@@ -201,11 +159,32 @@ export function CookieBannerPreview() {
    * would force that round to either re-ask everyone or invent an answer.
    */
   const handleDecision = useCallback((categories) => {
+    /* ── ORDER: TELL GOOGLE, THEN PERSIST, THEN DISMISS ────────────────────
+     *
+     * The update goes first because it is the only step with an outside
+     * observer. If persisting threw — a full cookie jar, a hardened browser —
+     * a consent-first order has still applied the user's choice to the tag for
+     * this page view, and the banner reappears next time. The reverse order
+     * would record a decision that was never acted on, which is the worse of
+     * the two failures: the record says the user was asked and answered while
+     * the tag carries on under the old state.
+     *
+     * `consent update` and not a second `consent default`: default is the
+     * pre-tag state and may only be declared once, before the tag runs.
+     * Everything after that is an update, and it is what the tag is waiting
+     * for during the bootstrap's `wait_for_update` window.
+     *
+     * gtagConsentUpdate returns silently when window.gtag is absent, so a
+     * blocked or failed gtag.js cannot break the banner. The bootstrap
+     * publishes window.gtag before the library arrives, so in practice the
+     * queue exists even when the network does not.
+     */
+    gtagConsentUpdate(consentSignalsFor(categories));
     writeConsentCookie(categories, new Date().toISOString());
     setDecision(categories);
   }, []);
 
-  const visible = mounted && shouldRenderCookieBannerPreview(pathname) && !dismissed;
+  const visible = mounted && shouldRenderCookieConsentBanner(pathname) && !dismissed;
 
   /**
    * ── THE COLLISION, AND HOW IT IS RESOLVED ─────────────────────────────────
@@ -305,7 +284,7 @@ export function CookieBannerPreview() {
      * across the bottom of every page.
      */
     <div
-      data-cookie-banner-preview=""
+      data-cookie-consent-banner=""
       className="pointer-events-none fixed inset-x-0 bottom-0 z-70 p-3 sm:p-4"
     >
       {/*
@@ -329,7 +308,6 @@ export function CookieBannerPreview() {
       */}
       <div className="pointer-events-auto mx-auto max-w-[960px]" ref={cardRef}>
         <CookieBanner
-          notice={<PreviewNotice />}
           onDecision={handleDecision}
         />
       </div>
