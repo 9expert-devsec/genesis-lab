@@ -580,6 +580,11 @@ export function CareerPathRegisterClient({ careerPath }) {
             round:      sel.round,
             startDate:  sel.startDate,
             endDate:    sel.endDate,
+            // THE RAW DAYS, unformatted. `round` is a label this file computed
+            // for the SCREEN and it collapses 8, 10, 12 to "8–12"; the day list
+            // is the only thing on the document that still knows the round has
+            // a hole in it. See the note on `dates` in CareerPathRegistration.
+            dates:      Array.isArray(sel.dates) ? sel.dates : [],
             type:       sel.type,
             scheduleId: sel.scheduleId,
           });
