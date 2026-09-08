@@ -271,6 +271,11 @@ test("the union across all three tabs equals the exact set the panel rendered be
       "ป้ายส่วนลด",
       "หมายเหตุใต้ราคา",
       "ป้ายมุมการ์ด",
+      // ROUND D step 1 — an ENTRY, not a change of claim. The claim is still
+      // that every field the panel can edit is reachable from some tab; the set
+      // grew because price_card gained one, and this exact-ordered shape is
+      // what forces that to be written down here rather than noticed later.
+      "รอบที่ระบุ",
       "รายการ (บรรทัดละ 1 รายการ)",
       "ข้อความบนปุ่ม",
       "ลิงก์ปุ่ม",
