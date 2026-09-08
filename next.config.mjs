@@ -534,6 +534,79 @@ const nextConfig = {
           { key: 'Vercel-CDN-Cache-Control', value: 'no-store' },
         ],
       },
+      /* ── A RANGED REQUEST IS NEVER CACHED ON THE LEGACY PATHS ─────────────
+       *
+       * ══ INCIDENT 2026-09-08. DELETING THIS RE-OPENS IT SILENTLY. ═════════
+       *
+       * Every article image on the site rendered as an empty grey box.
+       * MEASURED on one derivative URL:
+       *
+       *   …/styles/max_850/public/articles/images/search-cowork-frontier.png
+       *     (no query)        200, Content-Length 18004,  x-vercel-cache MISS
+       *     ?itok=Nkjcaoh6    206, Content-Length   500,  x-vercel-cache HIT
+       *                       Content-Range: bytes 0-499/18004  [5/5, deterministic]
+       *     ?itok=…&cb=RAND   200, Content-Length 18004,  MISS
+       *
+       * The origin was correct every time it was actually reached. At some
+       * earlier point a request carrying `Range` hit that URL, the edge stored
+       * the 206 under that cache key, and Cloudinary's own
+       * `Cache-Control: public, no-transform, max-age=2592000` — 30 days, set
+       * upstream, not by us — kept serving 500 bytes of a PNG to everyone.
+       *
+       * Two properties made it site-wide rather than a curiosity:
+       *   · Drupal derivatives carry a FIXED `?itok=<hmac>` per file, and the
+       *     edge keys on the full URL, so every visitor shares ONE cache key.
+       *     One poisoned entry takes down one image for the whole world.
+       *   · Sending `Cache-Control: no-cache` / `Pragma: no-cache` on the
+       *     request still returned the poisoned 206 — the edge ignores request
+       *     cache headers, so NO END USER COULD CLEAR THIS THEMSELVES. It took
+       *     a full CDN purge on the Vercel project.
+       *
+       * ── WHY THIS SHAPE, AND NOT THE OBVIOUS ONES ────────────────────────
+       * `no-store` unconditionally on these paths would work and is rejected
+       * on cost: it pushes every article image to Cloudinary on every request,
+       * on a plan where bandwidth is 67.8% of spend. Gating on `has: range`
+       * keeps the cache for the traffic that matters — a real visitor sends no
+       * Range header and is untouched by this rule — and withholds it only
+       * from the requests that can poison it. On these paths a Range request
+       * is a crawler, a scanner, a link-preview bot or a download manager;
+       * the file types where ranging is legitimate (pdf, xlsx, zip, mp3 …)
+       * are already held out of the cache by the rule above.
+       *
+       * ── SCOPED BY PATH, DELIBERATELY, NOT BY EXTENSION ──────────────────
+       * The rule above is keyed on an extension LIST, which only protects what
+       * someone remembered to add to it. Matching the legacy roots as whole
+       * paths closes every class in one move — the transformed images, `svg`
+       * and `gif`, and the `txt`/`csv`/`rtf` raw documents that are
+       * deliberately absent from NO_STORE_DOCUMENT_EXTENSIONS — and keeps
+       * closing them for file types nobody has thought of yet.
+       *
+       * ── IT COVERS THE RESOLVER ROUTE TOO, AND THAT IS NOT INCIDENTAL ────
+       * `headers()` matches the INCOMING request path, so a substitution-
+       * carrying path rewritten to /legacy-file/… is matched here by the URL
+       * the client asked for. That route needs it: proxyUpstream propagates a
+       * 206 verbatim, by design, and its default `s-maxage=86400` invites the
+       * shared cache to keep it for 24 hours. Same defect, shorter window.
+       * `export const dynamic = 'force-dynamic'` does NOT prevent it — that
+       * governs Next's route cache, not the CDN.
+       *
+       * ⚠ WHAT BREAKS IF THIS IS DELETED: nothing, visibly, for as long as no
+       * bot happens to send a Range request. Then one image — or every image
+       * sharing a poisoned derivative — serves a truncated body to every
+       * visitor for up to 30 days, and no user-side action can clear it.
+       */
+      ...LEGACY_ROOTS.flatMap((root) => [`/${root}/:path*`, `${VARIANT_PREFIX}/:variant/${root}/:path*`])
+        .map((source) => ({
+          source,
+          has: [{ type: 'header', key: 'range' }],
+          headers: [
+            // BOTH, deliberately: they are read by different layers and this is
+            // not the place to find out which one the platform honoured.
+            { key: 'CDN-Cache-Control', value: 'no-store' },
+            { key: 'Vercel-CDN-Cache-Control', value: 'no-store' },
+          ],
+        })),
+
       // ── REMOVED: the `public` Cache-Control override on legacy image paths ─
       //
       // It attempted to recover the edge cache for f_auto by overriding
