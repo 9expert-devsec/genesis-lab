@@ -36,6 +36,7 @@
 
 import { siteConfig } from '@/config/site';
 import { SITE_URL } from '@/lib/seo/siteUrl';
+import { HOME_TITLE } from '@/lib/seo/homeMeta';
 
 /**
  * The training venue, shared by the Place node and the organisation's own
@@ -171,10 +172,17 @@ export function buildHomeJsonLd(siteUrl = SITE_URL) {
         '@type': 'WebPage',
         '@id': webPageId,
         url: homeUrl,
-        // The page's ACTUAL <title>, built the way app/page.jsx builds it, so
-        // structured data cannot assert a title the page does not have. A better
-        // SEO title is a separate decision and not this module's to take.
-        name: `${siteConfig.name} — ${siteConfig.tagline}`,
+        // The page's ACTUAL <title>, read from the same constant app/page.jsx
+        // puts in `metadata.title`, so structured data cannot assert a title the
+        // page does not have.
+        //
+        // That title changed on 2026-09-09 (round ORIGIN-1) from
+        // `${siteConfig.name} — ${siteConfig.tagline}` to approved marketing
+        // copy. This line follows it rather than being pinned to the old value:
+        // the rule was never "the name is the brand and the tagline", it was
+        // "the name is whatever the page's title is", and lib/seo/homeMeta is
+        // now where that one value lives.
+        name: HOME_TITLE,
         inLanguage: 'th',
         isPartOf: { '@id': websiteId },
         about: { '@id': organizationId },

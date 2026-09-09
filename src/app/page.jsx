@@ -15,6 +15,8 @@ import { getLandingData } from "@/lib/landing/getLandingData";
 import { getNavMenuData } from "@/lib/navmenu/getNavMenuData";
 import { siteConfig } from "@/config/site";
 import { buildHomeJsonLd } from "@/lib/seo/homeJsonLd";
+import { HOME_TITLE, HOME_DESCRIPTION } from "@/lib/seo/homeMeta";
+import { OG_DEFAULT_IMAGE } from "@/lib/seo/ogImage";
 
 import { HeroSection } from "./_components/home/HeroSection";
 import { HeroBanner } from "./_components/home/HeroBanner";
@@ -40,12 +42,38 @@ import { InstructorQuote } from "./_components/home/InstructorQuote";
 // just means the admin save hasn't finished its background sync yet.
 export const runtime = "nodejs";
 
+/**
+ * The title here reaches three surfaces, and all three read lib/seo/homeMeta:
+ *   · <title>
+ *   · og:title
+ *   · the graph's WebPage.name, via lib/seo/homeJsonLd
+ *
+ * og:title HAS TO BE SET EXPLICITLY. It does NOT fall out of `title`. The root
+ * layout declares a site-wide `openGraph.title` of
+ * `${siteConfig.name} — ${siteConfig.tagline}`, and a child's `title` does not
+ * override it — so setting only `title` here shipped a home page whose <title>
+ * said one thing and whose og:title said another. Measured on a production
+ * build before this line existed. If a future round changes HOME_TITLE and this
+ * block is deleted, the same split comes straight back.
+ *
+ * `openGraph` is REPLACED wholesale by the child, not deep-merged, so the image
+ * and the rest of the card have to be restated here or the home page silently
+ * loses its social image. That is why this block names more than the title.
+ */
 export const metadata = {
-  title: `${siteConfig.name} — ${siteConfig.tagline}`,
-  description:
-    'อบรมคอร์สเทคโนโลยีชั้นนำ AI, Data, Power BI, Excel, Power Automate, Automation ด้วยผู้เชี่ยวชาญตัวจริง สอนสไตล์ใช้งานจริง Never Stop Learning',
+  title: HOME_TITLE,
+  description: HOME_DESCRIPTION,
   alternates: {
     canonical: siteConfig.url,
+  },
+  openGraph: {
+    type:        'website',
+    locale:      'th_TH',
+    url:         siteConfig.url,
+    siteName:    siteConfig.name,
+    title:       HOME_TITLE,
+    description: HOME_DESCRIPTION,
+    images:      [OG_DEFAULT_IMAGE],
   },
 };
 
