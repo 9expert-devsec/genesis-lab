@@ -10,17 +10,42 @@ import { useSwipe } from '@/hooks/useSwipe';
 /**
  * ROUND HS-C: split out of the old flat `value: '5K+'` strings into
  * target/suffix/decimals so the count-up can animate a real number and
- * reassemble the exact same displayed string at the end — '5K+', '90K+',
- * '4.9', '700K+', '73' respectively. Verified against the values these
- * replace: target + suffix (decimals=0) or target.toFixed(1) (decimals=1,
- * the รีวิว stat only) reproduces each one exactly.
+ * reassemble the exact displayed string at the end. The reassembly rule is
+ * `target + suffix` (decimals=0) or `target.toFixed(1) + suffix` (decimals=1,
+ * the รีวิว stat only), which currently yields '5K+', '90K+', '5.0', '700K+'
+ * and '79'.
+ *
+ * Note that รีวิว is 5.0 and not 5: it MUST keep decimals=1, or toFixed drops
+ * the tenth and the strip reads a bare '5' next to a five-star row.
+ */
+/**
+ * ── THESE NUMBERS ARE HARDCODED AND WILL DRIFT AGAIN ────────────────────────
+ * หลักสูตร sat at 73 while the real count was 79 — a six-course gap nobody
+ * noticed, because nothing here reads the catalogue. Every value below is a
+ * literal that is true on the day someone types it and decays quietly after.
+ * Making หลักสูตร computed is a separate round (it needs an MSDB call plus a
+ * course_extensions read, fed through landing_cache, because this is a client
+ * component); it was priced in ORIGIN-1 and deliberately not built there.
+ * Until then, re-measure before trusting any of these.
+ *
+ * Provenance, 2026-09-09 (round ORIGIN-1):
+ *   · องค์กร 5K+, ผู้เรียน 90K+  — unchanged, not re-measured this round.
+ *   · รีวิว 4.9 → 5.0            — approved.
+ *   · ผู้ติดตาม 700K+            — UNCHANGED ON PURPOSE. Live counts that day
+ *     totalled ~797,500 (TikTok 278.7K, YouTube 257K, Facebook 241.4K, LINE
+ *     11.5K, Instagram 8.5K, X 316), so 700K+ is true and conservative. The
+ *     team's own figure is pending and the number is not to be changed twice.
+ *     Do NOT "improve" this to 790K+.
+ *   · หลักสูตร 73 → 79           — recounted: 77 published courses (upstream
+ *     /public-course, minus CourseExtension.isPublished === false, which was
+ *     zero that day) + 2 masterclass courses.
  */
 const STATS = [
   { target: 5, suffix: 'K+', decimals: 0, label: 'องค์กร' },
   { target: 90, suffix: 'K+', decimals: 0, label: 'ผู้เรียน' },
-  { target: 4.9, suffix: '', decimals: 1, label: 'รีวิว', star: true },
+  { target: 5.0, suffix: '', decimals: 1, label: 'รีวิว', star: true },
   { target: 700, suffix: 'K+', decimals: 0, label: 'ผู้ติดตาม' },
-  { target: 73, suffix: '', decimals: 0, label: 'หลักสูตร' },
+  { target: 79, suffix: '', decimals: 0, label: 'หลักสูตร' },
 ];
 
 /**
