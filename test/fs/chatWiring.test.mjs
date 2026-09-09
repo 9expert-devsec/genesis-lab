@@ -353,7 +353,14 @@ test('the SITE mark is untouched — the agent has its own face, the org keeps i
   // logo showing a chatbot would be wrong in Google's brand panel.
   assert.match(LAYOUT, /icon: '\/logo\/9exp-stand\.png'/, 'favicon unchanged');
   assert.match(LAYOUT, /apple: '\/logo\/9exp-stand\.png'/, 'apple-touch icon unchanged');
-  const HOME = src('src/app/page.jsx');
-  assert.match(HOME, /logo: `\$\{siteConfig\.url\}\/logo\/9exp-stand\.png`/, 'JSON-LD logo unchanged');
+  // RE-POINTED, NOT WEAKENED. The Organization JSON-LD moved out of the Home JSX
+  // and into lib/seo/homeJsonLd.js, where the logo is composed from that module's
+  // origin argument rather than from `siteConfig.url` directly. The claim is
+  // unchanged — the org's logo is still the 9Expert mark — but the expression it
+  // reads had been reformulated, so the old matcher had stopped binding while
+  // staying green-shaped. That is defect 7 in sourceScan.mjs, and its standing
+  // procedure is to follow the expression to its new home.
+  const HOME_JSONLD = src('src/lib/seo/homeJsonLd.js');
+  assert.match(HOME_JSONLD, /url: `\$\{siteUrl\}\/logo\/9exp-stand\.png`/, 'JSON-LD logo unchanged');
   assert.notEqual(CHAT_MARK_SRC, '/logo/9exp-stand.png', 'and the two marks really are different files');
 });
