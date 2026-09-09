@@ -82,26 +82,33 @@ test('the builder itself is server-safe — no hooks, no client directive', () =
 const ABSOLUTE_ARTICLE_URL = /(https:\/\/[^`'"\s]*|\$\{[^}]*(?:SITE_URL|siteUrl|base)[^}]*\})\/articles\/\$\{/;
 
 /**
- * THE THREE REMAINING SPELLINGS ARE KNOWN, NAMED, AND UNCHANGED.
+ * TWO REMAINING SPELLINGS. THERE WERE THREE.
  *
- * The helper's job was to stop the two JSON-LD blocks from disagreeing, and it
- * does. It did NOT unify the site's canonical origin, and pretending otherwise
- * by quietly rewriting these three would change what every published article
- * emits — a decision about canonical URLs, not a side effect of adding a
- * listing block. So they are recorded here, with what each uses, and this test
- * fails if a FOURTH appears.
+ * This list was written to make the follow-up impossible to forget, and round
+ * ORIGIN-1 (2026-09-09) is that follow-up. What it recorded then was:
  *
- * Reconciling them is the follow-up this list exists to make impossible to
- * forget:
  *   · [slug]/page.jsx        → NEXT_PUBLIC_SITE_URL   (canonical + og:url)
  *   · ArticleDetailClient    → a hardcoded literal    (share links)
  *   · sitemap.js             → its own `base`         (the sitemap entries)
- * and the helper defaults to a fourth origin again, inherited from buildJsonLd.
- * See lib/articles/articleUrl.js, which states the same thing at the value.
+ *   … and the helper defaulting to a FOURTH origin, inherited from buildJsonLd.
+ *
+ * The fourth is gone: lib/articles/articleUrl.js now defaults to lib/seo/siteUrl's
+ * SITE_URL, the site's one origin. ArticleDetailClient is gone from this list
+ * too — it no longer pairs an origin with the path at all, it calls
+ * articleCanonicalUrl, so removing it is not a weakening. If it ever goes back
+ * to building the URL itself, the matcher sees it again and this test fails.
+ *
+ * The two that remain are NOT hardcoded hosts and are not this round's scope:
+ *   · [slug]/page.jsx        → NEXT_PUBLIC_SITE_URL   (canonical + og:url)
+ *   · sitemap.js             → its own `base`         (the sitemap entries)
+ * Both resolve to the live origin in production. They are second EXPRESSIONS
+ * for one value rather than second values — the thing lib/seo/siteUrl argues
+ * against, because an expression that merely agrees in production disagrees
+ * everywhere else. Absorbing them is a later round; this test fails if a THIRD
+ * appears in the meantime.
  */
 const KNOWN_ORIGIN_SPELLINGS = [
   DETAIL,
-  'src/app/(public)/articles/[slug]/_components/ArticleDetailClient.jsx',
   'src/app/sitemap.js',
 ];
 
@@ -153,6 +160,50 @@ test('the listing description goes through the shared truncation helper', () => 
   assert.ok(
     !/\.slice\(0,\s*\d+\)/.test(code),
     'the builder truncates by hand — that is the second implementation the helper removed'
+  );
+});
+
+// ── No article module names a host of its own ───────────────────────────────
+
+/**
+ * THE ASSERTION ROUND ORIGIN-1 EXISTS FOR.
+ *
+ * The article modules resolved to `https://genesis-lab.9expert.app` — a literal
+ * preview host, sitting in a defaulted parameter and looking entirely correct.
+ * It passed every other test in this suite and in test/pure/articleListJsonLd,
+ * because a fixture and a hardcoded value agree with each other perfectly. What
+ * it did was emit the preview origin from production: 78 occurrences on
+ * /articles and 9 on an article detail page, measured 2026-09-09, while those
+ * same pages served a `<link rel="canonical">` on the live domain.
+ *
+ * So: these files compose from the origin constant and MUST NOT spell a host.
+ * Read from `code`, imports and comments stripped — the paragraph above names
+ * the host and must not be able to satisfy the rule it describes (defects 1, 2
+ * and 5 in sourceScan.mjs).
+ */
+for (const rel of [URL_HELPER, BUILDER, 'src/lib/articles/buildJsonLd.js']) {
+  test(`${rel} names no host of its own`, () => {
+    const { code } = readSource(rel);
+    assert.ok(
+      !code.includes('genesis-lab.9expert.app'),
+      'the preview host is back — this is the defect ORIGIN-1 removed'
+    );
+    assert.ok(
+      !code.includes('9experttraining'),
+      'even the CORRECT host is wrong here: the origin comes from lib/seo/siteUrl, '
+        + 'and a second spelling that agrees in production disagrees everywhere else'
+    );
+  });
+}
+
+test('CONTROL: the host scan DOES fire on a file that spells one out', () => {
+  // Without this the three assertions above could pass by reading nothing —
+  // a scrubbed file, a bad path, an empty string. siteConfig is where the host
+  // legitimately lives, so the scan must be able to see it there.
+  const { code } = readSource('src/config/site.js');
+  assert.ok(
+    code.includes('9experttraining'),
+    'the scan cannot see a host where one really is — the assertions above pass vacuously'
   );
 });
 

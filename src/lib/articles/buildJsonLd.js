@@ -16,9 +16,10 @@
  */
 
 import { toMetaDescription } from '@/lib/seo/metaDescription';
-import { ARTICLE_SITE_URL, articleCanonicalUrl } from '@/lib/articles/articleUrl';
+import { articleCanonicalUrl } from '@/lib/articles/articleUrl';
+import { SITE_URL } from '@/lib/seo/siteUrl';
 
-export function buildJsonLd(article, siteUrl = ARTICLE_SITE_URL) {
+export function buildJsonLd(article, siteUrl = SITE_URL) {
   if (!article?.jsonLd?.enabled) return null;
   if (!article.active || !article.publishedAt) return null;
 

@@ -9,11 +9,25 @@
  * Google rich results: https://developers.google.com/search/docs/appearance/structured-data/course
  */
 import { courseCanonicalUrl } from '@/lib/courses/courseCanonicalPath';
+import { SITE_URL } from '@/lib/seo/siteUrl';
 
 export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }) {
   if (!course?.course_name) return null;
 
-  const base = siteUrl ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'https://genesis-lab.9expert.app';
+  /**
+   * The last link in this chain used to be the literal
+   * `'https://genesis-lab.9expert.app'` — the preview host, reachable only when
+   * BOTH the argument and the env var were absent. It never fired in production
+   * and that is exactly what made it worth removing: a fallback that is dormant
+   * everywhere it is tested is a fallback nobody notices is wrong, waiting for
+   * the one environment that does not set the variable.
+   *
+   * SITE_URL reads NEXT_PUBLIC_SITE_URL through siteConfig, so the middle term
+   * is now redundant with the last rather than contradicting it. It is kept
+   * because callers passing nothing and callers relying on the env are two
+   * different call sites, and collapsing them is not this round's change.
+   */
+  const base = siteUrl ?? process.env.NEXT_PUBLIC_SITE_URL ?? SITE_URL;
 
   /**
    * THE ONE CANONICAL RULE, not a local copy of it.

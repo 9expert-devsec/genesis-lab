@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildListJsonLd, ARTICLE_LIST_NAME } from '@/lib/articles/buildListJsonLd';
 import { buildJsonLd } from '@/lib/articles/buildJsonLd';
-import { articleCanonicalUrl, ARTICLE_SITE_URL } from '@/lib/articles/articleUrl';
+import { articleCanonicalUrl } from '@/lib/articles/articleUrl';
+import { SITE_URL } from '@/lib/seo/siteUrl';
 import { META_DESCRIPTION_MAX } from '@/lib/seo/metaDescription';
 
 /**
@@ -79,7 +80,7 @@ test('a ListItem url is byte-identical to the detail page JSON-LD url', () => {
 test('a Thai slug survives into the url unchanged, as the detail page emits it', () => {
   const slug = 'สอน-power-bi';
   const ld = buildListJsonLd([ITEM(slug, 'สอน Power BI')]);
-  assert.equal(ld.itemListElement[0].url, `${ARTICLE_SITE_URL}/articles/${slug}`);
+  assert.equal(ld.itemListElement[0].url, `${SITE_URL}/articles/${slug}`);
   assert.equal(ld.itemListElement[0].url, articleCanonicalUrl(slug));
 });
 

@@ -63,7 +63,7 @@ const argOf = (f, d) => { const i = argv.indexOf(f); return i === -1 ? d : argv[
 const POLL_MINUTES = Number(argOf('--minutes', '15'));
 const POLL_EVERY_MS = 5_000;
 const WARM_TRIES = 12;
-const SITE_ORIGIN = argOf('--origin', 'https://genesis-lab.9expert.app').replace(/\/$/, '');
+const SITE_ORIGIN = argOf('--origin', 'https://www.9experttraining.com').replace(/\/$/, '');
 
 const die = (m) => { console.error(`\n✖ ${m}\n`); process.exit(1); };
 const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });

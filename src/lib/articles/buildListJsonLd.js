@@ -43,7 +43,8 @@
  */
 
 import { toMetaDescription } from '@/lib/seo/metaDescription';
-import { ARTICLE_SITE_URL, articleCanonicalUrl } from '@/lib/articles/articleUrl';
+import { articleCanonicalUrl } from '@/lib/articles/articleUrl';
+import { SITE_URL } from '@/lib/seo/siteUrl';
 
 /** What the page's own <h1> says, so the list is named the same thing a reader sees. */
 export const ARTICLE_LIST_NAME = 'บทความ';
@@ -69,7 +70,7 @@ export function buildListJsonLd(articles, opts = {}) {
     page = 1,
     pageSize = items.length,
     total,
-    siteUrl = ARTICLE_SITE_URL,
+    siteUrl = SITE_URL,
   } = opts;
 
   const offset = (Math.max(1, page) - 1) * pageSize;

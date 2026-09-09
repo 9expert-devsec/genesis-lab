@@ -3,7 +3,7 @@
  * READ-ONLY. Mongo reads plus HTTP HEADs. Writes nothing but files under reports/.
  *
  *   node --env-file=.env.local scripts/audit-article-image-coverage.mjs
- *   … --concurrency 3 --delay 120 --origin https://genesis-lab.9expert.app
+ *   … --concurrency 3 --delay 120 --origin https://www.9experttraining.com
  *   … --no-probe            skip the network entirely (registry-only, WEAKER)
  *
  * ══ THE QUESTION THIS ANSWERS, AND THE ONE IT DOES NOT ══════════════════════
@@ -103,7 +103,7 @@ const argOf = (flag, fallback = null) => {
 const has = (flag) => ARGV.includes(flag);
 
 const COLLECTION = 'articles';
-const ORIGIN = argOf('--origin', 'https://genesis-lab.9expert.app').replace(/\/$/, '');
+const ORIGIN = argOf('--origin', 'https://www.9experttraining.com').replace(/\/$/, '');
 const CLOUD = process.env.CLOUDINARY_CLOUD_NAME ?? 'ddva7xvdt';
 const CLOUDINARY_BASE = `https://res.cloudinary.com/${CLOUD}`;
 const BLOB_BASE = (process.env.BLOB_PUBLIC_BASE ?? '').replace(/\/$/, '');

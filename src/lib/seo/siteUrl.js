@@ -41,12 +41,25 @@
  * The second already holds the name `SITE_URL` in the admin bundle. It is the
  * interloper; this module keeps the name and that one is absorbed later.
  *
- * DELIBERATELY OUT OF SCOPE for the round that introduced this: app/sitemap.js,
- * articles/[slug]/_components/ArticleDetailClient.jsx and lib/articles/buildJsonLd.js
- * are NOT migrated. The latter two resolve to `https://genesis-lab.9expert.app`,
- * a staging host — a production build publishes article canonicals on the live
- * domain while their JSON-LD names staging. Recorded, not fixed: cutting the whole
- * site over at once is a blast radius, and this module's first consumer is Home.
+ * ── THE ARTICLE SURFACES: MIGRATED 2026-09-09, ROUND ORIGIN-1 ───────────────
+ * The round that introduced this module left three things out of scope and said
+ * so here: app/sitemap.js, ArticleDetailClient.jsx and lib/articles/buildJsonLd.js,
+ * the latter two resolving to `https://genesis-lab.9expert.app` — so a production
+ * build published article canonicals on the live domain while their JSON-LD named
+ * the preview host. That was recorded, not fixed, because cutting the whole site
+ * over at once is a blast radius and Home was the first consumer.
+ *
+ * ORIGIN-1 measured the cost of leaving it and took the rest of the cut:
+ * lib/articles/articleUrl.js (which both JSON-LD builders default through),
+ * buildJsonLd.js, ArticleDetailClient.jsx and lib/courses/buildCourseJsonLd.js
+ * all read this constant now. On production that day the preview host appeared
+ * 78 times on /articles and 9 times on an article detail page, including all
+ * three social-sharer hrefs in the served markup.
+ *
+ * STILL NOT MIGRATED, and still not intentional: app/sitemap.js, which builds
+ * its own `base`. It resolves to the live origin in production, so it is a
+ * second EXPRESSION rather than a second value — the weaker version of the same
+ * defect, and the next one to absorb.
  */
 
 import { siteConfig } from '@/config/site';

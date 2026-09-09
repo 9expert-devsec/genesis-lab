@@ -72,7 +72,7 @@ import { WEBROOT_DOCUMENTS } from '../src/lib/webrootDocuments.mjs';
 
 const args = process.argv.slice(2);
 const argOf = (k, d) => (args.find((a) => a.startsWith(`--${k}=`)) ?? `=${d}`).split('=').slice(1).join('=');
-const ORIGIN = argOf('origin', 'https://genesis-lab.9expert.app').replace(/\/$/, '');
+const ORIGIN = argOf('origin', 'https://www.9experttraining.com').replace(/\/$/, '');
 const JSON_OUT = argOf('json', '');
 
 const die = (m) => { console.error(`\n✗ ${m}\n`); process.exit(1); };

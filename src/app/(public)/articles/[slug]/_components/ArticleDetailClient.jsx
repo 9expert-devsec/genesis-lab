@@ -7,6 +7,7 @@ import { ArrowSlider } from '@/components/ui/ArrowSlider';
 import { READING_PROGRESS_ANCHOR_ID } from '@/lib/readingProgress';
 import { coursePriceLabel } from '@/lib/coursePriceLabel';
 import { ImageLightbox } from '@/components/ui/ImageLightbox';
+import { articleCanonicalUrl } from '@/lib/articles/articleUrl';
 
 /**
  * Article detail page — client component, owns most of the rendering
@@ -40,8 +41,15 @@ export function ArticleDetailClient({
   const [showProgress, setShowProgress] = useState(false);
   const [tocItems, setTocItems]         = useState([]);
   const [activeTocId, setActiveTocId]   = useState('');
+  // The SSR seed for every share button. Through articleCanonicalUrl, not a
+  // template literal of its own: this string is what a pre-hydration click, a
+  // no-JS client and a crawler reading the sharer hrefs actually get, so it has
+  // to be the same URL the page's canonical and its JSON-LD name. It used to be
+  // a hardcoded preview origin, which is what shipped
+  // `facebook.com/sharer?u=https%3A%2F%2Fgenesis-lab.9expert.app%2F…` into the
+  // served markup of every article.
   const [pageUrl, setPageUrl]           = useState(
-    `https://genesis-lab.9expert.app/articles/${article.slug}`
+    articleCanonicalUrl(article.slug)
   );
 
   const contentRef = useRef(null);
