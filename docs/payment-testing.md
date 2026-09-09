@@ -15,12 +15,20 @@ Set these in Vercel Environment Variables (Production scope):
 ## Omise Dashboard Webhook Setup
 
 1. Go to https://dashboard.omise.co → Settings → Webhooks
-2. Add TWO webhook endpoints (Omise supports multiple URLs simultaneously):
+2. ONE webhook endpoint:
    - `https://www.9experttraining.com/api/webhooks/omise?key=<OMISE_WEBHOOK_SECRET>`
-   - `https://genesis-lab.9expert.app/api/webhooks/omise?key=<OMISE_WEBHOOK_SECRET>`
 
    > Note: Replace `<OMISE_WEBHOOK_SECRET>` with the actual value set in Vercel env vars.
    > Do NOT paste the placeholder text literally.
+
+   > **DO NOT re-add a second endpoint on `genesis-lab.9expert.app`.** This step
+   > used to list one, from when that preview domain was where the app lived. It
+   > is redundant: production above is endpoint #1 and receives every
+   > `charge.complete` directly, so the preview endpoint bought nothing and sent
+   > payment traffic to an origin that is off the site's consent and analytics
+   > cookies. As of round ORIGIN-1 (2026-09-09) that domain is a redirect to
+   > production. If one is still registered in the Omise dashboard from an
+   > earlier setup, delete it there — this file cannot remove it for you.
 
 3. Enable events: `charge.complete`
 4. Note: Omise test-mode webhooks only fire for test-mode charges — same keys must be active on both ends.
