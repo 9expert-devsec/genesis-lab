@@ -14,6 +14,7 @@ import ClientLogosSection from "@/components/portfolio/ClientLogosSection";
 import { getLandingData } from "@/lib/landing/getLandingData";
 import { getNavMenuData } from "@/lib/navmenu/getNavMenuData";
 import { siteConfig } from "@/config/site";
+import { buildHomeJsonLd } from "@/lib/seo/homeJsonLd";
 
 import { HeroSection } from "./_components/home/HeroSection";
 import { HeroBanner } from "./_components/home/HeroBanner";
@@ -129,40 +130,19 @@ export default async function HomePage() {
           src/lib/heroOverlay.js. */}
       <PublicHeader overlay />
 
-      {/* Organization structured data — surfaces the brand panel and
-          course catalogue in Google's SERP. Inlined here (vs. layout)
-          so it only appears on the home page, where the Organization
-          claim is canonical. */}
+      {/* The site's organisation entity — EducationalOrganization + WebSite +
+          WebPage + Place, cross-linked by @id. Inlined here (vs. layout) so it
+          only appears on the home page, where the Organization claim is
+          canonical. The graph itself lives in lib/seo/homeJsonLd.js so it can be
+          invoked by a test rather than only scanned as source text.
+
+          POSITION IS LOAD-BEARING: this sits OUTSIDE <main>, between the header
+          and the main landmark, exactly where the previous block sat. The
+          element structure inside <main> is asserted by fs/heroOverlayOptIn and
+          render/homeHeroSection — do not move this inside it. */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'EducationalOrganization',
-            name: '9Expert Training',
-            alternateName: 'นายน์เอ็กซ์เพิร์ท',
-            url: siteConfig.url,
-            logo: `${siteConfig.url}/logo/9exp-stand.png`,
-            description:
-              'อบรมคอร์สเทคโนโลยีชั้นนำ AI, Data, Power BI, Excel, Power Automate, Automation ด้วยผู้เชี่ยวชาญตัวจริง',
-            address: {
-              '@type': 'PostalAddress',
-              addressCountry: 'TH',
-              addressLocality: 'กรุงเทพมหานคร',
-            },
-            sameAs: [siteConfig.facebookUrl],
-            hasOfferCatalog: {
-              '@type': 'OfferCatalog',
-              name: 'หลักสูตรอบรม IT',
-              itemListElement: [
-                { '@type': 'Course', name: 'AI & Machine Learning',          provider: { '@type': 'Organization', name: '9Expert Training' } },
-                { '@type': 'Course', name: 'Data Analytics & Power BI',      provider: { '@type': 'Organization', name: '9Expert Training' } },
-                { '@type': 'Course', name: 'Microsoft 365 & Power Platform', provider: { '@type': 'Organization', name: '9Expert Training' } },
-                { '@type': 'Course', name: 'RPA & Automation',               provider: { '@type': 'Organization', name: '9Expert Training' } },
-              ],
-            },
-          }),
-        }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildHomeJsonLd()) }}
       />
 
       <main id="main">
