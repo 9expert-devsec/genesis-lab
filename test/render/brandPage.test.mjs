@@ -2,11 +2,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import { JSDOM } from 'jsdom';
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { readSourceForScanning, ROOT as SRC_ROOT } from '../sourceScan.mjs';
 import BrandPage from '@/app/(public)/brand/page';
+import {
+  BrandAssetExplorer,
+  LogoCardRow,
+} from '@/app/(public)/brand/_components/BrandAssetExplorer';
 import { BRAND_PALETTE } from '@/lib/brand/palette';
 import {
   BRAND_SECTIONS,
@@ -26,8 +32,9 @@ import {
  *      drift from the theme (the other half of that is the parity guard in
  *      test/pure/brandPalette.test.mjs, which compares palette to
  *      tailwind.config.js);
- *   2. the tile behind each logo variant does NOT follow the theme, because it
- *      is the guideline being demonstrated rather than decoration.
+ *   2. the tile behind the logo cards does NOT follow the theme — it follows
+ *      the SELECTED INK, because it is the guideline being demonstrated rather
+ *      than decoration.
  *
  * (2) is the one that would rot quietly. "Make the page dark-mode consistent"
  * is a reasonable-sounding edit that would put `dark:bg-*` on the tile and make
@@ -38,6 +45,33 @@ import {
  * particular ELEMENT's attributes (is THIS img lazy? does THIS tile carry a
  * dark: class?), and a substring search across the whole document answers a
  * different question.
+ *
+ * ── TWO WAYS OF DRIVING THE PAGE, AND WHY BOTH ARE HERE ─────────────────────
+ * Section 06 is now three cards and one shared colour picker, and the picker is
+ * the page's only client component. `renderToStaticMarkup` answers everything
+ * about the page AS SERVED — which ink it opens on, that there are three cards
+ * and not fifteen, what the rest of the page renders — but it cannot press a
+ * button, so on its own it can only ever see Nine Blue.
+ *
+ * So the ink-dependent claims are made twice, deliberately, and the two are not
+ * the same claim:
+ *
+ *   · LogoCardRow is mounted directly, once per ink, to assert the tile pairing
+ *     for all five. That is the RULE — the mapping from ink to ground — and it
+ *     is checked without a click because a click is not what makes it true.
+ *   · BrandAssetExplorer is then mounted into a real JSDOM and each of the five
+ *     swatches is really clicked, which is the only thing that proves the
+ *     selection is WIRED: that pressing State Light re-points all three images,
+ *     re-grounds all three tiles, moves aria-pressed, and rewrites the hrefs.
+ *
+ * WHAT IS STILL NOT COVERED, said plainly rather than implied by a green: no
+ * assertion here touches hydration (this mounts a client root directly, it does
+ * not replay Next's server HTML and hydrate it), keyboard activation (the
+ * clicks are dispatched MouseEvents; Enter/Space are native <button> behaviour
+ * that is taken on trust), focus movement, or anything visual — that a ring is
+ * actually drawn, that the tile is a colour a human would call dark, or that
+ * the artwork inside it is legible. The class names are asserted; the pixels
+ * are not.
  */
 
 const doc = () => {
@@ -47,56 +81,273 @@ const doc = () => {
 
 const logoImages = (d) => [...d.querySelectorAll('img')].filter((i) => i.getAttribute('src')?.includes('/files/ci-svg/'));
 
-test('all fifteen logo cards render — three shapes x five inks, from the loop', () => {
+/** The colour picker's five buttons, read off whatever document is passed. */
+const inkButtons = (d) => [...d.querySelectorAll('[role="group"] button[aria-pressed]')];
+
+const inkByKey = Object.fromEntries(LOGO_VARIANTS.map((v) => [v.key, v]));
+
+/**
+ * Assert the ground of one tile: the right one of the two, and NOTHING
+ * conditional on the theme.
+ *
+ * Shared by the static per-ink pass and the click-driven one so both are
+ * measuring the same property with the same strictness — a second, looser copy
+ * inside the interaction test is exactly how one of the two quietly stops
+ * meaning anything.
+ */
+function assertTileGround(tile, variant, where) {
+  const classes = tile.className;
+
+  // Not "the class list happens to contain no dark:" — the assertion is that
+  // the tile's GROUND is unconditional. A `dark:` anything on this element is
+  // the regression, whatever utility it decorates.
+  assert.ok(
+    !/(^|\s)dark:/.test(classes),
+    `${where}: the ${variant.key} tile carries a dark: variant (${classes}). The ` +
+      `tile is the guideline being demonstrated: a Cloud Base logo is the ` +
+      `knockout and is legible ONLY on dark, a Deep Navy logo ONLY on light. ` +
+      `Inverting the tile with the theme shows navy-on-navy and makes the page ` +
+      `teach the mistake it forbids three sections further up.`,
+  );
+
+  const wantsDark = variant.tile === 'dark';
+  assert.equal(
+    /(^|\s)bg-9e-navy(\s|$)/.test(classes),
+    wantsDark,
+    `${where}: ${variant.key} should sit on a ${variant.tile} tile`,
+  );
+  assert.equal(
+    /(^|\s)bg-white(\s|$)/.test(classes),
+    !wantsDark,
+    `${where}: ${variant.key} should sit on a ${variant.tile} tile`,
+  );
+}
+
+/**
+ * Mount a real React root in a real DOM, FULLY SYNCHRONOUSLY.
+ *
+ * The globals swap follows test/render/imageLightbox exactly, and for the
+ * reason recorded there at length: test/run.mjs runs these files with
+ * `isolation: 'none'` AND `concurrency: true`, so an `await` taken while
+ * `globalThis.document` is swapped hands a foreign document to whatever else is
+ * mid-flight. Every mount here is synchronous end to end; `flushSync` is what
+ * makes that possible.
+ */
+function withDom(run) {
+  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
+    pretendToBeVisual: true,
+  });
+  const prev = {
+    window: globalThis.window,
+    document: globalThis.document,
+    raf: globalThis.requestAnimationFrame,
+  };
+  globalThis.window = dom.window;
+  globalThis.document = dom.window.document;
+  globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.window);
+
+  const root = createRoot(dom.window.document.getElementById('root'));
+  const api = {
+    doc: dom.window.document,
+    render: () => flushSync(() => root.render(createElement(BrandAssetExplorer))),
+    /** A click that really bubbles, so React's root listener can see it. */
+    click: (el) =>
+      flushSync(() =>
+        el.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })),
+      ),
+  };
+  try {
+    return run(api);
+  } finally {
+    // Unmount INSIDE the swap — React touches `document` during teardown, and
+    // doing it after the restore throws on a detached tree.
+    try { flushSync(() => root.unmount()); } catch { /* already torn down */ }
+    globalThis.window = prev.window;
+    globalThis.document = prev.document;
+    globalThis.requestAnimationFrame = prev.raf;
+  }
+}
+
+// ── SECTION 06: THREE CARDS AND ONE PICKER ──────────────────────────────────
+
+test('section 06 renders THREE cards — one per logo form, not one per file', () => {
   const images = logoImages(doc());
-  assert.equal(images.length, LOGO_SHAPES.length * LOGO_VARIANTS.length);
-  assert.equal(images.length, 15, 'the guideline ships five inks of three shapes');
+
+  // The EXACT count, not a floor. The shape this replaced rendered fifteen and
+  // was correct at every "at least three" assertion anyone could write about
+  // it, so a floor here would pass on the very regression it exists to catch.
+  assert.equal(
+    images.length,
+    3,
+    `section 06 rendered ${images.length} logo tiles. It is three cards sharing ` +
+      `one colour picker — one per logo form — not one card per file.`,
+  );
+  assert.equal(images.length, LOGO_SHAPES.length, 'one card per shape in LOGO_SHAPES');
 
   const srcs = images.map((i) => i.getAttribute('src'));
-  assert.equal(new Set(srcs).size, 15, 'fifteen DISTINCT files, not one repeated');
+  assert.equal(new Set(srcs).size, 3, 'three DISTINCT files, not one repeated');
+});
+
+test('the page opens on Nine Blue, and every card points at the -nineblue files', () => {
+  const d = doc();
+
+  // Document order matters: the cards read Signature · Symbol · Square, which
+  // is the order the guideline introduces them in.
+  assert.deepEqual(
+    logoImages(d).map((i) => i.getAttribute('src')),
+    [
+      '/files/ci-svg/signature-nineblue.svg',
+      '/files/ci-svg/symbol-nineblue.svg',
+      '/files/ci-svg/square-nineblue.svg',
+    ],
+  );
+
+  const hrefs = [...d.querySelectorAll('a')].map((a) => a.getAttribute('href'));
   for (const shape of LOGO_SHAPES) {
-    for (const variant of LOGO_VARIANTS) {
+    assert.ok(
+      hrefs.includes(`/files/ci-svg/${shape.key}-nineblue.svg`),
+      `no SVG download for ${shape.key}-nineblue`,
+    );
+    assert.ok(
+      hrefs.includes(`/files/ci/${shape.key}-nineblue.png`),
+      `no PNG download for ${shape.key}-nineblue`,
+    );
+  }
+
+  // ...and NO other ink's file is anywhere in the served markup. Rendering all
+  // fifteen and hiding twelve with CSS would satisfy every assertion above.
+  const otherInks = LOGO_VARIANTS.filter((v) => v.key !== 'nineblue');
+  for (const href of hrefs.filter(Boolean)) {
+    for (const variant of otherInks) {
       assert.ok(
-        srcs.includes(`/files/ci-svg/${shape.key}-${variant.key}.svg`),
-        `missing ${shape.key}-${variant.key}`,
+        !href.endsWith(`-${variant.key}.svg`) && !href.endsWith(`-${variant.key}.png`),
+        `${href} ships in the default render, but only Nine Blue is selected`,
       );
     }
   }
+
+  // The visitor is told WHICH file each button hands over, before they click.
+  const text = d.getElementById('brand-assets').textContent;
+  for (const shape of LOGO_SHAPES) {
+    assert.ok(text.includes(`${shape.key}-nineblue`), `the ${shape.key} card omits its file stem`);
+  }
+  assert.ok(text.includes(inkByKey.nineblue.name), 'the cards name the selected colour');
+  assert.ok(text.includes(inkByKey.nineblue.hex), 'the cards print the selected hex');
 });
 
-test('THE TILE DOES NOT FLIP WITH THE THEME', () => {
+test('all five inks are offered as named, keyboard-operable options', () => {
   const d = doc();
-  const tiles = logoImages(d).map((img) => img.parentElement);
-  assert.equal(tiles.length, 15);
+  const buttons = inkButtons(d);
 
-  for (const [index, tile] of tiles.entries()) {
-    const variant = LOGO_VARIANTS[index % LOGO_VARIANTS.length];
-    const classes = tile.className;
+  assert.equal(buttons.length, 5, 'five approved inks, five swatches');
+  assert.equal(buttons.length, LOGO_VARIANTS.length);
 
-    // Not "the class list happens to contain no dark:" — the assertion is that
-    // the tile's GROUND is unconditional. A `dark:` anything on this element is
-    // the regression, whatever utility it decorates.
-    assert.ok(
-      !/(^|\s)dark:/.test(classes),
-      `the ${variant.key} tile carries a dark: variant (${classes}). The tile is ` +
-        `the guideline being demonstrated: a Cloud Base logo is the knockout and ` +
-        `is legible ONLY on dark, a Deep Navy logo ONLY on light. Inverting the ` +
-        `tile with the theme shows navy-on-navy and makes the page teach the ` +
-        `mistake it forbids three sections further down.`,
-    );
+  // The NAME, not just a coloured circle. Two of the five inks are greys many
+  // readers cannot tell apart, and a screen reader is handed nothing at all by
+  // a background colour.
+  assert.deepEqual(
+    buttons.map((b) => b.textContent.replace(/✓/g, '').trim()),
+    LOGO_VARIANTS.map((v) => v.name),
+  );
 
-    const wantsDark = variant.tile === 'dark';
+  for (const button of buttons) {
+    assert.equal(button.tagName, 'BUTTON', 'a real button, not a div with a handler');
+    assert.equal(button.getAttribute('type'), 'button', 'not a submit inside some future form');
     assert.equal(
-      /(^|\s)bg-9e-navy(\s|$)/.test(classes),
-      wantsDark,
-      `${variant.key} should sit on a ${variant.tile} tile`,
-    );
-    assert.equal(
-      /(^|\s)bg-white(\s|$)/.test(classes),
-      !wantsDark,
-      `${variant.key} should sit on a ${variant.tile} tile`,
+      button.getAttribute('tabindex'),
+      null,
+      'no tabindex — the native tab order is the keyboard model here',
     );
   }
+
+  // Selection is exposed to assistive tech, and exactly one option carries it.
+  const pressed = buttons.filter((b) => b.getAttribute('aria-pressed') === 'true');
+  assert.equal(pressed.length, 1, 'exactly one ink is selected at a time');
+  assert.equal(pressed[0].textContent.replace(/✓/g, '').trim(), inkByKey.nineblue.name);
+
+  // ...and it is not carried by colour alone: the selected button is also the
+  // one wearing a ring and a check mark.
+  assert.match(pressed[0].className, /(^|\s)ring-2(\s|$)/, 'the selected swatch wears a ring');
+  assert.ok(pressed[0].textContent.includes('✓'), 'the selected swatch is check-marked');
+
+  const group = d.querySelector('[role="group"][aria-labelledby]');
+  assert.ok(group, 'the five swatches are one labelled group');
+  assert.ok(
+    d.getElementById(group.getAttribute('aria-labelledby'))?.textContent.trim(),
+    'the group label points at an element with text',
+  );
+});
+
+test('THE TILE FOLLOWS THE SELECTED INK, AND NEVER THE THEME — all five', () => {
+  // Mounted per ink rather than clicked, because the pairing is a RULE about
+  // the ink and not a consequence of pressing anything. All five, not a sample:
+  // one wrong pairing renders a white logo on a white tile and throws nothing.
+  for (const variant of LOGO_VARIANTS) {
+    const html = renderToStaticMarkup(createElement(LogoCardRow, { variant }));
+    const d = new JSDOM(`<!doctype html><body>${html}</body>`).window.document;
+    const tiles = logoImages(d).map((img) => img.parentElement);
+    assert.equal(tiles.length, 3, `${variant.key}: three cards`);
+    for (const tile of tiles) assertTileGround(tile, variant, `LogoCardRow[${variant.key}]`);
+  }
+});
+
+test('clicking each swatch re-points all three cards and re-grounds all three tiles', () => {
+  withDom((m) => {
+    m.render();
+
+    for (const variant of LOGO_VARIANTS) {
+      const button = inkButtons(m.doc).find(
+        (b) => b.textContent.replace(/✓/g, '').trim() === variant.name,
+      );
+      assert.ok(button, `no swatch labelled ${variant.name}`);
+      m.click(button);
+
+      const images = logoImages(m.doc);
+      assert.equal(images.length, 3, `${variant.key}: still three cards after the click`);
+
+      // Every card moved — the picker is SHARED, so a click that repainted only
+      // the first card would be the bug worth catching here.
+      assert.deepEqual(
+        images.map((i) => i.getAttribute('src')),
+        LOGO_SHAPES.map((s) => `/files/ci-svg/${s.key}-${variant.key}.svg`),
+        `${variant.key}: the previews did not all follow the picker`,
+      );
+
+      const hrefs = [...m.doc.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+      for (const shape of LOGO_SHAPES) {
+        assert.ok(hrefs.includes(`/files/ci-svg/${shape.key}-${variant.key}.svg`));
+        assert.ok(hrefs.includes(`/files/ci/${shape.key}-${variant.key}.png`));
+        // No `download` attribute, in either state — the delivery layer sends
+        // these as attachments and a second copy of that ruling here would be
+        // the weaker one.
+        assert.equal(
+          m.doc.querySelector(`a[href="/files/ci/${shape.key}-${variant.key}.png"]`)
+            .getAttribute('download'),
+          null,
+        );
+      }
+
+      for (const img of images) {
+        assertTileGround(img.parentElement, variant, `after clicking ${variant.name}`);
+        assert.ok(
+          (img.getAttribute('alt') ?? '').includes(variant.name),
+          `the alt still names the previous ink: ${img.getAttribute('alt')}`,
+        );
+      }
+
+      const pressed = inkButtons(m.doc).filter((b) => b.getAttribute('aria-pressed') === 'true');
+      assert.equal(pressed.length, 1, `${variant.key}: exactly one swatch stays pressed`);
+      assert.equal(pressed[0].textContent.replace(/✓/g, '').trim(), variant.name);
+
+      const stems = m.doc.body.textContent;
+      for (const shape of LOGO_SHAPES) {
+        assert.ok(
+          stems.includes(`${shape.key}-${variant.key}`),
+          `${shape.key} card does not print its ${variant.key} file stem`,
+        );
+      }
+    }
+  });
 });
 
 test('the tile assignment is the guideline pairing, not an alternating pattern', () => {
@@ -137,7 +388,14 @@ test('every printed hex comes from the palette or is one of the two logo inks', 
 
 test('the swatch chips are painted from the palette, in palette order', () => {
   const d = doc();
-  const chips = [...d.querySelectorAll('[style*="background-color"]')];
+  // SCOPED TO SECTION 04, and that scope is the point rather than a convenience.
+  // Section 06's ink picker paints five dots the same way — inline, from data,
+  // for the reason ColorSwatchGrid records — and two of those five inks are
+  // deliberately NOT palette colours. A document-wide count would therefore
+  // read eleven chips and go red on a correct page, and "fix" it by relaxing to
+  // a floor, which would stop noticing a palette colour that fell out of the
+  // grid. The claim here is about the BRAND PALETTE grid; ask it there.
+  const chips = [...d.getElementById('colors').querySelectorAll('[style*="background-color"]')];
   assert.equal(chips.length, BRAND_PALETTE.length, 'one chip per brand colour');
 
   chips.forEach((chip, i) => {
@@ -230,14 +488,23 @@ test('every logo image is lazy and carries a Thai alt naming its ink', () => {
   }
 });
 
-test('each logo card offers both an SVG and a PNG download', () => {
+test('each logo card offers an SVG and a PNG, as plain anchors', () => {
   const d = doc();
-  const hrefs = [...d.querySelectorAll('a')].map((a) => a.getAttribute('href'));
-  for (const shape of LOGO_SHAPES) {
-    for (const variant of LOGO_VARIANTS) {
-      assert.ok(hrefs.includes(`/files/ci-svg/${shape.key}-${variant.key}.svg`));
-      assert.ok(hrefs.includes(`/files/ci/${shape.key}-${variant.key}.png`));
-    }
+  const links = [...d.querySelectorAll('a')].filter((a) =>
+    /^\/files\/ci(-svg)?\//.test(a.getAttribute('href') ?? ''),
+  );
+  // Three cards x two formats. The wallpaper's own download link lives under
+  // /files/ci/ too and is matched by the filter, so it is excluded by name
+  // rather than by trimming the pattern until the number came out right.
+  const logoLinks = links.filter((a) => !a.getAttribute('href').includes('wallpaper'));
+  assert.equal(logoLinks.length, LOGO_SHAPES.length * 2);
+
+  for (const a of logoLinks) {
+    // NO `download` attribute, here or on the wallpaper. next.config.mjs sends
+    // the originals under these two roots as attachments already; adding the
+    // attribute would be a second, weaker statement of that in a place the
+    // delivery tests do not read.
+    assert.equal(a.getAttribute('download'), null, `${a.getAttribute('href')} carries download=`);
   }
 });
 
@@ -351,6 +618,6 @@ test('no SVG is routed through next/image, which would refuse it', () => {
   // next.config.mjs does not set `dangerouslyAllowSVG`, so the optimizer rejects
   // an SVG source outright. The stub in test/loader.mjs renders next/image as an
   // <img> too, so the markup alone cannot tell them apart — the source can.
-  const src = readSourceForScanning('src/app/(public)/brand/_components/LogoVariantGrid.jsx');
-  assert.ok(!/next\/image/.test(src), 'LogoVariantGrid must use a plain <img> for SVG sources');
+  const src = readSourceForScanning('src/app/(public)/brand/_components/BrandAssetExplorer.jsx');
+  assert.ok(!/next\/image/.test(src), 'BrandAssetExplorer must use a plain <img> for SVG sources');
 });

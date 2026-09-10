@@ -9,7 +9,7 @@ import {
 } from './_components/DefinitionGrid';
 import { PositioningContrast } from './_components/PositioningContrast';
 import { ColorSwatchGrid } from './_components/ColorSwatchGrid';
-import { LogoVariantGrid } from './_components/LogoVariantGrid';
+import { BrandAssetExplorer } from './_components/BrandAssetExplorer';
 import { GuidancePair, GuidancePanel } from './_components/GuidancePanels';
 import { MinimumSizeTable } from './_components/MinimumSizeTable';
 import { WallpaperPanel } from './_components/WallpaperPanel';
@@ -36,7 +36,6 @@ import {
   MISUSE_LEAD,
   PROHIBITIONS,
   REQUIREMENTS,
-  LOGO_SHAPES,
   BRAND_ASSETS_LEAD,
 } from './brandContent';
 
@@ -45,8 +44,16 @@ import {
  *
  * A SERVER COMPONENT with no data access and no async work: every value on this
  * page is a constant in src/lib/brand/palette.js or ./brandContent.js, so the
- * route is fully static and ships no client JavaScript of its own. The section
- * rail is plain anchors for the same reason — see SectionNav.
+ * route is prerendered as static. The section rail is plain anchors for the
+ * same reason — see SectionNav.
+ *
+ * ── ONE CLIENT COMPONENT, AND IT IS NAMED ───────────────────────────────────
+ * `BrandAssetExplorer` in section 06 — the three download cards and the colour
+ * picker that drives all three. It is the ONLY 'use client' module this page
+ * reaches, it holds a single `useState`, and it does not make the route
+ * dynamic: a client component is still prerendered, then hydrated. Every other
+ * component here must stay server-rendered; if a second one needs state, that
+ * is a decision to take deliberately rather than by importing.
  *
  * ── THIS STATIC ROUTE BEATS THE CATCH-ALL. SAY IT OUT LOUD ──────────────────
  * `src/app/(public)/[...slug]/page.jsx` resolves a CustomPage by slug. Next.js
@@ -239,19 +246,17 @@ export default function BrandPage() {
 
           {/* ── 06 ───────────────────────────────────────────────────────── */}
           <BrandSection {...sectionById['brand-assets']} lead={BRAND_ASSETS_LEAD}>
-            {/* Signature / Symbol / Square — three subsections, one component,
-                fifteen cards. The shapes are data (brandContent.LOGO_SHAPES) so
-                adding a fourth lockup is one entry, not another copy of this
-                block. */}
-            {LOGO_SHAPES.map((shape) => (
-              <Subsection key={shape.key} title={shape.title} lead={shape.blurb}>
-                <LogoVariantGrid
-                  shape={shape.key}
-                  alt={shape.alt}
-                  stageHeight={shape.stageHeight}
-                />
-              </Subsection>
-            ))}
+            {/* Signature / Symbol / Square — three cards and one shared colour
+                picker, both driven by brandContent's LOGO_SHAPES and
+                LOGO_VARIANTS, so a fourth lockup or a sixth ink is one entry
+                rather than another copy of this block.
+
+                THE ONE CLIENT COMPONENT ON THIS PAGE. The picker needs state,
+                and this is the only thing on /brand that does; everything above
+                and below it stays server-rendered so the route stays static.
+                See BrandAssetExplorer for why the selection is component state
+                and not a search param. */}
+            <BrandAssetExplorer />
 
             <Subsection title="Wallpaper">
               <WallpaperPanel />

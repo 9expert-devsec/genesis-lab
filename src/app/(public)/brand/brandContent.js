@@ -9,10 +9,11 @@ import { paletteByKey } from '@/lib/brand/palette';
  * document someone signed off, and "improving" a sentence here silently forks
  * the page from the document it claims to reproduce.
  *
- * It sits in a module rather than inline in the JSX for two reasons: the fifteen
- * logo cards become one loop over two lists instead of fifteen near-identical
- * blocks, and it keeps page.jsx free of colour LITERALS — every hex the page
- * prints is either read from the brand palette or declared exactly once, here.
+ * It sits in a module rather than inline in the JSX for two reasons: the logo
+ * downloader in section 06 becomes two loops over two lists instead of a block
+ * per form per ink, and it keeps page.jsx free of colour LITERALS — every hex
+ * the page prints is either read from the brand palette or declared exactly
+ * once, here.
  *
  * ══ THE LANGUAGE SPLIT IS THE SOURCE DOCUMENT'S, NOT A CHOICE MADE HERE ═════
  * ENGLISH — section and subsection titles, labels, colour names, keywords,
@@ -363,7 +364,8 @@ export const pngHref = (shape, variant) => `/files/ci/${shape}-${variant}.png`;
  * ── `tile` IS NOT DECORATION AND DOES NOT FOLLOW THE THEME ──────────────────
  * It records which background the guideline says this ink is FOR: a Cloud Base
  * logo is the knockout, so it can only be shown on dark; a Deep Navy logo can
- * only be shown on light. See LogoVariantGrid, where that is enforced.
+ * only be shown on light. See BrandAssetExplorer, where that is enforced — the
+ * selected ink drives all three tiles at once, and the theme never does.
  *
  * ── WHERE EACH HEX COMES FROM ───────────────────────────────────────────────
  * Three of the five inks ARE brand palette colours and read their hex from the

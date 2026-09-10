@@ -34,9 +34,9 @@ import { WALLPAPER } from '../brandContent';
  *     space before the image arrives and the eight sections above it do not
  *     jump when it does.
  *
- * A plain <img> rather than next/image, for consistency with the fifteen logo
- * tiles above (which have no choice — see LogoVariantGrid) and because routing
- * an already-optimized rewrite through a second optimizer buys nothing.
+ * A plain <img> rather than next/image, for consistency with the logo tiles
+ * above (which have no choice — see BrandAssetExplorer) and because routing an
+ * already-optimized rewrite through a second optimizer buys nothing.
  */
 export function WallpaperPanel() {
   return (
