@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { LOGO_VARIANTS, svgHref, pngHref } from '../logoAssets';
+import { LOGO_VARIANTS, svgHref, pngHref } from '../brandContent';
 
 /**
  * The five approved inks of one logo shape, as five download cards.

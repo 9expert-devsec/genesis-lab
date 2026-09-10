@@ -4,12 +4,12 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
 import { readSourceForScanning } from '../sourceScan.mjs';
-import LogoPage from '@/app/(public)/logo-page/page';
+import BrandPage from '@/app/(public)/brand/page';
 import { BRAND_PALETTE } from '@/lib/brand/palette';
-import { LOGO_SHAPES, LOGO_VARIANTS, WALLPAPER } from '@/app/(public)/logo-page/logoAssets';
+import { LOGO_SHAPES, LOGO_VARIANTS, WALLPAPER } from '@/app/(public)/brand/brandContent';
 
 /**
- * What /logo-page ACTUALLY renders — read off the markup, not off the source.
+ * What /brand ACTUALLY renders — read off the markup, not off the source.
  *
  * The page is a brand REFERENCE: its whole job is to be the one place a value
  * is copied out of. Two properties make it that, and neither is visible in a
@@ -34,7 +34,7 @@ import { LOGO_SHAPES, LOGO_VARIANTS, WALLPAPER } from '@/app/(public)/logo-page/
  */
 
 const doc = () => {
-  const html = renderToStaticMarkup(createElement(LogoPage));
+  const html = renderToStaticMarkup(createElement(BrandPage));
   return new JSDOM(`<!doctype html><body>${html}</body>`).window.document;
 };
 
@@ -106,7 +106,7 @@ test('the tile assignment is the guideline pairing, not an alternating pattern',
 });
 
 test('every printed hex comes from the palette or is one of the two logo inks', () => {
-  const html = renderToStaticMarkup(createElement(LogoPage));
+  const html = renderToStaticMarkup(createElement(BrandPage));
   const printed = new Set((html.match(/#[0-9A-Fa-f]{6}\b/g) ?? []).map((h) => h.toUpperCase()));
 
   const allowed = new Set([
@@ -150,7 +150,7 @@ test('page.jsx holds no colour literal of its own', () => {
   // Comments and imports stripped, per the standing rule in test/sourceScan.mjs
   // — a docstring that quotes a hex would otherwise satisfy a "does not
   // contain" assertion about the code.
-  const src = readSourceForScanning('src/app/(public)/logo-page/page.jsx');
+  const src = readSourceForScanning('src/app/(public)/brand/page.jsx');
   const hexes = src.match(/#[0-9A-Fa-f]{3,8}\b/g) ?? [];
   assert.deepEqual(
     hexes,
@@ -234,6 +234,6 @@ test('no SVG is routed through next/image, which would refuse it', () => {
   // next.config.mjs does not set `dangerouslyAllowSVG`, so the optimizer rejects
   // an SVG source outright. The stub in test/loader.mjs renders next/image as an
   // <img> too, so the markup alone cannot tell them apart — the source can.
-  const src = readSourceForScanning('src/app/(public)/logo-page/_components/LogoVariantGrid.jsx');
+  const src = readSourceForScanning('src/app/(public)/brand/_components/LogoVariantGrid.jsx');
   assert.ok(!/next\/image/.test(src), 'LogoVariantGrid must use a plain <img> for SVG sources');
 });

@@ -12,28 +12,28 @@ import {
   PROHIBITIONS,
   LOGO_MEANING,
   BRAND_KEYWORDS,
-} from './logoAssets';
+} from './brandContent';
 
 /**
- * /logo-page — the 9Expert brand asset page.
+ * /brand — the 9Expert brand hub.
  *
  * A SERVER COMPONENT with no data access and no async work: every value on this
- * page is a constant in src/lib/brand/palette.js or ./logoAssets.js, so the
+ * page is a constant in src/lib/brand/palette.js or ./brandContent.js, so the
  * route is fully static and ships no client JavaScript of its own.
  *
  * ── THIS STATIC ROUTE BEATS THE CATCH-ALL. SAY IT OUT LOUD ──────────────────
  * `src/app/(public)/[...slug]/page.jsx` resolves a CustomPage by slug, and a
- * CustomPage DRAFT exists at slug `logo-page`. Next.js route precedence is
+ * CustomPage draft has existed at a slug this route later took. Precedence is
  * static > dynamic > catch-all, and `(public)` is a route group that
  * contributes nothing to the URL, so from the moment this file exists
- * /logo-page is THIS page and the catch-all is never reached for that segment.
+ * /brand is THIS page and the catch-all is never reached for that segment.
  * The two do not collide and nothing 500s: the draft simply becomes
  * unreachable at its own URL — including through the `?preview=` token, which
  * is handled inside the catch-all. Publishing the draft would NOT take the URL
  * back. It has to be deleted through the admin UI.
  *
  * ── CONTENT SOURCE ──────────────────────────────────────────────────────────
- * prompts/logo-page-content-reference.html — reviewed and approved. Section
+ * prompts/brand-page-content-reference.md — reviewed and approved. Section
  * order, Thai copy, table values and asset paths all come from it. Its markup
  * does NOT: that file is inline-CSS written for a CMS field, light-mode only,
  * with fifteen hand-repeated logo cards and the palette hardcoded six times.
@@ -58,8 +58,8 @@ export const metadata = {
   title: PAGE_TITLE,
   description:
     'ศูนย์รวมโลโก้ ระบบสี และหลักการใช้งานอัตลักษณ์ของ 9Expert Training ดาวน์โหลดไฟล์ต้นฉบับ SVG และ PNG ได้ทุกรูปแบบ',
-  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/logo-page` },
-  openGraph: { url: `${process.env.NEXT_PUBLIC_SITE_URL}/logo-page` },
+  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/brand` },
+  openGraph: { url: `${process.env.NEXT_PUBLIC_SITE_URL}/brand` },
 };
 
 const LEAD_PARAGRAPHS = [
@@ -99,7 +99,7 @@ export default function LogoPage() {
       </BrandSection>
 
       {/* Signature / Symbol / Square — three sections, one component, fifteen
-          cards. The shapes are data (logoAssets.LOGO_SHAPES) so adding a fourth
+          cards. The shapes are data (brandContent.LOGO_SHAPES) so adding a fourth
           lockup is one entry, not another copy of this block. */}
       {LOGO_SHAPES.map((shape) => (
         <BrandSection key={shape.key} id={shape.key} title={shape.title} blurb={shape.blurb}>

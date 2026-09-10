@@ -1,6 +1,6 @@
 import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { WALLPAPER } from '../logoAssets';
+import { WALLPAPER } from '../brandContent';
 
 /**
  * The desktop wallpaper: a preview, and the link to the real file.

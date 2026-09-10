@@ -1,10 +1,10 @@
 import { paletteByKey } from '@/lib/brand/palette';
 
 /**
- * THE CONTENT OF /logo-page, as data.
+ * THE CONTENT OF /brand, as data.
  *
  * Every string here is the approved copy from the Master Brand Guideline v1.0,
- * ported from prompts/logo-page-content-reference.html. It sits in a module
+ * ported from prompts/brand-page-content-reference.md. It sits in a module
  * rather than inline in the JSX for two reasons: the fifteen logo cards become
  * one loop over two lists instead of fifteen near-identical blocks, and it
  * keeps page.jsx free of colour LITERALS — every hex the page prints is either

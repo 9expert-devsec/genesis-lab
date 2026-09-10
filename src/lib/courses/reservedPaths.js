@@ -59,15 +59,9 @@ export const RESERVED_PATHS = Object.freeze([
   { segment: 'cookie-policy', source: 'tree' },
   { segment: 'faq', source: 'tree' },
   { segment: 'join-us', source: 'tree' },
-  // The brand asset page. It is a STATIC route, so it beats the [...slug]
-  // catch-all outright — which means an alias or a custom-page slug of
-  // `logo-page` would be accepted by admin and then never resolve, with no
-  // error at either end. That is not hypothetical here: a CustomPage draft
-  // already holds this slug and has been unreachable since the route landed.
-  //
-  // NOT covered by the `logo` static entry below. This list matches the whole
-  // first segment, so `logo` reserves /logo and nothing else.
-  { segment: 'logo-page', source: 'tree' },
+  // `brand` IS a tree entry too, and it is NOT listed here. It is listed once,
+  // in the public/ block below, carrying `alsoSource: ['tree']` — see the note
+  // there. Listing it twice would trip the no-duplicates check.
   { segment: 'masterclass', source: 'tree' },
   { segment: 'policies', source: 'tree' },
   { segment: 'portfolio', source: 'tree' },
@@ -126,7 +120,24 @@ export const RESERVED_PATHS = Object.freeze([
   // its neighbours, and an alias that loses to a static file loses SILENTLY,
   // with no error and no symptom. The cost is named: no course can use /avatar.
   { segment: 'avatar', source: 'static' },
-  { segment: 'brand', source: 'static' },
+  // ══ THE ONE SEGMENT WITH TWO ORIGINS ══════════════════════════════════════
+  // public/brand/ holds the header lockups (logo-blue.png, logo-white.png and
+  // eight more), AND src/app/(public)/brand is the brand hub route. Both
+  // reserve this segment, and the parity checks derive it from both places —
+  // the static check reads public/, the tree check reads the app router.
+  //
+  // It can only be LISTED once: `the list has no duplicate segments` is a real
+  // guard and a second `{ segment: 'brand' }` would trip it. So the entry
+  // declares its extra origin instead, and reservedBySource() reports it under
+  // both. Without that, one of the two parity tests goes red no matter which
+  // single `source` is chosen — they are not simultaneously satisfiable by a
+  // one-source entry, which is the whole reason this field exists.
+  //
+  // The two do NOT collide at runtime: public/ serves FILES, so /brand/foo.png
+  // comes from the directory and bare /brand reaches the route. Verified
+  // against production before the route was added — /brand answered 404, so
+  // the directory was not claiming the bare URL.
+  { segment: 'brand', source: 'static', alsoSource: ['tree'] },
   // The Home hero artwork. Same `-img` convention as policies-img below.
   { segment: 'hero-img', source: 'static' },
   { segment: 'logo', source: 'static' },
@@ -162,7 +173,15 @@ export const RESERVED_PATHS = Object.freeze([
 
 /** Every entry contributed by a source the test can derive. */
 export function reservedBySource(source) {
-  return RESERVED_PATHS.filter((r) => r.source === source).map((r) => r.segment);
+  return RESERVED_PATHS
+    // `alsoSource` is for a segment reserved by MORE THAN ONE mechanism — today
+    // only `brand`, which is both a public/ directory and an app-router route.
+    // Such a segment is derivable by two parity checks but may appear in the
+    // list only once, so it names its extra origins rather than being listed
+    // twice. `source` stays a single string: the primary origin, and the one
+    // the `known source` check validates.
+    .filter((r) => r.source === source || (r.alsoSource ?? []).includes(source))
+    .map((r) => r.segment);
 }
 
 /**
