@@ -9,6 +9,7 @@ import nextConfig from '../../next.config.mjs';
 import { resolveDerivative } from '../../scripts/lib/legacy-source-manifest.mjs';
 import {
   DELIVERY_VARIANTS,
+  ATTACHMENT_TRANSFORM,
   LEGACY_PREFIX,
   LEGACY_ROOTS,
   UNTRANSFORMED_EXTENSIONS,
@@ -192,8 +193,20 @@ function transformOf(destination) {
   return after.startsWith(`${LEGACY_PREFIX}/`) ? '' : after.slice(0, after.indexOf('/'));
 }
 
-test('every image destination carries a transformation from DELIVERY_VARIANTS', () => {
-  const known = new Set(Object.values(DELIVERY_VARIANTS));
+test('every image destination carries a transformation legacyTransforms.mjs defines', () => {
+  // The claim is SINGLE DEFINITION, not "one of the variants": no rule may
+  // invent a transformation string inline in next.config.mjs. So the accepted
+  // set is built by READING the module, and every member of it is a named
+  // export there.
+  //
+  // ATTACHMENT_TRANSFORM joined the set with the brand-original exemption. It
+  // is not a DELIVERY_VARIANT and must not be added to that table — a variant
+  // is a RENDERING a component can ask for by name through `/_img/<name>/`,
+  // and `fl_attachment` is the opposite of a rendering: it is the instruction
+  // to hand over the stored file untouched. Widening DELIVERY_VARIANTS would
+  // have created `/_img/attachment/…` as a side effect and made every legacy
+  // path on the site downloadable-as-original by URL.
+  const known = new Set([...Object.values(DELIVERY_VARIANTS), ATTACHMENT_TRANSFORM]);
   const imageRules = rules.filter((r) => r.destination.includes('/image/upload/'));
   assert.ok(imageRules.length > 0, 'no image rules found — the config shape changed');
 
@@ -204,7 +217,8 @@ test('every image destination carries a transformation from DELIVERY_VARIANTS', 
     if (transform === '') continue;
     assert.ok(
       known.has(transform),
-      `${transform} is not in DELIVERY_VARIANTS — a transformation was written somewhere else`,
+      `${transform} is not exported by legacyTransforms.mjs — a transformation was ` +
+        `written somewhere else`,
     );
   }
 });

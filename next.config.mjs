@@ -5,6 +5,8 @@ import {
   UNTRANSFORMED_EXTENSIONS,
   LEGACY_PREFIX,
   LEGACY_ROOTS,
+  BRAND_ORIGINAL_PREFIXES,
+  ATTACHMENT_TRANSFORM,
   RAW_EXTENSION_LIST,
   NO_STORE_DOCUMENT_EXTENSIONS,
   FILES_DIR,
@@ -484,6 +486,50 @@ const nextConfig = {
       }))
       : [];
 
+    // ── DISTRIBUTABLE BRAND ORIGINALS ─────────────────────────────────────
+    //
+    // Everything under a BRAND_ORIGINAL_PREFIXES path is a file a visitor
+    // downloads and keeps — logo masters on /logo-page — not an image a page
+    // paints. It goes out as the stored original with `Content-Disposition:
+    // attachment` instead of through DELIVERY_VARIANTS.default, which was
+    // handing out a w_1600 q_80 WEBP under a `.png` URL: lossy, resized, and
+    // mislabelled, from a master intended for print. The reasoning and the
+    // measurements are with the constants in src/lib/legacyTransforms.mjs.
+    //
+    // ⚠ THIS IS THE SAME THREE-RULE CHAIN `rulesFor` EMITS PER ROOT, IN THE
+    // SAME ORDER, WITH ONE TRANSFORM SWAPPED. That is the whole change, and
+    // the shape is copied deliberately rather than reduced to just the
+    // catch-all: the substitution rule and the RAW rule normally precede the
+    // image catch-all for every root, so omitting them here would not "leave
+    // those cases alone" — being listed FIRST, the catch-all would claim them
+    // and send a `&`-bearing name or a PDF to image/upload, which answers 400.
+    // Their behaviour is therefore IDENTICAL to today; only the last rule
+    // differs. The derivative pair is not copied because it is scoped to
+    // `${FILES_DIR}/styles/`, which no brand-original prefix is under.
+    //
+    // ⚠ AND IT IS SCOPED TO THE CANONICAL PATH BY ORDER, NOT BY PATTERN.
+    // These sources have no `at` prefix, so `/_img/w800/files/ci/…` cannot
+    // match them — and they are listed AFTER the variant rules, which claim
+    // that form first. /logo-page depends on exactly this: it previews the
+    // 8000x4500 wallpaper through `/_img/w800/` at 14,286 B while its download
+    // button points at the canonical path and must get all 4,846,891 B. Moving
+    // this block above the variant rules would silently turn that preview into
+    // a 4.6 MB attachment.
+    const brandOriginalRules = BRAND_ORIGINAL_PREFIXES.flatMap((root) => [
+      {
+        source: `/${root}/:rest(.*${substitutedChars}.*)`,
+        destination: `/legacy-file/${root}/:rest`,
+      },
+      {
+        source: `/${root}/:rest(.*\\.(?:${rawExt}))`,
+        destination: `${base}/raw/upload/${prefix}/${root}/:rest`,
+      },
+      {
+        source: `/${root}/:rest*`,
+        destination: image(ATTACHMENT_TRANSFORM, `${root}/:rest*`),
+      },
+    ]);
+
     return [
       ...webrootDocuments,
       ...blobFiles,
@@ -492,6 +538,9 @@ const nextConfig = {
       ...Object.entries(DELIVERY_VARIANTS)
         .filter(([name]) => name !== 'default')
         .flatMap(([name, transform]) => rulesFor(`${VARIANT_PREFIX}/${name}`, transform)),
+      // After the variants, before the default rules. Both halves of that are
+      // load-bearing — see the block note above.
+      ...brandOriginalRules,
       ...rulesFor('', DELIVERY_VARIANTS.default),
     ];
   },

@@ -160,6 +160,80 @@ export const LEGACY_PREFIX = '9exp-genesis/legacy';
  */
 export const LEGACY_ROOTS = ['sites/default/files', 'images', 'files', 'download'];
 
+/**
+ * ══ DISTRIBUTABLE BRAND ORIGINALS — DELIVERED AS THE FILE, NOT AS A PICTURE ══
+ *
+ * Path prefixes whose contents are files a visitor DOWNLOADS AND KEEPS, not
+ * images a page paints. Everything under one of these is delivered as the
+ * stored original with `Content-Disposition: attachment`.
+ *
+ * ── WHY THIS IS A CORRECTNESS FIX AND NOT AN OPTIMISATION TRADE-OFF ─────────
+ * `files/ci/` holds the 9Expert logo masters offered for download on
+ * /logo-page. Under the ordinary raster rules they went out through
+ * DELIVERY_VARIANTS.default, and measured on production that meant:
+ *
+ *     /files/ci/signature-nineblue.png
+ *       →  image/webp   24,948 B   Content-Disposition: inline
+ *
+ * Two separate defects in one response. The bytes are WEBP while the URL says
+ * `.png`, so a designer who saves it gets a file whose contents do not match
+ * its name and whose pixels have been resized to w_1600 and re-encoded lossily
+ * at q_80 — from a logo master intended for print. And it is `inline`, so it
+ * opens in a tab rather than downloading at all.
+ *
+ * Adding a `download` attribute at the markup would fix only the second and
+ * make the first worse: it would force a save of the mislabelled file. The
+ * mislabelling is at the delivery layer, so the exemption is too.
+ *
+ * ── WHY A PREFIX AND NOT AN EXTENSION ──────────────────────────────────────
+ * UNTRANSFORMED_EXTENSIONS cannot express this. `png` is the right thing to
+ * transform nearly everywhere on this site — ~2,900 migrated article and course
+ * images depend on it, and adding `png` there would send every one of them out
+ * at full size, on a plan where bandwidth is 67.8% of spend. What is special is
+ * not the format, it is the PURPOSE: these particular files are artefacts being
+ * distributed, and the transformation that is correct for a photograph in an
+ * article body is a data-loss bug for a logo master.
+ *
+ * `files/ci-svg/` is deliberately NOT listed. SVG already lands in
+ * UNTRANSFORMED_EXTENSIONS, and Cloudinary already returns `attachment` for
+ * image/svg+xml of its own accord — verified with `curl -sI`. It works; listing
+ * it would change nothing and imply it did.
+ *
+ * ⚠ THE `/_img/<variant>/` FORM IS NOT AFFECTED, AND MUST NOT BE. A component
+ * asking for `/_img/w800/files/ci/wallpaper-desktop.png` is asking for a
+ * rendered thumbnail on purpose — /logo-page previews the 8000x4500 wallpaper
+ * that way, 14,286 B instead of 4,846,891 B. The exemption applies to the
+ * CANONICAL path only, which is what a download link points at. next.config.mjs
+ * enforces that by emitting these rules after the variant rules and before the
+ * default ones; test/pure/brandOriginalDelivery.test.mjs pins it.
+ */
+export const BRAND_ORIGINAL_PREFIXES = Object.freeze(['files/ci']);
+
+/**
+ * The transformation for a distributable original: a FLAG AND NOTHING ELSE.
+ *
+ * No format, no quality, no width — so Cloudinary has nothing to re-encode and
+ * returns the stored asset. Verified against this cloud rather than assumed,
+ * on files/ci/signature-nineblue.png:
+ *
+ *   image/upload/<id>                 image/png  51,433 B  md5 1de92ea0…9949
+ *   image/upload/fl_attachment/<id>   image/png  51,433 B  md5 1de92ea0…9949
+ *                                     Content-Disposition: attachment;
+ *                                       filename="signature-nineblue.png"
+ *
+ * Same md5, so `fl_attachment` costs nothing in fidelity — it adds the header
+ * and leaves the bytes alone. It is NOT UNTRANSFORMED_TRANSFORM (`''`), which
+ * delivers the same bytes but sends no Content-Disposition at all and therefore
+ * still opens in a tab.
+ */
+export const ATTACHMENT_TRANSFORM = 'fl_attachment';
+
+/** True when this legacy path is a distributable brand original. */
+export function isBrandOriginalPath(path) {
+  const clean = String(path).replace(/^\/+/, '');
+  return BRAND_ORIGINAL_PREFIXES.some((p) => clean.startsWith(`${p}/`));
+}
+
 /** Extensions uploaded as Cloudinary `raw` — no transformations, no format suffix. */
 export const RAW_EXTENSION_LIST = [
   'pdf', 'xlsx', 'xls', 'doc', 'docx', 'ppt', 'pptx',
