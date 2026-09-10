@@ -59,6 +59,15 @@ export const RESERVED_PATHS = Object.freeze([
   { segment: 'cookie-policy', source: 'tree' },
   { segment: 'faq', source: 'tree' },
   { segment: 'join-us', source: 'tree' },
+  // The brand asset page. It is a STATIC route, so it beats the [...slug]
+  // catch-all outright — which means an alias or a custom-page slug of
+  // `logo-page` would be accepted by admin and then never resolve, with no
+  // error at either end. That is not hypothetical here: a CustomPage draft
+  // already holds this slug and has been unreachable since the route landed.
+  //
+  // NOT covered by the `logo` static entry below. This list matches the whole
+  // first segment, so `logo` reserves /logo and nothing else.
+  { segment: 'logo-page', source: 'tree' },
   { segment: 'masterclass', source: 'tree' },
   { segment: 'policies', source: 'tree' },
   { segment: 'portfolio', source: 'tree' },
