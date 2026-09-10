@@ -21,8 +21,17 @@ import sanitizeHtml from 'sanitize-html';
  * RENDER time (server) and must not assume the body was cleaned at save.
  */
 
-// Only <iframe>s whose src host matches one of these EXACTLY are kept.
-const IFRAME_HOST_WHITELIST = [
+/**
+ * Only <iframe>s whose src host matches one of these EXACTLY are kept.
+ *
+ * EXPORTED FOR THE GUARD, NOT FOR CALLERS. sanitize-html matches these as bare
+ * hostnames, so an entry carrying a scheme, a path, a port or an uppercase
+ * letter does not throw and does not warn — it simply never matches, and the
+ * embed it was added for silently disappears the same way a missing entry does.
+ * test/pure/iframeHostWhitelist walks THIS array rather than a copy of it, so a
+ * malformed entry cannot pass review by looking plausible in a diff.
+ */
+export const IFRAME_HOST_WHITELIST = [
   'docs.google.com',
   'forms.gle',
   'www.google.com',
@@ -34,6 +43,10 @@ const IFRAME_HOST_WHITELIST = [
   'www.facebook.com',
   'web.facebook.com',
   'maps.google.com',
+  // Power BI report embeds on Advanced HTML pages. `app.powerbi.com` is the
+  // first-party viewer host — the `?r=` publish-to-web URL the Power BI service
+  // hands the author. Nothing else Microsoft serves is added with it.
+  'app.powerbi.com',
 ];
 
 const SANITIZE_CONFIG = {
