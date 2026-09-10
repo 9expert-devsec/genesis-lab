@@ -3,10 +3,17 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
-import { readSourceForScanning } from '../sourceScan.mjs';
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
+import { readSourceForScanning, ROOT as SRC_ROOT } from '../sourceScan.mjs';
 import BrandPage from '@/app/(public)/brand/page';
 import { BRAND_PALETTE } from '@/lib/brand/palette';
-import { LOGO_SHAPES, LOGO_VARIANTS, WALLPAPER } from '@/app/(public)/brand/brandContent';
+import {
+  BRAND_SECTIONS,
+  LOGO_SHAPES,
+  LOGO_VARIANTS,
+  WALLPAPER,
+} from '@/app/(public)/brand/brandContent';
 
 /**
  * What /brand ACTUALLY renders — read off the markup, not off the source.
@@ -146,16 +153,33 @@ test('the swatch chips are painted from the palette, in palette order', () => {
   });
 });
 
-test('page.jsx holds no colour literal of its own', () => {
+test('no JSX on this page holds a colour literal of its own', () => {
   // Comments and imports stripped, per the standing rule in test/sourceScan.mjs
   // — a docstring that quotes a hex would otherwise satisfy a "does not
   // contain" assertion about the code.
-  const src = readSourceForScanning('src/app/(public)/brand/page.jsx');
-  const hexes = src.match(/#[0-9A-Fa-f]{3,8}\b/g) ?? [];
+  //
+  // EVERY component, not just page.jsx. The section rebuild moved most of the
+  // markup out of the page file, so a scan of page.jsx alone would now pass
+  // over a page whose swatches were hardcoded one directory down. The data
+  // modules are deliberately NOT scanned: brandContent.js is where the two logo
+  // inks (State Deep / State Light) are declared exactly once, on purpose.
+  const files = [
+    'src/app/(public)/brand/page.jsx',
+    ...readdirSync(path.join(SRC_ROOT, 'src/app/(public)/brand/_components'))
+      .filter((f) => f.endsWith('.jsx'))
+      .map((f) => `src/app/(public)/brand/_components/${f}`),
+  ];
+  assert.ok(files.length >= 7, `only ${files.length} files scanned — did the tree move?`);
+
+  const offenders = [];
+  for (const file of files) {
+    const hexes = readSourceForScanning(file).match(/#[0-9A-Fa-f]{3,8}\b/g) ?? [];
+    if (hexes.length) offenders.push(`${file}: ${hexes.join(', ')}`);
+  }
   assert.deepEqual(
-    hexes,
+    offenders,
     [],
-    `page.jsx contains hex literal(s): ${hexes.join(', ')}. Colours belong to ` +
+    `colour literal(s) in JSX:\n  ${offenders.join('\n  ')}\nColours belong to ` +
       `src/lib/brand/palette.js, which is parity-checked against the theme; a ` +
       `literal here is a copy nothing compares.`,
   );
@@ -217,17 +241,110 @@ test('each logo card offers both an SVG and a PNG download', () => {
   }
 });
 
-test('the heading outline runs h1 then h2 — no level is skipped', () => {
+test('the heading outline runs h1 then h2 then h3 — no level is skipped', () => {
   const d = doc();
   assert.equal(d.querySelectorAll('h1').length, 1, 'the page owns exactly one h1');
-  // Ten section headings: colour system, three logo shapes, minimum size,
-  // backgrounds, incorrect usage, meaning, wallpaper.
   const h2s = [...d.querySelectorAll('h2')];
-  assert.ok(h2s.length >= 8, `expected the guideline sections as h2, saw ${h2s.length}`);
-  // The reference's markup starts at h3 because a CMS supplied the title above
-  // it. Porting that verbatim would leave a hole in the outline.
-  const h3sBeforeAnyH2 = d.querySelector('h3, h2');
-  assert.equal(h3sBeforeAnyH2.tagName, 'H2', 'the first sub-heading is an h2, not an h3');
+  assert.equal(
+    h2s.length,
+    BRAND_SECTIONS.length,
+    `one h2 per section and no more — saw ${h2s.length} for ${BRAND_SECTIONS.length} sections`,
+  );
+  // The guideline's own markup starts at h3 because a CMS supplied the title
+  // above it. Porting that verbatim would leave a hole in the outline.
+  const firstSubHeading = d.querySelector('h2, h3');
+  assert.equal(firstSubHeading.tagName, 'H2', 'the first sub-heading is an h2, not an h3');
+});
+
+// ── THE SIX SECTIONS ────────────────────────────────────────────────────────
+
+test('all six sections render, IN ORDER, with the ids that get shared as links', () => {
+  const d = doc();
+
+  // Read the ids off the document in DOCUMENT ORDER rather than looking each
+  // one up: an assertion that only checks presence passes on a page whose
+  // sections have been shuffled, and the numbering would then disagree with the
+  // rail. Order is part of the contract here.
+  const rendered = [...d.querySelectorAll('[id]')]
+    .map((el) => el.id)
+    .filter((id) => BRAND_SECTIONS.some((s) => s.id === id));
+
+  assert.deepEqual(
+    rendered,
+    BRAND_SECTIONS.map((s) => s.id),
+    'the sections on the page do not match BRAND_SECTIONS in order',
+  );
+
+  // The ids are PUBLIC API — people paste these anchors into chat — so the
+  // expected list is spelled out once here rather than derived, which is what
+  // makes a rename go red instead of quietly following the module.
+  assert.deepEqual(rendered, [
+    'brand-story',
+    'logo',
+    'logo-usage',
+    'colors',
+    'do-and-dont',
+    'brand-assets',
+  ]);
+
+  // Each section's own <h2> carries its English title, and its number is
+  // present but hidden from assistive tech (the title already carries the
+  // meaning; "zero one Brand Story" is noise in a heading).
+  for (const section of BRAND_SECTIONS) {
+    const el = d.getElementById(section.id);
+    const heading = el.querySelector('h2');
+    assert.equal(heading.textContent.trim(), section.title, `${section.id} heading`);
+    const number = el.querySelector('[aria-hidden="true"]');
+    assert.equal(number.textContent.trim(), section.number, `${section.id} number`);
+  }
+});
+
+test('the section rail links to every section, and only to sections', () => {
+  const d = doc();
+  const anchors = [...d.querySelectorAll('a[href^="#"]')].map((a) => a.getAttribute('href'));
+  assert.ok(anchors.length > 0, 'no in-page anchors at all — the rail did not render');
+
+  for (const section of BRAND_SECTIONS) {
+    assert.ok(anchors.includes(`#${section.id}`), `the rail has no link to #${section.id}`);
+  }
+  // Every in-page anchor resolves to something that exists. A rail entry
+  // pointing at a removed section is a dead link that nothing else would catch.
+  for (const href of new Set(anchors)) {
+    assert.ok(d.getElementById(href.slice(1)), `${href} points at no element on the page`);
+  }
+});
+
+test('TYPOGRAPHY AND GRADIENTS APPEAR NOWHERE — they were cut deliberately', () => {
+  // ── WHY THIS GUARD EXISTS ─────────────────────────────────────────────────
+  // The guideline's table of contents lists chapter 04, "TYPOGRAPHY & GRAPHIC
+  // LANGUAGE", at pages 27-29. The document is 26 pages long and ends at 3.1 —
+  // the chapter was never written. Gradients appear once in the whole document,
+  // as a prohibition.
+  //
+  // So anyone comparing this page against that contents page will read the gap
+  // as an omission and "restore" two sections that have no source text, which
+  // means inventing brand policy. This assertion is what turns that from a
+  // plausible-looking fix into a red test with a reason attached.
+  //
+  // When the chapter is actually written, DELETE THIS TEST DELIBERATELY — do
+  // not weaken it to make a new section pass.
+  const html = renderToStaticMarkup(createElement(BrandPage));
+
+  for (const word of ['Typography', 'Gradient']) {
+    assert.ok(
+      !new RegExp(word, 'i').test(html),
+      `"${word}" appears on the page. Chapter 04 was never written and gradients ` +
+        `are a single prohibition, not a section — see BRAND_SECTIONS in ` +
+        `brandContent.js before adding either back.`,
+    );
+  }
+
+  // ...and the section list itself does not carry a placeholder for them, which
+  // would render as nothing today and as a section the moment someone filled it.
+  for (const section of BRAND_SECTIONS) {
+    assert.ok(!/typograph|gradient/i.test(section.id), `${section.id} is a placeholder`);
+    assert.ok(!/typograph|gradient/i.test(section.title), `${section.title} is a placeholder`);
+  }
 });
 
 test('no SVG is routed through next/image, which would refuse it', () => {

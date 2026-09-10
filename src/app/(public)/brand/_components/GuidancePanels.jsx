@@ -35,12 +35,23 @@ const TONE = {
   },
 };
 
-export function GuidancePanel({ tone, title, items, columns = 1, className }) {
+/**
+ * ── `as` IS THE HEADING LEVEL, AND IT DEFAULTS TO h4 ────────────────────────
+ * A panel's title is a real heading — `Do`, `Avoid`, `Don't` — so it must not
+ * be a styled <p>, and it must not be a fixed <h3> either. Most of these panels
+ * sit INSIDE a Subsection, whose own title is the h3; a hardcoded h3 made
+ * "Voice & Tone", "Do" and "Avoid" siblings in the outline, which tells a
+ * screen-reader user the three are peers rather than a heading and its two
+ * halves. The two panels in section 05 have no Subsection above them and are
+ * therefore genuinely h3. The call site knows which; this component does not.
+ */
+export function GuidancePanel({ tone, title, items, columns = 1, as = 'h4', className }) {
   const { panel, icon, Glyph } = TONE[tone];
+  const Heading = as;
 
   return (
     <div className={cn('min-w-0 rounded-9e-md border p-4 sm:p-[18px]', panel, className)}>
-      <h3 className="text-[15px] font-bold text-[var(--text-primary)]">{title}</h3>
+      <Heading className="text-[15px] font-bold text-[var(--text-primary)]">{title}</Heading>
       {/* `columns={2}` is for the one full-width panel on the page — the eight
           logo prohibitions, each two or three words long, which as a single
           column read as a ragged strip down the left of a very wide box. A GRID
@@ -71,11 +82,11 @@ export function GuidancePanel({ tone, title, items, columns = 1, className }) {
 }
 
 /** The side-by-side pair. Stacks below the flex-basis, one panel per row. */
-export function GuidancePair({ affirm, avoid }) {
+export function GuidancePair({ affirm, avoid, as = 'h4' }) {
   return (
     <div className="flex flex-wrap gap-3.5">
-      <GuidancePanel tone="affirm" title={affirm.title} items={affirm.items} className="flex-[1_1_320px]" />
-      <GuidancePanel tone="avoid" title={avoid.title} items={avoid.items} className="flex-[1_1_320px]" />
+      <GuidancePanel tone="affirm" as={as} title={affirm.title} items={affirm.items} className="flex-[1_1_320px]" />
+      <GuidancePanel tone="avoid" as={as} title={avoid.title} items={avoid.items} className="flex-[1_1_320px]" />
     </div>
   );
 }

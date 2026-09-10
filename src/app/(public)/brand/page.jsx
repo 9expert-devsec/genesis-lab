@@ -1,17 +1,43 @@
 import Link from 'next/link';
-import { BrandSection } from './_components/BrandSection';
+import { BrandSection, Subsection } from './_components/BrandSection';
+import { SectionNavRail, SectionNavStrip } from './_components/SectionNav';
+import {
+  DefinitionGrid,
+  CopyList,
+  StatementBlock,
+  LabelledBlock,
+} from './_components/DefinitionGrid';
+import { PositioningContrast } from './_components/PositioningContrast';
 import { ColorSwatchGrid } from './_components/ColorSwatchGrid';
 import { LogoVariantGrid } from './_components/LogoVariantGrid';
 import { GuidancePair, GuidancePanel } from './_components/GuidancePanels';
 import { MinimumSizeTable } from './_components/MinimumSizeTable';
 import { WallpaperPanel } from './_components/WallpaperPanel';
 import {
-  LOGO_SHAPES,
-  COLOR_GUIDANCE,
-  BACKGROUND_GUIDANCE,
-  PROHIBITIONS,
+  PAGE_HEADER,
+  CLOSING_NOTE,
+  sectionById,
+  ABOUT_PARAGRAPHS,
+  VISION,
+  MISSION,
+  BRAND_PURPOSE,
+  BRAND_POSITIONING,
+  CORE_VALUES,
+  BRAND_PERSONALITY,
+  VOICE_AND_TONE,
   LOGO_MEANING,
   BRAND_KEYWORDS,
+  LOGO_ANATOMY,
+  LOGO_CONSTRUCTION,
+  CLEAR_SPACE,
+  MINIMUM_SIZE_NOTE,
+  BACKGROUND_GUIDANCE,
+  COLOR_GUIDANCE,
+  MISUSE_LEAD,
+  PROHIBITIONS,
+  REQUIREMENTS,
+  LOGO_SHAPES,
+  BRAND_ASSETS_LEAD,
 } from './brandContent';
 
 /**
@@ -19,204 +45,244 @@ import {
  *
  * A SERVER COMPONENT with no data access and no async work: every value on this
  * page is a constant in src/lib/brand/palette.js or ./brandContent.js, so the
- * route is fully static and ships no client JavaScript of its own.
+ * route is fully static and ships no client JavaScript of its own. The section
+ * rail is plain anchors for the same reason — see SectionNav.
  *
  * ── THIS STATIC ROUTE BEATS THE CATCH-ALL. SAY IT OUT LOUD ──────────────────
- * `src/app/(public)/[...slug]/page.jsx` resolves a CustomPage by slug, and a
- * CustomPage draft has existed at a slug this route later took. Precedence is
- * static > dynamic > catch-all, and `(public)` is a route group that
- * contributes nothing to the URL, so from the moment this file exists
- * /brand is THIS page and the catch-all is never reached for that segment.
- * The two do not collide and nothing 500s: the draft simply becomes
- * unreachable at its own URL — including through the `?preview=` token, which
- * is handled inside the catch-all. Publishing the draft would NOT take the URL
- * back. It has to be deleted through the admin UI.
+ * `src/app/(public)/[...slug]/page.jsx` resolves a CustomPage by slug. Next.js
+ * route precedence is static > dynamic > catch-all, and `(public)` is a route
+ * group that contributes nothing to the URL, so from the moment this file
+ * exists /brand is THIS page and the catch-all is never reached for that
+ * segment. A CustomPage on this slug would not collide and nothing would 500 —
+ * it would simply become unreachable, preview token included, and publishing it
+ * would NOT take the URL back.
+ *
+ * `public/brand/` does not shadow it either: public/ serves FILES, so
+ * /brand/logo-blue.png comes from the directory and bare /brand reaches here.
  *
  * ── CONTENT SOURCE ──────────────────────────────────────────────────────────
- * prompts/brand-page-content-reference.md — reviewed and approved. Section
- * order, Thai copy, table values and asset paths all come from it. Its markup
- * does NOT: that file is inline-CSS written for a CMS field, light-mode only,
- * with fifteen hand-repeated logo cards and the palette hardcoded six times.
- * This route replaces it.
- */
-
-/**
- * THE ONE STRING ON THIS PAGE THAT IS NOT IN THE CONTENT REFERENCE.
+ * prompts/brand-page-content-reference.md — the approved transcription of
+ * Master Brand Guideline v1.0. Copy is not rewritten here; every string comes
+ * from ./brandContent.js, which holds it verbatim. The English/Thai split is
+ * the source document's own and is explained there.
  *
- * The reference has no <h1>: it was written for a CMS body field, where the
- * page title came from chrome above it. A real route has no such chrome — the
- * site's convention is that the page owns its own heading (see /faq, and the
- * policy pages via PolicyHero) — so one had to be written. It is derived from
- * the reference's own opening sentence ("ศูนย์รวมโลโก้ ระบบสี และหลักการใช้งาน
- * อัตลักษณ์ของ 9Expert Training") rather than invented from nothing, and it is
- * pulled out here — one constant feeding both the <h1> and the metadata title —
- * so it is easy to find and change when it is signed off.
+ * ── WHAT IS DELIBERATELY MISSING ────────────────────────────────────────────
+ * Typography and Gradients. The reasoning is at BRAND_SECTIONS in
+ * ./brandContent.js, and test/render/brandPage asserts their absence — read
+ * that before adding either back from the guideline's contents page.
  */
-const PAGE_TITLE = 'โลโก้และอัตลักษณ์องค์กร';
 
 export const metadata = {
-  title: PAGE_TITLE,
+  title: PAGE_HEADER.title,
   description:
-    'ศูนย์รวมโลโก้ ระบบสี และหลักการใช้งานอัตลักษณ์ของ 9Expert Training ดาวน์โหลดไฟล์ต้นฉบับ SVG และ PNG ได้ทุกรูปแบบ',
+    'ศูนย์รวมอัตลักษณ์องค์กร 9Expert Training — Brand Story, โลโก้, หลักการใช้งาน, ระบบสี และไฟล์ต้นฉบับสำหรับดาวน์โหลด',
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/brand` },
   openGraph: { url: `${process.env.NEXT_PUBLIC_SITE_URL}/brand` },
 };
 
-const LEAD_PARAGRAPHS = [
-  'ศูนย์รวมโลโก้ ระบบสี และหลักการใช้งานอัตลักษณ์ของ 9Expert Training สำหรับสื่อสิ่งพิมพ์ สื่อดิจิทัล และงานร่วมกับพาร์ตเนอร์ ดาวน์โหลดไฟล์ต้นฉบับได้ทุกรูปแบบจากหน้านี้',
-  'อ้างอิงจาก Master Brand Guideline เวอร์ชัน 1.0 (21 กรกฎาคม 2026) กรุณาใช้ไฟล์มาตรฐานจากหน้านี้เท่านั้น ไม่สร้างเวอร์ชันใหม่ด้วยตนเอง',
-];
-
-export default function LogoPage() {
+export default function BrandPage() {
   return (
-    <div className="mx-auto max-w-[1120px] px-4 pb-12 pt-8 sm:px-6">
+    <div className="mx-auto max-w-[1180px] px-4 pb-12 pt-8 sm:px-6">
       <header>
         <p className="inline-block rounded-full bg-9e-action/10 px-3 py-1 font-en text-xs font-bold uppercase tracking-wider text-9e-action dark:bg-9e-air/10 dark:text-9e-air">
-          Brand Asset Package
+          {PAGE_HEADER.eyebrow}
         </p>
         <h1 className="mt-2.5 font-heading text-[32px] font-bold leading-tight text-[var(--text-primary)]">
-          {PAGE_TITLE}
+          {PAGE_HEADER.title}
         </h1>
-        {LEAD_PARAGRAPHS.map((paragraph) => (
-          <p
-            key={paragraph}
-            className="mt-3 max-w-[840px] text-base leading-loose text-[var(--text-secondary)]"
-          >
-            {paragraph}
-          </p>
-        ))}
+        <p className="mt-3 max-w-[840px] text-base leading-loose text-[var(--text-secondary)]">
+          {PAGE_HEADER.subline}
+        </p>
       </header>
 
-      <BrandSection
-        id="color-system"
-        title="ระบบสีของแบรนด์"
-        blurb="ระบบสีแบ่งเป็นสีหลัก สีพื้นหลัง และสีเน้น แต่ละสีมีบทบาทชัดเจน ใช้สีตามบทบาทที่กำหนดเพื่อให้งานทุกชิ้นสื่อสารไปในทางเดียวกัน"
-      >
-        <ColorSwatchGrid />
-        <div className="mt-[18px]">
-          <GuidancePair affirm={COLOR_GUIDANCE.do} avoid={COLOR_GUIDANCE.dont} />
-        </div>
-      </BrandSection>
+      {/* Narrow screens: the chip strip, above the content. It sits outside the
+          grid below so it spans the full width rather than the content column. */}
+      <div className="mt-6 lg:hidden">
+        <SectionNavStrip />
+      </div>
 
-      {/* Signature / Symbol / Square — three sections, one component, fifteen
-          cards. The shapes are data (brandContent.LOGO_SHAPES) so adding a fourth
-          lockup is one entry, not another copy of this block. */}
-      {LOGO_SHAPES.map((shape) => (
-        <BrandSection key={shape.key} id={shape.key} title={shape.title} blurb={shape.blurb}>
-          <LogoVariantGrid shape={shape.key} alt={shape.alt} stageHeight={shape.stageHeight} />
-        </BrandSection>
-      ))}
+      {/* Wide screens: rail beside content. `items-start` is what lets the
+          rail's `sticky` work — a stretched flex child is as tall as the
+          content, so there is nothing for it to stick within. */}
+      <div className="mt-6 flex items-start gap-8 lg:mt-8">
+        <SectionNavRail />
 
-      <BrandSection
-        id="minimum-size"
-        title="ขนาดเล็กที่สุดที่ใช้ได้"
-        blurb="การใช้โลโก้เล็กกว่าค่าที่กำหนดจะทำให้รายละเอียดหาย อ่านไม่ออก และลดการจดจำแบรนด์ ควรทดสอบการอ่านจริงบนสื่อปลายทางทุกครั้ง"
-      >
-        <MinimumSizeTable />
-      </BrandSection>
+        <div className="min-w-0 flex-1 space-y-8">
+          {/* ── 01 ───────────────────────────────────────────────────────── */}
+          <BrandSection {...sectionById['brand-story']}>
+            <Subsection title="About">
+              <div className="space-y-3">
+                {ABOUT_PARAGRAPHS.map((paragraph) => (
+                  <p
+                    key={paragraph}
+                    className="text-sm leading-relaxed text-[var(--text-primary)]"
+                  >
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+            </Subsection>
 
-      <BrandSection
-        id="on-backgrounds"
-        title="การวางโลโก้บนพื้นหลัง"
-        blurb="เลือกเวอร์ชันสีให้สอดคล้องกับความเข้มของพื้นหลัง พื้นหลังที่รบกวนสายตาจะทำให้โลโก้อ่านยากและลดความน่าเชื่อถือ"
-      >
-        <GuidancePair affirm={BACKGROUND_GUIDANCE.do} avoid={BACKGROUND_GUIDANCE.dont} />
-      </BrandSection>
+            <Subsection title="Vision">
+              <StatementBlock>{VISION}</StatementBlock>
+            </Subsection>
 
-      <BrandSection
-        id="incorrect-usage"
-        title="การใช้โลโก้ที่ไม่ถูกต้อง"
-        blurb="โลโก้ต้องคงรูปแบบเดิมทุกครั้ง ใช้เฉพาะไฟล์ที่ได้รับอนุมัติ และห้ามสร้างเวอร์ชันใหม่ด้วยตนเอง เมื่อไม่แน่ใจให้กลับมาตรวจสอบจากหน้านี้"
-      >
-        {/* One panel, full width, and no affirmative partner — the reference
-            has none here and inventing eight "do" bullets to balance the column
-            would be writing guideline copy, not porting it. The list keeps two
-            columns from sm up so eight short prohibitions do not read as a
-            column of single words. */}
-        <GuidancePanel
-          tone="avoid"
-          title={PROHIBITIONS.title}
-          items={PROHIBITIONS.items}
-          columns={2}
-          className="w-full"
-        />
-      </BrandSection>
+            <Subsection title="Mission">
+              <CopyList items={MISSION} />
+            </Subsection>
 
-      <BrandSection
-        id="logo-meaning"
-        title="ความหมายของโลโก้"
-        blurb="โลโก้ออกแบบมาเพื่อสื่อถึงความเป็นผู้เชี่ยวชาญ การนำทาง และการก้าวไปข้างหน้าอย่างต่อเนื่อง"
-      >
-        <div className="flex flex-wrap gap-3.5">
-          {LOGO_MEANING.map((element) => (
-            <div
-              key={element.key}
-              className="min-w-0 flex-[1_1_240px] rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface-muted)] p-3.5"
-            >
-              <h3 className="text-base font-bold text-[var(--text-primary)]">{element.title}</h3>
-              <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-primary)]">
-                {element.detail}
+            <Subsection title="Brand Purpose">
+              <StatementBlock>{BRAND_PURPOSE}</StatementBlock>
+            </Subsection>
+
+            <Subsection title="Brand Positioning" lead={BRAND_POSITIONING.lead}>
+              <PositioningContrast />
+            </Subsection>
+
+            <Subsection title="Core Values">
+              <DefinitionGrid items={CORE_VALUES} columns={3} />
+            </Subsection>
+
+            <Subsection title="Brand Personality" lead={BRAND_PERSONALITY.lead}>
+              <DefinitionGrid items={BRAND_PERSONALITY.traits} columns={3} />
+            </Subsection>
+
+            <Subsection title="Voice & Tone" lead={VOICE_AND_TONE.lead}>
+              <GuidancePair affirm={VOICE_AND_TONE.do} avoid={VOICE_AND_TONE.avoid} />
+            </Subsection>
+          </BrandSection>
+
+          {/* ── 02 ───────────────────────────────────────────────────────── */}
+          <BrandSection {...sectionById.logo}>
+            <Subsection title="Logo Meaning" lead={LOGO_MEANING.lead}>
+              <DefinitionGrid items={LOGO_MEANING.elements} />
+              {/* The four keywords. The source runs them together on one line
+                  with middots; as chips they read as the four separate words
+                  they are. */}
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="font-en text-[13px] font-semibold text-[var(--text-secondary)]">
+                  Keywords
+                </span>
+                {BRAND_KEYWORDS.map((keyword) => (
+                  <span
+                    key={keyword}
+                    className="rounded-full bg-9e-action/10 px-3 py-1 font-en text-xs font-bold tracking-wide text-9e-action dark:bg-9e-air/10 dark:text-9e-air"
+                  >
+                    {keyword}
+                  </span>
+                ))}
+              </div>
+            </Subsection>
+
+            <Subsection title="Logo Anatomy">
+              <DefinitionGrid items={LOGO_ANATOMY.parts} columns={3} />
+              <div className="mt-4">
+                <LabelledBlock
+                  title={LOGO_ANATOMY.rules.title}
+                  items={LOGO_ANATOMY.rules.items}
+                />
+              </div>
+            </Subsection>
+
+            <Subsection title="Logo Construction">
+              <CopyList items={LOGO_CONSTRUCTION.measurements} />
+              <p className="mt-3 text-sm leading-relaxed text-[var(--text-secondary)]">
+                {LOGO_CONSTRUCTION.note}
               </p>
-            </div>
-          ))}
+            </Subsection>
+          </BrandSection>
+
+          {/* ── 03 ───────────────────────────────────────────────────────── */}
+          <BrandSection {...sectionById['logo-usage']}>
+            <Subsection title="Clear Space" lead={CLEAR_SPACE} />
+
+            <Subsection title="Minimum Size">
+              <MinimumSizeTable />
+              <p className="mt-3 text-sm leading-relaxed text-[var(--text-secondary)]">
+                {MINIMUM_SIZE_NOTE}
+              </p>
+            </Subsection>
+
+            <Subsection title="Logo on Backgrounds">
+              <GuidancePair
+                affirm={BACKGROUND_GUIDANCE.do}
+                avoid={BACKGROUND_GUIDANCE.avoid}
+              />
+            </Subsection>
+          </BrandSection>
+
+          {/* ── 04 ───────────────────────────────────────────────────────── */}
+          <BrandSection {...sectionById.colors}>
+            <ColorSwatchGrid />
+            {/* `as="h3"`: no Subsection sits above these two, so their titles
+                are the section's first sub-headings, not sub-sub-headings. */}
+            <GuidancePair as="h3" affirm={COLOR_GUIDANCE.do} avoid={COLOR_GUIDANCE.avoid} />
+          </BrandSection>
+
+          {/* ── 05 ───────────────────────────────────────────────────────── */}
+          <BrandSection {...sectionById['do-and-dont']} lead={MISUSE_LEAD}>
+            {/* One full-width panel per group, and no affirmative partner for
+                the prohibitions — the source has none there, and inventing
+                eight "do" bullets to balance the column would be writing
+                guideline copy rather than transcribing it. Two columns so eight
+                short prohibitions do not read as a strip of single words. */}
+            <GuidancePanel
+              tone="avoid"
+              as="h3"
+              title={PROHIBITIONS.title}
+              items={PROHIBITIONS.items}
+              columns={2}
+              className="w-full"
+            />
+            <LabelledBlock as="h3" title={REQUIREMENTS.title} items={REQUIREMENTS.items} />
+          </BrandSection>
+
+          {/* ── 06 ───────────────────────────────────────────────────────── */}
+          <BrandSection {...sectionById['brand-assets']} lead={BRAND_ASSETS_LEAD}>
+            {/* Signature / Symbol / Square — three subsections, one component,
+                fifteen cards. The shapes are data (brandContent.LOGO_SHAPES) so
+                adding a fourth lockup is one entry, not another copy of this
+                block. */}
+            {LOGO_SHAPES.map((shape) => (
+              <Subsection key={shape.key} title={shape.title} lead={shape.blurb}>
+                <LogoVariantGrid
+                  shape={shape.key}
+                  alt={shape.alt}
+                  stageHeight={shape.stageHeight}
+                />
+              </Subsection>
+            ))}
+
+            <Subsection title="Wallpaper">
+              <WallpaperPanel />
+            </Subsection>
+          </BrandSection>
+
+          {/* The closing note: not a BrandSection — it has no number, no anchor
+              and is not a chapter of the guideline.
+
+              ── AND NOT A `Card` EITHER, WHICH IS A MEASURED CHOICE ─────────
+              It wants a tinted blue ground rather than the neutral surface, and
+              `bg-9e-action/5` CANNOT be handed to Card through `className`.
+              Card merges with `cn` (twMerge), and twMerge does not know the
+              project's custom `9e-*` scales, so it cannot see `bg-9e-action/5`
+              and Card's own `bg-[var(--surface)]` as one conflict group: BOTH
+              would survive into the markup and the winner would be Tailwind's
+              emission order, not this file. Same trap as the `rounded-9e-*` one
+              documented in button.jsx. A plain <div> owns its classes outright
+              and has nothing to merge. */}
+          <div className="rounded-9e-lg border border-9e-action/20 bg-9e-action/5 p-4 shadow-9e-sm sm:p-[18px]">
+            <p className="text-sm leading-relaxed text-[var(--text-primary)]">
+              {CLOSING_NOTE.before}{' '}
+              <Link
+                href={CLOSING_NOTE.href}
+                className="font-semibold text-9e-action underline underline-offset-4 dark:text-9e-air"
+              >
+                {CLOSING_NOTE.linkText}
+              </Link>
+            </p>
+          </div>
         </div>
-
-        {/* The four brand keywords. In the reference they are the tail of the
-            section's sub-line, run together with a middot; as chips they are
-            legible as the four separate words they are. */}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span className="text-[13px] font-semibold text-[var(--text-secondary)]">
-            คำสำคัญของแบรนด์
-          </span>
-          {BRAND_KEYWORDS.map((keyword) => (
-            <span
-              key={keyword}
-              className="rounded-full bg-9e-action/10 px-3 py-1 font-en text-xs font-bold tracking-wide text-9e-action dark:bg-9e-air/10 dark:text-9e-air"
-            >
-              {keyword}
-            </span>
-          ))}
-        </div>
-      </BrandSection>
-
-      <BrandSection
-        id="wallpaper"
-        title="Wallpaper"
-        blurb="วอลเปเปอร์เดสก์ท็อปลายอัตลักษณ์ 9Expert ความละเอียด 8000 × 4500 พิกเซล"
-      >
-        <WallpaperPanel />
-      </BrandSection>
-
-      {/* The closing note: the page's own caveat about what guideline v1.0 does
-          and does not yet cover. Not a BrandSection — it has no heading and is
-          not a section of the guideline.
-
-          ── AND NOT A `Card` EITHER, WHICH IS A MEASURED CHOICE ─────────────
-          It wants a tinted blue ground rather than the neutral surface, and
-          `bg-9e-action/5` CANNOT be handed to Card through `className`. Card
-          merges with `cn` (twMerge), and twMerge does not know the project's
-          custom `9e-*` scales, so it cannot see `bg-9e-action/5` and Card's own
-          `bg-[var(--surface)]` as one conflict group: BOTH would survive into
-          the markup and the winner would be Tailwind's emission order, not this
-          file. Same trap as the `rounded-9e-*` one documented in button.jsx.
-          A plain <div> owns its classes outright and has nothing to merge. */}
-      <div className="mt-8 rounded-9e-lg border border-9e-action/20 bg-9e-action/5 p-4 shadow-9e-sm sm:p-[18px]">
-        <p className="text-sm leading-relaxed text-[var(--text-primary)]">
-          <strong className="font-bold">หมายเหตุเรื่องเนื้อหา</strong>{' '}
-          ข้อมูลทั้งหมดในหน้านี้อ้างอิงจาก Master Brand Guideline เวอร์ชัน 1.0
-          ยกเว้นหัวข้อสัดส่วนการใช้สีและการตรวจคอนทราสต์ ซึ่งเอกสารเวอร์ชันนี้ยังไม่ได้ระบุไว้
-          ส่วนนั้นเรียบเรียงจากแนวปฏิบัติที่ใช้อยู่จริง และรอผู้ออกแบบยืนยันในเวอร์ชันถัดไป
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-[var(--text-primary)]">
-          ต้องการไฟล์รูปแบบอื่น เช่น EPS หรือ AI สำหรับงานพิมพ์ หรือมีข้อสงสัยเรื่องการใช้อัตลักษณ์
-          ติดต่อทีมงาน 9Expert ได้ที่{' '}
-          <Link
-            href="/contact-us"
-            className="font-semibold text-9e-action underline underline-offset-4 dark:text-9e-air"
-          >
-            หน้าติดต่อเรา
-          </Link>
-        </p>
       </div>
     </div>
   );

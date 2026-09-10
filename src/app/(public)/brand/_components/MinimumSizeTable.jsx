@@ -1,7 +1,7 @@
 import { MINIMUM_SIZE_COLUMNS, MINIMUM_SIZE_ROWS } from '../brandContent';
 
 /**
- * ขนาดเล็กที่สุดที่ใช้ได้ — four rows of minimums, screen and print.
+ * Minimum Size — four rows of minimums, screen and print.
  *
  * ── WRITTEN HERE BECAUSE THE REPO HAS NO SHARED TABLE ───────────────────────
  * Checked before writing it: there is no <table> primitive anywhere in
