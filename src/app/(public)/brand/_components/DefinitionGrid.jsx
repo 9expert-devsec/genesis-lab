@@ -1,12 +1,17 @@
 import { cn } from '@/lib/utils';
 
 /**
- * A grid of name → copy cards. Five uses on this page: Core Values, Brand
- * Personality, Logo Meaning's elements, Logo Anatomy's parts, and Mission.
+ * A grid of name → copy cards. Two uses on this page: Logo Meaning's elements
+ * and Logo Anatomy's parts.
  *
- * Every one of those is the same shape in the source document — a two-column
- * table of a short label against one Thai sentence — so it is one component
- * rather than five grids that would drift a gap and a font-weight apart within
+ * Core Values and Brand Personality used to be here too, and were moved out to
+ * BrandTraits: rendering that pair identically was the bug — they share three
+ * names, and matching grids made the overlap look accidental. Do NOT route
+ * either back through here to "reuse the component".
+ *
+ * Both remaining uses are the same shape in the source document — a two-column
+ * table of a short label against one Thai sentence — so they stay one component
+ * rather than two grids that would drift a gap and a font-weight apart within
  * a month.
  *
  * ── WHY NOT A <table> ───────────────────────────────────────────────────────

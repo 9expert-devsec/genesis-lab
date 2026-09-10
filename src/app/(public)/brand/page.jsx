@@ -7,6 +7,7 @@ import {
   StatementBlock,
   LabelledBlock,
 } from './_components/DefinitionGrid';
+import { CoreValueGrid, TraitChips } from './_components/BrandTraits';
 import { PositioningContrast } from './_components/PositioningContrast';
 import { ColorSwatchGrid } from './_components/ColorSwatchGrid';
 import { BrandAssetExplorer } from './_components/BrandAssetExplorer';
@@ -23,6 +24,7 @@ import {
   BRAND_PURPOSE,
   BRAND_POSITIONING,
   CORE_VALUES,
+  CORE_VALUES_LEAD,
   BRAND_PERSONALITY,
   VOICE_AND_TONE,
   LOGO_MEANING,
@@ -146,12 +148,16 @@ export default function BrandPage() {
               <PositioningContrast />
             </Subsection>
 
-            <Subsection title="Core Values">
-              <DefinitionGrid items={CORE_VALUES} columns={3} />
+            {/* The pair below is deliberately ASYMMETRIC — heavy cards with
+                icons against light chips — because three names appear in both
+                and identical grids made that read as a copy-paste slip rather
+                than the value/trait relationship it is. See BrandTraits. */}
+            <Subsection title="Core Values" lead={CORE_VALUES_LEAD}>
+              <CoreValueGrid items={CORE_VALUES} />
             </Subsection>
 
             <Subsection title="Brand Personality" lead={BRAND_PERSONALITY.lead}>
-              <DefinitionGrid items={BRAND_PERSONALITY.traits} columns={3} />
+              <TraitChips items={BRAND_PERSONALITY.traits} />
             </Subsection>
 
             <Subsection title="Voice & Tone" lead={VOICE_AND_TONE.lead}>

@@ -15,7 +15,9 @@ import {
 } from '@/app/(public)/brand/_components/BrandAssetExplorer';
 import { BRAND_PALETTE } from '@/lib/brand/palette';
 import {
+  BRAND_PERSONALITY,
   BRAND_SECTIONS,
+  CORE_VALUES,
   LOGO_SHAPES,
   LOGO_VARIANTS,
   WALLPAPER,
@@ -521,6 +523,165 @@ test('the heading outline runs h1 then h2 then h3 — no level is skipped', () =
   // above it. Porting that verbatim would leave a hole in the outline.
   const firstSubHeading = d.querySelector('h2, h3');
   assert.equal(firstSubHeading.tagName, 'H2', 'the first sub-heading is an h2, not an h3');
+});
+
+// ── CORE VALUES vs BRAND PERSONALITY: THE ASYMMETRY IS THE FEATURE ──────────
+//
+// These two subsections sit one after the other, are both five English names
+// against five Thai lines, and SHARE THREE NAMES — `Friendly` and `Practical`
+// most visibly. The overlap is the source guideline's: a value is what we hold
+// to, a trait is how we come across, and each shared word carries a DIFFERENT
+// Thai line in each block.
+//
+// Rendered identically, that repetition read as a copy-paste slip. So the two
+// blocks are now deliberately unlike each other — cards with icons and a
+// lead-in for Values, a wrapping run of bare chips for Personality — and the
+// three tests below pin the three ways that could quietly be undone:
+//
+//   · someone adds icons to the chips "for consistency" and erases the weight
+//     difference that carries the whole distinction;
+//   · someone deletes one `Friendly` to "fix the duplicate", losing a line of
+//     approved guideline copy;
+//   · someone drops the lead-in and the two blocks match again.
+
+/** The <section> a Subsection renders, found by its English h3. */
+const subsectionByTitle = (d, title) =>
+  [...d.querySelectorAll('section')].find(
+    (s) => s.querySelector('h3')?.textContent.trim() === title,
+  );
+
+test('Core Values is the HEAVY half: five cards, an icon each, and a lead-in', () => {
+  const d = doc();
+  const block = subsectionByTitle(d, 'Core Values');
+  assert.ok(block, 'no Core Values subsection on the page');
+
+  // The lead-in. Its absence was half of why the two blocks looked
+  // interchangeable — Brand Personality has always had one.
+  const lead = block.querySelector('h3 + p');
+  assert.equal(
+    lead?.textContent.trim(),
+    'สิ่งที่เรายึดถือในการทำงานและส่งมอบให้ผู้เรียนทุกครั้ง',
+    'the Core Values lead-in is missing or was rewritten',
+  );
+
+  const cards = [...block.querySelectorAll('dl > div')];
+  assert.equal(cards.length, CORE_VALUES.length, `${cards.length} value cards`);
+
+  const iconShapes = new Set();
+  for (const value of CORE_VALUES) {
+    const card = cards.find((c) => c.querySelector('dt')?.textContent.trim() === value.name);
+    assert.ok(card, `no card for the value ${value.name}`);
+    assert.equal(card.querySelector('dd').textContent.trim(), value.copy, `${value.name} copy`);
+
+    const svgs = [...card.querySelectorAll('svg')];
+    assert.equal(svgs.length, 1, `${value.name} should carry exactly one icon, saw ${svgs.length}`);
+
+    // Decorative, not informative: the value's own name is right beside it, so
+    // announcing the icon reads the same word twice. Asserted on the <svg>
+    // itself rather than on a wrapper — a wrapper can be refactored away.
+    assert.equal(
+      svgs[0].getAttribute('aria-hidden'),
+      'true',
+      `the ${value.name} icon is announced to assistive tech; it sits next to a ` +
+        `visible label and must be aria-hidden`,
+    );
+
+    // Five DIFFERENT icons. Compared by path geometry rather than by class
+    // name, which is lucide's to change. One icon repeated five times would
+    // satisfy every assertion above and decorate nothing.
+    iconShapes.add(svgs[0].innerHTML);
+  }
+  assert.equal(iconShapes.size, CORE_VALUES.length, 'two values share the same icon');
+
+  // The compass belongs to section 02 — it is the LOGO's meaning
+  // (`เข็มทิศ / ทิศทาง`), the one symbol that section exists to teach. Spending
+  // it on a value up here blurs it before the reader gets there.
+  assert.ok(
+    !/compass/i.test(block.innerHTML),
+    "a Compass icon in Core Values: that symbol is the logo's own, in section 02",
+  );
+});
+
+test('Brand Personality is the LIGHT half: five chips and NOT ONE ICON', () => {
+  const d = doc();
+  const block = subsectionByTitle(d, 'Brand Personality');
+  assert.ok(block, 'no Brand Personality subsection on the page');
+
+  const chips = [...block.querySelectorAll('dl > div')];
+  assert.equal(chips.length, BRAND_PERSONALITY.traits.length, `${chips.length} trait chips`);
+
+  for (const trait of BRAND_PERSONALITY.traits) {
+    const chip = chips.find((c) => c.querySelector('dt')?.textContent.trim() === trait.name);
+    assert.ok(chip, `no chip for the trait ${trait.name}`);
+    assert.equal(chip.querySelector('dd').textContent.trim(), trait.copy, `${trait.name} copy`);
+  }
+
+  // ── THE ASSERTION THIS WHOLE ROUND RESTS ON ───────────────────────────────
+  // Zero icons, and it is a number rather than a `!includes` so the failure
+  // message says how many crept in. "Make the two blocks consistent" is a
+  // reasonable-sounding change that would add five icons here and quietly
+  // delete the only thing distinguishing traits from values.
+  const EXPECTED_ICONS_ON_TRAITS = 0;
+  assert.equal(
+    block.querySelectorAll('svg').length,
+    EXPECTED_ICONS_ON_TRAITS,
+    'Brand Personality traits carry icons. They must not: Core Values is the ' +
+      'heavy block (cards + icons + lead-in) and Personality is the light one ' +
+      '(bare chips). The weight difference IS the distinction between what we ' +
+      'hold to and how we come across — with icons on both, three shared names ' +
+      'read as a copy-paste mistake again.',
+  );
+
+  // And the chips are not cards wearing a smaller padding: a wrapping run, not
+  // a grid.
+  const list = block.querySelector('dl');
+  assert.ok(
+    /flex-wrap/.test(list.className),
+    `the trait list is not a wrapping run (${list.className})`,
+  );
+  assert.ok(!/(^|\s)grid(\s|$)/.test(list.className), 'the trait list went back to being a grid');
+});
+
+test('`Friendly` appears TWICE — once per block, with its two different Thai lines', () => {
+  // ── WHY THIS IS PINNED ────────────────────────────────────────────────────
+  // The obvious "fix" for a word appearing twice on one page is to delete one
+  // of them. Both are in the approved guideline, they mean different things,
+  // and they carry different Thai. Deleting either loses copy nothing else on
+  // the site holds.
+  const html = renderToStaticMarkup(createElement(BrandPage));
+  const EXPECTED_FRIENDLY_COUNT = 2;
+  assert.equal(
+    html.split('Friendly').length - 1,
+    EXPECTED_FRIENDLY_COUNT,
+    'the page no longer prints `Friendly` exactly twice. It is a Core Value AND ' +
+      'a Personality trait in the source guideline, with a different Thai line ' +
+      'for each; neither may be deleted or renamed to remove the repetition.',
+  );
+
+  const d = doc();
+  const asValue = subsectionByTitle(d, 'Core Values');
+  const asTrait = subsectionByTitle(d, 'Brand Personality');
+
+  const lineFor = (block, name) =>
+    [...block.querySelectorAll('dl > div')]
+      .find((el) => el.querySelector('dt')?.textContent.trim() === name)
+      ?.querySelector('dd')
+      .textContent.trim();
+
+  // Spelled out rather than read from brandContent: the point is that THESE
+  // two sentences both survive, so deriving them from the module would let a
+  // deletion there sail straight through.
+  assert.equal(lineFor(asValue, 'Friendly'), 'เราเป็นมิตร เข้าถึงง่าย พร้อมช่วยเหลือ');
+  assert.equal(lineFor(asTrait, 'Friendly'), 'เป็นมิตร เข้าถึงง่าย และจริงใจ');
+  assert.notEqual(
+    lineFor(asValue, 'Friendly'),
+    lineFor(asTrait, 'Friendly'),
+    'both Friendlys now carry the same Thai line — one was copied over the other',
+  );
+
+  // `Practical` is the same pairing, and the same trap.
+  assert.equal(lineFor(asValue, 'Practical'), 'เราสอนสิ่งที่ใช้งานได้จริง นำไปใช้ได้ทันที');
+  assert.equal(lineFor(asTrait, 'Practical'), 'เน้นการใช้งานจริง เกิดประโยชน์');
 });
 
 // ── THE SIX SECTIONS ────────────────────────────────────────────────────────

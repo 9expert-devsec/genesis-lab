@@ -145,7 +145,16 @@ export const BRAND_POSITIONING = Object.freeze({
   ]),
 });
 
-/** Core Values — five, each an English name with a Thai line. */
+/**
+ * Core Values — five, each an English name with a Thai line.
+ *
+ * The lead-in is the block's own. Brand Personality below has always had one,
+ * and Core Values having none was half of why the two read as the same block
+ * printed twice — see BrandTraits for the other half.
+ */
+export const CORE_VALUES_LEAD =
+  'สิ่งที่เรายึดถือในการทำงานและส่งมอบให้ผู้เรียนทุกครั้ง';
+
 export const CORE_VALUES = Object.freeze([
   Object.freeze({ name: 'Expertise', copy: 'เราพัฒนาความรู้และความเชี่ยวชาญอย่างต่อเนื่อง' }),
   Object.freeze({ name: 'Friendly', copy: 'เราเป็นมิตร เข้าถึงง่าย พร้อมช่วยเหลือ' }),
