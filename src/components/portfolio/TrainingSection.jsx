@@ -15,7 +15,7 @@ const TRAINING_ITEMS = [
     tagBg: 'bg-9e-brand text-white',
     accentHex: '#2486FF',
     image:
-      'https://res.cloudinary.com/ddva7xvdt/image/upload/v1778228610/9exp-genesis/atmosphere-photos/e4bvkvg6jxgvv33rxb6z.jpg',
+      'https://res.cloudinary.com/ddva7xvdt/image/upload/v1782707487/9exp-genesis/atmosphere-photos/uav020j9emg5bbza462f.webp',
     href: '/training-course',
   },
   {

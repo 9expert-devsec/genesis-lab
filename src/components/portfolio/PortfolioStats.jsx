@@ -24,8 +24,8 @@ const STATS = [
     Icon: Building2,
   },
   {
-    target: 75,
-    suffix: "+",
+    target: 79,
+    suffix: "",
     label: "หลักสูตรที่เปิดสอน",
     sub: "Public & Corporate Training",
     Icon: BookOpen,

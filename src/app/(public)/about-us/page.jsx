@@ -31,9 +31,9 @@ export default async function AboutUsPage() {
   const stats = [
     { value: 90, suffix: "K+", label: "ผู้เรียน" },
     { value: 5, suffix: "K+", label: "องค์กร" },
-    { value: 4.9, suffix: "", label: "คะแนนรีวิว", decimals: 1 },
+    { value: 5.0, suffix: "", label: "คะแนนรีวิว", decimals: 1 },
     { value: 700, suffix: "K+", label: "ผู้ติดตาม" },
-    { value: 73, suffix: "", label: "หลักสูตร" },
+    { value: 79, suffix: "", label: "หลักสูตร" },
   ];
 
   return (

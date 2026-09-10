@@ -34,7 +34,7 @@ const BENEFITS = [
 ];
 
 const STATS = [
-  { value: '15+ ปี',  label: 'ประสบการณ์' },
+  { value: '20+ ปี',  label: 'ประสบการณ์' },
   { value: '90,000+', label: 'ผู้เรียน' },
   { value: '5,000+',  label: 'องค์กร' },
 ];
