@@ -1615,8 +1615,16 @@ function MobileMegaAccordion({
             />
           </MobileSub>
 
-          {/* Career Path */}
+          {/* Career Path — "ดูทั้งหมด" leads the group, as it does on the
+              desktop mega menu's header row; the DB rows follow. */}
           <MobileSub label="Career Path" icon={TrendingUp}>
+            <Link
+              href="/career-path-project"
+              onClick={onNavigate}
+              className="flex items-center px-3 py-2 text-xs font-medium text-9e-action dark:text-9e-air hover:underline"
+            >
+              ดูทั้งหมด →
+            </Link>
             {cpRows.map((cp) => (
               <Link
                 key={cp.href}
@@ -1650,8 +1658,16 @@ function MobileMegaAccordion({
             )}
           </MobileSub>
 
-          {/* Masterclass */}
+          {/* Masterclass — "ดูทั้งหมด" leads the group, matching Career Path
+              above and the desktop mega menu's header row. */}
           <MobileSub label="Masterclass" icon={GraduationCap}>
+            <Link
+              href="/masterclass"
+              onClick={onNavigate}
+              className="flex items-center px-3 py-2 text-xs font-medium text-9e-action dark:text-9e-air hover:underline"
+            >
+              ดูทั้งหมด →
+            </Link>
             {navMasterclasses.length > 0 ? (
               navMasterclasses.slice(0, 3).map((c) => (
                 <Link
@@ -1666,13 +1682,6 @@ function MobileMegaAccordion({
             ) : (
               <p className="px-3 py-2 text-sm text-[var(--text-muted)]">ยังไม่มี Masterclass</p>
             )}
-            <Link
-              href="/masterclass"
-              onClick={onNavigate}
-              className="flex items-center px-3 py-2 text-xs font-medium text-9e-action dark:text-9e-air hover:underline"
-            >
-              ดูทั้งหมด →
-            </Link>
           </MobileSub>
 
           {/* หลักสูตรออนไลน์ */}
