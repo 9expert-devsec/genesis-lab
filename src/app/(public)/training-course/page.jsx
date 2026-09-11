@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
+import { projectCourseListRows } from '@/lib/courses/courseListRow';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { CourseListClient } from './_components/CourseListClient';
@@ -33,7 +34,12 @@ export default async function Page() {
       getPageLinkability(),
     ]);
     skillSlugs = linkability.skillSlugs;
-    items = await enrichCoursesWithDetails(coursesResult.items);
+    // Trimmed HERE, at the boundary where the row becomes a prop of a client
+    // component and is serialised into the page: the enriched row carries
+    // the full course body (topics, objectives, related courses, …) and the
+    // list reads a fraction of it. See lib/courses/courseListRow for the
+    // measurement and the per-consumer key list.
+    items = projectCourseListRows(await enrichCoursesWithDetails(coursesResult.items));
     earlyBirdMap = earlyBirdMapResult;
     // Apply admin-set program order. We pass the names down so the
     // client groups + filter dropdown render in the same sequence.
