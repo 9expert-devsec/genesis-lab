@@ -1532,9 +1532,23 @@ function ProgramTable({
           <tbody>
             {courses.map((c, i) => {
               const stripe = i % 2 === 0;
+              /*
+                Both stripes are OPAQUE in both themes, and that is the point:
+                the frozen <td>s below carry this same fill and are sticky, so
+                a cell's own background is the mask the month columns scroll
+                under. The odd stripe used to be `dark:bg-[#0a1424]/40` — a
+                40% alpha that composited fine against the card as a ROW tint
+                and, on the sticky cells, let every date pill scrolling past
+                show through the course name and the price. Light mode never
+                had the alpha, which is why only dark bled.
+
+                `#0f1e30` is the header row's fill on this same table — one
+                step darker than the #111d2c card, the same page / card /
+                header ladder the <thead> comment describes. Not a new colour.
+              */
               const stickyBg = stripe
                 ? "bg-white dark:bg-[#111d2c]"
-                : "bg-[#FAFBFC] dark:bg-[#0a1424]/40";
+                : "bg-[#FAFBFC] dark:bg-[#0f1e30]";
               const ebScheduleId = earlyBirdIdFor(earlyBirdMap, c);
 
               /*
