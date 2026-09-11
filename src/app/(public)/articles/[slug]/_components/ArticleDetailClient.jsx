@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, ChevronLeft, Clock, User } from 'lucide-react';
+import { ArrowRight, ChevronLeft, Clock, Share2, User } from 'lucide-react';
 import { ArrowSlider } from '@/components/ui/ArrowSlider';
 import { READING_PROGRESS_ANCHOR_ID } from '@/lib/readingProgress';
 import { coursePriceLabel } from '@/lib/coursePriceLabel';
@@ -65,6 +65,39 @@ export function ArticleDetailClient({
   useEffect(() => {
     if (typeof window !== 'undefined') setPageUrl(window.location.href);
   }, []);
+
+  // Web Share API, detected the same way: seeded false so the server and the
+  // first client paint both emit the Facebook anchor, then flipped after mount
+  // where `navigator` exists. Feature-detected — never a user-agent sniff —
+  // because the thing being fixed is iOS Safari handing `sharer.php` to the
+  // Facebook app, which cannot open it, so no composer ever appears. The
+  // system share sheet is what iOS does have. Where the API is absent the
+  // anchor stays exactly as it was.
+  const [canNativeShare, setCanNativeShare] = useState(false);
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      setCanNativeShare(true);
+    }
+  }, []);
+
+  // Called from the click handler and NOTHING else may run before it: Safari
+  // grants the share sheet only while the call stack is still the user
+  // gesture, and an await, a state update or an analytics call in front of
+  // `navigator.share()` makes it refuse silently — which is indistinguishable
+  // from the defect this replaces. Anything that wants to observe the share
+  // belongs in the promise's `.then()`, after the call.
+  //
+  // Dismissing the sheet rejects with AbortError. That is the reader choosing
+  // to cancel, so it is swallowed on purpose: no error surfaced, and no
+  // fallback to the Facebook sharer they just declined.
+  const handleNativeShare = useCallback(() => {
+    navigator
+      .share({ title: article.title, url: pageUrl })
+      .catch((err) => {
+        if (err && err.name === 'AbortError') return;
+        console.error('[ArticleDetailClient] navigator.share failed:', err);
+      });
+  }, [article.title, pageUrl]);
 
   // Inject IDs onto the rendered H2/H3 nodes AND build the TOC from
   // those same nodes — one pass, single source of truth.
@@ -403,7 +436,9 @@ export function ArticleDetailClient({
                 >
                   Share
                 </span>
-                <ShareIcon href={shareLinks.facebook} brand="facebook" />
+                {canNativeShare
+                  ? <NativeShareIcon onShare={handleNativeShare} />
+                  : <ShareIcon href={shareLinks.facebook} brand="facebook" />}
                 <ShareIcon href={shareLinks.line}     brand="line" />
                 <ShareIcon href={shareLinks.linkedin} brand="linkedin" />
               </>
@@ -474,7 +509,9 @@ export function ArticleDetailClient({
                 pill buttons here for tablets and phones. */}
             <div className="mt-4 flex flex-wrap items-center gap-3 xl:hidden">
               <span className="text-sm font-medium text-gray-500 dark:text-[#94a3b8]">Share:</span>
-              <ShareLink href={shareLinks.facebook} brand="facebook" label="Facebook" />
+              {canNativeShare
+                ? <NativeShareLink onShare={handleNativeShare} />
+                : <ShareLink href={shareLinks.facebook} brand="facebook" label="Facebook" />}
               <ShareLink href={shareLinks.line}     brand="line"     label="LINE" />
               <ShareLink href={shareLinks.linkedin} brand="linkedin" label="LinkedIn" />
             </div>
@@ -649,6 +686,54 @@ const BRAND = {
   line:     { fg: '#06C755' },
   linkedin: { fg: '#0A66C2' },
 };
+
+// The system share sheet has no brand: it is a button, not a link, and it
+// says แชร์ rather than Facebook because the sheet may hand the URL to LINE,
+// Messages or anything else the reader has installed. The site's own action
+// colour, so it sits beside the brand-tinted LINE/LinkedIn buttons without
+// borrowing one of their logos.
+const NATIVE_SHARE_FG = '#005CFF'; // 9e-action
+
+function NativeShareIcon({ onShare }) {
+  const fg = NATIVE_SHARE_FG;
+  return (
+    <button
+      type="button"
+      onClick={onShare}
+      title="แชร์"
+      aria-label="แชร์"
+      className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors hover:text-white"
+      style={{
+        backgroundColor: `${fg}1a`,
+        color: fg,
+        borderColor: `${fg}33`,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = `${fg}33`; }}
+      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = `${fg}1a`; }}
+    >
+      <Share2 className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+    </button>
+  );
+}
+
+function NativeShareLink({ onShare }) {
+  const fg = NATIVE_SHARE_FG;
+  return (
+    <button
+      type="button"
+      onClick={onShare}
+      className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+      style={{
+        backgroundColor: `${fg}1a`,
+        color: fg,
+        borderColor: `${fg}33`,
+      }}
+    >
+      <Share2 className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+      แชร์
+    </button>
+  );
+}
 
 function ShareIcon({ href, brand }) {
   const { fg } = BRAND[brand];
