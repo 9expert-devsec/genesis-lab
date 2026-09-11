@@ -10,16 +10,28 @@ import { ArticleDetailClient } from '@/app/(public)/articles/[slug]/_components/
 import { ROOT, readSource } from '../sourceScan.mjs';
 
 /**
- * The article share row: a Facebook anchor where the Web Share API is absent,
- * a native แชร์ button where it is present.
+ * The article share buttons: on the MOBILE surface a native แชร์ button
+ * where the Web Share API is present and a Facebook anchor where it is not;
+ * on the DESKTOP surface Facebook / LINE / LinkedIn, always.
  *
  * ── THE DEFECT ─────────────────────────────────────────────────────────────
  * On iOS the Facebook anchor opened the Facebook app, which cannot handle
  * `sharer.php`, so no composer ever appeared. Measured: OG tags and `pageUrl`
  * were correct — not a data bug. Android was fine. The fix swaps the Facebook
- * button for one that calls `navigator.share()` wherever that exists, and
+ * button for one that calls `navigator.share()` where that exists, and
  * leaves the anchor exactly as it was everywhere else. LINE and LinkedIn are
  * untouched in both cases.
+ *
+ * ── THE SECOND ROUND: DESKTOP IS NOT A SURFACE WITH THE DEFECT ─────────────
+ * `navigator.share` also exists in Safari and Edge on desktop, so the first
+ * cut of the fix reached the xl sticky strip and put a sheet button where
+ * three labelled buttons belong. The rule is now per SURFACE, not per
+ * browser: the pill row (`xl:hidden`) swaps, the strip (`hidden xl:flex`)
+ * never does. The split is those two responsive utilities — the same pair
+ * that already kept the surfaces from ever being visible together — and no
+ * JavaScript viewport logic. The desktop-keeps-Facebook assertion below is
+ * what pins this round: without it, a later edit that read `canNativeShare`
+ * in the strip would undo it silently.
  *
  * ── TWO TIERS, AND WHY ─────────────────────────────────────────────────────
  * The FALLBACK is asserted here, in-process, under `renderToStaticMarkup`:
@@ -39,9 +51,12 @@ import { ROOT, readSource } from '../sourceScan.mjs';
  * (AbortError) is silent and opens nothing, and that a real failure is
  * logged. It cannot say Safari grants the sheet — that is a property of the
  * browser, and the synchronous-call check is the closest observable proxy.
- * It also does not exercise the xl sticky strip, which is gated on a scroll
- * the drive does not perform; that strip takes the same `canNativeShare`
- * and the same handler, and is covered by the source assertion at the end.
+ * The xl strip is gated on `showProgress`, which the drive flips with one
+ * dispatched scroll event (in jsdom `scrollY > offsetTop - 100` is
+ * `0 > -100`), so both surfaces are observed in every run. What the drive
+ * cannot say is which surface a real viewport SHOWS — jsdom applies no CSS —
+ * so the split itself is pinned on the class strings, and the source guard at
+ * the end pins that the strip has no `canNativeShare` read to swap on.
  */
 
 const ARTICLE = {
@@ -155,6 +170,52 @@ test('CONTROL: a NON-abort failure IS reported — the abort case is handled spe
   assert.equal(r.windowOpenCalls, 0);
 });
 
+// ── Desktop strip — the surface that must NOT swap ──────────────────────────
+
+const stripBrands = (r) => r.strip.anchors.map((a) => a.title);
+
+test('desktop: with navigator.share PRESENT the strip keeps its Facebook anchor and has NO native button', () => {
+  // THE ASSERTION THAT PINS THIS ROUND. Desktop Safari and Edge have the API;
+  // the strip must still be the three labelled buttons it always was.
+  const r = R.resolves;
+  assert.equal(r.strip.revealed, true, 'the strip never rendered — showProgress did not flip');
+  assert.deepEqual(stripBrands(r), ['Share facebook', 'Share line', 'Share linkedin']);
+  assert.match(r.strip.anchors[0].href, /^https:\/\/www\.facebook\.com\/sharer\/sharer\.php\?u=/);
+  assert.deepEqual(r.strip.buttons, [], 'a native share button reached the desktop strip');
+  assert.equal(r.strip.anchors.some((a) => /แชร์/.test(a.text)), false);
+});
+
+test('desktop: with navigator.share ABSENT the strip is the same three anchors', () => {
+  const r = R.absent;
+  assert.equal(r.strip.revealed, true);
+  assert.deepEqual(stripBrands(r), ['Share facebook', 'Share line', 'Share linkedin']);
+  assert.deepEqual(r.strip.buttons, []);
+});
+
+test('desktop: the strip is identical with and without the API — canNativeShare does not reach it', () => {
+  assert.deepEqual(R.resolves.strip, R.absent.strip);
+  assert.deepEqual(R.aborts.strip, R.absent.strip);
+});
+
+test('LINE and LinkedIn are present on BOTH surfaces in all four combinations', () => {
+  for (const [name, r] of [['present', R.resolves], ['absent', R.absent]]) {
+    const row = r.anchors.map((a) => a.text);
+    assert.ok(row.includes('LINE') && row.includes('LinkedIn'), `pill row lost LINE/LinkedIn (API ${name})`);
+    const strip = stripBrands(r);
+    assert.ok(strip.includes('Share line') && strip.includes('Share linkedin'), `strip lost LINE/LinkedIn (API ${name})`);
+  }
+});
+
+test('the split is CSS: the pill row is xl:hidden, the strip is hidden xl:flex — one breakpoint, never both', () => {
+  // Desktop and mobile are the two containers' responsive utilities, not a
+  // resize listener or a viewport state. The same `xl` on both sides is what
+  // makes the surfaces complementary at every width.
+  const r = R.resolves;
+  assert.match(r.rowClass, /(^|\s)xl:hidden(\s|$)/);
+  assert.match(r.strip.className, /(^|\s)hidden(\s|$)/);
+  assert.match(r.strip.className, /(^|\s)xl:flex(\s|$)/);
+});
+
 test('native: with NO navigator.share the mounted page keeps the Facebook anchor', () => {
   // The runtime feature-detect, not only the SSR seed. Same DOM, same
   // effects, no API: three anchors, no button.
@@ -175,10 +236,24 @@ test('source: the detection is a feature check, never a user-agent sniff', () =>
   assert.doesNotMatch(SRC, /userAgent|navigator\.platform|\/iP(hone|ad|od)\//, 'a UA sniff crept in');
 });
 
-test('source: both share surfaces take the swap — the xl strip the drive cannot scroll to', () => {
-  // The sticky strip renders behind `showProgress`; the drive never scrolls,
-  // so the pill row is what it observed. This pins that the strip made the
-  // same choice from the same state, rather than keeping a Facebook icon.
-  assert.match(SRC, /canNativeShare\s*\?\s*<NativeShareIcon onShare=\{handleNativeShare\} \/>\s*:\s*<ShareIcon href=\{shareLinks\.facebook\} brand="facebook" \/>/);
+test('source: canNativeShare is read by the pill row ONLY — the strip has nothing to swap on', () => {
+  // The DOM assertions above show the strip did not swap in this run; this
+  // pins WHY, so a future read of the state in the strip is a red line here
+  // and not a browser-specific surprise. One conditional render, on the pill.
+  const reads = SRC.match(/\bcanNativeShare\b/g) ?? [];
+  // declaration + the pill row's ternary — nothing else.
+  assert.equal(reads.length, 2, `canNativeShare is referenced ${reads.length} times; expected the declaration and one render site`);
   assert.match(SRC, /canNativeShare\s*\?\s*<NativeShareLink onShare=\{handleNativeShare\} \/>\s*:\s*<ShareLink href=\{shareLinks\.facebook\} brand="facebook" label="Facebook" \/>/);
+  assert.doesNotMatch(SRC, /NativeShareIcon/, 'a strip-shaped native button is back');
+  // The strip's Facebook icon is unconditional. (`readSource().code` turns
+  // the JSX comment that sits between the label and the icon into `{ }`.)
+  assert.match(SRC, /Share\s*<\/span>\s*(\{\s*\}\s*)?<ShareIcon href=\{shareLinks\.facebook\} brand="facebook" \/>/);
+});
+
+test('source: no viewport logic decides the surface — no media query, no width state, no UA', () => {
+  // The component does listen to `resize` — for the reading-progress bar,
+  // which predates this work — so that listener is not the tell. What would
+  // be: a media query, a width comparison, or a hook that turns the viewport
+  // into state and then picks a surface from it.
+  assert.doesNotMatch(SRC, /matchMedia|innerWidth|useMediaQuery|useViewport|useBreakpoint|isMobile|isDesktop/);
 });

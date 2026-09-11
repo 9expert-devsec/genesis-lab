@@ -73,6 +73,12 @@ export function ArticleDetailClient({
   // Facebook app, which cannot open it, so no composer ever appears. The
   // system share sheet is what iOS does have. Where the API is absent the
   // anchor stays exactly as it was.
+  //
+  // Read by the MOBILE pill row only. The xl strip is the desktop surface,
+  // which never had the defect, and desktop Safari/Edge also expose
+  // navigator.share — so the strip renders its three anchors regardless. The
+  // split is the existing `xl:hidden` / `hidden xl:flex` pair on the two
+  // containers, not viewport logic here.
   const [canNativeShare, setCanNativeShare] = useState(false);
   useEffect(() => {
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
@@ -436,9 +442,11 @@ export function ArticleDetailClient({
                 >
                   Share
                 </span>
-                {canNativeShare
-                  ? <NativeShareIcon onShare={handleNativeShare} />
-                  : <ShareIcon href={shareLinks.facebook} brand="facebook" />}
+                {/* Desktop keeps its three labelled buttons: the strip is
+                    xl+ only and never had the iOS defect, so it does NOT read
+                    canNativeShare — Safari and Edge on desktop have
+                    navigator.share too, and must not get a sheet here. */}
+                <ShareIcon href={shareLinks.facebook} brand="facebook" />
                 <ShareIcon href={shareLinks.line}     brand="line" />
                 <ShareIcon href={shareLinks.linkedin} brand="linkedin" />
               </>
@@ -509,6 +517,7 @@ export function ArticleDetailClient({
                 pill buttons here for tablets and phones. */}
             <div className="mt-4 flex flex-wrap items-center gap-3 xl:hidden">
               <span className="text-sm font-medium text-gray-500 dark:text-[#94a3b8]">Share:</span>
+              {/* The only surface that swaps Facebook for the system sheet. */}
               {canNativeShare
                 ? <NativeShareLink onShare={handleNativeShare} />
                 : <ShareLink href={shareLinks.facebook} brand="facebook" label="Facebook" />}
@@ -690,31 +699,10 @@ const BRAND = {
 // The system share sheet has no brand: it is a button, not a link, and it
 // says แชร์ rather than Facebook because the sheet may hand the URL to LINE,
 // Messages or anything else the reader has installed. The site's own action
-// colour, so it sits beside the brand-tinted LINE/LinkedIn buttons without
-// borrowing one of their logos.
+// colour, so it sits beside the brand-tinted LINE/LinkedIn pills without
+// borrowing one of their logos. Pill form only — the xl strip has no native
+// variant on purpose (see canNativeShare).
 const NATIVE_SHARE_FG = '#005CFF'; // 9e-action
-
-function NativeShareIcon({ onShare }) {
-  const fg = NATIVE_SHARE_FG;
-  return (
-    <button
-      type="button"
-      onClick={onShare}
-      title="แชร์"
-      aria-label="แชร์"
-      className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors hover:text-white"
-      style={{
-        backgroundColor: `${fg}1a`,
-        color: fg,
-        borderColor: `${fg}33`,
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = `${fg}33`; }}
-      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = `${fg}1a`; }}
-    >
-      <Share2 className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-    </button>
-  );
-}
 
 function NativeShareLink({ onShare }) {
   const fg = NATIVE_SHARE_FG;

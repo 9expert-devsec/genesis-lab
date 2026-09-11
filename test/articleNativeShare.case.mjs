@@ -28,9 +28,12 @@
  *              still show the Facebook anchor — the fallback is a runtime
  *              decision, not only the SSR seed.
  *
- * The share row asserted on is the mobile pill row: the xl sticky strip is
- * gated on `showProgress`, which needs a scroll, and this drive does not
- * scroll.
+ * BOTH surfaces are read: the mobile pill row (`xl:hidden`) and the xl
+ * sticky strip (`hidden xl:flex`). The strip is gated on `showProgress`,
+ * set from `window.scrollY > content.offsetTop - 100` on scroll — in jsdom
+ * that is `0 > -100`, so one dispatched scroll event reveals it with no
+ * layout. Each surface is reported separately because the rule differs:
+ * the pill row swaps Facebook for the sheet, the strip never does.
  *
  * Not a test file. `.case.mjs`, so neither the runner's manifest nor its
  * discovery guard picks it up.
@@ -57,11 +60,20 @@ const ARTICLE = {
 
 const text = (el) => el.textContent.replace(/\s+/g, ' ').trim();
 
-/** The mobile pill row — the sibling of the "Share:" label. */
+/** The mobile pill row — the parent of the "Share:" label. */
 function shareRow(doc) {
   const label = [...doc.querySelectorAll('span')].find((s) => text(s) === 'Share:');
   return label ? label.parentElement : null;
 }
+/** The xl sticky strip — the parent of its vertical "Share" label. */
+function shareStrip(doc) {
+  const label = [...doc.querySelectorAll('span')].find((s) => text(s) === 'Share');
+  return label ? label.parentElement : null;
+}
+const anchorsOf = (scope) =>
+  scope ? [...scope.querySelectorAll('a')].map((a) => ({ href: a.getAttribute('href'), text: text(a), title: a.getAttribute('title') })) : [];
+const buttonsOf = (scope) =>
+  scope ? [...scope.querySelectorAll('button')].map((b) => ({ text: text(b), type: b.getAttribute('type'), title: b.getAttribute('title') })) : [];
 
 async function drive(outcome) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
@@ -106,9 +118,13 @@ async function drive(outcome) {
     root.render(h(ArticleDetailClient, { article: ARTICLE, related: [], relatedCoursesData: [], minutes: 2 }));
   });
 
+  // Reveal the strip: `showProgress` flips on the first scroll tick.
+  await act(async () => { win.dispatchEvent(new win.Event('scroll')); });
+
   const row = shareRow(win.document);
-  const anchors = row ? [...row.querySelectorAll('a')].map((a) => ({ href: a.getAttribute('href'), text: text(a) })) : [];
-  const buttons = row ? [...row.querySelectorAll('button')].map((b) => ({ text: text(b), type: b.getAttribute('type') })) : [];
+  const strip = shareStrip(win.document);
+  const anchors = anchorsOf(row).map(({ title, ...a }) => a);
+  const buttons = buttonsOf(row).map(({ title, ...b }) => b);
   const shareBtn = row ? [...row.querySelectorAll('button')].find((b) => text(b) === 'แชร์') : null;
 
   let calledBeforeDispatchReturned = false;
@@ -127,8 +143,17 @@ async function drive(outcome) {
   console.error = origError;
 
   return {
+    // Mobile pill row (`xl:hidden`).
     anchors,
     buttons,
+    rowClass: row ? row.getAttribute('class') : null,
+    // Desktop strip (`hidden xl:flex`).
+    strip: {
+      revealed: Boolean(strip),
+      anchors: anchorsOf(strip),
+      buttons: buttonsOf(strip),
+      className: strip ? strip.getAttribute('class') : null,
+    },
     calls: calls.map(({ at, ...rest }) => rest),
     calledBeforeDispatchReturned,
     consoleErrors: errors,
