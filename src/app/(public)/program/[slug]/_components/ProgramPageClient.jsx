@@ -174,7 +174,12 @@ export function ProgramPageClient({
       </section>
 
       {/* ── Course grid ───────────────────────────────────────────── */}
-      <section className="mx-auto max-w-[1200px] pt-10 lg:pt-14">
+      {/* `px-4 lg:px-6` is the skill page's card-container padding, verbatim
+          (SkillPageClient's per-program block) and this page's own hero
+          above. Without it the cards ran to the viewport edge on mobile and
+          overhung the hero by 24px a side on desktop. ProgramOnlineCoursesSection
+          below carries the same string so its columns stay aligned with these. */}
+      <section className="mx-auto max-w-[1200px] px-4 pt-10 lg:px-6 lg:pt-14">
         <div className="mb-6 flex items-center gap-3">
           {program?.programiconurl && (
             <Image

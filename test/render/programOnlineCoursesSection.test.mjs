@@ -154,18 +154,21 @@ test('CONTROL: a program with no icon still renders the heading and the pill', (
   assert.match(render({ program: {} }), />คอร์สออนไลน์ในโปรแกรม</);
 });
 
-test('the container matches the course grid EXACTLY, including its lack of px', () => {
-  // Adding px-4 here would inset this section relative to the course grid above
-  // and the two would visibly disagree. Pinned so a well-meaning edit is caught.
+test('the container matches the course grid EXACTLY, including its px', () => {
+  // A padding change on one section that the other does not follow insets it
+  // relative to its neighbour and the two visibly disagree. Pinned so a
+  // well-meaning edit is caught. (The pair used to share NO px; the mobile
+  // side-padding fix gave both `px-4 lg:px-6` — see
+  // test/render/programSkillCardPadding for the cross-page claim.)
   const sectionCls = dom(render()).querySelector('section').getAttribute('class');
   const client = readFileSync(
     'src/app/(public)/program/[slug]/_components/ProgramPageClient.jsx', 'utf8'
   );
   assert.ok(
-    client.includes('mx-auto max-w-[1200px] pt-10 lg:pt-14'),
+    client.includes('mx-auto max-w-[1200px] px-4 pt-10 lg:px-6 lg:pt-14'),
     'the course grid container changed — re-check this section against it'
   );
-  assert.equal(sectionCls, 'mx-auto max-w-[1200px] pt-10 lg:pt-14');
+  assert.equal(sectionCls, 'mx-auto max-w-[1200px] px-4 pt-10 lg:px-6 lg:pt-14');
 });
 
 // ── it reuses OnlineCourseCard unchanged ───────────────────────────────────

@@ -37,15 +37,18 @@ import { OnlineCourseCard } from '@/app/_components/home/OnlineCourseCard';
  * The grid literal is identical to the course grid's above it, so the two
  * sections' cards line up column-for-column.
  *
- * ── CONTAINER MATCHES THE COURSE GRID EXACTLY, INCLUDING ITS LACK OF px ────
+ * ── CONTAINER MATCHES THE COURSE GRID EXACTLY, INCLUDING ITS px ────────────
  *
- * `mx-auto max-w-[1200px]` with no horizontal padding, copied verbatim from
- * ProgramPageClient's course-grid section. Below 1200px that means the cards
- * reach the viewport edge — which is how the course grid already renders, so
- * adding `px-4` here would inset this section relative to the one above it and
- * the two would visibly disagree. Matching the neighbour is the point; the
- * missing padding is a pre-existing question about the page, not this section's
- * to answer.
+ * `mx-auto max-w-[1200px] px-4 … lg:px-6`, copied verbatim from
+ * ProgramPageClient's course-grid section. The two used to share a container
+ * with NO horizontal padding — this note once said the missing padding was
+ * "a pre-existing question about the page, not this section's to answer" —
+ * and the page answered it: the cards ran to the viewport edge on mobile and
+ * overhung the hero on desktop, while the skill page's identical cards sat
+ * inside `px-4 lg:px-6`. Both sections now carry that padding, and the
+ * reason they are pinned to each other is unchanged: an edit to one that the
+ * other does not follow insets it relative to its neighbour, and the two
+ * visibly disagree.
  *
  * @param {Array}  courses    online-course rows, already filtered to the program
  * @param {object} program    for the heading icon; optional
@@ -61,7 +64,7 @@ export function ProgramOnlineCoursesSection({
   if (!courses?.length) return null;
 
   return (
-    <section id={id} className="mx-auto max-w-[1200px] pt-10 lg:pt-14">
+    <section id={id} className="mx-auto max-w-[1200px] px-4 pt-10 lg:px-6 lg:pt-14">
       <div className="mb-6 flex items-center gap-3">
         {program?.programiconurl && (
           <Image
