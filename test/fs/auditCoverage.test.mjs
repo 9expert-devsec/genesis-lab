@@ -783,7 +783,17 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // It needs no REACHED_THROUGH_IMPORT entry: it writes through
 // `RegisterPublic.findOneAndUpdate` in its own body, so the file-local
 // classifier sees it and the depth-0 figure below moves with it.
-const MUTATING_EXPORT_COUNT = 184;
+// 184 → 186: `recordPageCatalogUpload` and `removePageCatalog` (page-catalogs.js),
+// the program/skill catalog PDF — the outline flow without a language. Both
+// write `ProgramPageConfig`/`SkillPageConfig.findOneAndUpdate` in their own
+// bodies, so depth 0 sees them and both figures move by 2. `signPageCatalogUpload`
+// is NOT counted: it signs and files an audit row, and W-t rules the audit
+// writer is not a domain write. The file is not in SWEPT_FILES (its neighbour
+// page-configs.js is not either — a separate ticket); every export records
+// regardless. NOTE: the assertion was already red at 191 !== 184 before this
+// round (see the known pre-existing failures); the constant is bumped by
+// exactly this round's delta so it keeps saying what this round added.
+const MUTATING_EXPORT_COUNT = 186;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -1005,7 +1015,9 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 176,
+    zero, 178,
+    'ROUND: 176 → 178 for recordPageCatalogUpload + removePageCatalog (page-catalogs.js), ' +
+    'which write the page-config models in their own bodies — same property as the last bump. ' +
     'ROUND: 175 → 176 for updateBundleRequestStatus, which calls ' +
     'RegisterPublic.findOneAndUpdate in its own body — so depth 0 sees it and ' +
     'the two figures move together, which is the property this control exists ' +

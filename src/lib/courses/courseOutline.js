@@ -42,6 +42,8 @@
  * anything a URL segment could not carry cleanly.
  */
 
+import { normaliseKeyForPath } from '@/lib/files/pathKey';
+
 /** The one category segment course outlines live in. A valid isValidCategory(). */
 export const OUTLINE_CATEGORY = 'course-outline';
 
@@ -86,18 +88,9 @@ export function isOutlineLang(lang) {
  * hunting through a form with 40 fields.
  */
 export function normaliseCourseIdForPath(courseId) {
-  const raw = String(courseId ?? '').trim();
-  if (!raw) return { ok: false, reason: 'course_id ว่าง — กรอกรหัสหลักสูตรก่อนอัปโหลด' };
-
-  const value = raw.toLowerCase();
-  if (!/^[a-z0-9-]+$/.test(value)) {
-    return {
-      ok: false,
-      reason: `course_id "${raw}" มีอักขระที่ใช้ในชื่อไฟล์ไม่ได้ — รองรับเฉพาะ a-z 0-9 และ - `
-        + `(ตรวจแล้วได้ "${value}")`,
-    };
-  }
-  return { ok: true, value };
+  // THE RULE LIVES IN lib/files/pathKey now — the program/skill catalog PDF
+  // needed the identical one. Same messages, same refusals; this is a name.
+  return normaliseKeyForPath(courseId, { label: 'course_id', noun: 'รหัสหลักสูตร' });
 }
 
 /** `<course-id>-course-outline-<lang>.pdf`, lowercased. */
