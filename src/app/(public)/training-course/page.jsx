@@ -9,7 +9,10 @@ import { CourseListClient } from './_components/CourseListClient';
 import { siteCurrentYear } from '@/lib/articlePublishTime';
 import { getPageLinkability } from '@/lib/resolvePageSlug';
 
-export const metadata = { title: 'หลักสูตรทั้งหมด' };
+export const metadata = {
+  title: 'หลักสูตรทั้งหมด',
+  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/training-course` },
+};
 
 export default async function Page() {
   let items = [];

@@ -14,6 +14,7 @@ export async function generateMetadata({ params }) {
     title: cp?.title
       ? `สมัคร Career Path: ${cp.title}`
       : 'สมัคร Career Path',
+    alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/career-path-register/${slug}` },
   };
 }
 

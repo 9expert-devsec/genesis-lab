@@ -8,6 +8,7 @@ import { ArticlesPageClient } from './_components/ArticlesPageClient';
 export const metadata = {
   title: 'บทความ',
   description: 'แบ่งปันความรู้เทคโนโลยี เพื่อ "ขับเคลื่อนประเทศไทย"',
+  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/articles` },
 };
 
 // The list is now page- and filter-driven via searchParams, so render

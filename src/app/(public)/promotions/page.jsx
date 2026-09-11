@@ -21,6 +21,7 @@ export const metadata = {
   title: 'โปรโมชัน | 9Expert Training',
   description:
     'รวมโปรโมชั่นและส่วนลดพิเศษสำหรับหลักสูตรอบรมจาก 9Expert Training',
+  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/promotions` },
 };
 
 /*

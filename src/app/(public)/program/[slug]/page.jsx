@@ -128,10 +128,15 @@ export async function generateMetadata({ params }) {
     program.program_teaser ||
     '';
   const ogImage = config?.ogImage?.trim() || program.programiconurl || '';
+  // The page itself redirects to /<urlSlug> when the admin set one (see the
+  // note on Page below), so the canonical names that URL; otherwise this one.
+  const custom = config?.urlSlug?.trim();
+  const canonical = `${process.env.NEXT_PUBLIC_SITE_URL}/${custom || `program/${slug}`}`;
 
   return {
     title,
     description,
+    alternates: { canonical },
     openGraph: {
       title,
       description,

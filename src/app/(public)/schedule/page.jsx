@@ -11,6 +11,7 @@ export const metadata = {
   title: 'ตารางฝึกอบรม',
   description:
     'ตารางการฝึกอบรมหลักสูตรทั้งหมด Public Training — เลือกเดือน ทักษะ และรูปแบบการอบรม',
+  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/schedule` },
 };
 
 export const revalidate = 1800;

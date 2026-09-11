@@ -9,6 +9,7 @@ export async function generateMetadata({ params }) {
   const course = await getMasterclassBySlug(slug);
   return {
     title: course ? `สมัคร: ${course.title_th} | Masterclass` : 'สมัครอบรม Masterclass',
+    alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/masterclass/${slug}/register` },
   };
 }
 

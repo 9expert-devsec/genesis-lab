@@ -163,6 +163,10 @@ export async function generateMetadata({ params }) {
   return {
     title,
     description,
+    // Same self-reference the builder and custom-page branches above emit;
+    // without it this branch inherited the homepage canonical from the root
+    // layout.
+    alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/promotions/${segment}` },
     openGraph: {
       title,
       description,

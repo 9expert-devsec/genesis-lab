@@ -7,6 +7,7 @@ export const metadata = {
   title: 'Masterclass — 9Expert Training',
   description:
     'เรียนเข้มข้นแบบ Workshop เต็มวัน เฉพาะเสาร์-อาทิตย์ กลุ่มเล็ก ลงมือปฏิบัติจริงกับผู้เชี่ยวชาญ 9Expert',
+  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/masterclass` },
 };
 
 export default async function MasterclassListingPage() {
