@@ -99,15 +99,23 @@ export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }
       : undefined,
     // Live schedule instances
     hasCourseInstance: instances.length > 0 ? instances : undefined,
-    // Site-wide aggregate rating (hardcoded marketing number — same source
-    // as TestimonialStats.jsx STATS array)
-    aggregateRating: {
-      '@type':       'AggregateRating',
-      ratingValue:   '4.9',
-      bestRating:    '5',
-      worstRating:   '1',
-      ratingCount:   '90000', // 90K+ learners used as proxy for review count
-    },
+    // NO aggregateRating, NO review — deliberately absent, not missing.
+    //
+    // This builder used to emit a site-wide AggregateRating (4.9 / 5, with
+    // the "90K+ learners" marketing count standing in for ratingCount) on
+    // every course page, identical on all 77, with no rating rendered
+    // anywhere in visible content. That asserts 90,000 reviews of each course
+    // that do not exist. Google's review-snippet policy requires the markup
+    // to reflect a real rating of THIS item that is visible on the page; a
+    // site-wide number pasted into every Course is a structured-data policy
+    // violation, not a missed rich result.
+    //
+    // The repo already forbids it: lib/schemas/pageBuilder.js keeps Review and
+    // AggregateRating out of JSONLD_TYPES ("must NEVER be emitted"), and the
+    // JSON-LD hook point in app/(public)/[...slug]/page.jsx repeats it. This
+    // file predates both. test/fs/noAggregateRatingJsonLd guards the whole of
+    // src/. The key may return ONLY when real per-course ratings exist AND
+    // are rendered in the page's visible content — both, not either.
     image: course.course_cover_url || undefined,
     inLanguage: 'th',
   };
