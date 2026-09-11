@@ -7,6 +7,8 @@ import {
   deleteProgramConfig,
   deleteSkillConfig,
 } from '@/lib/actions/page-configs';
+import { PageCatalogUpload } from '@/components/admin/PageCatalogUpload';
+import { hasCatalog } from '@/lib/pageCatalog';
 
 /**
  * Generic editor for ProgramPageConfig / SkillPageConfig. Renders a
@@ -144,7 +146,13 @@ function EditForm({ kind, item, config, onSaved }) {
 
   const onDelete = () => {
     if (!config?._id) return;
-    if (!window.confirm('ลบการตั้งค่า URL & SEO ของรายการนี้?')) return;
+    // Deleting the row takes the catalog reference with it — the file stays
+    // at its derived id (see lib/actions/page-catalogs), but the button goes.
+    // Say so, rather than let a URL clean-up silently unpublish a download.
+    const message = hasCatalog(config)
+      ? 'ลบการตั้งค่า URL & SEO ของรายการนี้?\n\nรายการนี้มีแคตตาล็อก PDF อยู่ — ปุ่มดาวน์โหลดบนหน้าเว็บจะหายไปด้วย'
+      : 'ลบการตั้งค่า URL & SEO ของรายการนี้?';
+    if (!window.confirm(message)) return;
     startTransition(async () => {
       const action = kind === 'program' ? deleteProgramConfig : deleteSkillConfig;
       await action(item.id);
@@ -198,6 +206,13 @@ function EditForm({ kind, item, config, onSaved }) {
           placeholder="https://..."
           className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-9e-navy dark:text-white"
         />
+      </Field>
+
+      {/* THE CATALOG PDF. Not a form field: it uploads and records the moment
+          a file is picked (overwrite in place, live at once — the outline's
+          rule), so it sits outside บันทึก and needs no hidden input. */}
+      <Field label="แคตตาล็อก" hint="PDF ภาษาไทย 1 ไฟล์ — หน้าเว็บแสดงปุ่มดาวน์โหลดเฉพาะเมื่อมีไฟล์">
+        <PageCatalogUpload kind={kind} id={item.id} initialCatalog={config?.catalogPdf ?? null} />
       </Field>
 
       <label className="flex items-center gap-2 text-sm text-9e-navy dark:text-white">
