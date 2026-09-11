@@ -22,6 +22,11 @@ import { CATALOG_DOWNLOAD_LABEL, hasCatalog } from '@/lib/pageCatalog';
  *
  * "No file" means NOTHING — the absence is asserted on the DOM, not inferred
  * from an empty href.
+ *
+ * IT OPENS IN A NEW TAB. The button shipped for one round with a `download`
+ * attribute and was reverted on request: the anchor is the repo's
+ * external-link shape — `target="_blank" rel="noopener noreferrer"` — and
+ * carries NO `download`, like the course outline under the same rewrite.
  */
 
 const dom = (html) => new JSDOM(`<!doctype html><body>${html}</body>`).window.document;
@@ -56,13 +61,13 @@ const descriptionOf = (doc, text) =>
 
 // ── The program page ────────────────────────────────────────────────────────
 
-test('program page: WITH a file, the button renders under the description, as a download', () => {
+test('program page: WITH a file, the button renders under the description and opens in a new tab', () => {
   assert.equal(hasCatalog(WITH_FILE), true, 'the fixture must be a config with a file');
   const doc = renderProgram(WITH_FILE);
   const a = catalogAnchor(doc);
   assert.ok(a, 'no catalog button rendered');
   assert.equal(a.getAttribute('href'), '/files/catalog/program-power-bi-catalog.pdf');
-  assert.equal(a.getAttribute('download'), 'Power BI catalog.pdf', 'the file must SAVE, named for the program — raw delivery sends no disposition');
+  assert.equal(a.hasAttribute('download'), false, 'a download attribute is back — the button opens the PDF in a tab, it does not save it');
   assert.equal(a.getAttribute('target'), '_blank');
   assert.equal(a.getAttribute('rel'), 'noopener noreferrer');
 
@@ -86,13 +91,15 @@ test('program page: WITHOUT a file, NOTHING renders — no anchor, no placeholde
 
 // ── The skill page ──────────────────────────────────────────────────────────
 
-test('skill page: WITH a file, the button renders under the description, as a download', () => {
+test('skill page: WITH a file, the button renders under the description and opens in a new tab', () => {
   const config = { skillId: 'DEV', catalogPdf: { ...WITH_FILE.catalogPdf, path: '/files/catalog/skill-dev-catalog.pdf' } };
   const doc = renderSkill(config);
   const a = catalogAnchor(doc);
   assert.ok(a, 'no catalog button rendered');
   assert.equal(a.getAttribute('href'), '/files/catalog/skill-dev-catalog.pdf');
-  assert.equal(a.getAttribute('download'), 'Programming catalog.pdf');
+  assert.equal(a.hasAttribute('download'), false, 'a download attribute is back — the button opens the PDF in a tab, it does not save it');
+  assert.equal(a.getAttribute('target'), '_blank');
+  assert.equal(a.getAttribute('rel'), 'noopener noreferrer');
 
   const desc = descriptionOf(doc, 'Code');
   assert.ok(desc, 'description paragraph not found');
@@ -112,20 +119,23 @@ test('skill page: WITHOUT a file, NOTHING renders', () => {
 // ── The shared piece and its treatment ──────────────────────────────────────
 
 test('the button IS the site\'s HeroPdfButton — same anchor classes as /training-course\'s catalog button', () => {
-  const ours = dom(renderToStaticMarkup(createElement(PageCatalogButton, { config: WITH_FILE, name: 'Power BI' }))).querySelector('a');
+  const ours = dom(renderToStaticMarkup(createElement(PageCatalogButton, { config: WITH_FILE }))).querySelector('a');
   const theirs = dom(renderToStaticMarkup(createElement(HeroPdfButton, { href: '/x.pdf' }, 'ดาวน์โหลดแคตตาล็อกหลักสูตร'))).querySelector('a');
   assert.ok(ours && theirs);
   assert.equal(ours.getAttribute('class'), theirs.getAttribute('class'));
   assert.equal(ours.querySelectorAll('svg').length, 2, 'the leading document glyph and the trailing download glyph');
 });
 
-test('CONTROL: HeroPdfButton without downloadAs renders NO download attribute — existing callers are untouched', () => {
-  const a = dom(renderToStaticMarkup(createElement(HeroPdfButton, { href: '/x.pdf' }, 'x'))).querySelector('a');
+test('CONTROL: HeroPdfButton itself renders NO download attribute and has no opt-in for one', () => {
+  // The `downloadAs` prop that existed for one round is gone; passing it does nothing.
+  const a = dom(renderToStaticMarkup(createElement(HeroPdfButton, { href: '/x.pdf', downloadAs: 'x.pdf' }, 'x'))).querySelector('a');
   assert.equal(a.hasAttribute('download'), false);
+  assert.equal(a.getAttribute('target'), '_blank');
+  assert.equal(a.getAttribute('rel'), 'noopener noreferrer');
 });
 
 test('CONTROL: PageCatalogButton alone renders null for every no-file shape', () => {
   for (const config of [undefined, null, {}, { catalogPdf: null }, { catalogPdf: { path: ' ' } }]) {
-    assert.equal(renderToStaticMarkup(createElement(PageCatalogButton, { config, name: 'x' })), '');
+    assert.equal(renderToStaticMarkup(createElement(PageCatalogButton, { config })), '');
   }
 });

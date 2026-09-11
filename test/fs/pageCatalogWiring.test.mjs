@@ -104,21 +104,26 @@ test('the button renders on hasCatalog and nothing else', () => {
   assert.match(withImports, /import \{[^}]*\bhasCatalog\b[^}]*\} from '@\/lib\/pageCatalog'/);
   assert.match(code, /if \(!hasCatalog\(config\)\) return null;/);
   assert.match(code, /<HeroPdfButton/, 'the treatment is not the site\'s PDF button');
-  assert.match(code, /downloadAs=\{catalogDownloadName\(name\)\}/, 'the button does not download');
+  // Opens in a tab: HeroPdfButton's own target/rel pair, and NO download —
+  // the opt-in that existed for one round is gone from both files.
+  // (`CATALOG_DOWNLOAD_LABEL` is the label's name, not an attribute — hence
+  // the two exact spellings rather than /download/i.)
+  assert.doesNotMatch(code, /download=|downloadAs/, 'a download attribute or opt-in is back on the catalog button');
   assert.match(code, /\{CATALOG_DOWNLOAD_LABEL\}/, 'the label is not the shared constant');
 });
 
-test('HeroPdfButton\'s download is OPT-IN and undefined by default', () => {
+test('HeroPdfButton carries the external-link pair and NO download attribute or opt-in', () => {
   const { code } = readSource(HERO_BTN);
-  assert.match(code, /download=\{downloadAs \|\| undefined\}/);
+  assert.match(code, /target="_blank"\s+rel="noopener noreferrer"/);
+  assert.doesNotMatch(code, /download=|downloadAs/, 'the download opt-in is back on HeroPdfButton');
 });
 
 test('both pages mount PageCatalogButton with their config, after the description', () => {
-  for (const [rel, name] of [[PROGRAM_PAGE, 'program?.program_name'], [SKILL_PAGE, 'skill?.skill_name']]) {
+  for (const rel of [PROGRAM_PAGE, SKILL_PAGE]) {
     const { code, withImports } = readSource(rel);
     assert.match(withImports, /import \{ PageCatalogButton \} from '@\/components\/ui\/PageCatalogButton'/, `${rel} does not import the button`);
-    const mount = new RegExp(`<PageCatalogButton config=\\{config\\} name=\\{${name.replace(/[?.]/g, '\\$&')}\\}`);
-    assert.match(code, mount, `${rel} does not mount the button with config and name`);
+    const mount = /<PageCatalogButton config=\{config\}[^>]*\/>/;
+    assert.match(code, mount, `${rel} does not mount the button with config`);
     const descAt = code.indexOf('{description && (');
     const mountAt = code.search(mount);
     assert.ok(descAt > 0 && mountAt > descAt, `${rel}: the button is not after the description`);

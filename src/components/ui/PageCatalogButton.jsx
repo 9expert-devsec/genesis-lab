@@ -1,5 +1,5 @@
 import { HeroPdfButton } from '@/components/ui/HeroPdfButton';
-import { CATALOG_DOWNLOAD_LABEL, catalogDownloadName, hasCatalog } from '@/lib/pageCatalog';
+import { CATALOG_DOWNLOAD_LABEL, hasCatalog } from '@/lib/pageCatalog';
 
 /**
  * ดาวน์โหลดแคตตาล็อก — the program page's and the skill page's catalog button.
@@ -15,20 +15,18 @@ import { CATALOG_DOWNLOAD_LABEL, catalogDownloadName, hasCatalog } from '@/lib/p
  * /schedule's PDF already are. Both heroes here are gradient surfaces and
  * both pages' own copy is Thai, so the label follows theirs.
  *
- * ── IT DOWNLOADS, BY ATTRIBUTE ──────────────────────────────────────────────
+ * ── IT OPENS IN A NEW TAB, LIKE THE OUTLINE ─────────────────────────────────
  * The file is raw Cloudinary delivery through the /files/ rewrite, which
- * sends no Content-Disposition — the course outline under the same rewrite
- * opens in a tab. `downloadAs` makes this one save instead, named for the
- * program or skill rather than for its key.
+ * sends no Content-Disposition, so the anchor — `target="_blank"` with the
+ * noopener/noreferrer pair, the repo's external-link shape — opens the PDF
+ * in a tab exactly as the course outline under the same rewrite does. It
+ * shipped for one round with a `download` attribute; that was reverted on
+ * request, and HeroPdfButton's no-`download` rule stands for every caller.
  */
-export function PageCatalogButton({ config, name, className }) {
+export function PageCatalogButton({ config, className }) {
   if (!hasCatalog(config)) return null;
   return (
-    <HeroPdfButton
-      href={config.catalogPdf.path}
-      downloadAs={catalogDownloadName(name)}
-      className={className}
-    >
+    <HeroPdfButton href={config.catalogPdf.path} className={className}>
       {CATALOG_DOWNLOAD_LABEL}
     </HeroPdfButton>
   );

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CATALOG_CATEGORY, CATALOG_DOWNLOAD_LABEL, CATALOG_KINDS,
-  catalogDownloadName, catalogPublicPath, catalogTarget, emptyCatalog, hasCatalog, refuseNonPdf,
+  catalogPublicPath, catalogTarget, emptyCatalog, hasCatalog, refuseNonPdf,
 } from '@/lib/pageCatalog';
 import { normaliseKeyForPath } from '@/lib/files/pathKey';
 import { normaliseCourseIdForPath } from '@/lib/courses/courseOutline';
@@ -113,16 +113,8 @@ test('a non-PDF is refused — by extension, and by a stated non-PDF type on a .
   assert.match(refuseNonPdf({}), /ชื่อไฟล์/);
 });
 
-// ── The button's words and the saved name ───────────────────────────────────
+// ── The button's words ──────────────────────────────────────────────────────
 
 test('the label follows the site\'s existing catalog button copy', () => {
   assert.equal(CATALOG_DOWNLOAD_LABEL, 'ดาวน์โหลดแคตตาล็อก');
-});
-
-test('the saved filename is the display name, made safe, not the key', () => {
-  assert.equal(catalogDownloadName('Power BI'), 'Power BI catalog.pdf');
-  assert.equal(catalogDownloadName('  AI / ML: "intro"  '), 'AI ML intro catalog.pdf');
-  assert.equal(catalogDownloadName(''), 'catalog.pdf');
-  assert.equal(catalogDownloadName(null), 'catalog.pdf');
-  assert.equal(catalogDownloadName('   '), 'catalog.pdf');
 });

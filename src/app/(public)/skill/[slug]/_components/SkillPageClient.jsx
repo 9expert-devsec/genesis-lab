@@ -65,7 +65,7 @@ export function SkillPageClient({
 
           {/* The catalog, under the description — nothing at all when the
               skill has no file (lib/pageCatalog.hasCatalog). */}
-          <PageCatalogButton config={config} name={skill?.skill_name} />
+          <PageCatalogButton config={config} />
         </div>
       </section>
 

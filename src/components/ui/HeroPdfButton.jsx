@@ -25,26 +25,18 @@ import { cn } from '@/lib/utils';
  * rewritten to Vercel Blob, always present. Both facts live at the call sites;
  * this component only knows how the thing should look.
  *
- * ── NO `download` ATTRIBUTE BY DEFAULT, ON PURPOSE ─────────────────────────
+ * ── NO `download` ATTRIBUTE, ON PURPOSE ─────────────────────────────────────
  * Whether the file opens in the tab or saves is decided by the RESPONSE
- * HEADERS, not by the anchor. Adding `download` unconditionally would override
- * an inline Content-Disposition the file may legitimately answer with, and
- * would do it for every caller at once.
- *
- * `downloadAs` is the OPT-IN for a caller whose file arrives with NO
- * disposition at all — a raw Cloudinary PDF under /files/ is served bare, so
- * without it the button opens a tab. It is a same-origin URL (the rewrite
- * proxies; the browser never sees Cloudinary), which is the one case the
- * attribute is honoured. The value is the filename the browser saves as.
- * Callers that do not pass it are byte-for-byte what they were.
+ * HEADERS, not by the anchor. Adding `download` here would override an inline
+ * Content-Disposition the file may legitimately answer with, and would do it
+ * for every caller at once.
  */
-export function HeroPdfButton({ href, children, className, downloadAs }) {
+export function HeroPdfButton({ href, children, className }) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      download={downloadAs || undefined}
       className={cn(
         'mt-6 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3',
         'text-sm font-medium text-9e-action shadow-md transition-colors hover:bg-9e-ice',

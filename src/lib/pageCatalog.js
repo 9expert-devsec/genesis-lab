@@ -142,16 +142,3 @@ export function hasCatalog(config) {
   const path = config?.catalogPdf?.path;
   return typeof path === 'string' && path.trim().length > 0;
 }
-
-/**
- * The name the browser saves the file as.
- *
- * Raw delivery from Cloudinary carries no Content-Disposition, so the anchor's
- * `download` attribute is what turns "open in a tab" into "save" — and it
- * takes the filename. The display name is offered rather than the key so the
- * saved file reads `Power BI catalog.pdf` and not `program-power-bi-catalog.pdf`.
- */
-export function catalogDownloadName(displayName) {
-  const base = String(displayName ?? '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
-  return base ? `${base} catalog.pdf` : 'catalog.pdf';
-}

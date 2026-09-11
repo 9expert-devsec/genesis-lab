@@ -131,7 +131,7 @@ export function ProgramPageClient({
             {/* The catalog, under the description — nothing at all when the
                 program has no file (lib/pageCatalog.hasCatalog). `mt-2` trims
                 the button's built-in mt-6 because this column already gaps. */}
-            <PageCatalogButton config={config} name={program?.program_name} className="mt-2 self-start" />
+            <PageCatalogButton config={config} className="mt-2 self-start" />
           </div>
 
           {/*
