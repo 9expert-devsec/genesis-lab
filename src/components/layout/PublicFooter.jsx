@@ -1,11 +1,20 @@
 import Image from "next/image";
 import Link from "next/link";
-import { FaInstagram, FaTiktok, FaLinkedin, FaYoutube } from "react-icons/fa";
+import { FaFacebook, FaInstagram, FaTiktok, FaLinkedin, FaYoutube } from "react-icons/fa";
 import { TbBrandShopee } from "react-icons/tb";
 import { Logo } from "@/components/brand/Logo";
 import { siteConfig, footerNav, policyNav } from "@/config/site";
 
 const SOCIALS = [
+  {
+    // From siteConfig, not restated: the homepage JSON-LD `sameAs` reads the
+    // same field, so the footer and the identity claim cannot drift apart.
+    // First in the row because every other surface that lists the profiles
+    // (contact page, /social, sameAs) leads with Facebook.
+    href: siteConfig.facebookUrl,
+    label: "Facebook",
+    Icon: FaFacebook,
+  },
   {
     href: "https://www.instagram.com/9expert_training",
     label: "Instagram",
