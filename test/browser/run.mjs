@@ -51,6 +51,7 @@ const SCRIPTS = [
   ['youtube', 'the facade: nothing from the player until someone presses play'],
   ['seam', 'no band where the hero meets the section, and the hero stays clickable'],
   ['scrolly', 'the page does not move while the carousel does (slow: ~2 min)'],
+  ['prose-lists', 'lists copy as one line per item, and no item gap moved — needs a BUILD, not the dev server'],
 ];
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
