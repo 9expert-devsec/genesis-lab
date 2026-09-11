@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
 import { toKebab } from '@/lib/slug';
 import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
+import { PageCatalogButton } from '@/components/ui/PageCatalogButton';
 
 /**
  * Public skill detail page.
@@ -17,6 +18,10 @@ import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
  */
 export function SkillPageClient({
   skill,
+  // The SkillPageConfig row, for the catalog button. `null` when the skill has
+  // no config, which hasCatalog reads as no file — the program page already
+  // took `config` for its description; this is the same prop for the same row.
+  config = null,
   coursesByProgram,
   totalCourses,
   faqs = [],
@@ -57,6 +62,10 @@ export function SkillPageClient({
               {description}
             </p>
           )}
+
+          {/* The catalog, under the description — nothing at all when the
+              skill has no file (lib/pageCatalog.hasCatalog). */}
+          <PageCatalogButton config={config} name={skill?.skill_name} />
         </div>
       </section>
 

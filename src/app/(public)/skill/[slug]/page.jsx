@@ -47,7 +47,7 @@ export default async function SkillPage({ params }) {
   if (custom) redirect(`/${custom}`);
 
   // No custom slug — render inline under /skill/<slug>.
-  const { skill } = resolved;
+  const { skill, config } = resolved;
   const skillId = String(skill._id);
   const [programsRes, coursesRes, faqs, linkability] = await Promise.all([
     listPrograms().catch(() => ({ items: [] })),
@@ -76,6 +76,7 @@ export default async function SkillPage({ params }) {
   return (
     <SkillPageClient
       skill={skill}
+      config={config}
       coursesByProgram={coursesByProgram}
       totalCourses={skillCourses.length}
       faqs={faqs}

@@ -7,6 +7,7 @@ import { CourseCard } from '@/app/(public)/training-course/_components/CourseCar
 import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 import { ProgramOnlineCoursesSection } from '@/components/program/ProgramOnlineCoursesSection';
 import { ProgramArticlesSection } from '@/components/program/ProgramArticlesSection';
+import { PageCatalogButton } from '@/components/ui/PageCatalogButton';
 
 /**
  * Public program detail page.
@@ -126,6 +127,11 @@ export function ProgramPageClient({
                 {description}
               </p>
             )}
+
+            {/* The catalog, under the description — nothing at all when the
+                program has no file (lib/pageCatalog.hasCatalog). `mt-2` trims
+                the button's built-in mt-6 because this column already gaps. */}
+            <PageCatalogButton config={config} name={program?.program_name} className="mt-2 self-start" />
           </div>
 
           {/*

@@ -626,6 +626,7 @@ export default async function CatchAllPage({ params, searchParams }) {
       return (
         <SkillPageClient
           skill={skillData.skill}
+          config={skillData.config}
           coursesByProgram={skillData.coursesByProgram}
           totalCourses={skillData.totalCourses}
           faqs={skillData.faqs}
