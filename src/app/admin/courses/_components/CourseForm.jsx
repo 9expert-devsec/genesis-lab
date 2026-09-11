@@ -933,9 +933,13 @@ export function CourseForm({
               {/* CARRIES THE CODE, so the admin who was just looking at this
                   course does not have to find it again on the next screen. The
                   code and not the _id: the picker there is keyed on course_id
-                  and the preview action takes a code. */}
+                  and the preview action takes a code.
+
+                  AND THE LIST FILTER, one hop further out — the rename page's
+                  ← goes to the list, and this was the one hop in the chain
+                  that dropped it. */}
               <Link
-                href={`/admin/courses/rename?course=${encodeURIComponent(courseId)}`}
+                href={withListQuery(`/admin/courses/rename?course=${encodeURIComponent(courseId)}`, listQuery)}
                 className="font-semibold text-9e-action hover:underline"
               >
                 ตรวจสอบผลกระทบก่อน

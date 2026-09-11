@@ -7,6 +7,7 @@ import {
   Receipt, MessageSquare, StickyNote, Database, ClipboardList, History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { withListQuery } from '@/lib/registrations/listQuery';
 import {
   updateInhouseStatus,
   deleteInhouseRegistration,
@@ -418,8 +419,12 @@ const TABS = [
  *        be mounted from a client tab panel, so the page renders it and this
  *        component only places it. Switching tabs costs no round trip.
  */
-export function InhouseDetailClient({ doc, courses = [], history = null }) {
+export function InhouseDetailClient({ doc, courses = [], history = null, listQuery = '' }) {
   const router = useRouter();
+  // The list this request was opened from, as page.jsx read it off this URL —
+  // always the in-house side (page.jsx forces `source`), plus whatever filters
+  // and page the row link carried. ← and the post-delete redirect both use it.
+  const listHref = withListQuery('/admin/registrations', listQuery);
 
   const [status,      setStatus]      = useState(doc.status);
 
@@ -570,7 +575,7 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
     setBusy('delete'); setError(null);
     startTransition(async () => {
       const res = await deleteInhouseRegistration(doc._id);
-      if (res.ok) router.push('/admin/registrations?source=inhouse');
+      if (res.ok) router.push(listHref);
       else { setError(res.error || 'ลบไม่สำเร็จ'); setBusy(null); }
     });
   };
@@ -804,7 +809,7 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
 
   return (
     <div className="mx-auto w-full max-w-[1080px]">
-      <BackLink label="กลับรายการ" onClick={() => router.back()} />
+      <BackLink label="กลับรายการ" href={listHref} />
 
       {/*
         THE HEADING NAMES THE COMPANY — see lib/registrations/detailHeading for

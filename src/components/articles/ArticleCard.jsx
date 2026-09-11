@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowRight, Pin } from 'lucide-react';
 import { shouldShowPinBadge } from '@/lib/articlePositioning';
 import { ProgramOverlay, SkillChips } from '@/components/articles/ArticleTaxonomyChips';
+import { withListQuery } from '@/lib/articles/publicListQuery';
 
 /**
  * One card on /articles.
@@ -59,8 +60,15 @@ import { ProgramOverlay, SkillChips } from '@/components/articles/ArticleTaxonom
  * be a strip of padding, and in the overlay it would be a transparent box
  * floating on the artwork.
  */
-export function ArticleCard({ article, programNames = {}, skillNames = {} }) {
-  const href = `/articles/${article.slug}`;
+/**
+ * `listQuery` — the /articles list's URL state, appended to the card's link so
+ * the article page's back link can reproduce it (lib/articles/publicListQuery).
+ * Only /articles passes it: the landing page and the program page render this
+ * card too, and a reader arriving from those has no list position to return to,
+ * so their links stay bare. '' — the default — appends nothing.
+ */
+export function ArticleCard({ article, programNames = {}, skillNames = {}, listQuery = '' }) {
+  const href = withListQuery(`/articles/${article.slug}`, listQuery);
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--surface-border)] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-9e-lg dark:bg-[#0D1B2A]">
       <Link href={href} className="relative block aspect-video overflow-hidden bg-9e-ice dark:bg-[#111d2c]">

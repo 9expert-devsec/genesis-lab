@@ -5,6 +5,7 @@ import { InhouseDetailClient } from '../_components/InhouseDetailClient';
 import { RecordHistory } from '@/components/audit/RecordHistory';
 import { refNo } from '@/lib/refNo';
 import { buildCourseNameMap, resolveCourseNames } from '@/lib/api/courseNameMap';
+import { registrationListQuery } from '@/lib/registrations/listQuery';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,12 +14,21 @@ export async function generateMetadata({ params }) {
   return { title: `In-house Request ${refNo(id)}` };
 }
 
-export default async function Page({ params }) {
+export default async function Page({ params, searchParams }) {
   await requirePage('registrations');
 
   const { id } = await params;
   const doc = await getInhouseRegistrationById(id);
   if (!doc) notFound();
+
+  /**
+   * WHERE ← AND THE POST-DELETE REDIRECT GO: the list, with the state the row
+   * link carried here (lib/registrations/listQuery). `source` is FORCED to
+   * in-house — this is the in-house collection's page, so the way back is the
+   * in-house list even from a bare or pasted URL, which is the guarantee the
+   * old hard-coded `?source=inhouse` redirect gave and this must not lose.
+   */
+  const listQuery = registrationListQuery({ ...((await searchParams) ?? {}), source: 'inhouse' });
 
   /**
    * COURSE NAMES ARE RESOLVED HERE, ON THE SERVER, and arrive as a prop.
@@ -52,6 +62,7 @@ export default async function Page({ params }) {
     <InhouseDetailClient
       doc={doc}
       courses={courses}
+      listQuery={listQuery}
       history={(
         <RecordHistory
           menu="registrations"

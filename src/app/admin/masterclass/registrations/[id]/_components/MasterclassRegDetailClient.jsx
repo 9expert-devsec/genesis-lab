@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { formatTHB } from '@/lib/pricing';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { refNo } from '@/lib/refNo';
+import { withListQuery } from '@/lib/masterclass/registrationListQuery';
 import {
   updateMasterclassRegistrationStatus,
   deleteMasterclassRegistration,
@@ -48,8 +49,11 @@ function fmtDate(iso) {
 
 // ── Main Component ─────────────────────────────────────────────────
 
-export function MasterclassRegDetailClient({ reg }) {
+export function MasterclassRegDetailClient({ reg, listQuery = '' }) {
   const router = useRouter();
+  // The list this registration was opened from, as page.jsx read it off this
+  // URL. ← and the post-delete redirect both use it; '' → the bare list.
+  const listHref = withListQuery('/admin/masterclass/registrations', listQuery);
   const [status, setStatus] = useState(reg.status);
   const [error,  setError]  = useState(null);
   const [busy,   setBusy]   = useState(null);
@@ -71,7 +75,7 @@ export function MasterclassRegDetailClient({ reg }) {
     setBusy('delete'); setError(null);
     startTransition(async () => {
       const res = await deleteMasterclassRegistration(reg._id);
-      if (res?.ok) router.push('/admin/masterclass/registrations');
+      if (res?.ok) router.push(listHref);
       else { setError(res?.error || 'ลบไม่สำเร็จ'); setBusy(null); }
     });
   };
@@ -87,7 +91,7 @@ export function MasterclassRegDetailClient({ reg }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <Link
-            href="/admin/masterclass/registrations"
+            href={listHref}
             className="mb-3 flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-9e-action"
           >
             <ArrowLeft className="h-4 w-4" /> ผู้ลงทะเบียนทั้งหมด

@@ -3,6 +3,9 @@ import { listPrograms } from '@/lib/api/programs';
 import { listSkills } from '@/lib/api/skills';
 import { buildProgramNames, buildSkillNames } from '@/lib/articleTaxonomy';
 import { buildListJsonLd } from '@/lib/articles/buildListJsonLd';
+import { articlePublicListQuery } from '@/lib/articles/publicListQuery';
+import { pageClampTarget } from '@/lib/adminListQuery';
+import { redirect } from 'next/navigation';
 import { ArticlesPageClient } from './_components/ArticlesPageClient';
 
 export const metadata = {
@@ -63,6 +66,26 @@ export default async function ArticlesIndexPage({ searchParams }) {
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  /**
+   * THE LIST'S URL STATE, as one string, for every link that leaves this page.
+   * Read from the same `sp` as the props above — so a card's link and the
+   * filters the grid is showing cannot disagree — and serialised ONCE here
+   * rather than in the client, which does not read the URL.
+   */
+  const listQuery = articlePublicListQuery(sp);
+
+  /**
+   * A PAGE PAST THE END IS CLAMPED TO THE LAST PAGE THAT HAS ROWS, by redirect.
+   * The reader who came back to ?page=29 after the last article on it was
+   * unpublished — or who followed a stale link — lands on the last real page
+   * with every other param intact, and the address bar says so. Page 1 and any
+   * in-range page pass through untouched. See pageClampTarget for the rule;
+   * the redirect is outside the fetch's error handling because redirect()
+   * works by throwing.
+   */
+  const clampTo = pageClampTarget({ path: '/articles', query: listQuery, pageKey: 'page', page, pageCount: totalPages });
+  if (clampTo) redirect(clampTo);
   const programs = (programsRes.items ?? []).map((p) => ({
     program_id:   p.program_id,
     program_name: p.program_name,
@@ -160,6 +183,7 @@ export default async function ArticlesIndexPage({ searchParams }) {
           program={program}
           skill={skill}
           articleType={articleType}
+          listQuery={listQuery}
         />
       </section>
     </>

@@ -7,7 +7,10 @@ import {
 } from '@/lib/actions/registrations';
 import { resolveDateWindow } from '@/lib/registrations/listFilter';
 import { buildCourseNameMap } from '@/lib/api/courseNameMap';
-import { readSourceFilters } from '@/lib/registrations/filterScope';
+import { readSourceFilters, filterParamKey } from '@/lib/registrations/filterScope';
+import { registrationListQuery } from '@/lib/registrations/listQuery';
+import { pageClampTarget } from '@/lib/adminListQuery';
+import { redirect } from 'next/navigation';
 import { readLastEditedMap } from '@/lib/audit/readAuditLog';
 import { RefreshOnNavigate } from '@/components/admin/RefreshOnNavigate';
 import { RegistrationsClient } from './_components/RegistrationsClient';
@@ -286,6 +289,29 @@ export default async function Page({ searchParams }) {
         recordIds: data.items.map((r) => String(r._id)),
       });
 
+  /**
+   * THE LIST'S URL STATE — `source` and BOTH namespaces — as one string, for
+   * every row link. The detail page puts it back on its ← control and on the
+   * redirect after a delete, so the admin returns to this page, this source,
+   * these filters. See lib/registrations/listQuery for why both namespaces
+   * travel and not only the one on screen.
+   *
+   * A PAGE PAST THE END IS CLAMPED, by redirect, to the last page that has
+   * rows — the case is "deleted the only row on page 29 and came back to page
+   * 29". Under THIS source's page key, so public's page is never touched by an
+   * in-house clamp. Page 1 and in-range pages pass through. redirect() throws,
+   * so this sits after every await that has its own error handling.
+   */
+  const listQuery = registrationListQuery(sp);
+  const clampTo = pageClampTarget({
+    path: '/admin/registrations',
+    query: listQuery,
+    pageKey: filterParamKey('page', source),
+    page,
+    pageCount: data.pageCount,
+  });
+  if (clampTo) redirect(clampTo);
+
   return (
     /*
       ── `-mt-6` CANCELS THE ADMIN SHELL'S TOP PADDING ───────────────────────
@@ -385,6 +411,7 @@ export default async function Page({ searchParams }) {
         course={course}
         dateWindow={resolveDateWindow({ range, from, to })}
         courseOptions={labelledCourseOptions}
+        listQuery={listQuery}
       />
     </div>
   );

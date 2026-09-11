@@ -9,6 +9,7 @@ import {
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { formatTHB } from '@/lib/pricing';
+import { withListQuery } from '@/lib/registrations/listQuery';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { onlyDigits } from '@/lib/registration/digitsOnly';
@@ -307,8 +308,13 @@ const TABS = [
  *        SERVER-SIDE by page.jsx — see its docstring for why not here, and for
  *        why past rounds are not among them.
  */
-export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], history = null }) {
+export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], history = null, listQuery = '' }) {
   const router = useRouter();
+  // The list this record was opened from — its source, filters and page — as
+  // page.jsx read them off this URL. Every way out of here goes through it:
+  // ←, the redirect after a delete, and the hop to a sibling leg, so that the
+  // sibling's ← still knows the way home. '' → the bare list.
+  const listHref = withListQuery('/admin/registrations', listQuery);
 
   /**
    * ══ A REQUEST VIEW HAS NO "CURRENT LEG" ════════════════════════════════════
@@ -736,7 +742,7 @@ export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], hi
     setBusy('delete'); setError(null);
     startTransition(async () => {
       const res = await deleteRegistration(doc._id);
-      if (res.ok) router.push('/admin/registrations');
+      if (res.ok) router.push(listHref);
       else { setError(res.error || 'ลบไม่สำเร็จ'); setBusy(null); }
     });
   };
@@ -797,9 +803,9 @@ export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], hi
         router.refresh();
         setBusy(null);
       } else if (survivor) {
-        router.push(`/admin/registrations/${survivor._id}`);
+        router.push(withListQuery(`/admin/registrations/${survivor._id}`, listQuery));
       } else {
-        router.push('/admin/registrations');
+        router.push(listHref);
       }
     });
   };
@@ -1218,7 +1224,7 @@ export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], hi
 
   return (
     <div className="mx-auto w-full max-w-[1080px]">
-      <BackLink label="กลับรายการ" onClick={() => router.back()} />
+      <BackLink label="กลับรายการ" href={listHref} />
 
       {/*
         THE HEADING NAMES THE COORDINATOR, AND THE REFERENCE NUMBER IS GONE FROM
@@ -1520,7 +1526,7 @@ export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], hi
             the per-leg controls (delete, and the course card above) act on.
           */}
           {isBundleRequest ? (
-            <BundleCoursesCard legs={bundleLegs} onDelete={handleDeleteLeg} busy={busy} />
+            <BundleCoursesCard legs={bundleLegs} onDelete={handleDeleteLeg} busy={busy} listQuery={listQuery} />
           ) : null}
 
           <SectionCard
@@ -1969,7 +1975,7 @@ export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], hi
  * package is empty — a stronger and falser statement than saying nothing, which
  * is the degrade rule the round card's empty hint already follows.
  */
-function BundleCoursesCard({ legs = [], onDelete, busy }) {
+function BundleCoursesCard({ legs = [], onDelete, busy, listQuery = '' }) {
   if (!legs.length) return null;
 
   return (
@@ -1981,7 +1987,7 @@ function BundleCoursesCard({ legs = [], onDelete, busy }) {
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-[6px]">
                   <Link
-                    href={`/admin/registrations/${leg._id}`}
+                    href={withListQuery(`/admin/registrations/${leg._id}`, listQuery)}
                     className={cn(
                       // The shared value size, imported rather than spelled: a
                       // card file writing its own `text-[…]` is what

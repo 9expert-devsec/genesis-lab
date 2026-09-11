@@ -4,6 +4,9 @@ import {
   getMasterclassCourseOptions,
 } from '@/lib/actions/masterclass-registrations';
 import { requirePage } from '@/lib/rbac/guard';
+import { masterclassRegistrationListQuery } from '@/lib/masterclass/registrationListQuery';
+import { pageClampTarget } from '@/lib/adminListQuery';
+import { redirect } from 'next/navigation';
 import { MasterclassRegistrationsClient } from './_components/MasterclassRegistrationsClient';
 
 export const metadata = { title: 'Masterclass — ผู้ลงทะเบียน' };
@@ -27,6 +30,24 @@ export default async function MasterclassRegistrationsPage({ searchParams }) {
     getMasterclassRegStatusCounts({ range }),
     getMasterclassCourseOptions(),
   ]);
+
+  /**
+   * THE LIST'S URL STATE, as one string, for every row link — the detail page
+   * puts it back on ← and on the post-delete redirect
+   * (lib/masterclass/registrationListQuery). A page past the end — the admin
+   * deleted the only row on it and came back — is clamped by redirect to the
+   * last page that has rows; page 1 and in-range pages pass through. See
+   * pageClampTarget. redirect() throws, so it sits after the awaits.
+   */
+  const listQuery = masterclassRegistrationListQuery(sp);
+  const clampTo = pageClampTarget({
+    path: '/admin/masterclass/registrations',
+    query: listQuery,
+    pageKey: 'page',
+    page,
+    pageCount: data.pageCount,
+  });
+  if (clampTo) redirect(clampTo);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -56,6 +77,7 @@ export default async function MasterclassRegistrationsPage({ searchParams }) {
         licenseScope={licenseScope}
         counts={counts}
         courseOptions={courseOptions}
+        listQuery={listQuery}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, isValidElement, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { ArrowLeft, MoreHorizontal, Pencil, Check, X, Loader2, Copy } from 'lucide-react';
 import { cva } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
@@ -96,10 +97,14 @@ const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffec
 /**
  * The back link: a 40.5px block holding a 20px line.
  *
- * `onClick` rather than an `<a>` because the target is "where the reader came
- * from" — `router.back()` — and that is not a URL this component can know. The
- * list screen's row link is the opposite case and is a real anchor for the
- * reasons tableParts spells out; this is a return, not a destination.
+ * A REAL ANCHOR NOW, WITH AN `href`. It was a button calling `router.back()`
+ * on the argument that "where the reader came from" is not a URL this
+ * component can know. It is now: the list page puts its URL state on every
+ * row link, the detail page reads it off its own URL and hands the list's
+ * address here (lib/registrations/listQuery). That buys what history never
+ * could — a detail opened in a new tab, or from a pasted link, has a way back
+ * that goes somewhere; and it is a link for every reason tableParts gives for
+ * the row: open-in-new-tab, copy, visible to assistive tech.
  *
  * ── THERE IS NO TOP PADDING, AND THAT SUPERSEDES THE GEOMETRY ──────────────
  * The Figma read puts this block 30px down and it shipped as `pt-[30px]`. THE
@@ -111,18 +116,17 @@ const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffec
  * this comment is the only record of the decision. If the vertical rhythm ever
  * makes the gap look necessary again, that is a conversation, not a re-add.
  */
-export function BackLink({ label, onClick }) {
+export function BackLink({ label, href }) {
   return (
     <div>
       <div className="flex h-[40.5px] items-start">
-        <button
-          type="button"
-          onClick={onClick}
+        <Link
+          href={href}
           className="inline-flex items-center gap-[6px] text-[13px] leading-[20px] text-[var(--text-secondary)] transition-colors hover:text-9e-action"
         >
           <ArrowLeft aria-hidden="true" className="h-[14px] w-[14px]" />
           {label}
-        </button>
+        </Link>
       </div>
     </div>
   );

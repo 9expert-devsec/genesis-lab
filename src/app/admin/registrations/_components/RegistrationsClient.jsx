@@ -5,6 +5,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { filterParamKey, isDefaultFilterValue } from '@/lib/registrations/filterScope';
+import { withListQuery } from '@/lib/registrations/listQuery';
 import {
   buildStatCards,
   isSystemSet,
@@ -94,10 +95,16 @@ const SOURCE_TABS = [
  * `source` is the same value the list query used to choose the model, so the
  * link cannot disagree with the row it is attached to.
  */
-function detailHref(source, id) {
-  return source === 'inhouse'
-    ? `/admin/registrations/inhouse/${id}`
-    : `/admin/registrations/${id}`;
+function detailHref(source, id, listQuery = '') {
+  // The list's URL state rides on every row link so the detail page can send
+  // the admin back here — this source, these filters, this page. '' appends
+  // nothing, so a bare list produces bare links.
+  return withListQuery(
+    source === 'inhouse'
+      ? `/admin/registrations/inhouse/${id}`
+      : `/admin/registrations/${id}`,
+    listQuery
+  );
 }
 
 
@@ -183,6 +190,10 @@ export function RegistrationsClient({
   course = '',
   dateWindow = { custom: false, preset: 'all', from: null, to: null, swapped: false },
   courseOptions = [],
+  // The list's own URL state, serialised by page.jsx from the same searchParams
+  // every filter prop came from. Handed to the row links only; this component
+  // does not re-derive it from the URL.
+  listQuery = '',
 }) {
   const router     = useRouter();
   const pathname   = usePathname();
@@ -554,7 +565,11 @@ export function RegistrationsClient({
         {source === 'inhouse' ? (
           /* No `lastEdited`: the in-house table does not render the audit hint —
              see its header. page.jsx does not even fetch it for this source. */
-          <InhouseTable items={items} courseNames={courseNames} />
+          <InhouseTable
+            items={items}
+            courseNames={courseNames}
+            detailHref={(id) => detailHref('inhouse', id, listQuery)}
+          />
         ) : (
           <PublicTable
             items={items}
@@ -567,7 +582,7 @@ export function RegistrationsClient({
               already made by the `source ===` test above. Handing the table the
               two-argument form would hand it the decision as well.
             */
-            detailHref={(id) => detailHref('public', id)}
+            detailHref={(id) => detailHref('public', id, listQuery)}
           />
         )}
       </ListPanel>

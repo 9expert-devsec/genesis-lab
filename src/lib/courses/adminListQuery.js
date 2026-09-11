@@ -32,24 +32,12 @@ export const COURSE_LIST_PARAMS = ['q', 'program', 'type'];
  *
  * Empty values are dropped: `?q=` is noise that survives into every link and
  * makes a "no filters" URL look filtered.
+ *
+ * THE LOOP LIVES IN lib/adminListQuery (`listQueryReader`) since the same
+ * round trip was needed on four more lists; only the param list is this
+ * module's. Behaviour is unchanged and test/pure/adminListQuery still pins it.
  */
-export function courseListQuery(searchParams) {
-  if (!searchParams) return '';
-  const read = (key) => {
-    if (typeof searchParams.get === 'function') return searchParams.get(key);
-    const raw = searchParams[key];
-    return Array.isArray(raw) ? raw[0] : raw;
-  };
-
-  const out = new URLSearchParams();
-  for (const key of COURSE_LIST_PARAMS) {
-    const value = read(key);
-    if (value == null) continue;
-    const trimmed = String(value).trim();
-    if (trimmed) out.set(key, trimmed);
-  }
-  return out.toString();
-}
+export const courseListQuery = listQueryReader(COURSE_LIST_PARAMS);
 
 /**
  * `href` with the list filters appended, or unchanged when there are none.
@@ -68,6 +56,6 @@ export function courseListQuery(searchParams) {
  * unimported name — a false positive, but one that costs nothing to avoid and
  * would otherwise be re-litigated by whoever next saw the guard go red.
  */
-import { withListQuery } from '../adminListQuery';
+import { listQueryReader, withListQuery } from '../adminListQuery';
 
 export { withListQuery };

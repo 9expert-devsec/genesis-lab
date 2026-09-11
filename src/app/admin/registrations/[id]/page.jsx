@@ -9,6 +9,7 @@ import { refNo } from '@/lib/refNo';
 import { requestKeyOf } from '@/lib/registrations/foldRequests';
 import { PUBLIC_SCHEDULE_STATUSES, listSchedulesByCourse } from '@/lib/api/schedules';
 import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
+import { registrationListQuery } from '@/lib/registrations/listQuery';
 
 /**
  * THE ROUNDS THIS REGISTRATION MAY BE MOVED TO, resolved HERE on the server.
@@ -84,12 +85,22 @@ export async function generateMetadata({ params }) {
   return { title: `ใบสมัคร ${refNo(doc ? requestKeyOf(doc) : id)}` };
 }
 
-export default async function Page({ params }) {
+export default async function Page({ params, searchParams }) {
   await requirePage('registrations');
 
   const { id } = await params;
   const doc = await getRegistrationById(id);
   if (!doc) notFound();
+
+  /**
+   * WHERE ← AND THE POST-DELETE REDIRECT GO: the list, with the state the row
+   * link carried here (lib/registrations/listQuery). Read off THIS page's URL,
+   * which is already force-dynamic. `source` is forced EMPTY — this is the
+   * public collection's page, so the way back is the public side whatever the
+   * query says; a URL that somehow carried `source=inhouse` here must not send
+   * the admin to the other list. A bare arrival yields '' and a bare list.
+   */
+  const listQuery = registrationListQuery({ ...((await searchParams) ?? {}), source: '' });
 
   /**
    * THE HISTORY PANEL IS RENDERED HERE AND HANDED IN AS A SLOT.
@@ -134,6 +145,7 @@ export default async function Page({ params }) {
       doc={doc}
       rounds={rounds}
       bundleLegs={bundleLegs}
+      listQuery={listQuery}
       history={(
         <RecordHistory
           menu="registrations"

@@ -2,12 +2,13 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, ChevronLeft, Clock, Share2, User } from 'lucide-react';
+import { ArrowRight, Clock, Share2, User } from 'lucide-react';
 import { ArrowSlider } from '@/components/ui/ArrowSlider';
 import { READING_PROGRESS_ANCHOR_ID } from '@/lib/readingProgress';
 import { coursePriceLabel } from '@/lib/coursePriceLabel';
 import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import { articleCanonicalUrl } from '@/lib/articles/articleUrl';
+import { ArticleBackLink } from './ArticleBackLink';
 
 /**
  * Article detail page — client component, owns most of the rendering
@@ -421,14 +422,11 @@ export function ArticleDetailClient({
 
       <div className="mx-auto max-w-[1200px] px-4 pb-20">
         {/* Back link sits above the grid so users still have a way
-            out at every viewport size. */}
+            out at every viewport size. It carries the list's page and filters
+            back — see ArticleBackLink for why it is its own client component
+            with its own Suspense boundary, and why this page stays ISR. */}
         <div className="pt-6">
-          <Link
-            href="/articles"
-            className="inline-flex items-center gap-1 text-sm text-9e-action hover:underline"
-          >
-            <ChevronLeft className="h-4 w-4" /> กลับไปยังบทความทั้งหมด
-          </Link>
+          <ArticleBackLink />
         </div>
 
         <div className="mt-4 flex items-start gap-6">

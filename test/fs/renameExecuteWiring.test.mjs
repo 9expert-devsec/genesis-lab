@@ -215,9 +215,13 @@ test('the page reads ?course= and passes it down', () => {
 
 test('THE COURSE FORM CARRIES THE CODE, so the admin arrives with it selected', () => {
   const code = readSource(FORM).code;
+  // Wrapped in withListQuery since the list-state round trip reached this hop
+  // (the rename page's ← goes back to the list) — the code is still the first
+  // thing on the URL, and that is the claim here. test/fs/listStateRoundTrip
+  // pins the filter half.
   assert.match(
     code,
-    /href=\{`\/admin\/courses\/rename\?course=\$\{encodeURIComponent\(courseId\)\}`\}/,
+    /href=\{withListQuery\(`\/admin\/courses\/rename\?course=\$\{encodeURIComponent\(courseId\)\}`, listQuery\)\}/,
     'the edit form links to the rename screen without saying which course'
   );
 });

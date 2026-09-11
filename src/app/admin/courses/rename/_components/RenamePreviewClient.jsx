@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { previewCourseCodeRename } from '@/lib/actions/course-rename-preview';
+import { withListQuery } from '@/lib/courses/adminListQuery';
 import { CourseSearchSelect } from '@/app/admin/courses/_components/CourseSearchSelect';
 import { RenamePreviewReport } from './RenamePreviewReport';
 import { RenameExecutePanel } from './RenameExecutePanel';
@@ -25,7 +26,7 @@ import { RenameExecutePanel } from './RenameExecutePanel';
  * a collision and a case-only rename from fixtures — neither of which exists
  * in production to look at.
  */
-export function RenamePreviewClient({ courses = [], course = '' }) {
+export function RenamePreviewClient({ courses = [], course = '', listQuery = '' }) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -46,13 +47,16 @@ export function RenamePreviewClient({ courses = [], course = '' }) {
   const oldCode = course;
   const setOldCode = useCallback(
     (next) => {
-      const params = new URLSearchParams();
+      // Seeded from the list filter so picking another course does not shed
+      // it from this page's own URL — and with it, from ← below.
+      const params = new URLSearchParams(listQuery);
       const value = String(next ?? '').trim();
       if (value) params.set('course', value);
+      else params.delete('course');
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname);
     },
-    [router, pathname]
+    [router, pathname, listQuery]
   );
 
   const [newCode, setNewCode] = useState('');
@@ -87,7 +91,7 @@ export function RenamePreviewClient({ courses = [], course = '' }) {
   return (
     <div className="space-y-5">
       <Link
-        href="/admin/courses"
+        href={withListQuery('/admin/courses', listQuery)}
         className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-9e-action"
       >
         <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />

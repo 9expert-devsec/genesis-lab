@@ -19,6 +19,7 @@
  */
 
 import { requirePage } from '@/lib/rbac/guard';
+import { courseListQuery } from '@/lib/courses/adminListQuery';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { dbConnect } from '@/lib/db/connect';
 import { CourseExtension } from '@/models/CourseExtension';
@@ -54,6 +55,9 @@ export default async function CourseRenamePreviewPage({ searchParams }) {
    * `_id` would need a second lookup to become any of those.
    */
   const sp = await searchParams;
+  // The course list's filter, carried in by the edit form's link so ← can put
+  // it back — the same chain the promos/FAQ page is on (lib/courses/adminListQuery).
+  const listQuery = courseListQuery(sp);
   const raw = sp?.course;
   const course = (Array.isArray(raw) ? raw[0] : raw ?? '').toString().trim();
 
@@ -119,7 +123,7 @@ export default async function CourseRenamePreviewPage({ searchParams }) {
         </p>
       </div>
 
-      <RenamePreviewClient courses={courses} course={course} />
+      <RenamePreviewClient courses={courses} course={course} listQuery={listQuery} />
     </div>
   );
 }

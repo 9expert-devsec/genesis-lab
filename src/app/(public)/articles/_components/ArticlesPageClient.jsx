@@ -76,6 +76,11 @@ export function ArticlesPageClient({
   // `?type=video` link would otherwise lose it the instant they touched any
   // other filter — the list would silently widen under them.
   articleType = '',
+  // THE LIST'S OWN URL STATE, serialised by page.jsx from the same searchParams
+  // every prop above came from, and handed to each card so the article page
+  // can send the reader back to this exact page and filter. A string, not a
+  // recomputation here: this component does not read the URL (see the header).
+  listQuery = '',
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -225,6 +230,7 @@ export function ArticlesPageClient({
                 article={a}
                 programNames={programNames}
                 skillNames={skillNames}
+                listQuery={listQuery}
               />
             ))}
           </div>

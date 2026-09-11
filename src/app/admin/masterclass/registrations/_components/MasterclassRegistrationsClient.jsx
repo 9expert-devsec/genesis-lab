@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Search, Loader2, Download, Trash2, MoreVertical, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { refNo } from '@/lib/refNo';
+import { withListQuery } from '@/lib/masterclass/registrationListQuery';
 import {
   getMasterclassBatchOptions,
   updateMasterclassRegistrationStatus,
@@ -132,6 +133,10 @@ export function MasterclassRegistrationsClient({
   licenseScope = '',
   counts,
   courseOptions = [],
+  // The list's own URL state, serialised by page.jsx from the same searchParams
+  // every filter prop came from, for the row link only — this component does
+  // not re-derive it.
+  listQuery = '',
 }) {
   const router       = useRouter();
   const pathname     = usePathname();
@@ -630,7 +635,7 @@ function RowActionsMenu({ reg, isOpen, onToggle, onClose, onDelete, busy }) {
           className="w-44 overflow-hidden rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] py-1 shadow-9e-md"
         >
           <Link
-            href={`/admin/masterclass/registrations/${reg._id}`}
+            href={withListQuery(`/admin/masterclass/registrations/${reg._id}`, listQuery)}
             role="menuitem"
             className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-muted)]"
           >
