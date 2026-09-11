@@ -1,6 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
-import { FaFacebook, FaInstagram, FaTiktok, FaLinkedin, FaYoutube } from "react-icons/fa";
+import {
+  FaFacebook,
+  FaFacebookMessenger,
+  FaLine,
+  FaInstagram,
+  FaTiktok,
+  FaLinkedin,
+  FaYoutube,
+} from "react-icons/fa";
 import { TbBrandShopee } from "react-icons/tb";
 import { Logo } from "@/components/brand/Logo";
 import { siteConfig, footerNav, policyNav } from "@/config/site";
@@ -14,6 +22,21 @@ const SOCIALS = [
     href: siteConfig.facebookUrl,
     label: "Facebook",
     Icon: FaFacebook,
+  },
+  // The two CHAT channels sit next to Facebook, ahead of the broadcast
+  // profiles: Messenger is Facebook's own inbox, and LINE replaces the
+  // "LINE Official / @9expert" block that used to sit above this row in the
+  // contact column — it belongs where that block was, near the top, not at
+  // the end of the list. Both URLs come from siteConfig, not restated.
+  {
+    href: siteConfig.messengerUrl,
+    label: "Messenger",
+    Icon: FaFacebookMessenger,
+  },
+  {
+    href: siteConfig.lineUrl,
+    label: "LINE",
+    Icon: FaLine,
   },
   {
     href: "https://www.instagram.com/9expert_training",
@@ -99,19 +122,16 @@ export function PublicFooter() {
               >
                 training@9expert.co.th
               </a>
-              <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">LINE Official</p>
-              <a
-                href="https://line.me/R/ti/p/@9expert"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm font-bold text-9e-action dark:text-[#48B0FF]"
-              >
-                @9expert
-              </a>
             </div>
           </div>
 
-          <div className="mt-1 flex justify-center gap-3 sm:justify-start">
+          {/* A HARD 4-COLUMN GRID, not a wrapping row. Eight icons at 44px
+              plus 12px gaps is 212px wide, so a wrapping flex row would only
+              break 4 + 4 by coincidence of the column's width — and the column
+              is a fluid grid track that is wider than that on every breakpoint
+              the footer renders at, which would give one row of eight (or
+              5 + 3 on a narrow tablet). The grid says 4 + 4 outright. */}
+          <div className="mt-1 grid w-fit grid-cols-4 gap-3">
             {SOCIALS.map((s) => (
               <a
                 key={s.label}

@@ -23,6 +23,13 @@ export const siteConfig = {
 
   // Social
   facebookUrl: 'https://www.facebook.com/9ExpertTraining',
+  // The two chat channels. Spelled HERE and read from here — the footer used
+  // to carry the LINE URL as a literal, and it is spelled two more ways
+  // elsewhere in the tree (`%40` vs `@` on the career-path pages, and a
+  // different page.line.me link in the JSON-LD sameAs). New readers take
+  // these; the older literals are a separate clean-up.
+  messengerUrl: 'https://m.me/9ExpertTraining',
+  lineUrl:      'https://line.me/R/ti/p/@9expert',
 };
 
 /**
