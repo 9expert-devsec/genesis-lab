@@ -43,9 +43,10 @@ export const metadata = {
  * cancellation section moved from §7 to §6, four references followed it and
  * that one deliberately did NOT. A find-and-replace across "ข้อ 7" corrupts it.
  *
- * No dedicated "contact" accordion: the sidebar help card every policy page
- * already renders ("ต้องการความช่วยเหลือ?" → /contact-us) covers this, so the
- * docx's contact details are not duplicated inline here.
+ * No dedicated "contact" accordion: the footer on every page carries the
+ * contact details (phone, email, the chat channels), so the docx's contact
+ * details are not duplicated inline here. The sidebar help card that used to
+ * be cited for this was itself a duplicate of the footer and is gone.
  */
 
 const HIGHLIGHTS = [
@@ -105,13 +106,9 @@ export default function RefundPolicyPage() {
       updated={policy.updated}
       toc={TOC}
       currentSlug={policy.slug}
-      help={{
-        icon: 'help',
-        title: 'ต้องการความช่วยเหลือ?',
-        blurb: 'เราพร้อมให้คำแนะนำและช่วยเหลือในทุกขั้นตอน',
-        href: '/contact-us',
-        cta: 'ติดต่อทีมงาน',
-      }}
+      /* NO help card — see /terms: a generic "ต้องการความช่วยเหลือ?" card
+         repeats the footer on the same page. test/render/policyHelpCard pins
+         the absence. */
     >
       <div className="space-y-10">
         <section id="intro" className="scroll-mt-24">

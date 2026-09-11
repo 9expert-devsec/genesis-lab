@@ -104,13 +104,11 @@ export default function TermsPage() {
       updated={policy.updated}
       toc={TOC}
       currentSlug={policy.slug}
-      help={{
-        icon: 'help',
-        title: 'ต้องการความช่วยเหลือ?',
-        blurb: 'ทีมงานของเราพร้อมตอบทุกข้อสงสัยเกี่ยวกับการใช้บริการ',
-        href: '/contact-us',
-        cta: 'ติดต่อทีมงาน 9Expert',
-      }}
+      /* NO help card. It said "ต้องการความช่วยเหลือ? → ติดต่อทีมงาน", which is
+         what the footer on this same page already says; the sidebar slot is
+         for a page-specific aid (privacy's DPO link, cookie's manage link),
+         and a generic contact card is not one. test/render/policyHelpCard
+         pins the absence. */
     >
       <PolicyAccordion
         items={[
