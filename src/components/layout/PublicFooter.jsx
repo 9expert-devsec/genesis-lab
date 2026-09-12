@@ -162,7 +162,7 @@ export function PublicFooter() {
             ))}
           </div>
 
-          <div className="mt-5 flex w-full flex-col items-center gap-2 sm:items-start">
+          <div className="mt-2 flex w-full flex-col items-center gap-2 sm:items-start">
             <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
               ได้รับการรับรองจาก
             </p>
