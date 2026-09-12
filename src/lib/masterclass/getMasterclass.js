@@ -17,9 +17,12 @@ function serialize(v) {
  *   - early_bird_active is true AND
  *   - price_early_bird is set AND
  *   - early_bird_deadline is null OR still in the future
+ *
+ * `now` is injectable so a caller judging many rows against ONE instant (the
+ * corpus endpoint stamps that instant as `generated_at`) gets the same answer
+ * for every row; page renders pass nothing and keep the request-time clock.
  */
-export function resolveBatchPrice(batch) {
-  const now = new Date();
+export function resolveBatchPrice(batch, now = new Date()) {
   const ebActive =
     batch.early_bird_active &&
     batch.price_early_bird != null &&
