@@ -233,8 +233,13 @@ export async function POST(req) {
     upstream = await fetch(url.toString(), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      // `sessionId` and `user_id` are deliberately the SAME value sent twice.
+      // Upstream's ChatRequest model names the field `user_id` (and Pydantic
+      // silently drops `sessionId`, so without this every `if user_id:` memory
+      // call upstream is skipped); our client names it `sessionId`. Keep both.
       body: JSON.stringify({
         sessionId,
+        user_id: sessionId,
         message,
         history: sanitizeHistory(payload.history),
       }),

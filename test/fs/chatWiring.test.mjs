@@ -364,3 +364,20 @@ test('the SITE mark is untouched — the agent has its own face, the org keeps i
   assert.match(HOME_JSONLD, /url: `\$\{siteUrl\}\/logo\/9exp-stand\.png`/, 'JSON-LD logo unchanged');
   assert.notEqual(CHAT_MARK_SRC, '/logo/9exp-stand.png', 'and the two marks really are different files');
 });
+
+// ── The upstream body ───────────────────────────────────────────────────────
+
+test('the proxy forwards the session id to the upstream as user_id', () => {
+  // Upstream's ChatRequest model is `{ message, user_id }` and Pydantic drops
+  // every key it does not name. `sessionId` therefore never arrived, and every
+  // memory call upstream — all guarded by `if user_id:` — was skipped: no
+  // follow-up context, and a show-more chip that looped back to its category.
+  // The comment above the body explains the duplication; this checks the CODE
+  // (comments are scrubbed), so a tidy-up that drops the key goes red here.
+  const ROUTE = src('src/app/api/chat/route.js');
+  assert.match(
+    ROUTE,
+    /JSON\.stringify\(\{[^}]*\buser_id: sessionId\b[^}]*\}\)/,
+    'the upstream body carries user_id, and it is the SAME value as sessionId',
+  );
+});
