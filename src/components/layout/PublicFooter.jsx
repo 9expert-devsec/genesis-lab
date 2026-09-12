@@ -58,7 +58,11 @@ const SOCIALS = [
     label: "YouTube",
     Icon: FaYoutube,
   },
-  { href: "https://shopee.co.th/9expert", label: "Shopee", Icon: TbBrandShopee },
+  {
+    href: "https://shopee.co.th/9expert",
+    label: "Shopee",
+    Icon: TbBrandShopee,
+  },
 ];
 
 export function PublicFooter() {
@@ -108,14 +112,18 @@ export function PublicFooter() {
               ติดต่อเรา
             </h4>
             <div className="flex flex-col gap-1">
-              <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">Telephone</p>
+              <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                Telephone
+              </p>
               <a
                 href="tel:022194304"
                 className="text-sm font-bold text-9e-navy hover:text-9e-action dark:text-white dark:hover:text-[#48B0FF]"
               >
                 02-219-4304
               </a>
-              <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">Email</p>
+              <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                Email
+              </p>
               <a
                 href="mailto:training@9expert.co.th"
                 className="text-sm font-bold text-9e-navy hover:text-9e-action dark:text-white dark:hover:text-[#48B0FF]"
@@ -132,6 +140,10 @@ export function PublicFooter() {
               the footer renders at, which would give one row of eight (or
               5 + 3 on a narrow tablet). The grid says 4 + 4 outright. */}
           <div className="mt-1 grid w-fit grid-cols-4 gap-3">
+            <p className="col-span-4 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              ช่องทางออนไลน์
+            </p>
+
             {SOCIALS.map((s) => (
               <a
                 key={s.label}
@@ -139,7 +151,7 @@ export function PublicFooter() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={s.label}
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-[#E2E8F0] text-9e-slate-dp-50 transition-colors hover:border-9e-action hover:text-9e-action dark:border-[#1e3a5f] dark:text-[#94a3b8] dark:hover:border-[#48B0FF] dark:hover:text-[#48B0FF]"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-[#E2E8F0] text-9e-slate-dp-50 transition-colors hover:border-9e-action hover:text-9e-action dark:border-[#1e3a5f] dark:text-[#94a3b8] dark:hover:border-[#48B0FF] dark:hover:text-[#48B0FF]"
               >
                 {s.Icon ? (
                   <s.Icon className="h-4 w-4" strokeWidth={1.75} />
@@ -150,20 +162,23 @@ export function PublicFooter() {
             ))}
           </div>
 
-          <div className="flex w-full flex-col items-center gap-2 sm:items-start">
-            <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">ได้รับการรับรองจาก</p>
+          <div className="mt-5 flex w-full flex-col items-center gap-2 sm:items-start">
+            <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              ได้รับการรับรองจาก
+            </p>
+
             <a
-              className="w-8/12 rounded-xl bg-white shadow-md ring-1 ring-slate-100 dark:ring-[#1e3a5f]"
-              href="https://dbdregistered.dbd.go.th/api/public/trustmarkinfo/115374"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+  className="w-full max-w-[190px] rounded-xl bg-white px-4 pt-2.5 pb-0 shadow-md ring-1 ring-slate-100 dark:ring-[#1e3a5f]"
+  href="https://dbdregistered.dbd.go.th/api/public/trustmarkinfo/115374"
+  target="_blank"
+  rel="noopener noreferrer"
+>
               <Image
                 src="/assets/DBD_logo.jpg"
-                alt="dbd logo"
-                width={90}
-                height={50}
-                className="mx-auto mt-1 object-contain"
+                alt="DBD Registered"
+                width={80}
+                height={44}
+                className="mx-auto object-contain"
               />
             </a>
           </div>
@@ -200,7 +215,10 @@ export function PublicFooter() {
               {policyNav.map((item, i) => (
                 <li key={item.href} className="flex items-center gap-2">
                   {i > 0 && (
-                    <span aria-hidden="true" className="text-9e-slate-dp-300 dark:text-[#475569]">
+                    <span
+                      aria-hidden="true"
+                      className="text-9e-slate-dp-300 dark:text-[#475569]"
+                    >
                       ·
                     </span>
                   )}
@@ -223,7 +241,9 @@ export function PublicFooter() {
 function FooterGroup({ title, items }) {
   return (
     <div className="flex flex-col gap-3">
-      <h4 className="text-sm font-bold text-9e-navy dark:text-white">{title}</h4>
+      <h4 className="text-sm font-bold text-9e-navy dark:text-white">
+        {title}
+      </h4>
       <div className="flex flex-col gap-2">
         {items.map((item) => (
           <Link
