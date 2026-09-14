@@ -34,6 +34,31 @@
  * even though the string would come out right. The shared thing is the prefix
  * rule, and that is what this function is.
  *
+ * ── IDEMPOTENT: A VALUE THAT ALREADY CARRIES ITS PREFIX IS NOT PREFIXED AGAIN ─
+ * Measured, not supposed. `src/data/postcode-index.generated.json` carries the
+ * prefix on some values and not others: every district ("เขตพญาไท",
+ * "อำเภอเมืองอุดรธานี"), 178 of 5,883 sub-districts (Bangkok's "แขวง…" only,
+ * never a "ตำบล…"), and no province. Rows written before that dataset landed
+ * are bare; rows written after carry whatever the picker gave them. So the
+ * stored data holds BOTH shapes, and a formatter that always prepends mailed
+ * customers "แขวงแขวงสามเสนใน เขตเขตพญาไท".
+ *
+ * The rule: strip ANY administrative prefix that is valid for the field, then
+ * apply the branch's own. Any, not just the one about to be added — a stored
+ * "เขตสะพานสูง" reaching the non-Bangkok branch (the province blank, or typed
+ * as something other than กรุงเทพ…) must become "อำเภอสะพานสูง", not
+ * "อำเภอเขตสะพานสูง". Sub-district strips แขวง|ตำบล, district strips
+ * เขต|อำเภอ, province strips จังหวัด. Only a LEADING prefix is stripped, so a
+ * name that merely contains the syllables ("เขตร์" is not a prefix of
+ * anything real, but the guard is the anchor, not a word list) is untouched.
+ *
+ * The prefix logic itself stays: before it existed the in-house flow mailed
+ * "เชียงยืน เมืองอุดรธานี อุดรธานี 41000". And the stored rows are NOT
+ * backfilled — render-time idempotency already fixes every one of them, and a
+ * Mongo write would buy nothing a reader can see. Stripping at derivation
+ * time in scripts/derive-postcode-index.mjs is a later, separate change: it
+ * breaks that script's derived-vs-source round-trip invariant.
+ *
  * Pure: no env, no db, no `new Date()`.
  *
  * @param {{addressLine?: string, subDistrict?: string, district?: string,
@@ -41,7 +66,13 @@
  * @returns {string} single-line address, `''` when there is nothing to render
  */
 export function formatThaiAddress(address) {
-  const a = address ?? {};
+  const raw = address ?? {};
+  const a = {
+    ...raw,
+    subDistrict: stripPrefix(raw.subDistrict, SUB_DISTRICT_PREFIXES),
+    district:    stripPrefix(raw.district, DISTRICT_PREFIXES),
+    province:    stripPrefix(raw.province, PROVINCE_PREFIXES),
+  };
   const province = a.province || '';
   const isBangkok = province.startsWith('กรุงเทพ');
 
@@ -62,4 +93,29 @@ export function formatThaiAddress(address) {
       ];
 
   return parts.filter(Boolean).join(' ');
+}
+
+/** Every prefix a field may legitimately arrive with — both vocabularies, not just the branch's own. */
+export const SUB_DISTRICT_PREFIXES = Object.freeze(['แขวง', 'ตำบล']);
+export const DISTRICT_PREFIXES     = Object.freeze(['เขต', 'อำเภอ']);
+export const PROVINCE_PREFIXES     = Object.freeze(['จังหวัด']);
+
+/**
+ * The bare name: the value with one LEADING administrative prefix removed, or
+ * the value as given when it carries none. Whitespace around the value and
+ * between the prefix and the name is dropped, so "แขวง สามเสนใน" and
+ * "แขวงสามเสนใน" both yield "สามเสนใน". Non-strings pass through untouched so
+ * the `a.x && …` guards above keep their existing falsy behaviour.
+ *
+ * @param {unknown} value
+ * @param {readonly string[]} prefixes
+ * @returns {unknown} the bare string, or `value` unchanged when it is not a string
+ */
+export function stripPrefix(value, prefixes) {
+  if (typeof value !== 'string') return value;
+  const s = value.trim();
+  for (const p of prefixes) {
+    if (s.startsWith(p)) return s.slice(p.length).trim();
+  }
+  return s;
 }

@@ -215,6 +215,75 @@ test('CONTROL: the prefix rule is intact — now in formatThaiAddress', () => {
   assert.match(src, /province && `จังหวัด\$\{province\}`/);
 });
 
+test('the prefix rule is IDEMPOTENT: the three fields are stripped of any valid prefix before the branch adds its own', () => {
+  /**
+   * ADDED, not re-pointed. The five expressions above are unchanged; what
+   * changed is the `a` they read from. postcode-index.generated.json carries
+   * the prefix on every district and on Bangkok's sub-districts, so stored
+   * rows hold both shapes and the always-prepend rule mailed customers
+   * "แขวงแขวงสามเสนใน เขตเขตพญาไท". Pinned at source so the strip cannot be
+   * "simplified" back to one prefix per field: a stored "เขตสะพานสูง" reaching
+   * the non-Bangkok branch must lose เขต, not gain อำเภอ in front of it.
+   */
+  const code = scrubSource(read('src/lib/address/formatThaiAddress.js'));
+  assert.match(code, /subDistrict:\s*stripPrefix\(raw\.subDistrict, SUB_DISTRICT_PREFIXES\)/);
+  assert.match(code, /district:\s*stripPrefix\(raw\.district, DISTRICT_PREFIXES\)/);
+  assert.match(code, /province:\s*stripPrefix\(raw\.province, PROVINCE_PREFIXES\)/);
+  assert.match(code, /SUB_DISTRICT_PREFIXES = Object\.freeze\(\['แขวง', 'ตำบล'\]\)/, 'both sub-district vocabularies');
+  assert.match(code, /DISTRICT_PREFIXES\s+= Object\.freeze\(\['เขต', 'อำเภอ'\]\)/, 'both district vocabularies');
+  assert.match(code, /PROVINCE_PREFIXES\s+= Object\.freeze\(\['จังหวัด'\]\)/);
+  assert.match(code, /s\.startsWith\(p\)/, 'a LEADING prefix only — never a substring anywhere in the name');
+});
+
+test('CONTROL: a prefixed value and a bare value render IDENTICALLY — and the strip is what makes them', async () => {
+  /**
+   * Behavioural, through the real module. Without this the source pins above
+   * could be satisfied by a stripPrefix that returns its input, and the
+   * doubled prefix would be back with every assertion green.
+   */
+  const { formatThaiAddress, stripPrefix, SUB_DISTRICT_PREFIXES, DISTRICT_PREFIXES, PROVINCE_PREFIXES } =
+    await import('@/lib/address/formatThaiAddress');
+
+  const bare     = { addressLine: '99/1', subDistrict: 'สามเสนใน',     district: 'พญาไท',    province: 'กรุงเทพมหานคร', postalCode: '10400' };
+  const prefixed = { addressLine: '99/1', subDistrict: 'แขวงสามเสนใน', district: 'เขตพญาไท', province: 'กรุงเทพมหานคร', postalCode: '10400' };
+  const expected = '99/1 แขวงสามเสนใน เขตพญาไท กรุงเทพมหานคร 10400';
+  assert.equal(formatThaiAddress(bare), expected, 'bare input still gets its prefixes (the rule was not deleted)');
+  assert.equal(formatThaiAddress(prefixed), expected, 'prefixed input is not prefixed twice');
+
+  const upcountryBare     = { subDistrict: 'เชียงยืน',     district: 'เมืองอุดรธานี',      province: 'อุดรธานี',        postalCode: '41000' };
+  const upcountryPrefixed = { subDistrict: 'ตำบลเชียงยืน', district: 'อำเภอเมืองอุดรธานี', province: 'จังหวัดอุดรธานี', postalCode: '41000' };
+  const upcountry = 'ตำบลเชียงยืน อำเภอเมืองอุดรธานี จังหวัดอุดรธานี 41000';
+  assert.equal(formatThaiAddress(upcountryBare), upcountry);
+  assert.equal(formatThaiAddress(upcountryPrefixed), upcountry);
+
+  // The cross-vocabulary case: a Bangkok-style stored value reaching the
+  // non-Bangkok branch (province blank). ANY valid prefix is stripped, so the
+  // result is อำเภอสะพานสูง — never อำเภอเขตสะพานสูง.
+  assert.equal(formatThaiAddress({ subDistrict: 'แขวงลาดยาว', district: 'เขตสะพานสูง' }), 'ตำบลลาดยาว อำเภอสะพานสูง');
+
+  // The careerpath adapter's measured output, reproduced and fixed through
+  // formatBillingAddress — every caller benefits, that one included.
+  const { formatBillingAddress } = await import('@/lib/address/formatBillingAddress');
+  assert.equal(
+    formatBillingAddress({ country: 'TH', thaiAddress: { subDistrict: 'แขวงลาดยาว', district: 'เขตจตุจักร', province: 'กรุงเทพมหานคร', postalCode: '10900' } }),
+    'แขวงลาดยาว เขตจตุจักร กรุงเทพมหานคร 10900'
+  );
+
+  // stripPrefix itself: leading only, whitespace-tolerant, non-strings untouched.
+  assert.equal(stripPrefix('แขวง สามเสนใน ', SUB_DISTRICT_PREFIXES), 'สามเสนใน');
+  assert.equal(stripPrefix('ตำบลเชียงยืน', SUB_DISTRICT_PREFIXES), 'เชียงยืน');
+  assert.equal(stripPrefix('เมืองเขตดี', DISTRICT_PREFIXES), 'เมืองเขตดี', 'a prefix in the middle of a name is part of the name');
+  assert.equal(stripPrefix('จังหวัดขอนแก่น', PROVINCE_PREFIXES), 'ขอนแก่น');
+  assert.equal(stripPrefix(undefined, PROVINCE_PREFIXES), undefined);
+  assert.equal(stripPrefix('', PROVINCE_PREFIXES), '');
+
+  // CONTROL: with nothing to strip, the branch's own prefix lands on top of
+  // the stored one — the doubling this round fixes. The idempotency depends on
+  // the strip, not on the fixture happening to be bare.
+  assert.equal(`แขวง${stripPrefix('แขวงสามเสนใน', [])}`, 'แขวงแขวงสามเสนใน');
+  assert.equal(`แขวง${stripPrefix('แขวงสามเสนใน', SUB_DISTRICT_PREFIXES)}`, 'แขวงสามเสนใน');
+});
+
 test('CONTROL: formatBillingAddress still owns the invoice shape, and delegates', () => {
   /**
    * The other half of the extraction. Without this, moving the prefixes out
