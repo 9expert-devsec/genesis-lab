@@ -228,7 +228,7 @@ export async function RegisterPageContent({ searchParams, step }) {
           </p>
         )}
         <h1 className="mt-2 text-2xl font-bold text-[var(--text-primary)] lg:text-3xl">
-          สมัครอบรม: {course.course_name}
+          หลักสูตร: {course.course_name}
         </h1>
       </header>
 
