@@ -67,11 +67,40 @@ export function attendanceModeLabel(attendanceMode) {
  * or unrecognised type falls back to Classroom, matching the hard-coded
  * template it replaced: a room booking is the correct fail-safe for a record
  * whose type never got set.
+ *
+ * ── HYBRID SAYS WHICH MODE THE CUSTOMER CHOSE ─────────────────────────────
+ * On a hybrid round the row used to read the bare mode ("Classroom"), which
+ * is indistinguishable from a classroom-only round: the customer, and the
+ * staff reading the same mail, could not tell that a choice was made or which
+ * one. It now reads the `HYBRID_CHOSEN_*` wording below — the round's nature
+ * AND the pick, as ONE pre-formatted string under the existing key, so the
+ * Postmark template needs no edit and no second surface spells it. A round
+ * that is NOT hybrid keeps its bare label; the "Hybrid :" prefix must never
+ * appear on a classroom-only or online-only round (asserted in
+ * test/pure/emailTemplateModels).
+ *
+ * The careerpath flow does NOT go through here: it stores the literal
+ * "Hybrid (Classroom)" / "Hybrid (MS Teams)" and has its own map with its own,
+ * deliberately different, decision (see careerPathRegistrationModel.js).
  */
 export function scheduleTypeLabel(scheduleType, attendanceMode) {
   if (scheduleType === 'online') return attendanceModeLabel('teams');
-  if (scheduleType === 'hybrid') return attendanceModeLabel(attendanceMode);
+  if (scheduleType === 'hybrid') return hybridChoiceLabel(attendanceMode);
   return attendanceModeLabel('classroom');
+}
+
+export const HYBRID_CHOSEN_CLASSROOM = 'Hybrid : ลูกค้าเลือก Classroom เรียนที่สถาบัน 9Expert Training';
+export const HYBRID_CHOSEN_TEAMS = 'Hybrid : ลูกค้าเลือกเรียนสด ผ่าน MS Teams';
+
+/**
+ * The ประเภทการอบรม wording for a HYBRID round: `teams` → the MS Teams line,
+ * anything else → the Classroom line. Same fail-safe as attendanceModeLabel —
+ * the schema refuses a hybrid registration without a mode and the model
+ * defaults it to `classroom`, so "anything else" is a record that predates
+ * both, and a room booking is the safe reading of it.
+ */
+export function hybridChoiceLabel(attendanceMode) {
+  return attendanceMode === 'teams' ? HYBRID_CHOSEN_TEAMS : HYBRID_CHOSEN_CLASSROOM;
 }
 
 /**

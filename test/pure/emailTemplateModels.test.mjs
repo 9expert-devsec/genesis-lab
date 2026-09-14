@@ -4,7 +4,7 @@ import { buildPublicRegistrationModel } from '@/lib/email/models/publicRegistrat
 import { buildPublicPaidReceiptModel } from '@/lib/email/models/publicPaidReceiptModel';
 import { buildInhouseRegistrationModel } from '@/lib/email/models/inhouseRegistrationModel';
 import { paidReceiptEmail } from '@/lib/email/templates/registration-paid';
-import { contentModeLabel } from '@/lib/email/models/labels';
+import { contentModeLabel, HYBRID_CHOSEN_CLASSROOM, HYBRID_CHOSEN_TEAMS, scheduleTypeLabel } from '@/lib/email/models/labels';
 import { AMBIENT_PROBE, AMBIENT_TZ, withTZ, zoneProbe } from '../withTZ.mjs';
 
 /**
@@ -831,8 +831,36 @@ test('training_type_label is populated for classroom, hybrid AND online', () => 
   // schedule types, on the majority of registrations.
   assert.equal(regModel({ scheduleType: 'classroom' }).training_type_label, 'Classroom');
   assert.equal(regModel({ scheduleType: 'online' }).training_type_label, 'Online via Microsoft Teams');
-  assert.equal(regModel({ scheduleType: 'hybrid', attendanceMode: 'teams' }).training_type_label, 'Online via Microsoft Teams');
-  assert.equal(regModel({ scheduleType: 'hybrid', attendanceMode: 'classroom' }).training_type_label, 'Classroom');
+  assert.equal(regModel({ scheduleType: 'hybrid', attendanceMode: 'teams' }).training_type_label, HYBRID_CHOSEN_TEAMS);
+  assert.equal(regModel({ scheduleType: 'hybrid', attendanceMode: 'classroom' }).training_type_label, HYBRID_CHOSEN_CLASSROOM);
+});
+
+test('a HYBRID round says which mode the customer chose — the exact wording, one shared string', () => {
+  // The bare mode ("Classroom") was indistinguishable from a classroom-only
+  // round. The row now carries the round's nature AND the pick, pre-formatted
+  // under the existing key so the Postmark template is untouched.
+  assert.equal(HYBRID_CHOSEN_CLASSROOM, 'Hybrid : ลูกค้าเลือก Classroom เรียนที่สถาบัน 9Expert Training');
+  assert.equal(HYBRID_CHOSEN_TEAMS, 'Hybrid : ลูกค้าเลือกเรียนสด ผ่าน MS Teams');
+  assert.equal(regModel({ scheduleType: 'hybrid', attendanceMode: 'classroom' }).training_type_label, 'Hybrid : ลูกค้าเลือก Classroom เรียนที่สถาบัน 9Expert Training');
+  assert.equal(regModel({ scheduleType: 'hybrid', attendanceMode: 'teams' }).training_type_label, 'Hybrid : ลูกค้าเลือกเรียนสด ผ่าน MS Teams');
+  // The model reads the ONE shared function; a second literal per surface is the drift this pins against.
+  assert.equal(regModel({ scheduleType: 'hybrid', attendanceMode: 'teams' }).training_type_label, scheduleTypeLabel('hybrid', 'teams'));
+  // A hybrid record with no mode (predates the schema guard) reads as the Classroom pick — the room-booking fail-safe.
+  assert.equal(regModel({ scheduleType: 'hybrid', attendanceMode: undefined }).training_type_label, HYBRID_CHOSEN_CLASSROOM);
+});
+
+test('CONTROL: a round that is NOT hybrid keeps its bare label — the "Hybrid :" prefix never leaks onto it', () => {
+  assert.equal(regModel({ scheduleType: 'classroom' }).training_type_label, 'Classroom');
+  assert.equal(regModel({ scheduleType: 'classroom', attendanceMode: 'teams' }).training_type_label, 'Classroom', 'a stray mode on a classroom round changes nothing');
+  assert.equal(regModel({ scheduleType: 'online' }).training_type_label, 'Online via Microsoft Teams');
+  for (const scheduleType of ['classroom', 'online', undefined, null, 'nonsense']) {
+    for (const attendanceMode of ['classroom', 'teams', undefined]) {
+      const label = regModel({ scheduleType, attendanceMode }).training_type_label;
+      assert.doesNotMatch(label, /^Hybrid/, `"${label}" for ${scheduleType}/${attendanceMode}`);
+    }
+  }
+  // And the inverse: only 'hybrid' produces it.
+  assert.match(scheduleTypeLabel('hybrid', 'classroom'), /^Hybrid : /);
 });
 
 test('training_type_label is NEVER empty, for any schedule/mode combination', () => {
@@ -849,8 +877,8 @@ test('training_type_label and attendance_mode COEXIST and stay independent', () 
   // They answer different questions: the label is "what is this course", the
   // block is "which of the two options you picked". Merging loses one of them.
   const hybrid = regModel({ scheduleType: 'hybrid', attendanceMode: 'teams' });
-  assert.equal(hybrid.training_type_label, 'Online via Microsoft Teams');
-  assert.deepEqual(hybrid.attendance_mode, { label: 'Online via Microsoft Teams' });
+  assert.equal(hybrid.training_type_label, HYBRID_CHOSEN_TEAMS);
+  assert.deepEqual(hybrid.attendance_mode, { label: 'Online via Microsoft Teams' }, 'the hybrid-only block keeps its own bare wording');
 
   const classroom = regModel({ scheduleType: 'classroom' });
   assert.equal(classroom.training_type_label, 'Classroom');
