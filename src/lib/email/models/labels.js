@@ -63,8 +63,9 @@ export function attendanceModeLabel(attendanceMode) {
  * into the label would have announced a choice where none was made. Since
  * the hybrid wording below names the pick itself, the block became a second
  * spelling of the same fact in the same mail, and publicRegistrationModel
- * dropped it (see the note there). publicPaidReceiptModel still uses the
- * block: it has no ประเภทการอบรม row.
+ * dropped it (see the note there); publicPaidReceiptModel followed, gaining
+ * this row so a customer reads one sentence on both mails. The block's
+ * function is deleted (see below).
  *
  * `online` reports the Teams wording even though no choice was offered, because
  * the row answers "what is this course" and not "what did you pick". A missing
@@ -107,25 +108,16 @@ export function hybridChoiceLabel(attendanceMode) {
   return attendanceMode === 'teams' ? HYBRID_CHOSEN_TEAMS : HYBRID_CHOSEN_CLASSROOM;
 }
 
-/**
- * The mode row is HYBRID-ONLY. On a classroom-only or online-only schedule the
- * mode carries no information (there is nothing to have chosen between) and the
- * templates omit the row entirely rather than state the obvious.
- *
- * Returned as a block rather than a `show` flag plus a sibling label, so the
- * Postmark side is `{{#attendance_mode}}…{{label}}…{{/attendance_mode}}` and
- * the label cannot be rendered outside its own conditional by mistake.
- *
- * USED BY THE PAID RECEIPT ONLY. The registration confirmation stopped
- * emitting it once `scheduleTypeLabel` began naming the pick on hybrid rounds
- * (two rows stating the mode in two spellings); the receipt has no
- * ประเภทการอบรม row, so here the block is still the only mode statement.
+/*
+ * `attendanceModeBlock` — the hybrid-only `attendance_mode: { label }` block —
+ * IS DELETED. It fed a "which option you picked" row on the registration
+ * confirmation and the paid receipt. Once `scheduleTypeLabel` began naming the
+ * pick on hybrid rounds, both models dropped the block (the mode stated twice
+ * in two spellings), and with no caller left the function went with it. A
+ * Postmark `{{#attendance_mode}}` section still on a dashboard template
+ * renders empty for the missing key. `attendanceModeLabel` above stays: it is
+ * what `scheduleTypeLabel` resolves the non-hybrid rows with.
  */
-export function attendanceModeBlock({ attendanceMode, scheduleType }) {
-  return scheduleType === 'hybrid'
-    ? { label: attendanceModeLabel(attendanceMode) }
-    : false;
-}
 
 /**
  * รูปแบบเนื้อหา — the in-house content mode, as a plain string, ALWAYS present.

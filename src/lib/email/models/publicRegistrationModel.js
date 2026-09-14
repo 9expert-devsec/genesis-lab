@@ -127,8 +127,9 @@ export function buildPublicRegistrationModel({
      * renders empty for a missing key, which is the same visual result as the
      * `false` it used to receive on non-hybrid rounds.
      *
-     * The paid receipt (publicPaidReceiptModel) still emits the block: it has
-     * no ประเภทการอบรม row, so there the block is the only mode statement.
+     * The paid receipt (publicPaidReceiptModel) followed: it gained this same
+     * row from the same function and dropped the block too, so a customer
+     * reads one sentence on the confirmation and on the receipt.
      */
     training_type_label: scheduleTypeLabel(data?.scheduleType, data?.attendanceMode),
 

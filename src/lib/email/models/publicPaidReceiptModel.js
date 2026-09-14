@@ -2,9 +2,9 @@ import { formatTHB } from '@/lib/pricing';
 import { refNo } from '@/lib/refNo';
 import { siteDateParts } from '@/lib/articlePublishTime';
 import {
-  attendanceModeBlock,
   buildAttendeeBlocks,
   buildDocumentRequestedBlock,
+  scheduleTypeLabel,
 } from './labels';
 
 /**
@@ -78,10 +78,23 @@ export function buildPublicPaidReceiptModel({
 
     course_name: doc?.courseName || doc?.courseId || '',
     course_date: doc?.classDate || 'ตามรอบที่เลือก',
-    attendance_mode: attendanceModeBlock({
-      attendanceMode: doc?.attendanceMode,
-      scheduleType: doc?.scheduleType,
-    }),
+
+    /**
+     * ประเภทการอบรม — the SAME function and the SAME sentence as the
+     * registration confirmation (publicRegistrationModel): always present,
+     * and on a hybrid round it names the mode the customer chose. A customer
+     * reads one wording on the confirmation and the receipt, not two.
+     *
+     * ── `attendance_mode` IS GONE FROM THIS MODEL TOO — A REVERSAL ──────────
+     * The receipt used to carry only the hybrid-only `attendance_mode` block
+     * (it had no ประเภทการอบรม row at all), and when the confirmation dropped
+     * that block the receipt kept it as its only mode statement. Now that the
+     * label row is here, the block would be the mode stated twice in two
+     * spellings, so it is not emitted — ABSENT, not `false`. A Postmark
+     * `{{#attendance_mode}}` section on the dashboard, if the paid-receipt
+     * template exists there at all, renders empty for a missing key.
+     */
+    training_type_label: scheduleTypeLabel(doc?.scheduleType, doc?.attendanceMode),
 
     payment_method_label: paymentMethodLabel(payment.method),
     paid_at_label: formatPaidAt(payment.paidAt),

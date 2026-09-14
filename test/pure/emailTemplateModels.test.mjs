@@ -254,7 +254,7 @@ test('NO model, in any state, contains null or undefined anywhere', () => {
 
 test('every conditional block is an object or the boolean false, never a bare truthy', () => {
   const BLOCK_KEYS = [
-    'attendance_mode',
+    // 'attendance_mode' was here; no model emits it any more (see the REVERSED tests).
     'attendee_list',
     'attendee_later',
     'document_requested',
@@ -597,12 +597,42 @@ test('paid receipt carries the same attendee and billing blocks', () => {
   assert.equal(m.document_requested.billing_personal, false);
 });
 
-test('paid receipt KEEPS the mode block: hidden on a non-hybrid schedule, shown on hybrid', () => {
-  // Deliberately NOT reversed with the registration mail: the receipt has no
-  // ประเภทการอบรม row, so here the block is the only place the mode is stated.
-  assert.equal(paidModel({ scheduleType: 'classroom' }).attendance_mode, false);
-  assert.deepEqual(paidModel({ scheduleType: 'hybrid' }).attendance_mode, { label: 'Classroom' });
-  assert.deepEqual(paidModel({ scheduleType: 'hybrid', attendanceMode: 'teams' }).attendance_mode, { label: 'Online via Microsoft Teams' });
+test('REVERSED: the paid receipt no longer emits attendance_mode either — the key is ABSENT for every schedule and mode', () => {
+  /**
+   * One round ago this test read "paid receipt KEEPS the mode block", pinning
+   * `false` on classroom, `{ label: 'Classroom' }` on hybrid and
+   * `{ label: 'Online via Microsoft Teams' }` on hybrid/teams — kept because the
+   * receipt had no ประเภทการอบรม row and the block was its only mode
+   * statement. The receipt now carries that row from the SAME shared function
+   * as the confirmation, so the block became the mode stated twice, and it
+   * went. ABSENT, not `false`: there is no row left to hide.
+   */
+  for (const scheduleType of ['classroom', 'hybrid', 'online', undefined, null, 'nonsense']) {
+    for (const attendanceMode of ['classroom', 'teams', undefined, null, 'zoom']) {
+      const m = paidModel({ scheduleType, attendanceMode });
+      assert.equal('attendance_mode' in m, false, `attendance_mode came back on the receipt for ${scheduleType}/${attendanceMode}`);
+    }
+  }
+});
+
+test('CONTROL: the receipt says the SAME sentence as the confirmation — training_type_label from the one shared function', () => {
+  // The information moved rather than vanished, and it moved to the same
+  // words: a customer on a hybrid round reads one sentence on both mails.
+  assert.equal(paidModel({ scheduleType: 'hybrid', attendanceMode: 'teams' }).training_type_label, HYBRID_CHOSEN_TEAMS);
+  assert.equal(paidModel({ scheduleType: 'hybrid', attendanceMode: 'classroom' }).training_type_label, HYBRID_CHOSEN_CLASSROOM);
+  assert.equal(paidModel({ scheduleType: 'hybrid', attendanceMode: 'zoom' }).training_type_label, HYBRID_CHOSEN_CLASSROOM, 'the unknown-mode fail-safe moved with it');
+  assert.equal(paidModel({ scheduleType: 'classroom' }).training_type_label, 'Classroom');
+  assert.equal(paidModel({ scheduleType: 'online' }).training_type_label, 'Online via Microsoft Teams');
+  for (const scheduleType of ['classroom', 'hybrid', 'online', undefined, 'nonsense']) {
+    for (const attendanceMode of ['classroom', 'teams', undefined]) {
+      assert.equal(
+        paidModel({ scheduleType, attendanceMode }).training_type_label,
+        regModel({ scheduleType, attendanceMode }).training_type_label,
+        `receipt and confirmation disagree for ${scheduleType}/${attendanceMode}`
+      );
+      assert.equal(paidModel({ scheduleType, attendanceMode }).training_type_label, scheduleTypeLabel(scheduleType, attendanceMode));
+    }
+  }
 });
 
 // ── In-house ────────────────────────────────────────────────────────────────
