@@ -404,29 +404,40 @@ test('an unset country falls to ไทย rather than labelling a Thai company f
   assert.equal(regModel({ invoiceCountry: null }).invoice_country_label, 'ไทย');
 });
 
-// ── Attendance mode: hybrid only ────────────────────────────────────────────
+// ── Attendance mode: REMOVED from the registration mail (a reversal) ────────
 
-test('hybrid schedule shows the mode block with the Teams label', () => {
-  assert.deepEqual(regModel().attendance_mode, { label: 'Online via Microsoft Teams' });
+test('REVERSED: the registration model no longer emits attendance_mode — the key is ABSENT, for every schedule and mode', () => {
+  /**
+   * These four tests used to pin the hybrid-only `attendance_mode` block:
+   * `{ label: 'Online via Microsoft Teams' }` on a hybrid/teams registration,
+   * `{ label: 'Classroom' }` on hybrid/classroom, `false` on classroom-only and
+   * online-only, and the fail-safe `{ label: 'Classroom' }` for an unknown mode.
+   *
+   * The decision is REVERSED, not forgotten. Once `training_type_label` began
+   * naming the pick on hybrid rounds ("Hybrid : ลูกค้าเลือกเรียนสด ผ่าน MS
+   * Teams"), the block was the same fact stated a second time in a different
+   * spelling, in the same mail. Two rows disagreeing on wording is worse than
+   * either alone, so the block went. It is ABSENT — not `false`, not `null` —
+   * because there is no row for it to hide any more; a Postmark
+   * `{{#attendance_mode}}` section still on the dashboard renders empty for a
+   * missing key, exactly as it did for `false`.
+   *
+   * Asserted across the whole sweep so a merge that brings the key back on
+   * any one branch is caught, not just on the hybrid/teams fixture.
+   */
+  for (const scheduleType of ['classroom', 'hybrid', 'online', undefined, null, 'nonsense']) {
+    for (const attendanceMode of ['classroom', 'teams', undefined, null, 'zoom']) {
+      const m = regModel({ scheduleType, attendanceMode });
+      assert.equal('attendance_mode' in m, false, `attendance_mode came back for ${scheduleType}/${attendanceMode}`);
+    }
+  }
 });
 
-test('hybrid schedule with classroom mode shows the Classroom label', () => {
-  assert.deepEqual(
-    regModel({ attendanceMode: 'classroom' }).attendance_mode,
-    { label: 'Classroom' }
-  );
-});
-
-test('NON-hybrid schedule hides the mode block entirely', () => {
-  // On a classroom-only schedule the mode carries no information — there was
-  // nothing to choose between — and the template omits the row.
-  assert.equal(regModel({ scheduleType: 'classroom' }).attendance_mode, false);
-  assert.equal(regModel({ scheduleType: 'online' }).attendance_mode, false);
-  assert.equal(regModel({ scheduleType: undefined }).attendance_mode, false);
-});
-
-test('an unknown attendance mode fails safe to Classroom', () => {
-  assert.deepEqual(regModel({ attendanceMode: 'zoom' }).attendance_mode, { label: 'Classroom' });
+test('CONTROL: what the block said is now carried by training_type_label alone, on the hybrid round', () => {
+  // The reversal is only safe if the information moved rather than vanished.
+  assert.equal(regModel({ scheduleType: 'hybrid', attendanceMode: 'teams' }).training_type_label, HYBRID_CHOSEN_TEAMS);
+  assert.equal(regModel({ scheduleType: 'hybrid', attendanceMode: 'classroom' }).training_type_label, HYBRID_CHOSEN_CLASSROOM);
+  assert.equal(regModel({ scheduleType: 'hybrid', attendanceMode: 'zoom' }).training_type_label, HYBRID_CHOSEN_CLASSROOM, 'the unknown-mode fail-safe moved with it');
 });
 
 // ── Public registration: scalars and fallbacks ──────────────────────────────
@@ -586,9 +597,12 @@ test('paid receipt carries the same attendee and billing blocks', () => {
   assert.equal(m.document_requested.billing_personal, false);
 });
 
-test('paid receipt hides the mode block on a non-hybrid schedule', () => {
+test('paid receipt KEEPS the mode block: hidden on a non-hybrid schedule, shown on hybrid', () => {
+  // Deliberately NOT reversed with the registration mail: the receipt has no
+  // ประเภทการอบรม row, so here the block is the only place the mode is stated.
   assert.equal(paidModel({ scheduleType: 'classroom' }).attendance_mode, false);
   assert.deepEqual(paidModel({ scheduleType: 'hybrid' }).attendance_mode, { label: 'Classroom' });
+  assert.deepEqual(paidModel({ scheduleType: 'hybrid', attendanceMode: 'teams' }).attendance_mode, { label: 'Online via Microsoft Teams' });
 });
 
 // ── In-house ────────────────────────────────────────────────────────────────
@@ -873,16 +887,23 @@ test('training_type_label is NEVER empty, for any schedule/mode combination', ()
   }
 });
 
-test('training_type_label and attendance_mode COEXIST and stay independent', () => {
-  // They answer different questions: the label is "what is this course", the
-  // block is "which of the two options you picked". Merging loses one of them.
+test('REVERSED: training_type_label stands ALONE on the registration mail — attendance_mode no longer coexists with it', () => {
+  /**
+   * This test used to read "training_type_label and attendance_mode COEXIST
+   * and stay independent": the label was "what is this course", the block was
+   * "which of the two options you picked", and merging lost one of them. The
+   * label now answers both questions on a hybrid round, so the block is gone
+   * from this model and the pairing it asserted no longer exists. The paid
+   * receipt is the surface that still carries the block (it has no label row),
+   * and its own test below still pins that.
+   */
   const hybrid = regModel({ scheduleType: 'hybrid', attendanceMode: 'teams' });
   assert.equal(hybrid.training_type_label, HYBRID_CHOSEN_TEAMS);
-  assert.deepEqual(hybrid.attendance_mode, { label: 'Online via Microsoft Teams' }, 'the hybrid-only block keeps its own bare wording');
+  assert.equal('attendance_mode' in hybrid, false);
 
   const classroom = regModel({ scheduleType: 'classroom' });
   assert.equal(classroom.training_type_label, 'Classroom');
-  assert.equal(classroom.attendance_mode, false, 'the hybrid-only block must stay hidden');
+  assert.equal('attendance_mode' in classroom, false);
 });
 
 // ── public registration: flat billing + notes ───────────────────────────────

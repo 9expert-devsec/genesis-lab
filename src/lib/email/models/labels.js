@@ -55,12 +55,16 @@ export function attendanceModeLabel(attendanceMode) {
  * row. The public model's behaviour is byte-identical and the exhaustive
  * scheduleType × attendanceMode sweep in test/pure/emailTemplateModels says so.
  *
- * ── DELIBERATELY NOT MERGED WITH `attendanceModeBlock` ───────────────────
- * They answer different questions and merging loses one: this row says WHAT
- * THIS COURSE IS and is always shown; that block says WHICH OPTION WAS PICKED
- * and is hybrid-only. Collapsing into the block blanks the row on classroom and
- * online schedules (which was the original bug); collapsing into the label
- * starts announcing a choice on a schedule where nothing was chosen.
+ * ── THE REGISTRATION MAIL NO LONGER PAIRS THIS WITH `attendanceModeBlock` ──
+ * The two used to be kept deliberately apart on the registration mail: this
+ * row says WHAT THIS COURSE IS and is always shown; that block said WHICH
+ * OPTION WAS PICKED and was hybrid-only. Collapsing into the block blanked
+ * the row on classroom and online schedules (the original bug); collapsing
+ * into the label would have announced a choice where none was made. Since
+ * the hybrid wording below names the pick itself, the block became a second
+ * spelling of the same fact in the same mail, and publicRegistrationModel
+ * dropped it (see the note there). publicPaidReceiptModel still uses the
+ * block: it has no ประเภทการอบรม row.
  *
  * `online` reports the Teams wording even though no choice was offered, because
  * the row answers "what is this course" and not "what did you pick". A missing
@@ -111,6 +115,11 @@ export function hybridChoiceLabel(attendanceMode) {
  * Returned as a block rather than a `show` flag plus a sibling label, so the
  * Postmark side is `{{#attendance_mode}}…{{label}}…{{/attendance_mode}}` and
  * the label cannot be rendered outside its own conditional by mistake.
+ *
+ * USED BY THE PAID RECEIPT ONLY. The registration confirmation stopped
+ * emitting it once `scheduleTypeLabel` began naming the pick on hybrid rounds
+ * (two rows stating the mode in two spellings); the receipt has no
+ * ประเภทการอบรม row, so here the block is still the only mode statement.
  */
 export function attendanceModeBlock({ attendanceMode, scheduleType }) {
   return scheduleType === 'hybrid'

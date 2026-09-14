@@ -1,5 +1,4 @@
 import {
-  attendanceModeBlock,
   buildAttendeeBlocks,
   invoiceCountryLabel,
   invoiceTypeLabel,
@@ -107,19 +106,31 @@ export function buildPublicRegistrationModel({
     course_image: courseImage || '',
 
     /**
-     * ประเภทการอบรม — ALWAYS present, for every schedule type.
-     * Deliberately NOT merged with `attendance_mode`, which is the hybrid-only
-     * "here is the option you picked" row. They answer different questions and
-     * merging them loses one of the two: collapse into the block and the row
-     * vanishes on classroom-only and online-only schedules (the bug — it was
-     * blank for two of the three); collapse into the label and the mail starts
-     * announcing a choice on a schedule where nothing was chosen.
+     * ประเภทการอบรม — ALWAYS present, for every schedule type, and on a hybrid
+     * round it names the mode the customer chose (`HYBRID_CHOSEN_*` in
+     * labels.js).
+     *
+     * ── `attendance_mode` IS GONE FROM THIS MODEL — A REVERSAL, ON RECORD ──
+     * This model used to emit a second, hybrid-only block, `attendance_mode:
+     * { label }`, for a "which option you picked" row, and the two were kept
+     * deliberately separate: collapsing the row into the block blanked it on
+     * classroom-only and online-only rounds (the original bug), and collapsing
+     * the block into the row announced a choice where none was made.
+     *
+     * Both halves of that argument are now answered by the label itself: it is
+     * always present, and on a hybrid round it carries the pick in its own
+     * wording. Keeping the block meant one mail stating the mode twice, in two
+     * different spellings ("Hybrid : ลูกค้าเลือกเรียนสด ผ่าน MS Teams" and
+     * "Online via Microsoft Teams"), which is worse than either alone. So the
+     * key is not emitted. The Postmark template's `{{#attendance_mode}}` section
+     * — if it still exists on the dashboard; the template is not in this repo —
+     * renders empty for a missing key, which is the same visual result as the
+     * `false` it used to receive on non-hybrid rounds.
+     *
+     * The paid receipt (publicPaidReceiptModel) still emits the block: it has
+     * no ประเภทการอบรม row, so there the block is the only mode statement.
      */
     training_type_label: scheduleTypeLabel(data?.scheduleType, data?.attendanceMode),
-    attendance_mode: attendanceModeBlock({
-      attendanceMode: data?.attendanceMode,
-      scheduleType: data?.scheduleType,
-    }),
 
     total_participants: data?.attendeesCount ?? attendees.length,
     attendee_list,
