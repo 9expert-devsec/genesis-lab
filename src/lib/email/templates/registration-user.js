@@ -1,5 +1,6 @@
 import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { orNotSpecified } from '@/lib/orNotSpecified';
+import { scheduleTypeLabel } from '@/lib/email/models/labels';
 /**
  * Email to the user confirming their registration was received.
  * Returns { html, text } — the caller decides which to send.
@@ -20,9 +21,17 @@ export function userConfirmationEmail({
   coordinatorIsAttending = false,
   attendeesCount = 1,
 }) {
-  const modeLabel =
-    attendanceMode === 'teams' ? 'Online via Microsoft Teams' : 'Classroom';
-  const showMode = scheduleType === 'hybrid';
+  /**
+   * ประเภทการอบรม — THE SAME FUNCTION AND THE SAME SENTENCE AS THE POSTMARK
+   * MODEL. This fallback used to resolve its own `modeLabel` inline
+   * (`=== 'teams'` → the bare Teams/Classroom word) and show it on hybrid
+   * rounds only. decideSendPlan sends THIS html whenever the alias is unset OR
+   * the template send fails — silently, by design — so a fallback that spells
+   * the mode differently from the model means a mistyped alias ships the old
+   * wording with nothing to notice it. The inline copy is deleted; the row
+   * is always present, as it is on the template path.
+   */
+  const trainingTypeLabel = scheduleTypeLabel(scheduleType, attendanceMode);
 
   // ── Invoice display helpers ──────────────────────────────────────
   const showInvoice = requestInvoice && invoice;
@@ -115,10 +124,9 @@ export function userConfirmationEmail({
                     <p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">หลักสูตร</p>
                     <p style="margin: 0 0 16px; font-size: 16px; font-weight: 600;">${courseName}</p>
                     <p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">วันที่อบรม</p>
-                    <p style="margin: ${showMode ? '0 0 8px' : '0'}; font-size: 16px; font-weight: 600;">${classDate || 'ตามรอบที่เลือก'}</p>
-                    ${showMode ? `
-                    <p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">รูปแบบการอบรม</p>
-                    <p style="margin: 0; font-size: 14px; font-weight: 600;">${modeLabel}</p>` : ''}
+                    <p style="margin: 0 0 8px; font-size: 16px; font-weight: 600;">${classDate || 'ตามรอบที่เลือก'}</p>
+                    <p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">ประเภทการอบรม</p>
+                    <p style="margin: 0; font-size: 14px; font-weight: 600;">${trainingTypeLabel}</p>
                   </td>
                 </tr>
               </table>
@@ -173,7 +181,8 @@ export function userConfirmationEmail({
 
 เลขอ้างอิง: ${referenceNumber}
 หลักสูตร: ${courseName}
-วันที่อบรม: ${classDate || 'ตามรอบที่เลือก'}${showMode ? `\nรูปแบบการอบรม: ${modeLabel}` : ''}
+วันที่อบรม: ${classDate || 'ตามรอบที่เลือก'}
+ประเภทการอบรม: ${trainingTypeLabel}
 ${showInvoice ? `
 ข้อมูลออกใบเสนอราคา:
   ประเภท: ${invoiceTypeThai} · ${invoiceCountryLabel}

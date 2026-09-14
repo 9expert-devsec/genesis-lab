@@ -4,6 +4,7 @@ import { buildPublicRegistrationModel } from '@/lib/email/models/publicRegistrat
 import { buildPublicPaidReceiptModel } from '@/lib/email/models/publicPaidReceiptModel';
 import { buildInhouseRegistrationModel } from '@/lib/email/models/inhouseRegistrationModel';
 import { paidReceiptEmail } from '@/lib/email/templates/registration-paid';
+import { userConfirmationEmail } from '@/lib/email/templates/registration-user';
 import { contentModeLabel, HYBRID_CHOSEN_CLASSROOM, HYBRID_CHOSEN_TEAMS, scheduleTypeLabel } from '@/lib/email/models/labels';
 import { AMBIENT_PROBE, AMBIENT_TZ, withTZ, zoneProbe } from '../withTZ.mjs';
 
@@ -633,6 +634,64 @@ test('CONTROL: the receipt says the SAME sentence as the confirmation — traini
       assert.equal(paidModel({ scheduleType, attendanceMode }).training_type_label, scheduleTypeLabel(scheduleType, attendanceMode));
     }
   }
+});
+
+// ── The HTML fallbacks say the same sentence as the Postmark models ─────────
+
+/**
+ * The mode sentence, as the hard-coded fallback prints it in its text part:
+ * the line after "ประเภทการอบรม: ". Read from the TEXT body rather than the
+ * HTML so the assertion is about the words, not the markup around them.
+ */
+function fallbackSentence(text) {
+  const m = /^ประเภทการอบรม: (.*)$/m.exec(text);
+  assert.ok(m, 'the fallback prints a ประเภทการอบรม line');
+  return m[1];
+}
+
+test('the two HTML fallbacks and the two Postmark models say the SAME mode sentence for every schedule × mode', () => {
+  /**
+   * decideSendPlan sends the hard-coded HTML whenever the alias is unset OR
+   * the template send fails — silently, by design. The fallbacks used to
+   * resolve their own inline `modeLabel` (the bare Teams/Classroom word,
+   * hybrid-only), so a mistyped alias shipped the old wording with nothing to
+   * notice it. They now call the ONE shared `scheduleTypeLabel`; this pins
+   * all four surfaces to each other across the whole sweep, the way the
+   * receipt is pinned to the confirmation above.
+   */
+  for (const scheduleType of ['classroom', 'hybrid', 'online', undefined, null, 'nonsense']) {
+    for (const attendanceMode of ['classroom', 'teams', undefined, null, 'zoom']) {
+      const expected = scheduleTypeLabel(scheduleType, attendanceMode);
+      const tag = `${scheduleType}/${attendanceMode}`;
+
+      const confirmation = userConfirmationEmail({
+        referenceNumber: 'A1B2C3D4', firstName: 'พิรัศมิ์', courseName: 'Microsoft Excel Advanced',
+        classDate: '18-19 พ.ค. 2569', scheduleType, attendanceMode,
+      });
+      const receipt = paidReceiptEmail({ ...PAID_TEMPLATE_ARGS, scheduleType, attendanceMode, paidAt: PAID_DOC.payment.paidAt });
+
+      assert.equal(fallbackSentence(confirmation.text), expected, `confirmation fallback text, ${tag}`);
+      assert.equal(fallbackSentence(receipt.text), expected, `receipt fallback text, ${tag}`);
+      assert.ok(confirmation.html.includes(`ประเภทการอบรม</p>`) && confirmation.html.includes(`>${expected}</p>`), `confirmation fallback html, ${tag}`);
+      assert.ok(receipt.html.includes(`ประเภทการอบรม</p>`) && receipt.html.includes(`>${expected}</p>`), `receipt fallback html, ${tag}`);
+
+      assert.equal(regModel({ scheduleType, attendanceMode }).training_type_label, expected, `confirmation model, ${tag}`);
+      assert.equal(paidModel({ scheduleType, attendanceMode }).training_type_label, expected, `receipt model, ${tag}`);
+    }
+  }
+});
+
+test('CONTROL: the fallbacks no longer carry an inline mode copy, and the row is no longer hybrid-only', () => {
+  // A hybrid/teams registration reads the Hybrid sentence — not the bare
+  // "Online via Microsoft Teams" the inline copy produced — on both fallbacks…
+  const hybrid = userConfirmationEmail({ referenceNumber: 'X', firstName: 'x', courseName: 'c', classDate: 'd', scheduleType: 'hybrid', attendanceMode: 'teams' });
+  assert.equal(fallbackSentence(hybrid.text), HYBRID_CHOSEN_TEAMS);
+  assert.doesNotMatch(hybrid.text, /รูปแบบการอบรม/, 'the old hybrid-only row heading is gone');
+  // …and a classroom-only registration, which the inline copy left with NO
+  // mode line at all, now states its type like the template path does.
+  const classroom = paidReceiptEmail({ ...PAID_TEMPLATE_ARGS, scheduleType: 'classroom', attendanceMode: undefined, paidAt: PAID_DOC.payment.paidAt });
+  assert.equal(fallbackSentence(classroom.text), 'Classroom');
+  assert.doesNotMatch(classroom.text, /^Hybrid/m, 'no Hybrid prefix on a classroom-only round');
 });
 
 // ── In-house ────────────────────────────────────────────────────────────────
