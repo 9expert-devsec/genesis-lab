@@ -78,6 +78,24 @@ test('an assistant turn carrying `masterclasses` persists and restores the array
   assert.equal('masterclasses' in readTranscript('sess-M', (() => { const t = fakeStorage(); writeTranscript('sess-M', MSGS, t); return t; })())[1], false);
 });
 
+test('an assistant turn carrying `careerPaths` persists and restores the array byte for byte — the store needs no change', () => {
+  const items = [{
+    slug: 'data-analyst', title: 'Data Analyst', short_description: 'x', hero_image_url: null,
+    courses: [{ code: 'POWER-BI', name: 'Power BI Desktop for Business Analytics' }], course_count: 1,
+    url: 'https://www.9experttraining.com/data-analyst-career-path', price: { sale: 50150, full: 59000, discount_percent: 15 },
+  }];
+  const msgs = [MSGS[0], { ...MSGS[1], promotions: [], masterclasses: [], careerPaths: items }];
+  const s = fakeStorage();
+  writeTranscript('sess-CP', msgs, s);
+  const [, back] = readTranscript('sess-CP', s);
+  assert.deepEqual(back.careerPaths, items);
+  assert.deepEqual(back, { ...msgs[1], serverMessageId: null, rating: null }, 'every other field as stored');
+  // CONTROL: a transcript written WITHOUT the field reads back without it — the reader invents nothing.
+  const t = fakeStorage();
+  writeTranscript('sess-CP', MSGS, t);
+  assert.equal('careerPaths' in readTranscript('sess-CP', t)[1], false);
+});
+
 test('the key really is the session id, not a shared bucket', () => {
   // If it were shared, rotating the id on clear would leave the panel showing
   // the conversation it had just cleared.

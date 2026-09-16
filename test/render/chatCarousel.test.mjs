@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CourseCarousel, PromotionCarousel } from '@/components/chat/ChatCards';
 import { MasterclassCard, MasterclassCarousel } from '@/components/chat/ChatCards';
+import { CareerPathCard, CareerPathCarousel } from '@/components/chat/ChatCards';
 import { ChatPanel } from '@/components/chat/ChatPanel';
 
 // Paging controls that have nowhere to page to.
@@ -45,12 +46,36 @@ const LIVE_NOW = new Date('2026-09-16T06:00:00Z');   // 13:00 Bangkok — the DM
 const EXPIRED_NOW = new Date('2026-09-16T17:00:00Z'); // a minute after it ends
 
 const card = (item, now) => renderToStaticMarkup(createElement(MasterclassCard, { item, now }));
+
+// The live Prompt Engineer and Data Analyst paths as /api/corpus/career-path-cards serves them (2026-09-16).
+const CP_COVER = 'https://res.cloudinary.com/ddva7xvdt/image/upload/q_auto,f_auto/v1780907648/msdb/career-path/inubjgibwvuofhsboef1.jpg';
+const PROMPT_ENGINEER = {
+  slug: 'prompt-engineer', title: 'Prompt Engineer',
+  short_description: 'เขียน Prompt อย่างโปร และสื่อสารกับ AI ได้ตรงใจ สร้าง Workflow อัตโนมัติ ลดเวลาทำงานซ้ำซ้อน ยกระดับทักษะ AI ให้ทันโลก เพิ่มขีดความสามารถองค์กร',
+  hero_image_url: CP_COVER,
+  courses: [
+    { code: 'PYTHON-L1', name: 'Python Programming' }, { code: 'PYTHON-L2', name: 'Machine Learning using Python' },
+    { code: 'GEN-AI-L1', name: 'Generative AI for Business Transformation' }, { code: 'COPILOT-STU', name: 'AI Agents with Microsoft Copilot Studio' },
+    { code: 'N8N-L1', name: 'Workflow Automation with n8n' },
+  ],
+  course_count: 5,
+  url: 'https://www.9experttraining.com/prompt-engineer-career-path',
+  price: { sale: 51935, full: 61100, discount_percent: 15 },
+};
+const DATA_ANALYST = {
+  slug: 'data-analyst', title: 'Data Analyst', short_description: null, hero_image_url: null,
+  courses: [], course_count: 0, url: 'https://www.9experttraining.com/data-analyst-career-path', price: null,
+};
+const CAREER_PATHS = [PROMPT_ENGINEER, DATA_ANALYST];
+const cpCard = (item) => renderToStaticMarkup(createElement(CareerPathCard, { item }));
+const cpPriceRow = (markup) => markup.match(/<div class="mt-3" data-chat-price="">[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? '';
 const priceRow = (markup) => markup.match(/<div class="mt-3" data-chat-price="[^"]*">[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? '';
 
 test('a single card renders no paging controls', () => {
   assert.equal(chevrons(html(CourseCarousel, COURSES.slice(0, 1))), 0, 'course carousel');
   assert.equal(chevrons(html(PromotionCarousel, PROMOS.slice(0, 1))), 0, 'promotion carousel');
   assert.equal(chevrons(html(MasterclassCarousel, MASTERCLASSES.slice(0, 1))), 0, 'masterclass carousel');
+  assert.equal(chevrons(html(CareerPathCarousel, CAREER_PATHS.slice(0, 1))), 0, 'career-path carousel');
 });
 
 test('CONTROL: two cards DO render both controls', () => {
@@ -59,6 +84,7 @@ test('CONTROL: two cards DO render both controls', () => {
   assert.equal(chevrons(html(CourseCarousel, COURSES)), 2, 'course carousel');
   assert.equal(chevrons(html(PromotionCarousel, PROMOS)), 2, 'promotion carousel');
   assert.equal(chevrons(html(MasterclassCarousel, MASTERCLASSES)), 2, 'masterclass carousel');
+  assert.equal(chevrons(html(CareerPathCarousel, CAREER_PATHS)), 2, 'career-path carousel');
 });
 
 test('CONTROL: the single-card case still renders its card', () => {
@@ -74,6 +100,69 @@ test('CONTROL: the single-card case still renders its card', () => {
   const mc = html(MasterclassCarousel, MASTERCLASSES.slice(0, 1));
   assert.ok(mc.includes('AI Digital Marketing Creator Masterclass'), 'and the one masterclass is too');
   assert.equal(html(MasterclassCarousel, []), '');
+  const cp = html(CareerPathCarousel, CAREER_PATHS.slice(0, 1));
+  assert.ok(cp.includes('Prompt Engineer'), 'and the one career path is too');
+  assert.equal(html(CareerPathCarousel, []), '');
+});
+
+// ── the career-path card ────────────────────────────────────────────────────
+
+test('career-path card: cover, title, short_description under line-clamp-3, the courses line, the price row, then "ดูเส้นทาง" — top to bottom', () => {
+  const m = cpCard(PROMPT_ENGINEER);
+  assert.match(m, /<img src="https:\/\/res\.cloudinary\.com\/[^"]+\/msdb\/career-path\/inubjgibwvuofhsboef1\.jpg"[^>]*loading="lazy"/, 'the raw hero img');
+  const order = ['<img', 'Prompt Engineer', PROMPT_ENGINEER.short_description, '5 หลักสูตร: Python Programming, Machine Learning using Python, Generative AI for Business Transformation และอีก 2 หลักสูตร', '51,935 บาท', 'ดูเส้นทาง']
+    .map((s) => m.indexOf(s));
+  assert.ok(order.every((i) => i >= 0), `every piece is present: ${order}`);
+  assert.deepEqual([...order].sort((a, b) => a - b), order, 'in the specified order');
+  assert.match(m, /line-clamp-3[^"]*">เขียน Prompt/, 'the description is clamped by CSS, the whole string in the DOM');
+  assert.match(m, /<a href="https:\/\/www\.9experttraining\.com\/prompt-engineer-career-path" target="_blank" rel="noreferrer"/, 'same target/rel as the masterclass card');
+  assert.match(m, /var\(--surface\)/, 'the shared token vocabulary');
+  for (const never of ['ที่นั่ง', 'seat', 'registration', 'เงื่อนไข', 'Early Bird', 'ถึง ']) assert.ok(!m.includes(never), `never rendered: ${never}`);
+});
+
+test('career-path card: a null hero renders NO <img>; null description → no clamp block; the card itself still renders', () => {
+  const m = cpCard(DATA_ANALYST);
+  assert.ok(!/<img\b/.test(m), 'no img');
+  assert.ok(!m.includes('line-clamp-3'));
+  assert.ok(m.includes('Data Analyst') && m.includes('ดูเส้นทาง'));
+  assert.ok(m.startsWith('<div class="h-full overflow-hidden'), 'the shell opens straight onto the body');
+});
+
+test('career-path card: a null price renders no price row; 0 courses renders no courses line', () => {
+  const m = cpCard(DATA_ANALYST);
+  assert.equal(cpPriceRow(m), '');
+  assert.ok(!m.includes('data-chat-price') && !m.includes('บาท') && !m.includes('ลด '));
+  assert.ok(!m.includes('data-chat-courses') && !m.includes('หลักสูตร'), 'no courses line at 0');
+});
+
+test('career-path card: the price row — sale via formatBaht + บาท, full struck only when greater than sale, the ลด pill only when the percent is non-null', () => {
+  const full = cpPriceRow(cpCard(PROMPT_ENGINEER));
+  assert.match(full, />51,935 บาท</, 'sale, formatted');
+  assert.match(full, /line-through">61,100 บาท</, 'full, struck');
+  assert.match(full, /rounded-full bg-\[var\(--surface-muted\)\][^"]*">ลด 15%</, 'the pill reads ลด 15%');
+  // full null → no strike; full equal to or below sale → no strike either
+  for (const [label, price] of [['null full', { sale: 51935, full: null, discount_percent: 15 }], ['equal', { sale: 51935, full: 51935, discount_percent: 15 }], ['below', { sale: 51935, full: 50000, discount_percent: 15 }]]) {
+    const row = cpPriceRow(cpCard({ ...PROMPT_ENGINEER, price }));
+    assert.match(row, />51,935 บาท</, label);
+    assert.ok(!row.includes('line-through'), `${label}: no strike`);
+    assert.match(row, /ลด 15%/, `${label}: the pill is independent of the strike`);
+  }
+  // discount_percent null → no pill, strike still shown
+  const noPct = cpPriceRow(cpCard({ ...PROMPT_ENGINEER, price: { sale: 51935, full: 61100, discount_percent: null } }));
+  assert.ok(!noPct.includes('ลด '), 'no pill');
+  assert.match(noPct, /line-through">61,100 บาท</);
+  // the live inconsistent row is shown as served — 33,830 / 39,000 / ลด 15%
+  const acc = cpPriceRow(cpCard({ ...PROMPT_ENGINEER, price: { sale: 33830, full: 39000, discount_percent: 15 } }));
+  assert.match(acc, />33,830 บาท</);
+  assert.match(acc, /line-through">39,000 บาท</);
+  assert.match(acc, /ลด 15%/);
+});
+
+test('career-path card: the courses line for 3 and 6 courses matches the pure helper — names, then "และอีก n หลักสูตร"', () => {
+  const three = { ...DATA_ANALYST, courses: PROMPT_ENGINEER.courses.slice(0, 3), course_count: 3 };
+  assert.ok(cpCard(three).includes('3 หลักสูตร: Python Programming, Machine Learning using Python, Generative AI for Business Transformation<'), 'three names, no tail');
+  const six = { ...DATA_ANALYST, courses: [...PROMPT_ENGINEER.courses, { code: 'X', name: 'Sixth Course' }], course_count: 6 };
+  assert.ok(cpCard(six).includes('6 หลักสูตร: Python Programming, Machine Learning using Python, Generative AI for Business Transformation และอีก 3 หลักสูตร<'));
 });
 
 // ── the masterclass card ────────────────────────────────────────────────────
@@ -160,6 +249,28 @@ test('panel: with the field ABSENT (today) there is no masterclass markup, and t
   assert.ok(!before.includes('>Masterclass<'), 'no heading');
   assert.ok(before.includes('Generative AI'), 'the course carousel is still there');
   assert.equal(explicitEmpty, before, 'an explicit [] and an absent field render the same bytes');
+});
+
+test('panel: with `careerPaths` ABSENT (today) there is no career-path markup, and the reply renders byte-identically to before', () => {
+  const before = panel([USER, assistant({ masterclasses: MASTERCLASSES })]);
+  const explicitEmpty = panel([USER, assistant({ masterclasses: MASTERCLASSES, careerPaths: [] })]);
+  assert.ok(!before.includes('data-chat-career-paths'), 'no career-path block');
+  assert.ok(!before.includes('>Career Path<'), 'no heading');
+  assert.ok(before.includes('Generative AI') && before.includes('data-chat-masterclasses'), 'the other carousels are still there');
+  assert.equal(explicitEmpty, before, 'an explicit [] and an absent field render the same bytes');
+});
+
+test('panel: `careerPaths` renders its own carousel BEFORE the courses, in the order received; courses then masterclasses keep their order after it', () => {
+  const m = panel([USER, assistant({ careerPaths: CAREER_PATHS, masterclasses: MASTERCLASSES })]);
+  assert.ok(m.includes('data-chat-career-paths') && m.includes('>Career Path<'), 'the block and its heading');
+  const ordered = ['>Career Path<', 'Prompt Engineer', 'Data Analyst', '>คอร์สแนะนำ<', '>Generative AI<', '>Masterclass<', 'AI Digital Marketing Creator Masterclass'].map((s) => m.indexOf(s));
+  assert.ok(ordered.every((i) => i >= 0), `every piece is present: ${ordered}`);
+  assert.deepEqual([...ordered].sort((a, b) => a - b), ordered, 'career paths → courses → masterclasses, each in received order');
+  const cpBlock = m.slice(m.indexOf('data-chat-career-paths'), m.indexOf('>คอร์สแนะนำ<'));
+  assert.equal(chevrons(cpBlock), 2, 'two career-path cards page');
+  // received order is honoured, not alphabetical
+  const swapped = panel([USER, assistant({ careerPaths: [DATA_ANALYST, PROMPT_ENGINEER] })]);
+  assert.ok(swapped.indexOf('Data Analyst') < swapped.indexOf('Prompt Engineer'));
 });
 
 test('panel: a `masterclasses` array on the message renders its own carousel, after the courses, in the order received', () => {

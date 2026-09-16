@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CHAT_MARK_ALT, CHAT_MARK_SRC } from '@/lib/chat/branding';
 import { masterclassPriceView } from '@/lib/chat/masterclassCardPrice';
+import { careerPathCourseLine } from '@/lib/chat/careerPathCourseLine';
 import { formatBaht } from '@/lib/utils';
 import {
   ArrowUpRight,
   Banknote,
   BarChart2,
+  BookOpen,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -547,6 +549,85 @@ export function MasterclassCard({ item, now }) {
   );
 }
 
+/**
+ * The career-path card — the fourth card type, on its own message array
+ * (`message.careerPaths`), served through /api/chat from genesis's own
+ * /api/corpus/career-path-cards. Same shell, tokens and raw <img> as the
+ * masterclass card; the fields are the endpoint's contract by name, no
+ * fallback chains. The price is what the path's detail page prints — a
+ * stored figure with no deadline — so there is no clock and no stale-
+ * snapshot rule here. Never rendered: registrations, seats, conditions.
+ */
+export function CareerPathCard({ item }) {
+  if (!item) return null;
+
+  const title = cleanText(item.title || '');
+  const desc = cleanText(item.short_description || '');
+  const img = cleanText(item.hero_image_url || '');
+  const url = cleanText(item.url || '');
+  const courseLine = careerPathCourseLine(item);
+  const price = item.price && typeof item.price === 'object' && Number.isFinite(Number(item.price.sale)) ? item.price : null;
+  const sale = price ? Number(price.sale) : null;
+  const full = price && price.full != null && Number.isFinite(Number(price.full)) && Number(price.full) > sale ? Number(price.full) : null;
+  const pct = price && price.discount_percent != null && Number.isFinite(Number(price.discount_percent)) ? Number(price.discount_percent) : null;
+
+  return (
+    <div className={CARD_SHELL}>
+      {img ? (
+        <div className="bg-[var(--surface-muted)]">
+          <div className="aspect-[16/9] w-full">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={img} alt={title} className="h-full w-full object-cover" loading="lazy" />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="p-4">
+        <div className="text-[15px] font-semibold text-[var(--text-primary)]">{title}</div>
+        {desc ? (
+          // CSS clamp only — the full description stays in the DOM and is never cut in JS.
+          <div className="mt-1 line-clamp-3 text-sm text-[var(--text-secondary)]">{desc}</div>
+        ) : null}
+
+        {courseLine ? (
+          <div className="mt-2 flex items-start gap-1.5 text-xs text-[var(--text-secondary)]" data-chat-courses="">
+            <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{courseLine}</span>
+          </div>
+        ) : null}
+
+        {price ? (
+          <div className="mt-3" data-chat-price="">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="text-lg font-bold text-[var(--text-primary)]">{formatBaht(sale)} บาท</span>
+              {full != null ? (
+                <span className="text-sm text-[var(--text-muted)] line-through">{formatBaht(full)} บาท</span>
+              ) : null}
+              {pct != null ? <span className={`${PILL} text-xs`}>ลด {pct}%</span> : null}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-4">
+          {url ? (
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-9e-action hover:underline dark:text-9e-air"
+            >
+              ดูเส้นทาง
+              <ArrowUpRight className="h-4 w-4" />
+            </a>
+          ) : (
+            <span className="text-sm font-semibold text-[var(--text-muted)]">กรุณาติดต่อสอบถาม</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Carousels ───────────────────────────────────────────────────────────── */
 
 function Carousel({ items, keyOf, widthClass, render }) {
@@ -554,9 +635,9 @@ function Carousel({ items, keyOf, widthClass, render }) {
   if (!Array.isArray(items) || items.length === 0) return null;
 
   // One card has nothing to page to, so the chevrons would be two controls that
-  // visibly do nothing. Shared by ALL THREE carousels — the course, promotion
-  // and masterclass lists differ only in card width and key, which is why one
-  // guard fixes them all.
+  // visibly do nothing. Shared by ALL FOUR carousels — the course, promotion,
+  // masterclass and career-path lists differ only in card width and key, which
+  // is why one guard fixes them all.
   const pageable = items.length > 1;
 
   return (
@@ -611,6 +692,18 @@ export function MasterclassCarousel({ items, now }) {
       keyOf={(m, i) => m.slug || i}
       widthClass="w-[85vw] max-w-[360px] sm:w-[320px] md:w-[340px]"
       render={(m) => <MasterclassCard item={m} now={now} />}
+    />
+  );
+}
+
+/** Cards in the order received — the endpoint already orders them as /career-path-project does. */
+export function CareerPathCarousel({ items }) {
+  return (
+    <Carousel
+      items={items}
+      keyOf={(p, i) => p.slug || i}
+      widthClass="w-[85vw] max-w-[360px] sm:w-[320px] md:w-[340px]"
+      render={(p) => <CareerPathCard item={p} />}
     />
   );
 }

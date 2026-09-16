@@ -133,12 +133,42 @@ test('chatClient — driven sequentially (the fetch handler is process-global)',
         assert.equal(r.reply, 'x', label);
         assert.equal(r.serverMessageId, UUID, label);
         assert.deepEqual(r.courses, [{ title: 'c' }], `${label}: the course pick is untouched`);
-        assert.deepEqual(Object.keys(r), ['raw', 'reply', 'quickReplies', 'courses', 'promotions', 'masterclasses', 'serverMessageId'], label);
+        assert.deepEqual(Object.keys(r), ['raw', 'reply', 'quickReplies', 'courses', 'promotions', 'masterclasses', 'careerPaths', 'serverMessageId'], label);
       });
     }
     // NO fallback chain: a masterclass list under a course-style alias is not guessed at.
     await withChat({ response: 'x', cards: { masterclasses: [{ slug: 'x' }] }, ui: { masterclasses: [{ slug: 'y' }] } }, async () => {
       assert.deepEqual((await sendChat(ARGS)).masterclasses, [], 'one name, by contract');
+    });
+  });
+
+  await t.test('a top-level `career_paths` array is picked as careerPaths as-is, order kept; absent / null / non-array → [] and nothing else changes', async () => {
+    const items = [
+      { slug: 'data-analyst', title: 'Data Analyst', short_description: null, hero_image_url: null, courses: [{ code: 'POWER-BI', name: 'Power BI Desktop for Business Analytics' }], course_count: 1, url: 'https://www.9experttraining.com/data-analyst-career-path', price: { sale: 50150, full: 59000, discount_percent: 15 } },
+      { slug: 'prompt-engineer', title: 'Prompt Engineer', courses: [], course_count: 0, url: 'https://www.9experttraining.com/prompt-engineer-career-path', price: null },
+    ];
+    await withChat({ response: 'x', message_id: UUID, career_paths: items }, async () => {
+      const r = await sendChat(ARGS);
+      assert.deepEqual(r.careerPaths, items, 'the array, untouched');
+      assert.deepEqual(r.careerPaths.map((p) => p.slug), ['data-analyst', 'prompt-engineer'], 'in the order received');
+      assert.deepEqual(r.courses, [], 'no leak into the course pick');
+      assert.deepEqual(r.masterclasses, [], 'nor the masterclass pick');
+    });
+    for (const [label, body] of [
+      ['absent', { response: 'x', message_id: UUID, courses: [{ title: 'c' }] }],
+      ['null', { response: 'x', message_id: UUID, courses: [{ title: 'c' }], career_paths: null }],
+      ['an object', { response: 'x', message_id: UUID, courses: [{ title: 'c' }], career_paths: { slug: 'x' } }],
+    ]) {
+      await withChat(body, async () => {
+        const r = await sendChat(ARGS);
+        assert.deepEqual(r.careerPaths, [], label);
+        assert.deepEqual(r.courses, [{ title: 'c' }], `${label}: the course pick is untouched`);
+        assert.deepEqual(Object.keys(r), ['raw', 'reply', 'quickReplies', 'courses', 'promotions', 'masterclasses', 'careerPaths', 'serverMessageId'], label);
+      });
+    }
+    // ONE name, by contract: a camelCase or nested spelling is not guessed at.
+    await withChat({ response: 'x', careerPaths: [{ slug: 'x' }], cards: { career_paths: [{ slug: 'y' }] } }, async () => {
+      assert.deepEqual((await sendChat(ARGS)).careerPaths, []);
     });
   });
 

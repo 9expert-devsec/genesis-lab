@@ -118,6 +118,12 @@ function normalizeMasterclasses(d) {
   return Array.isArray(raw) ? raw : [];
 }
 
+/** The career-path cards — the same one-name rule as masterclasses, served from /api/corpus/career-path-cards. Absent → []. */
+function normalizeCareerPaths(d) {
+  const raw = d?.career_paths ?? [];
+  return Array.isArray(raw) ? raw : [];
+}
+
 /**
  * The error the panel renders.
  *
@@ -162,6 +168,7 @@ export async function sendChat({ sessionId, message, history }) {
     courses: normalizeCourses(d),
     promotions: normalizePromotions(d),
     masterclasses: normalizeMasterclasses(d),
+    careerPaths: normalizeCareerPaths(d),
     // The backend's id for the assistant row it stored — a UUID string, or
     // null when it stored none. Read from `raw` (the proxy relays the upstream
     // body verbatim, so this is the top-level `message_id` the backend

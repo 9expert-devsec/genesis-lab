@@ -11,6 +11,7 @@ import {
   messageOverflow,
 } from '@/lib/chat/limits';
 import {
+  CareerPathCarousel,
   ChatAvatar,
   CourseCarousel,
   MasterclassCarousel,
@@ -410,6 +411,9 @@ function AssistantBubble({ message, rating, onRate }) {
   const promotions = sortPromotions(message.promotions);
   // Absent on every reply today; a third array when the backend sends one.
   const masterclasses = Array.isArray(message.masterclasses) ? message.masterclasses : [];
+  // Likewise absent today; rendered BEFORE the courses, because a reply about
+  // one path carries that path's card and then its courses as course cards.
+  const careerPaths = Array.isArray(message.careerPaths) ? message.careerPaths : [];
 
   return (
     <div className="flex items-start gap-2">
@@ -441,6 +445,13 @@ function AssistantBubble({ message, rating, onRate }) {
             <div className="mt-3">
               <div className="text-xs font-semibold text-[var(--text-muted)]">โปรโมชัน</div>
               <PromotionCarousel items={promotions} />
+            </div>
+          ) : null}
+
+          {careerPaths.length > 0 ? (
+            <div className="mt-3" data-chat-career-paths="">
+              <div className="text-xs font-semibold text-[var(--text-muted)]">Career Path</div>
+              <CareerPathCarousel items={careerPaths} />
             </div>
           ) : null}
 

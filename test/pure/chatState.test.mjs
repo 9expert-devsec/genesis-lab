@@ -162,7 +162,23 @@ test('the reply action carries serverMessageId onto the message, and a fresh rep
   assert.equal(m.serverMessageId, UUID);
   assert.equal(m.rating, null, 'a new reply starts unrated — null, never undefined');
   assert.equal(m.id, 'a1', 'the LOCAL id is untouched — it stays the React key and the transcript key');
-  assert.deepEqual(Object.keys(m), ['id', 'role', 'text', 'createdAt', 'quickReplies', 'courses', 'promotions', 'masterclasses', 'serverMessageId', 'rating']);
+  assert.deepEqual(Object.keys(m), ['id', 'role', 'text', 'createdAt', 'quickReplies', 'courses', 'promotions', 'masterclasses', 'careerPaths', 'serverMessageId', 'rating']);
+});
+
+test('the reply action copies `careerPaths` onto the message exactly as the other card arrays are; absent or non-array → []', () => {
+  const items = [{ slug: 'data-analyst', title: 'Data Analyst', courses: [], course_count: 0, price: null }, { slug: 'prompt-engineer', title: 'Prompt Engineer' }];
+  const m = withReply(UUID, { careerPaths: items }).messages[1];
+  assert.deepEqual(m.careerPaths, items, 'the array, elements untouched, order kept');
+  assert.deepEqual(m.courses, [], 'the other arrays are unaffected');
+  assert.deepEqual(m.masterclasses, []);
+  const absent = chatReducer(
+    { ...initialChatState, sessionId: 's', messages: [] },
+    { type: 'ASSISTANT', id: 'a1', createdAt: 2, text: 'ans', quickReplies: [], courses: [], promotions: [], serverMessageId: UUID },
+  ).messages[0];
+  assert.deepEqual(absent.careerPaths, [], 'absent reads as an empty list — never undefined');
+  for (const bad of [null, 'x', 42, { slug: 'x' }]) {
+    assert.deepEqual(withReply(UUID, { careerPaths: bad }).messages[1].careerPaths, [], `careerPaths ${JSON.stringify(bad)}`);
+  }
 });
 
 test('the reply action copies `masterclasses` onto the message exactly as courses and promotions are; absent or non-array → []', () => {
