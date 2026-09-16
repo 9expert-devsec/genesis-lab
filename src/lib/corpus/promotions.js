@@ -154,6 +154,10 @@ export function masterclassItems({ batches = [], courses = [] } = {}, now) {
       ],
       bundle:      null,
       description: text(c.subtitle_th),
+      // The course's cover, raw — the same URL the /masterclass listing card
+      // renders (docs/masterclass-chat-card-phase-a.md §A2). Masterclass items
+      // only: a builder page and an early_bird_config row store no image.
+      image_url:   text(c.cover_image_url),
     });
   }
   return items;
@@ -312,7 +316,7 @@ async function readMasterclassRows() {
       .select('course_id batch_no batch_label dates venue_name price_normal price_early_bird early_bird_deadline early_bird_active status createdAt')
       .lean(),
     MasterclassCourse.find({ is_published: true })
-      .select('slug course_code title_th subtitle_th time_start time_end is_published')
+      .select('slug course_code title_th subtitle_th cover_image_url time_start time_end is_published')
       .lean(),
   ]);
   return { batches, courses };

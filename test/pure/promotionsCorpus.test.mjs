@@ -183,6 +183,24 @@ test('masterclass gates: draft batch, unpublished course, and a deadline past th
     'liveness is judged against the injected now, not the wall clock');
 });
 
+test('a masterclass item carries image_url = the course cover_image_url, raw; null when the course has none; no other kind gains an image key', () => {
+  const cover = 'https://res.cloudinary.com/ddva7xvdt/image/upload/v1783333443/9exp-genesis/masterclass/wgnrofx9womyejd0crx9.webp';
+  const withCover = COURSES.map((c) => (c._id === 'c-dmc' ? { ...c, cover_image_url: cover } : c));
+  const [item] = masterclassItems({ batches: [DMC_BATCH_1], courses: withCover }, NOW);
+  assert.equal(item.image_url, cover, 'the same URL the /masterclass listing card renders — no transform');
+  assert.equal(Object.keys(item).at(-1), 'image_url', 'appended after description, nothing renamed');
+  // absent, '' and whitespace are all null — ONE spelling of "no image"
+  for (const v of [undefined, '', '  ']) {
+    const [bare] = masterclassItems({ batches: [DMC_BATCH_1], courses: COURSES.map((c) => ({ ...c, cover_image_url: v })) }, NOW);
+    assert.equal(bare.image_url, null, `cover ${JSON.stringify(v)}`);
+  }
+  // CONTROL: the other two sources are untouched — no image key of any name
+  const [page] = builderPageItems([livePage()], NOW);
+  assert.equal('image_url' in page, false);
+  const [eb] = earlyBirdConfigItems([{ _id: 'eb-x', course_id: 'X', special_price: 1, deadline: FUTURE }], { pages: [], now: NOW });
+  assert.equal('image_url' in eb, false);
+});
+
 // ── builder pages ───────────────────────────────────────────────────────────
 
 function livePage(over = {}) {
