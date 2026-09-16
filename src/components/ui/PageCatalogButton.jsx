@@ -11,7 +11,7 @@ import { CATALOG_DOWNLOAD_LABEL, hasCatalog } from '@/lib/pageCatalog';
  * file, and that predicate is the same function the tests call.
  *
  * ── THE TREATMENT IS THE SITE'S PDF BUTTON ──────────────────────────────────
- * HeroPdfButton (its `catalog` variant) is what /training-course's catalog button and
+ * HeroPdfButton is what /training-course's catalog button and
  * /schedule's PDF already are. Both heroes here are gradient surfaces and
  * both pages' own copy is Thai, so the label follows theirs.
  *
@@ -26,7 +26,7 @@ import { CATALOG_DOWNLOAD_LABEL, hasCatalog } from '@/lib/pageCatalog';
 export function PageCatalogButton({ config, className }) {
   if (!hasCatalog(config)) return null;
   return (
-    <HeroPdfButton href={config.catalogPdf.path} className={className} variant="catalog">
+    <HeroPdfButton href={config.catalogPdf.path} className={className}>
       {CATALOG_DOWNLOAD_LABEL}
     </HeroPdfButton>
   );

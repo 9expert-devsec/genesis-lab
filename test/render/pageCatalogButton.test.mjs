@@ -118,9 +118,9 @@ test('skill page: WITHOUT a file, NOTHING renders', () => {
 
 // ── The shared piece and its treatment ──────────────────────────────────────
 
-test('the button IS the site\'s HeroPdfButton in its catalog variant — same anchor classes as /training-course\'s catalog button', () => {
+test('the button IS the site\'s HeroPdfButton — same anchor classes as /training-course\'s catalog button', () => {
   const ours = dom(renderToStaticMarkup(createElement(PageCatalogButton, { config: WITH_FILE }))).querySelector('a');
-  const theirs = dom(renderToStaticMarkup(createElement(HeroPdfButton, { href: '/x.pdf', variant: 'catalog' }, CATALOG_DOWNLOAD_LABEL))).querySelector('a');
+  const theirs = dom(renderToStaticMarkup(createElement(HeroPdfButton, { href: '/x.pdf' }, CATALOG_DOWNLOAD_LABEL))).querySelector('a');
   assert.ok(ours && theirs);
   assert.equal(ours.getAttribute('class'), theirs.getAttribute('class'));
   assert.equal(ours.innerHTML, theirs.innerHTML.replace('/x.pdf', WITH_FILE.catalogPdf.path), 'same glyph row, same label');

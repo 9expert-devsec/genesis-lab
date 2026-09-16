@@ -46,16 +46,19 @@ const html = (el) => renderToStaticMarkup(el);
 // the SAME component and these tests pin that — plus the deletions, which are
 // otherwise invisible to any existing test (there were none on that section).
 
-test('the DEFAULT button renders as a new-tab anchor with both glyphs — /schedule is unchanged', () => {
-  // The default keeps the document + download pair: /schedule's
-  // ดาวน์โหลดตารางการฝึกอบรม renders this element and was not part of the
-  // catalog-button round that added the `catalog` variant.
+test('the button renders as a new-tab anchor with ONE glyph, before the label — the same row for every caller', () => {
+  // Was "both glyphs — /schedule is unchanged": the document + download pair
+  // was kept as the default for /schedule while the catalog buttons opted into
+  // a single leading glyph. /schedule has followed, the pair has no caller,
+  // and the `variant` prop is gone with it.
   const out = html(React.createElement(HeroPdfButton, { href: '/x.pdf' }, 'ดาวน์โหลด'));
   assert.match(out, /<a[^>]+href="\/x\.pdf"/);
   assert.match(out, /target="_blank"/);
   assert.match(out, /rel="noopener noreferrer"/);
-  assert.equal((out.match(/<svg/g) ?? []).length, 2, 'expected a leading and a trailing glyph');
-  assert.match(read(SCHEDULE), /<HeroPdfButton href=\{schedulePDF\.url\}>/, '/schedule must not opt into the catalog variant');
+  assert.equal((out.match(/<svg/g) ?? []).length, 1, 'exactly one glyph');
+  assert.ok(out.indexOf('<svg') < out.indexOf('ดาวน์โหลด'), 'and it leads');
+  assert.match(read(SCHEDULE), /<HeroPdfButton href=\{schedulePDF\.url\}>/, '/schedule renders the shared element with no variant');
+  assert.doesNotMatch(read('src/components/ui/HeroPdfButton.jsx').replace(/\/\*[\s\S]*?\*\//g, ''), /variant|FileText/, 'no dead layout, no dead prop');
 });
 
 test('NO download attribute — the response headers decide, not the anchor', () => {

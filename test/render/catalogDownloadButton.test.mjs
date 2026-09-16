@@ -9,12 +9,18 @@ import { HeroSearch } from '@/app/(public)/training-course/_components/HeroSearc
 import { ProgramPageClient } from '@/app/(public)/program/[slug]/_components/ProgramPageClient';
 import { SkillPageClient } from '@/app/(public)/skill/[slug]/_components/SkillPageClient';
 import { CATALOG_DOWNLOAD_LABEL } from '@/lib/pageCatalog';
+import { ScheduleBoard } from '@/app/(public)/schedule/_components/ScheduleClient';
+import { PUBLIC_SCHEDULE_FILTER_HORIZON, rollingWindow } from '@/lib/schedule/monthWindow';
+import { defaultScheduleFilters } from '@/lib/schedule/scheduleFilters';
+import { siteDateParts } from '@/lib/articlePublishTime';
 
 /**
- * The catalog download button, on its three surfaces, after the unification:
- * label "ดาวน์โหลด Catalog", ONE glyph (the download one) BEFORE the label,
- * the document glyph gone. All three render HeroPdfButton's `catalog` variant,
- * so this is one component asserted at each place it appears.
+ * The hero PDF button, on its FOUR surfaces: the three catalog buttons
+ * (label "ดาวน์โหลด Catalog") and /schedule's timetable download (label
+ * "ดาวน์โหลดตารางการฝึกอบรม"). ONE glyph (the download one) BEFORE the label,
+ * the document glyph gone. All four render HeroPdfButton — there is no
+ * variant any more — so this is one component asserted at each place it
+ * appears, with each surface's own label.
  *
  * renderToStaticMarkup + JSDOM; never a client root.
  */
@@ -33,16 +39,16 @@ const WITH_FILE = { programId: 'POWER-BI', catalogPdf: { path: '/files/catalog/p
 const catalogAnchor = (doc) =>
   [...doc.querySelectorAll('a')].find((a) => a.textContent.trim() === NEW_LABEL) ?? null;
 
-function assertCatalogButton(a, where) {
-  assert.ok(a, `${where}: no anchor reads "${NEW_LABEL}"`);
-  assert.equal(a.textContent.trim(), NEW_LABEL, `${where}: label`);
+function assertCatalogButton(a, where, label = NEW_LABEL) {
+  assert.ok(a, `${where}: no anchor reads "${label}"`);
+  assert.equal(a.textContent.trim(), label, `${where}: label`);
 
   const svgs = a.querySelectorAll('svg');
   assert.equal(svgs.length, 1, `${where}: expected exactly one <svg>, saw ${svgs.length}`);
 
   // Markup order: the <svg> opens before the label text.
   const markup = a.innerHTML;
-  assert.ok(markup.indexOf('<svg') < markup.indexOf(NEW_LABEL), `${where}: the icon must precede the label`);
+  assert.ok(markup.indexOf('<svg') < markup.indexOf(label), `${where}: the icon must precede the label`);
   assert.equal(a.firstElementChild.tagName.toLowerCase(), 'svg', `${where}: the icon is not the first child`);
   assert.equal(a.lastChild.nodeType, 3, `${where}: the label text is not the last node — a trailing glyph is back`);
   assert.equal(svgs[0].getAttribute('aria-hidden'), 'true', `${where}: the glyph is decorative`);
@@ -52,8 +58,8 @@ function assertCatalogButton(a, where) {
   }
 }
 
-test('HeroPdfButton variant="catalog": one leading download glyph, the label, nothing after it', () => {
-  const a = dom(renderToStaticMarkup(createElement(HeroPdfButton, { href: '/x.pdf', variant: 'catalog' }, CATALOG_DOWNLOAD_LABEL))).querySelector('a');
+test('HeroPdfButton: one leading download glyph, the label, nothing after it', () => {
+  const a = dom(renderToStaticMarkup(createElement(HeroPdfButton, { href: '/x.pdf' }, CATALOG_DOWNLOAD_LABEL))).querySelector('a');
   assertCatalogButton(a, 'HeroPdfButton');
   // It is the lucide Download glyph, the same component the button already
   // used for its trailing icon: the arrow-into-tray path is the tell.
@@ -83,8 +89,32 @@ test('skill page: the unified button, when a catalog exists', () => {
   for (const old of OLD_LABELS) assert.equal(doc.body.textContent.includes(old), false, `old label "${old}" on the page`);
 });
 
-test('CONTROL: the default variant is untouched — two glyphs, document first — so /schedule did not move', () => {
-  const a = dom(renderToStaticMarkup(createElement(HeroPdfButton, { href: '/x.pdf' }, 'ดาวน์โหลดตารางการฝึกอบรม'))).querySelector('a');
-  assert.equal(a.querySelectorAll('svg').length, 2);
-  assert.equal(a.lastElementChild.tagName.toLowerCase(), 'svg', 'the trailing download glyph stays on the default');
+test('/schedule: the timetable download renders the same row — label unchanged, one <svg>, before the label', () => {
+  // Was the CONTROL "the default variant is untouched — two glyphs, document
+  // first — so /schedule did not move". /schedule has now moved, the pair
+  // has no caller, and this asserts /schedule the way the other three
+  // surfaces are asserted above. Rendered through ScheduleBoard, the same
+  // component test/render/scheduleFilterSheet drives, with an empty board:
+  // the hero and its PDF link do not depend on rows.
+  const now = new Date();
+  const defaults = defaultScheduleFilters(now);
+  const html = renderToStaticMarkup(createElement(ScheduleBoard, {
+    courses: [], programs: [], schedulePDF: { url: 'https://example.com/schedule.pdf' }, earlyBirdMap: {},
+    filters: defaults, defaults, currentYear: siteDateParts(now).year,
+    monthOptions: rollingWindow(now, PUBLIC_SCHEDULE_FILTER_HORIZON),
+    onFilterChange() {}, onReset() {}, sheetOpen: false, onSheetOpenChange() {},
+  }));
+  const doc = dom(html);
+  const a = doc.querySelector('a[href="https://example.com/schedule.pdf"]');
+  assertCatalogButton(a, '/schedule', 'ดาวน์โหลดตารางการฝึกอบรม');
+  assert.match(a.querySelector('svg').innerHTML, /polyline points="7 10 12 15 17 10"/, 'the same lucide Download glyph as the catalog buttons');
+  assert.equal(doc.body.textContent.includes(NEW_LABEL), false, 'the catalog label does not leak onto /schedule');
+});
+
+test('no caller opts into a variant, and the component offers none', () => {
+  // The two-glyph layout was deleted with its last caller. If a `variant`
+  // prop comes back, so does the drift this file exists to catch.
+  const el = renderToStaticMarkup(createElement(HeroPdfButton, { href: '/x.pdf', variant: 'catalog' }, 'x'));
+  const plain = renderToStaticMarkup(createElement(HeroPdfButton, { href: '/x.pdf' }, 'x'));
+  assert.equal(el, plain, 'an unknown prop changes nothing — there is no variant to select');
 });

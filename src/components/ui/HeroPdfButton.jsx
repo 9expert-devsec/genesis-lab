@@ -1,4 +1,4 @@
-import { Download, FileText } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
@@ -13,11 +13,10 @@ import { cn } from '@/lib/utils';
  * adjusts one of them. Copied classes agree on the day they are copied; a
  * shared component agrees permanently.
  *
- * It is deliberately NOT a general button. It hardcodes the glyph row (the
- * default pair, or the catalog variant's single leading glyph — see below),
- * the white-on-blue palette and `mt-6`, because those are what "the hero PDF
- * button" means here. A caller that wants something else wants a different
- * component.
+ * It is deliberately NOT a general button. It hardcodes the single leading
+ * download glyph, the white-on-blue palette and `mt-6`, because those are
+ * what "the hero PDF button" means here. A caller that wants something else
+ * wants a different component.
  *
  * ── THE TWO CALLERS DIFFER IN MECHANISM, NOT IN TREATMENT ───────────────────
  * /schedule's href is CMS-managed (Mongo `schedule_pdf`, admin at
@@ -32,17 +31,21 @@ import { cn } from '@/lib/utils';
  * Content-Disposition the file may legitimately answer with, and would do it
  * for every caller at once.
  *
- * ── `variant="catalog"`: ONE glyph, the download one, BEFORE the label ──────
- * The three catalog buttons (/training-course, the program page, the skill
- * page) were asked to read "[download] ดาวน์โหลด Catalog" — one icon, leading,
- * the document glyph gone. They all render THIS element, so the change is
- * made here once and opted into by name, rather than the icon row being
- * re-spelled at three call sites. The default keeps the document + download
- * pair because /schedule's ดาวน์โหลดตารางการฝึกอบรม also renders this element
- * and was not part of that ask; it is unchanged.
+ * ── ONE GLYPH, THE DOWNLOAD ONE, BEFORE THE LABEL ───────────────────────────
+ * It used to render a document glyph before the label and the download glyph
+ * after it. The three catalog buttons (/training-course, the program page,
+ * the skill page) were asked for "[download] ดาวน์โหลด Catalog" first and got
+ * it as an opt-in `variant="catalog"`, with /schedule's
+ * ดาวน์โหลดตารางการฝึกอบรม left on the old pair because it was outside that
+ * ask. /schedule has since been brought in line, which left the pair with no
+ * caller — so the pair and the `variant` prop are gone rather than kept as
+ * dead code. Every caller renders the same row; the label is still each
+ * caller's own children.
+ *
+ * The glyph is aria-hidden: the label already says what the link does, and
+ * announcing "download" twice reads the same word twice.
  */
-export function HeroPdfButton({ href, children, className, variant = 'default' }) {
-  const catalog = variant === 'catalog';
+export function HeroPdfButton({ href, children, className }) {
   return (
     <a
       href={href}
@@ -54,13 +57,8 @@ export function HeroPdfButton({ href, children, className, variant = 'default' }
         className,
       )}
     >
-      {catalog ? (
-        <Download className="h-4 w-4 flex-none" aria-hidden="true" />
-      ) : (
-        <FileText className="h-4 w-4 flex-none" />
-      )}
+      <Download className="h-4 w-4 flex-none" aria-hidden="true" />
       {children}
-      {catalog ? null : <Download className="h-4 w-4 flex-none" />}
     </a>
   );
 }
