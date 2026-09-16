@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Download } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -169,12 +170,23 @@ function DownloadPair({ shape, variant }) {
           NO `download` attribute on either link. The delivery layer already
           sends the originals under /files/ci/ and /files/ci-svg/ as
           attachments, so the attribute would be a second, weaker copy of that
-          ruling sitting in a place nothing checks. */}
+          ruling sitting in a place nothing checks.
+
+          The leading glyph is the same `Download` the wallpaper button below
+          uses — 16px, aria-hidden (the label already says what the link
+          does), and it inherits currentColor so it reads white on the filled
+          SVG button and brand-blue on the outlined PNG one. */}
       <Button asChild variant="primary" size="md" radius="md" className="flex-1 px-4 sm:flex-none">
-        <a href={svgHref(shape.key, variant.key)}>SVG</a>
+        <a href={svgHref(shape.key, variant.key)}>
+          <Download className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden="true" />
+          SVG
+        </a>
       </Button>
       <Button asChild variant="outline" size="md" radius="md" className="flex-1 px-4 sm:flex-none">
-        <a href={pngHref(shape.key, variant.key)}>PNG</a>
+        <a href={pngHref(shape.key, variant.key)}>
+          <Download className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden="true" />
+          PNG
+        </a>
       </Button>
     </div>
   );
