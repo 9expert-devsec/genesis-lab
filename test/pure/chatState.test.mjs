@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { chatReducer, initialChatState, toHistory } from '@/lib/chat/chatState';
+import {
+  chatReducer,
+  initialChatState,
+  normalizeRating,
+  normalizeServerMessageId,
+  toHistory,
+} from '@/lib/chat/chatState';
 import {
   MAX_HISTORY_TURNS,
   MAX_MESSAGE_CHARS,
@@ -139,4 +145,80 @@ test('the route and the composer share ONE cap, not two copies', () => {
     !/const\s+MAX_HISTORY_TURNS\s*=/.test(route),
     'nor its own history cap',
   );
+});
+
+// ── serverMessageId and rating — the backend's id and the thumb, ON the message ──
+
+const UUID = '3f2a9c1e-7b4d-4e8a-9c21-0d5e6f7a8b9c';
+
+const withReply = (serverMessageId, extra = {}) =>
+  chatReducer(
+    { ...initialChatState, sessionId: 's', messages: [{ id: 'u1', role: 'user', text: 'q', createdAt: 1 }] },
+    { type: 'ASSISTANT', id: 'a1', createdAt: 2, text: 'ans', quickReplies: [], courses: [], promotions: [], serverMessageId, ...extra },
+  );
+
+test('the reply action carries serverMessageId onto the message, and a fresh reply is unrated', () => {
+  const m = withReply(UUID).messages[1];
+  assert.equal(m.serverMessageId, UUID);
+  assert.equal(m.rating, null, 'a new reply starts unrated — null, never undefined');
+  assert.equal(m.id, 'a1', 'the LOCAL id is untouched — it stays the React key and the transcript key');
+  assert.deepEqual(Object.keys(m), ['id', 'role', 'text', 'createdAt', 'quickReplies', 'courses', 'promotions', 'serverMessageId', 'rating']);
+});
+
+test('the reply action normalises a bad serverMessageId to null rather than storing it', () => {
+  for (const bad of [undefined, null, 42, '', '   ', {}, 'x'.repeat(101)]) {
+    assert.equal(withReply(bad).messages[1].serverMessageId, null, `serverMessageId ${JSON.stringify(bad)} must read as null`);
+  }
+  assert.equal(withReply('x'.repeat(100)).messages[1].serverMessageId, 'x'.repeat(100), 'exactly 100 chars is accepted — the proxy cap');
+  assert.equal(withReply('  ' + UUID + ' ').messages[1].serverMessageId, UUID, 'trimmed');
+});
+
+test('the rate action sets rating on the named assistant message, optimistically', () => {
+  const s1 = withReply(UUID);
+  const s2 = chatReducer(s1, { type: 'RATE', id: 'a1', rating: 'up' });
+  assert.equal(s2.messages[1].rating, 'up');
+  assert.equal(s2.messages[1].serverMessageId, UUID, 'nothing else on the message changes');
+  assert.equal(s2.messages[0], s1.messages[0], 'the other messages are the same objects');
+  assert.equal(s1.messages[1].rating, null, 'the previous state is not mutated');
+});
+
+test('rating the other thumb REPLACES the rating — there is no clear, only up or down', () => {
+  const up = chatReducer(withReply(UUID), { type: 'RATE', id: 'a1', rating: 'up' });
+  const down = chatReducer(up, { type: 'RATE', id: 'a1', rating: 'down' });
+  assert.equal(down.messages[1].rating, 'down');
+  const back = chatReducer(down, { type: 'RATE', id: 'a1', rating: 'up' });
+  assert.equal(back.messages[1].rating, 'up');
+  // No value clears it: a nonsense rating is ignored and the state object is returned unchanged.
+  for (const bad of [null, undefined, '', 'clear', 'UP', 1]) {
+    assert.equal(chatReducer(back, { type: 'RATE', id: 'a1', rating: bad }), back, `rating ${JSON.stringify(bad)} must be a no-op`);
+  }
+});
+
+test('re-rating the SAME thumb leaves state identical — the same object, so nothing re-renders or re-sends', () => {
+  const up = chatReducer(withReply(UUID), { type: 'RATE', id: 'a1', rating: 'up' });
+  const again = chatReducer(up, { type: 'RATE', id: 'a1', rating: 'up' });
+  assert.equal(again, up, 'strict same reference');
+});
+
+test('the rate action on an unknown id, or on a USER message, is a no-op', () => {
+  const s = withReply(UUID);
+  assert.equal(chatReducer(s, { type: 'RATE', id: 'nope', rating: 'up' }), s);
+  assert.equal(chatReducer(s, { type: 'RATE', id: 'u1', rating: 'up' }), s, 'a user turn cannot be rated');
+  assert.equal(chatReducer(s, { type: 'RATE', rating: 'up' }), s, 'no id at all');
+});
+
+test('the two normalisers are the single source the reducer and the transcript reader share', () => {
+  assert.equal(normalizeRating('up'), 'up');
+  assert.equal(normalizeRating('down'), 'down');
+  for (const bad of ['meh', 'UP', '', null, undefined, 0, {}]) assert.equal(normalizeRating(bad), null);
+  assert.equal(normalizeServerMessageId(UUID), UUID);
+  for (const bad of [null, undefined, 42, '', 'x'.repeat(101), { id: UUID }]) assert.equal(normalizeServerMessageId(bad), null);
+  // The transcript reader imports them rather than re-spelling the rule.
+  const store = src('src/lib/chat/transcriptStore.js');
+  assert.match(store, /import \{ normalizeRating, normalizeServerMessageId \} from '@\/lib\/chat\/chatState'/);
+});
+
+test('RESET drops rated messages with everything else — a new conversation starts unrated', () => {
+  const up = chatReducer(withReply(UUID), { type: 'RATE', id: 'a1', rating: 'up' });
+  assert.deepEqual(chatReducer(up, { type: 'RESET', sessionId: 'new' }).messages, []);
 });

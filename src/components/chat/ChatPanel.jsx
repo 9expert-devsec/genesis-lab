@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Maximize2, Minimize2, Send as SendIcon, ThumbsDown, ThumbsUp, X } from 'lucide-react';
-import { sendChatFeedback } from '@/lib/chat/chatClient';
 import { AssistantText } from '@/components/chat/AssistantText';
 import { CHAT_MARK_SRC } from '@/lib/chat/branding';
 import {
@@ -46,7 +45,6 @@ import {
 export function ChatPanel({ onClose, store }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [input, setInput] = useState('');
-  const [rated, setRated] = useState({});
   const listRef = useRef(null);
 
   // THE STORE IS A PROP, NOT A HOOK CALL HERE, AND THAT IS THE WHOLE POINT.
@@ -60,7 +58,7 @@ export function ChatPanel({ onClose, store }) {
   //
   // The store now lives in ChatLauncher, which stays mounted for the page's
   // lifetime. Closing is HIDING. Nothing is lost, so nothing needs confirming.
-  const { init, send, reset, messages, isLoading, error, errorCode, lastAssistant, sessionId } =
+  const { init, send, reset, rate, messages, isLoading, error, errorCode, lastAssistant } =
     store;
 
   // Not a fault: the service was never configured, so there is nothing to retry
@@ -131,32 +129,12 @@ export function ChatPanel({ onClose, store }) {
     [isLoading, send],
   );
 
-  const onRate = useCallback(
-    async (msgId, value) => {
-      if (!msgId || rated[msgId]) return;
-      setRated((prev) => ({ ...prev, [msgId]: value }));
-
-      const idx = messages.findIndex((m) => m.id === msgId);
-      let userText = '';
-      for (let i = idx - 1; i >= 0; i -= 1) {
-        if (messages[i]?.role === 'user') {
-          userText = messages[i]?.text || '';
-          break;
-        }
-      }
-
-      await sendChatFeedback({
-        rating: value,
-        messageId: msgId,
-        sessionId,
-        userText,
-        assistantText: messages[idx]?.text || '',
-        pageUrl: typeof window !== 'undefined' ? window.location.href : '',
-        createdAt: Date.now(),
-      });
-    },
-    [messages, rated, sessionId],
-  );
+  // The rating LIVES IN THE STORE, on the message, not in a useState map here.
+  // A map keyed by local id died with this component (the panel is unmounted on
+  // close) and was never persisted, so a thumb the user pressed was gone on
+  // the next open and pressable again. The store's rate() is optimistic,
+  // idempotent and fire-and-forget — see useChatStore.
+  const onRate = useCallback((msgId, value) => rate?.(msgId, value), [rate]);
 
   const windowClass = isFullscreen
     ? 'left-1/2 top-1/2 h-screen w-screen -translate-x-1/2 -translate-y-1/2 sm:h-[92vh] sm:max-h-[900px] sm:w-[92vw] sm:max-w-[1200px]'
@@ -246,7 +224,7 @@ export function ChatPanel({ onClose, store }) {
                     <AssistantBubble
                       key={m.id}
                       message={m}
-                      rating={rated[m.id]}
+                      rating={m.rating ?? null}
                       onRate={onRate}
                     />
                   ),
@@ -470,26 +448,39 @@ function AssistantBubble({ message, rating, onRate }) {
             </div>
           ) : null}
 
-          <div className="mt-4 flex items-center gap-2">
-            <RateButton
-              active={rating === 'up'}
-              disabled={!!rating}
-              onClick={() => onRate(message.id, 'up')}
-              label="ดี"
-              title="มีประโยชน์"
-              activeClass="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300"
-              Icon={ThumbsUp}
-            />
-            <RateButton
-              active={rating === 'down'}
-              disabled={!!rating}
-              onClick={() => onRate(message.id, 'down')}
-              label="ปรับปรุง"
-              title="ต้องปรับปรุง"
-              activeClass="border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300"
-              Icon={ThumbsDown}
-            />
-          </div>
+          {/* THUMBS ONLY WHEN THE BACKEND STORED THE ROW. `serverMessageId` is
+              the backend's own id for this answer; a rating is filed against
+              it, so a message without one (the apology bubble, a reply from
+              before the backend issued ids, a transcript restored from before
+              this field existed) has nothing to rate and shows no thumbs.
+
+              The selected thumb is marked (aria-pressed) and disabled — pressing
+              it again would change nothing. The OTHER thumb stays live: a
+              rating can be changed, and the backend upserts one row per
+              message, so the second post replaces the first. There is no
+              un-thumb, because there is no delete upstream. */}
+          {message.serverMessageId ? (
+            <div className="mt-4 flex items-center gap-2" data-chat-rating={rating ?? 'none'}>
+              <RateButton
+                active={rating === 'up'}
+                disabled={rating === 'up'}
+                onClick={() => onRate(message.id, 'up')}
+                label="ดี"
+                title="มีประโยชน์"
+                activeClass="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300"
+                Icon={ThumbsUp}
+              />
+              <RateButton
+                active={rating === 'down'}
+                disabled={rating === 'down'}
+                onClick={() => onRate(message.id, 'down')}
+                label="ปรับปรุง"
+                title="ต้องปรับปรุง"
+                activeClass="border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300"
+                Icon={ThumbsDown}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -502,6 +493,7 @@ function RateButton({ active, disabled, onClick, label, title, activeClass, Icon
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-pressed={active}
       title={title}
       className={cx(
         'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors duration-9e-micro',

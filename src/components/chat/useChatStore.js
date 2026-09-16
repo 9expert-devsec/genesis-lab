@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer } from 'react';
 import { getOrCreateSessionId, rotateSessionId } from '@/lib/chat/session';
-import { sendChat } from '@/lib/chat/chatClient';
+import { sendChat, sendChatFeedback } from '@/lib/chat/chatClient';
 import { chatReducer, initialChatState, nextMessageId, toHistory } from '@/lib/chat/chatState';
 import { CHAT_UNAVAILABLE_CODE } from '@/lib/chat/limits';
 import { dropTranscript, readTranscript, writeTranscript } from '@/lib/chat/transcriptStore';
@@ -76,6 +76,7 @@ export function useChatStore() {
           quickReplies: result.quickReplies,
           courses: result.courses,
           promotions: result.promotions,
+          serverMessageId: result.serverMessageId,
         });
       } catch (e) {
         dispatch({ type: 'ERROR', error: e?.message || 'เกิดข้อผิดพลาด', code: e?.code });
@@ -94,11 +95,61 @@ export function useChatStore() {
             quickReplies: [],
             courses: [],
             promotions: [],
+            // Nothing was stored upstream, so there is nothing to rate: no id,
+            // and therefore no thumbs on the apology.
+            serverMessageId: null,
           });
         }
       } finally {
         dispatch({ type: 'LOADING', value: false });
       }
+    },
+    [state.messages, state.sessionId],
+  );
+
+  /**
+   * Thumb an assistant message. OPTIMISTIC and FIRE-AND-FORGET: the reducer
+   * lights the thumb first, then the rating is posted and its answer ignored
+   * (the route guarantees a 200 whatever happens upstream, and a rating is a
+   * courtesy the user does us — never a red error under a good answer).
+   *
+   * Guarded on `serverMessageId`: a message the backend did not store has no
+   * row to rate, so the panel does not show its thumbs and this refuses
+   * anyway. The same thumb twice is a no-op here AND in the reducer (which
+   * returns the same state object), so nothing re-sends; the other thumb
+   * replaces the rating and posts again — the backend upserts one row per
+   * message, so the second post overwrites the first.
+   *
+   * `messageId` on the wire is the SERVER id. `userText`, `assistantText`
+   * and `pageUrl` still travel because the old feedback service reads them
+   * until FEEDBACK_API_URL is switched to the backend's own endpoint.
+   */
+  const rate = useCallback(
+    (msgId, value) => {
+      const idx = state.messages.findIndex((m) => m.id === msgId);
+      const msg = idx === -1 ? null : state.messages[idx];
+      if (!msg || msg.role !== 'assistant' || !msg.serverMessageId) return;
+      if (value !== 'up' && value !== 'down') return;
+      if (msg.rating === value) return;
+
+      dispatch({ type: 'RATE', id: msgId, rating: value });
+
+      let userText = '';
+      for (let i = idx - 1; i >= 0; i -= 1) {
+        if (state.messages[i]?.role === 'user') {
+          userText = state.messages[i]?.text || '';
+          break;
+        }
+      }
+      void sendChatFeedback({
+        rating: value,
+        messageId: msg.serverMessageId,
+        sessionId: state.sessionId,
+        userText,
+        assistantText: msg.text || '',
+        pageUrl: typeof window !== 'undefined' ? window.location.href : '',
+        createdAt: Date.now(),
+      });
     },
     [state.messages, state.sessionId],
   );
@@ -110,5 +161,5 @@ export function useChatStore() {
     return null;
   }, [state.messages]);
 
-  return { ...state, init, send, reset, lastAssistant };
+  return { ...state, init, send, reset, rate, lastAssistant };
 }

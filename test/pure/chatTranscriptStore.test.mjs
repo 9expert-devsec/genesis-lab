@@ -40,10 +40,21 @@ const MSGS = [
   { id: 'a1', role: 'assistant', text: 'แนะนำหลักสูตรพื้นฐานครับ', createdAt: 2, courses: [] },
 ];
 
+/**
+ * What MSGS reads back as. The reader now normalises the two rating fields on
+ * every assistant turn — `serverMessageId` and `rating`, both null when
+ * absent — so a fixture written in the pre-field shape comes back in the
+ * reducer's shape. Every other field is byte-identical; user turns gain
+ * nothing. The round-trip pins below compare against THIS, which is the
+ * updated claim: "what you wrote is what you read, plus the two normalised
+ * fields on assistant turns".
+ */
+const RESTORED = MSGS.map((m) => (m.role === 'assistant' ? { ...m, serverMessageId: null, rating: null } : m));
+
 test('a transcript round-trips under its session id', () => {
   const s = fakeStorage();
   writeTranscript('sess-A', MSGS, s);
-  assert.deepEqual(readTranscript('sess-A', s), MSGS);
+  assert.deepEqual(readTranscript('sess-A', s), RESTORED);
   assert.deepEqual(s._keys(), [transcriptKey('sess-A')], 'stored under exactly one key');
   assert.ok(transcriptKey('sess-A').startsWith(TRANSCRIPT_KEY_PREFIX));
 });
@@ -70,7 +81,7 @@ test('dropTranscript removes exactly one conversation', () => {
   writeTranscript('sess-B', MSGS, s);
   dropTranscript('sess-A', s);
   assert.deepEqual(readTranscript('sess-A', s), [], 'the named one is gone');
-  assert.deepEqual(readTranscript('sess-B', s), MSGS, 'and only that one');
+  assert.deepEqual(readTranscript('sess-B', s), RESTORED, 'and only that one');
 });
 
 test('CONTROL: rotating BEFORE dropping leaves the cleared chat readable', () => {
@@ -83,7 +94,7 @@ test('CONTROL: rotating BEFORE dropping leaves the cleared chat readable', () =>
   dropTranscript(newIdB, broken);            // …then drop, which knows only the NEW id
   assert.deepEqual(
     readTranscript('sess-old', broken),
-    MSGS,
+    RESTORED,
     'BROKEN: the conversation the user asked to clear is still there',
   );
 
@@ -150,4 +161,56 @@ test('a corrupt value is DISCARDED on the next write, not retried forever', () =
   writeTranscript('sess-A', restored, s);                // the persist effect
   assert.deepEqual(s._keys(), [], 'and the entry is gone, not left to rot');
   assert.deepEqual(readTranscript('sess-A', s), [], 'a second mount finds nothing to parse');
+});
+
+// ── serverMessageId and rating survive the round trip; junk does not ────────
+
+const UUID = '3f2a9c1e-7b4d-4e8a-9c21-0d5e6f7a8b9c';
+
+test('a round trip keeps serverMessageId and rating on an assistant message', () => {
+  const s = fakeStorage();
+  const msgs = [
+    { id: 'u1', role: 'user', text: 'q', createdAt: 1 },
+    { id: 'a1', role: 'assistant', text: 'ans', createdAt: 2, quickReplies: [], courses: [], promotions: [], serverMessageId: UUID, rating: 'down' },
+  ];
+  writeTranscript('sess-A', msgs, s);
+  const back = readTranscript('sess-A', s);
+  assert.equal(back[1].serverMessageId, UUID);
+  assert.equal(back[1].rating, 'down');
+  assert.deepEqual(back, msgs, 'nothing else on the message is touched — this is not a whitelist');
+});
+
+test('a restored message with an INVALID rating reads as null; a missing one reads as null too', () => {
+  const s = fakeStorage();
+  const stored = [
+    { id: 'a1', role: 'assistant', text: 'a', createdAt: 1, serverMessageId: UUID, rating: 'meh' },
+    { id: 'a2', role: 'assistant', text: 'b', createdAt: 2, serverMessageId: UUID, rating: 42 },
+    { id: 'a3', role: 'assistant', text: 'c', createdAt: 3, serverMessageId: UUID, rating: { up: true } },
+    { id: 'a4', role: 'assistant', text: 'd', createdAt: 4, serverMessageId: UUID, rating: 'UP' },
+    { id: 'a5', role: 'assistant', text: 'e', createdAt: 5, serverMessageId: UUID },
+  ];
+  s.setItem(transcriptKey('sess-A'), JSON.stringify(stored));
+  const back = readTranscript('sess-A', s);
+  for (const m of back) assert.equal(m.rating, null, `${m.id}: rating ${JSON.stringify(stored.find((x) => x.id === m.id).rating)} must read as null`);
+  for (const m of back) assert.equal(m.serverMessageId, UUID, `${m.id}: a valid server id is kept`);
+});
+
+test('a transcript from BEFORE these fields existed reads as unrated with no server id — and therefore shows no thumbs', () => {
+  const s = fakeStorage();
+  s.setItem(transcriptKey('sess-old'), JSON.stringify(MSGS)); // the pre-change shape: no serverMessageId, no rating
+  const back = readTranscript('sess-old', s);
+  assert.equal(back[1].role, 'assistant');
+  assert.equal(back[1].serverMessageId, null);
+  assert.equal(back[1].rating, null);
+  assert.equal('serverMessageId' in back[0], false, 'a USER turn gains neither field');
+});
+
+test('an invalid serverMessageId reads as null, so a devtools edit cannot conjure thumbs for a row the backend never stored', () => {
+  const s = fakeStorage();
+  s.setItem(transcriptKey('sess-A'), JSON.stringify([
+    { id: 'a1', role: 'assistant', text: 'a', createdAt: 1, serverMessageId: 42, rating: 'up' },
+    { id: 'a2', role: 'assistant', text: 'b', createdAt: 2, serverMessageId: 'x'.repeat(101), rating: 'up' },
+    { id: 'a3', role: 'assistant', text: 'c', createdAt: 3, serverMessageId: '', rating: 'up' },
+  ]));
+  for (const m of readTranscript('sess-A', s)) assert.equal(m.serverMessageId, null, m.id);
 });

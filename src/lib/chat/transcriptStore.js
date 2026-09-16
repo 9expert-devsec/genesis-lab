@@ -23,6 +23,8 @@
 // made and did not keep. dropTranscript exists to be called BEFORE the
 // rotation, while the old id is still known, and a test pins the order.
 
+import { normalizeRating, normalizeServerMessageId } from '@/lib/chat/chatState';
+
 const KEY_PREFIX = 'chat_transcript_';
 
 /**
@@ -50,6 +52,32 @@ export function transcriptKey(sessionId) {
   return `${KEY_PREFIX}${sessionId}`;
 }
 
+/**
+ * One restored message, with the two rating fields normalised.
+ *
+ * The reader used to hand back whatever JSON.parse produced. That was fine
+ * while every field was display-only; `rating` and `serverMessageId` are not —
+ * the reducer refuses to RATE a message whose stored rating already equals the
+ * click, and the panel shows thumbs only when the server id is present. A
+ * value someone edited in devtools ('meh', 42, {}) must therefore read as the
+ * absent case, not flow into those decisions as-is. Every OTHER field is left
+ * exactly as stored: this is not a whitelist, and a card payload the store
+ * does not know about still survives a reload.
+ *
+ * Messages that predate these fields (no `rating`, no `serverMessageId`) read
+ * as unrated with no server id — which is what they are, and why a restored
+ * old transcript correctly shows no thumbs.
+ */
+function normalizeMessage(m) {
+  if (!m || typeof m !== 'object') return m;
+  const out = { ...m };
+  if (m.role === 'assistant') {
+    out.serverMessageId = normalizeServerMessageId(m.serverMessageId);
+    out.rating = normalizeRating(m.rating);
+  }
+  return out;
+}
+
 /** The stored transcript for `sessionId`, or [] when there is nothing usable. */
 export function readTranscript(sessionId, storage = defaultStorage()) {
   if (!sessionId) return [];
@@ -59,7 +87,7 @@ export function readTranscript(sessionId, storage = defaultStorage()) {
     const parsed = JSON.parse(raw);
     // Anything that is not an array is treated as absent rather than thrown:
     // a corrupt entry must cost the user their history, not the whole panel.
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.map(normalizeMessage) : [];
   } catch {
     return [];
   }

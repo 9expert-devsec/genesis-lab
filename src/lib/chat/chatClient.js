@@ -15,6 +15,8 @@
 //
 // Ported from review-app, which learned all of this the hard way.
 
+import { normalizeServerMessageId } from '@/lib/chat/chatState';
+
 function asArray(x) {
   return Array.isArray(x) ? x : [];
 }
@@ -147,9 +149,24 @@ export async function sendChat({ sessionId, message, history }) {
     quickReplies: normalizeQuickReplies(d),
     courses: normalizeCourses(d),
     promotions: normalizePromotions(d),
+    // The backend's id for the assistant row it stored — a UUID string, or
+    // null when it stored none. Read from `raw` (the proxy relays the upstream
+    // body verbatim, so this is the top-level `message_id` the backend
+    // documents), NOT through the fallback chains above: an id is not a reply
+    // and gets no guessing. Anything but a non-empty string of ≤100 chars is
+    // null — see normalizeServerMessageId.
+    serverMessageId: normalizeServerMessageId(raw?.message_id),
   };
 }
 
+/**
+ * Post a thumb. `messageId` MUST be the backend's `serverMessageId`, never the
+ * widget's local `m_…` id: the backend upserts one feedback row per message
+ * and keys it on its own id, so a local id would file the rating against a
+ * row that does not exist. The rest of the payload — userText, assistantText,
+ * pageUrl — is still sent because the old feedback service reads it until
+ * FEEDBACK_API_URL is switched.
+ */
 export async function sendChatFeedback(payload) {
   // Never throws for the caller's benefit — a rating is a courtesy the user does
   // us, and the route already guarantees a 200. This is belt for a network drop.

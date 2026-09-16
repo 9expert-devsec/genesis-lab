@@ -24,10 +24,39 @@ const safeArr = (x) => (Array.isArray(x) ? x : []);
 
 /**
  * Message ids. Not crypto — they only have to be unique within one open panel,
- * and they key React lists and the thumbs-rating map.
+ * and they key React lists and the transcript. They are LOCAL: the backend's
+ * own id for an assistant row travels separately as `serverMessageId`.
  */
 export function nextMessageId(seed = Math.random()) {
   return `m_${Date.now().toString(36)}_${seed.toString(16).slice(2, 10)}`;
+}
+
+/**
+ * The two ratings a thumb can express. There is no "cleared" rating — the
+ * backend upserts one feedback row per message and offers no delete, so the
+ * widget offers no un-thumb either; `null` only ever means "not rated yet".
+ */
+export const RATINGS = Object.freeze(['up', 'down']);
+
+/** `'up' | 'down'` as given, anything else → null. Shared by the reducer and the transcript reader. */
+export function normalizeRating(value) {
+  return RATINGS.includes(value) ? value : null;
+}
+
+/**
+ * The backend's id for the assistant row, or null.
+ *
+ * Accepted ONLY as a non-empty string of at most 100 characters — the
+ * feedback proxy caps `messageId` at 100 and silently truncates, so a longer
+ * value would be forwarded as a different id than the one the backend issued.
+ * `null` is what upstream sends when it stored no assistant row, and it is
+ * what every other shape (number, object, '') becomes.
+ */
+export const SERVER_MESSAGE_ID_MAX = 100;
+export function normalizeServerMessageId(value) {
+  if (typeof value !== 'string') return null;
+  const s = value.trim();
+  return s !== '' && s.length <= SERVER_MESSAGE_ID_MAX ? s : null;
 }
 
 /**
@@ -78,9 +107,31 @@ export function chatReducer(state, action) {
             quickReplies: safeArr(action.quickReplies),
             courses: safeArr(action.courses),
             promotions: safeArr(action.promotions),
+            // The backend's id for this row, or null when it stored none (the
+            // apology bubble, an older upstream). The thumbs render only when
+            // it is present: a rating with no server id has nothing to attach
+            // to. Normalised here as well as in chatClient so a dispatcher
+            // cannot smuggle a number or a 200-char string into the transcript.
+            serverMessageId: normalizeServerMessageId(action.serverMessageId),
+            rating: null,
           },
         ],
       };
+
+    case 'RATE': {
+      // Optimistic and idempotent: the thumb lights up before the network
+      // answers, the same thumb twice is a no-op that returns the SAME state
+      // object (so nothing re-renders and nothing re-sends), the other thumb
+      // replaces the rating (the backend upserts one row per message), and an
+      // id this transcript does not hold changes nothing.
+      const rating = normalizeRating(action.rating);
+      if (!rating) return state;
+      const idx = state.messages.findIndex((m) => m.id === action.id && m.role === 'assistant');
+      if (idx === -1 || state.messages[idx].rating === rating) return state;
+      const messages = state.messages.slice();
+      messages[idx] = { ...messages[idx], rating };
+      return { ...state, messages };
+    }
 
     case 'LOADING':
       return { ...state, isLoading: action.value };
