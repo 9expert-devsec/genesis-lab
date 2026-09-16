@@ -46,12 +46,16 @@ const html = (el) => renderToStaticMarkup(el);
 // the SAME component and these tests pin that — plus the deletions, which are
 // otherwise invisible to any existing test (there were none on that section).
 
-test('the button renders as a new-tab anchor with both glyphs', () => {
+test('the DEFAULT button renders as a new-tab anchor with both glyphs — /schedule is unchanged', () => {
+  // The default keeps the document + download pair: /schedule's
+  // ดาวน์โหลดตารางการฝึกอบรม renders this element and was not part of the
+  // catalog-button round that added the `catalog` variant.
   const out = html(React.createElement(HeroPdfButton, { href: '/x.pdf' }, 'ดาวน์โหลด'));
   assert.match(out, /<a[^>]+href="\/x\.pdf"/);
   assert.match(out, /target="_blank"/);
   assert.match(out, /rel="noopener noreferrer"/);
   assert.equal((out.match(/<svg/g) ?? []).length, 2, 'expected a leading and a trailing glyph');
+  assert.match(read(SCHEDULE), /<HeroPdfButton href=\{schedulePDF\.url\}>/, '/schedule must not opt into the catalog variant');
 });
 
 test('NO download attribute — the response headers decide, not the anchor', () => {
@@ -109,9 +113,12 @@ test('RENDERED: the hero itself emits the button, after the search input', async
 
 test('the catalog button sits in the HERO, not after the results grid', () => {
   const hero = read(HERO);
-  // Element-text boundary, not a loose substring: the label is Thai and a bare
-  // includes() would also match a stray occurrence anywhere on the page.
-  assert.match(hero, />\s*ดาวน์โหลดแคตตาล็อกหลักสูตร\s*</);
+  // The label is the SHARED constant, not a literal: /training-course used to
+  // spell its own ดาวน์โหลดแคตตาล็อกหลักสูตร while the program and skill pages
+  // said ดาวน์โหลดแคตตาล็อก; all three now read CATALOG_DOWNLOAD_LABEL.
+  assert.match(hero, />\s*\{CATALOG_DOWNLOAD_LABEL\}\s*</);
+  assert.match(hero, /import \{ CATALOG_DOWNLOAD_LABEL \} from '@\/lib\/pageCatalog'/);
+  assert.equal(hero.includes('ดาวน์โหลดแคตตาล็อกหลักสูตร'), false, 'the old literal is still spelled in the hero');
   assert.match(hero, /href="\/9expert-training-course-catalog\.pdf"/);
   // and it is BELOW the search input in source order
   assert.ok(
@@ -161,9 +168,13 @@ test('CONTROL: the drift probe fires on a file that re-spells the pill', () => {
   assert.equal(iconButton.includes(PILL_CLASSES), false);
 });
 
-test('CONTROL: the Thai label matcher needs the element boundary, not a substring', () => {
-  assert.equal(/>\s*ดาวน์โหลดแคตตาล็อกหลักสูตร\s*</.test('ดาวน์โหลดแคตตาล็อกหลักสูตร'), false);
-  assert.equal(/>\s*ดาวน์โหลดแคตตาล็อกหลักสูตร\s*</.test('<a>ดาวน์โหลดแคตตาล็อกหลักสูตร</a>'), true);
+test('CONTROL: the label matcher needs the element boundary, not a substring', () => {
+  // The subject is now the constant's JSX expression rather than a Thai
+  // literal; the boundary rule is the same — a mention in a comment or an
+  // import line must not satisfy "the hero renders it".
+  assert.equal(/>\s*\{CATALOG_DOWNLOAD_LABEL\}\s*</.test('{CATALOG_DOWNLOAD_LABEL}'), false);
+  assert.equal(/>\s*\{CATALOG_DOWNLOAD_LABEL\}\s*</.test("import { CATALOG_DOWNLOAD_LABEL } from '@/lib/pageCatalog'"), false);
+  assert.equal(/>\s*\{CATALOG_DOWNLOAD_LABEL\}\s*</.test('<HeroPdfButton href="/x.pdf">\n  {CATALOG_DOWNLOAD_LABEL}\n</HeroPdfButton>'), true);
 });
 
 test('CONTROL: the comment stripper actually removes a quoted caption', () => {

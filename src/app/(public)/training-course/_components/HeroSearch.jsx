@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
 import { HeroPdfButton } from '@/components/ui/HeroPdfButton';
+import { CATALOG_DOWNLOAD_LABEL } from '@/lib/pageCatalog';
 
 /**
  * Gradient hero with centered pill search input.
@@ -81,8 +82,8 @@ export function HeroSearch({ defaultValue = '', onDebouncedChange }) {
           /schedule's, whose url comes from Mongo. Moving the button changed
           neither the URL nor how the bytes are served.
         */}
-        <HeroPdfButton href="/9expert-training-course-catalog.pdf">
-          ดาวน์โหลดแคตตาล็อกหลักสูตร
+        <HeroPdfButton href="/9expert-training-course-catalog.pdf" variant="catalog">
+          {CATALOG_DOWNLOAD_LABEL}
         </HeroPdfButton>
       </div>
     </section>

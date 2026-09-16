@@ -118,12 +118,16 @@ test('skill page: WITHOUT a file, NOTHING renders', () => {
 
 // ── The shared piece and its treatment ──────────────────────────────────────
 
-test('the button IS the site\'s HeroPdfButton — same anchor classes as /training-course\'s catalog button', () => {
+test('the button IS the site\'s HeroPdfButton in its catalog variant — same anchor classes as /training-course\'s catalog button', () => {
   const ours = dom(renderToStaticMarkup(createElement(PageCatalogButton, { config: WITH_FILE }))).querySelector('a');
-  const theirs = dom(renderToStaticMarkup(createElement(HeroPdfButton, { href: '/x.pdf' }, 'ดาวน์โหลดแคตตาล็อกหลักสูตร'))).querySelector('a');
+  const theirs = dom(renderToStaticMarkup(createElement(HeroPdfButton, { href: '/x.pdf', variant: 'catalog' }, CATALOG_DOWNLOAD_LABEL))).querySelector('a');
   assert.ok(ours && theirs);
   assert.equal(ours.getAttribute('class'), theirs.getAttribute('class'));
-  assert.equal(ours.querySelectorAll('svg').length, 2, 'the leading document glyph and the trailing download glyph');
+  assert.equal(ours.innerHTML, theirs.innerHTML.replace('/x.pdf', WITH_FILE.catalogPdf.path), 'same glyph row, same label');
+  // ONE glyph — the download one, before the label; the document glyph is gone.
+  assert.equal(ours.querySelectorAll('svg').length, 1, 'exactly one icon on a catalog button');
+  assert.equal(ours.firstElementChild.tagName.toLowerCase(), 'svg', 'the icon leads');
+  assert.equal(ours.textContent.trim(), 'ดาวน์โหลด Catalog');
 });
 
 test('CONTROL: HeroPdfButton itself renders NO download attribute and has no opt-in for one', () => {

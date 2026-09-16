@@ -115,6 +115,8 @@ test('a non-PDF is refused — by extension, and by a stated non-PDF type on a .
 
 // ── The button's words ──────────────────────────────────────────────────────
 
-test('the label follows the site\'s existing catalog button copy', () => {
-  assert.equal(CATALOG_DOWNLOAD_LABEL, 'ดาวน์โหลดแคตตาล็อก');
+test('the label is "ดาวน์โหลด Catalog" — one constant for all three catalog buttons', () => {
+  // Was 'ดาวน์โหลดแคตตาล็อก' here and a separate 'ดาวน์โหลดแคตตาล็อกหลักสูตร'
+  // literal on /training-course; both surfaces now read this constant.
+  assert.equal(CATALOG_DOWNLOAD_LABEL, 'ดาวน์โหลด Catalog');
 });

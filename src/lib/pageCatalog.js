@@ -57,12 +57,12 @@ const KIND_NAMES = Object.freeze({
 });
 
 /**
- * The button's label. Follows the site's own catalog button on
- * /training-course (ดาวน์โหลดแคตตาล็อกหลักสูตร) — Thai transliteration, not
- * the English word — trimmed of หลักสูตร because on these pages the catalog
- * is the program's or the skill's, not a course list.
+ * The label of EVERY catalog button — the program page's, the skill page's
+ * AND /training-course's, which used to spell its own ดาวน์โหลดแคตตาล็อกหลักสูตร
+ * while these two said ดาวน์โหลดแคตตาล็อก. One constant, three surfaces:
+ * the English word "Catalog", not the transliteration, by request.
  */
-export const CATALOG_DOWNLOAD_LABEL = 'ดาวน์โหลดแคตตาล็อก';
+export const CATALOG_DOWNLOAD_LABEL = 'ดาวน์โหลด Catalog';
 
 /** Is `kind` one of the two? Anything else is refused, never defaulted. */
 export function isCatalogKind(kind) {
