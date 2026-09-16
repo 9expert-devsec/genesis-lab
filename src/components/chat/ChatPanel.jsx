@@ -13,6 +13,7 @@ import {
 import {
   ChatAvatar,
   CourseCarousel,
+  MasterclassCarousel,
   PromotionCarousel,
   QuickChatBar,
   TypingBubble,
@@ -407,6 +408,8 @@ function UserBubble({ message }) {
 function AssistantBubble({ message, rating, onRate }) {
   const courses = Array.isArray(message.courses) ? message.courses : [];
   const promotions = sortPromotions(message.promotions);
+  // Absent on every reply today; a third array when the backend sends one.
+  const masterclasses = Array.isArray(message.masterclasses) ? message.masterclasses : [];
 
   return (
     <div className="flex items-start gap-2">
@@ -445,6 +448,13 @@ function AssistantBubble({ message, rating, onRate }) {
             <div className="mt-3">
               <div className="text-xs font-semibold text-[var(--text-muted)]">คอร์สแนะนำ</div>
               <CourseCarousel items={courses} />
+            </div>
+          ) : null}
+
+          {masterclasses.length > 0 ? (
+            <div className="mt-3" data-chat-masterclasses="">
+              <div className="text-xs font-semibold text-[var(--text-muted)]">Masterclass</div>
+              <MasterclassCarousel items={masterclasses} />
             </div>
           ) : null}
 

@@ -107,6 +107,18 @@ function normalizePromotions(d) {
 }
 
 /**
+ * The masterclass cards — ONE name, no fallback chain. The two chains above
+ * exist because the model's course/promotion payloads arrive under any of
+ * five keys; `masterclasses` is a contract the backend serves from genesis's
+ * own /api/corpus/masterclass-cards, so guessing at other spellings would
+ * only widen what a stray field could turn into a card. Absent → [].
+ */
+function normalizeMasterclasses(d) {
+  const raw = d?.masterclasses ?? [];
+  return Array.isArray(raw) ? raw : [];
+}
+
+/**
  * The error the panel renders.
  *
  * `code` is carried separately from the message because the panel treats
@@ -149,6 +161,7 @@ export async function sendChat({ sessionId, message, history }) {
     quickReplies: normalizeQuickReplies(d),
     courses: normalizeCourses(d),
     promotions: normalizePromotions(d),
+    masterclasses: normalizeMasterclasses(d),
     // The backend's id for the assistant row it stored — a UUID string, or
     // null when it stored none. Read from `raw` (the proxy relays the upstream
     // body verbatim, so this is the top-level `message_id` the backend

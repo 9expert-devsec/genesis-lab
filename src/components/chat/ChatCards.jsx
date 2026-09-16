@@ -2,9 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CHAT_MARK_ALT, CHAT_MARK_SRC } from '@/lib/chat/branding';
+import { masterclassPriceView } from '@/lib/chat/masterclassCardPrice';
+import { formatBaht } from '@/lib/utils';
 import {
   ArrowUpRight,
   Banknote,
+  BarChart2,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -443,6 +446,107 @@ export function PromotionCard({ item }) {
   );
 }
 
+/**
+ * The masterclass card — the third card type, on its own message array
+ * (`message.masterclasses`), served through /api/chat from genesis's own
+ * /api/corpus/masterclass-cards. Same shell, tokens and raw <img> as the
+ * course card; the fields are the endpoint's contract by name, no fallback
+ * chains. Never rendered: seats, a "full" state, or a countdown — the
+ * contract carries none.
+ *
+ * `now` is the instant the price row is judged against (see
+ * lib/chat/masterclassCardPrice — a card restored from sessionStorage can
+ * carry a finished early bird); the carousel passes it through, tests inject it.
+ */
+export function MasterclassCard({ item, now }) {
+  if (!item) return null;
+
+  const title = cleanText(item.title || '');
+  const subtitle = cleanText(item.subtitle || '');
+  const img = cleanText(item.cover_image_url || '');
+  const url = cleanText(item.url || '');
+  const instructors = (Array.isArray(item.instructors) ? item.instructors : []).map(cleanText).filter(Boolean);
+  const level = cleanText(item.level_label || '');
+  const duration = cleanText(item.duration_label || '');
+  // Stale snapshot: a deadline at or before `now` renders as no early bird, at the normal price.
+  const price = masterclassPriceView(item.price, now);
+
+  return (
+    <div className={CARD_SHELL}>
+      {img ? (
+        <div className="bg-[var(--surface-muted)]">
+          <div className="aspect-[16/9] w-full">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={img} alt={title} className="h-full w-full object-cover" loading="lazy" />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="p-4">
+        <div className="text-[15px] font-semibold text-[var(--text-primary)]">{title}</div>
+        {subtitle ? (
+          // CSS clamp only — the full subtitle stays in the DOM and is never cut in JS.
+          <div className="mt-1 line-clamp-3 text-sm text-[var(--text-secondary)]">{subtitle}</div>
+        ) : null}
+
+        {instructors.length > 0 ? (
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+            <UserIcon className="h-3.5 w-3.5 shrink-0" />
+            <span>{instructors.join(', ')}</span>
+          </div>
+        ) : null}
+
+        {level || duration ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
+            {level ? (
+              <span className={PILL}>
+                <BarChart2 className="h-3.5 w-3.5" />
+                {level}
+              </span>
+            ) : null}
+            {duration ? (
+              <span className={PILL}>
+                <Clock3 className="h-3.5 w-3.5" />
+                {duration}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {price ? (
+          <div className="mt-3" data-chat-price={price.earlyBird ? 'early-bird' : 'normal'}>
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="text-lg font-bold text-[var(--text-primary)]">{formatBaht(price.amount)} บาท</span>
+              {price.normalAmount != null ? (
+                <span className="text-sm text-[var(--text-muted)] line-through">{formatBaht(price.normalAmount)} บาท</span>
+              ) : null}
+            </div>
+            {price.endsLabel ? (
+              <div className="mt-0.5 text-xs text-[var(--text-secondary)]">Early Bird ถึง {price.endsLabel}</div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-4">
+          {url ? (
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-9e-action hover:underline dark:text-9e-air"
+            >
+              ดูรายละเอียด
+              <ArrowUpRight className="h-4 w-4" />
+            </a>
+          ) : (
+            <span className="text-sm font-semibold text-[var(--text-muted)]">กรุณาติดต่อสอบถาม</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Carousels ───────────────────────────────────────────────────────────── */
 
 function Carousel({ items, keyOf, widthClass, render }) {
@@ -450,8 +554,9 @@ function Carousel({ items, keyOf, widthClass, render }) {
   if (!Array.isArray(items) || items.length === 0) return null;
 
   // One card has nothing to page to, so the chevrons would be two controls that
-  // visibly do nothing. Shared by BOTH carousels — the course and promotion
-  // lists differ only in card width and key, which is why one guard fixes both.
+  // visibly do nothing. Shared by ALL THREE carousels — the course, promotion
+  // and masterclass lists differ only in card width and key, which is why one
+  // guard fixes them all.
   const pageable = items.length > 1;
 
   return (
@@ -494,6 +599,18 @@ export function PromotionCarousel({ items }) {
       keyOf={(p, i) => p.id || p._id || i}
       widthClass="w-[88vw] max-w-[420px] sm:w-[360px] md:w-[420px]"
       render={(p) => <PromotionCard item={p} />}
+    />
+  );
+}
+
+/** Cards in the order received — the endpoint already orders them as /masterclass does. */
+export function MasterclassCarousel({ items, now }) {
+  return (
+    <Carousel
+      items={items}
+      keyOf={(m, i) => m.slug || i}
+      widthClass="w-[85vw] max-w-[360px] sm:w-[320px] md:w-[340px]"
+      render={(m) => <MasterclassCard item={m} now={now} />}
     />
   );
 }

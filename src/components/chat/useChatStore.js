@@ -76,6 +76,7 @@ export function useChatStore() {
           quickReplies: result.quickReplies,
           courses: result.courses,
           promotions: result.promotions,
+          masterclasses: result.masterclasses,
           serverMessageId: result.serverMessageId,
         });
       } catch (e) {
@@ -95,6 +96,7 @@ export function useChatStore() {
             quickReplies: [],
             courses: [],
             promotions: [],
+            masterclasses: [],
             // Nothing was stored upstream, so there is nothing to rate: no id,
             // and therefore no thumbs on the apology.
             serverMessageId: null,

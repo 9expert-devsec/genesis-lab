@@ -59,6 +59,25 @@ test('a transcript round-trips under its session id', () => {
   assert.ok(transcriptKey('sess-A').startsWith(TRANSCRIPT_KEY_PREFIX));
 });
 
+test('an assistant turn carrying `masterclasses` persists and restores the array byte for byte — no extra work in the store', () => {
+  // The reader normalises only the two rating fields; a card array it does not
+  // know about survives a reload as stored. This is what lets the masterclass
+  // array ride the existing persistence with no change here.
+  const items = [{
+    slug: 'mas-ai-dmc', title: 'AI DMC', subtitle: null, cover_image_url: null, instructors: ['ก'], level_label: 'Intermediate',
+    duration_label: '1 วัน · 7 ชั่วโมง', url: 'https://www.9experttraining.com/masterclass/mas-ai-dmc',
+    price: { amount: 9030, normal_amount: 12900, early_bird: true, early_bird_ends_at: '2026-09-16T16:59:00.000Z' },
+  }];
+  const msgs = [MSGS[0], { ...MSGS[1], promotions: [], masterclasses: items }];
+  const s = fakeStorage();
+  writeTranscript('sess-M', msgs, s);
+  const [, back] = readTranscript('sess-M', s);
+  assert.deepEqual(back.masterclasses, items);
+  assert.deepEqual(back, { ...msgs[1], serverMessageId: null, rating: null }, 'every other field as stored');
+  // CONTROL: a transcript written WITHOUT the field reads back without it — the reader invents nothing.
+  assert.equal('masterclasses' in readTranscript('sess-M', (() => { const t = fakeStorage(); writeTranscript('sess-M', MSGS, t); return t; })())[1], false);
+});
+
 test('the key really is the session id, not a shared bucket', () => {
   // If it were shared, rotating the id on clear would leave the panel showing
   // the conversation it had just cleared.

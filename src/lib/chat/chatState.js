@@ -107,6 +107,7 @@ export function chatReducer(state, action) {
             quickReplies: safeArr(action.quickReplies),
             courses: safeArr(action.courses),
             promotions: safeArr(action.promotions),
+            masterclasses: safeArr(action.masterclasses),
             // The backend's id for this row, or null when it stored none (the
             // apology bubble, an older upstream). The thumbs render only when
             // it is present: a rating with no server id has nothing to attach

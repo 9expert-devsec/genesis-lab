@@ -107,6 +107,41 @@ test('chatClient — driven sequentially (the fetch handler is process-global)',
     });
   });
 
+  await t.test('a top-level `masterclasses` array is picked as-is, elements unvalidated, order kept', async () => {
+    const items = [
+      { slug: 'mas-ai-dmc', title: 'AI DMC', subtitle: null, cover_image_url: null, instructors: [], level_label: null, duration_label: null, url: 'https://www.9experttraining.com/masterclass/mas-ai-dmc', price: null },
+      { slug: 'mas-claude-ai-for-data-analyst', title: 'Claude', price: { amount: 9675, normal_amount: 12900, early_bird: true, early_bird_ends_at: '2026-10-02T16:59:00.000Z' } },
+    ];
+    await withChat({ response: 'x', message_id: UUID, masterclasses: items }, async () => {
+      const r = await sendChat(ARGS);
+      assert.deepEqual(r.masterclasses, items, 'the array, untouched');
+      assert.deepEqual(r.masterclasses.map((m) => m.slug), ['mas-ai-dmc', 'mas-claude-ai-for-data-analyst'], 'in the order received');
+      assert.deepEqual(r.courses, [], 'and it does not leak into the course pick');
+      assert.deepEqual(r.promotions, []);
+    });
+  });
+
+  await t.test('field absent (today), null, or not an array → masterclasses is [] and nothing else changes', async () => {
+    for (const [label, body] of [
+      ['absent', { response: 'x', message_id: UUID, courses: [{ title: 'c' }] }],
+      ['null', { response: 'x', message_id: UUID, courses: [{ title: 'c' }], masterclasses: null }],
+      ['an object', { response: 'x', message_id: UUID, courses: [{ title: 'c' }], masterclasses: { slug: 'x' } }],
+    ]) {
+      await withChat(body, async () => {
+        const r = await sendChat(ARGS);
+        assert.deepEqual(r.masterclasses, [], label);
+        assert.equal(r.reply, 'x', label);
+        assert.equal(r.serverMessageId, UUID, label);
+        assert.deepEqual(r.courses, [{ title: 'c' }], `${label}: the course pick is untouched`);
+        assert.deepEqual(Object.keys(r), ['raw', 'reply', 'quickReplies', 'courses', 'promotions', 'masterclasses', 'serverMessageId'], label);
+      });
+    }
+    // NO fallback chain: a masterclass list under a course-style alias is not guessed at.
+    await withChat({ response: 'x', cards: { masterclasses: [{ slug: 'x' }] }, ui: { masterclasses: [{ slug: 'y' }] } }, async () => {
+      assert.deepEqual((await sendChat(ARGS)).masterclasses, [], 'one name, by contract');
+    });
+  });
+
   await t.test('CONTROL: this file leaves no fetch handler registered', () => {
     assert.equal(fetchStubState().names.includes(NAME), false, 'a handler from this file is still registered');
   });
