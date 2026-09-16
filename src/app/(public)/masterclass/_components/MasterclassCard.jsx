@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Clock, BarChart2 } from "lucide-react";
 import { CountdownTimer } from "./CountdownTimer";
+import { MASTERCLASS_LEVEL_LABEL as LEVEL_MAP } from "@/lib/masterclass/levelLabel";
 
 /**
  * ROUND M-B — restyled to match Figma node 27:5 (expert-masterclass-landing,
@@ -25,11 +26,8 @@ import { CountdownTimer } from "./CountdownTimer";
  * background-only art → now an unused fallback); left in place rather than
  * deleted since the role keeps changing — see the M-C report.
  */
-const LEVEL_MAP = {
-  beginner: "Beginner",
-  intermediate: "Intermediate",
-  advanced: "Advanced",
-};
+// LEVEL_MAP lives in src/lib/masterclass/levelLabel.js — the chat-card corpus
+// imports the same mapping so the two surfaces cannot say different words.
 
 /** Card 1 (Claude AI) is themed orange, everything else blue — matches the Figma. */
 const PILL_COLOR = { "mas-claude-ai-for-data-analyst": "bg-[#f97316]" };
