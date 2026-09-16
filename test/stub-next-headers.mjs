@@ -48,8 +48,36 @@ export async function cookies() {
   };
 }
 
+/**
+ * `headers()` — added deliberately, for the /api/chat/feedback route tests.
+ *
+ * Same shape as the cookie jar: MODULE-LEVEL and settable, `.get()` only. The
+ * route reads `x-forwarded-for` / `x-real-ip` to key its rate limiter and
+ * nothing else; a test that needs a different header sets it, and one that
+ * sets nothing gets an empty bag (every `.get` → null, as the real API answers
+ * for an absent header). Reset between tests with clearHeaders().
+ */
+let bag = new Map();
+
+/** Replace the whole header bag. `{ name: value }` or a Map. Names are lower-cased, as the real API does. */
+export function setHeaders(entries) {
+  const pairs = entries instanceof Map ? [...entries] : Object.entries(entries ?? {});
+  bag = new Map(pairs.map(([k, v]) => [String(k).toLowerCase(), String(v)]));
+}
+
+export function clearHeaders() {
+  bag = new Map();
+}
+
 export async function headers() {
-  throw new Error('stub-next-headers: headers() is not stubbed — add it deliberately if needed');
+  return {
+    get(name) {
+      return bag.get(String(name).toLowerCase()) ?? null;
+    },
+    has(name) {
+      return bag.has(String(name).toLowerCase());
+    },
+  };
 }
 
 export async function draftMode() {
