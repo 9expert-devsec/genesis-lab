@@ -73,7 +73,97 @@ test('the avatar cell is the shared AdminAvatar, not a third <img>', () => {
 // ── the heading order ───────────────────────────────────────────────────────
 
 test('headings, left to right', () => {
-  assert.deepEqual(headings(render([row()])), ['โปรไฟล์', 'อีเมล', 'ชื่อ', 'Role', 'สถานะ', 'เข้าใช้ล่าสุด', 'การจัดการ']);
+  assert.deepEqual(headings(render([row()])), ['โปรไฟล์', 'อีเมล', 'ชื่อ', 'Role', 'สถานะ', 'เข้าใช้ล่าสุด', 'ออนไลน์', 'การจัดการ']);
+});
+
+// ── the presence column ─────────────────────────────────────────────────────
+
+const LAST_SEEN = '2026-09-17T09:12:00.000Z';
+const presenceCell = (doc, nth = 1) => doc.querySelector(`tbody tr:nth-child(${nth}) td[data-cell="presence"]`);
+const statusCell = (doc, nth = 1) => doc.querySelector(`tbody tr:nth-child(${nth}) td:nth-child(5)`);
+
+test('presence heading is ออนไลน์ — not a second สถานะ — and sits between เข้าใช้ล่าสุด and การจัดการ', () => {
+  const h = headings(render([row()]));
+  assert.equal(h.filter((x) => x === 'สถานะ').length, 1, 'exactly one สถานะ heading');
+  assert.equal(h.indexOf('ออนไลน์'), h.indexOf('เข้าใช้ล่าสุด') + 1);
+  assert.equal(h.indexOf('การจัดการ'), h.indexOf('ออนไลน์') + 1);
+});
+
+test('online row: a green dot plus ออนไลน์, nothing underneath', () => {
+  const cell = presenceCell(render([row({ online: true, lastSeenAt: LAST_SEEN })]));
+  const mark = cell.querySelector('[data-presence]');
+  assert.equal(mark.getAttribute('data-presence'), 'online');
+  assert.equal(text(mark), 'ออนไลน์');
+  const dot = mark.querySelector('span[aria-hidden="true"]');
+  assert.match(dot.className, /\bbg-green-500\b/);
+  assert.match(dot.className, /\brounded-full\b/);
+  assert.equal(cell.querySelector('[data-last-seen]'), null);
+});
+
+test('offline row with a last beat: a hollow muted dot, ออฟไลน์, and เห็นล่าสุด <time> in the เข้าใช้ล่าสุด format', () => {
+  const doc = render([row({ online: false, lastSeenAt: LAST_SEEN, lastLoginAt: LAST_SEEN })]);
+  const cell = presenceCell(doc);
+  const mark = cell.querySelector('[data-presence]');
+  assert.equal(mark.getAttribute('data-presence'), 'offline');
+  assert.match(text(mark), /^ออฟไลน์/);
+  const dot = mark.querySelector('span[aria-hidden="true"]');
+  assert.doesNotMatch(dot.className, /\bbg-green-500\b/);
+  assert.match(dot.className, /\bborder\b/, 'hollow: a border, no fill');
+  const seen = cell.querySelector('[data-last-seen]');
+  assert.ok(seen, 'the last-seen line renders');
+  const lastLoginText = text(doc.querySelector('tbody tr td:nth-child(6)'));
+  assert.equal(text(seen), `เห็นล่าสุด ${lastLoginText}`, 'same formatter as เข้าใช้ล่าสุด (both fed the same instant)');
+  assert.match(seen.className, /\btext-xs\b/);
+});
+
+test('offline row with no beat ever: ออฟไลน์ and NOTHING under it', () => {
+  const cell = presenceCell(render([row({ online: false, lastSeenAt: null })]));
+  assert.equal(cell.querySelector('[data-presence]').getAttribute('data-presence'), 'offline');
+  assert.equal(cell.querySelector('[data-last-seen]'), null);
+  assert.equal(text(cell), 'ออฟไลน์');
+});
+
+test('the column draws the SERVER\'s boolean only: a disabled account with a fresh lastSeenAt is Offline because listAdmins says so', () => {
+  // The rule lives in src/lib/admin/presence.js and runs in listAdmins; the
+  // client never re-derives it from the timestamp. A row that arrives with
+  // online:false and a fresh lastSeenAt — exactly what a disabled admin's row
+  // looks like — is drawn Offline, with the last-seen line.
+  const fresh = new Date().toISOString();
+  const doc = render([row({ active: false, online: false, lastSeenAt: fresh })]);
+  assert.equal(presenceCell(doc).querySelector('[data-presence]').getAttribute('data-presence'), 'offline');
+  assert.ok(presenceCell(doc).querySelector('[data-last-seen]'));
+  assert.equal(text(statusCell(doc)), 'ปิดใช้', 'สถานะ says disabled, in its own words');
+  // and a row with no `online` key at all (an older payload) is not online
+  const legacy = render([row({ lastSeenAt: fresh })]);
+  assert.equal(presenceCell(legacy).querySelector('[data-presence]').getAttribute('data-presence'), 'offline');
+});
+
+test('สถานะ and ออนไลน์ do not share a shape: enabled text has no dot, presence always has one', () => {
+  const doc = render([row({ online: true })]);
+  assert.equal(statusCell(doc).querySelector('span[aria-hidden="true"]'), null, 'สถานะ is plain text');
+  assert.equal(text(statusCell(doc)), 'ใช้งาน');
+  assert.ok(presenceCell(doc).querySelector('span[aria-hidden="true"]'), 'presence has its dot');
+});
+
+test('listAdmins decides online with isOnline and the server clock (source)', () => {
+  const { code, withImports } = readSource('src/lib/actions/admin-accounts.js');
+  assert.match(withImports, /from ['"]@\/lib\/admin\/presence['"]/);
+  assert.match(code, /online: isOnline\(d, now\)/);
+  assert.match(code, /const now = Date\.now\(\)/);
+  const client = readSource(CLIENT_REL).code;
+  assert.equal(/isOnline\(|lastSignedOutAt|PRESENCE_THRESHOLD/.test(client), false, 'the client never re-derives presence');
+  assert.match(client, /online=\{a\.online === true\}/);
+});
+
+test('the list refreshes itself only while visible, throttled, and once on focus (source)', () => {
+  const { code } = readSource(CLIENT_REL);
+  assert.match(code, /REFRESH_MS = 60_000/);
+  assert.match(code, /REFRESH_MIN_GAP_MS = 30_000/);
+  assert.match(code, /document\.visibilityState !== 'visible'/, 'a hidden tab does not refresh');
+  assert.match(code, /setInterval\(tick, REFRESH_MS\)/);
+  assert.match(code, /addEventListener\('focus', tick\)/);
+  assert.match(code, /clearInterval\(timer\)/);
+  assert.equal(/sendBeacon|pagehide|beforeunload/.test(code), false);
 });
 
 test('the (คุณ) marker survives in the email cell, and the empty state spans every column', () => {

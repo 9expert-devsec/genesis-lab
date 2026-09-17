@@ -27,6 +27,7 @@ import Admin from '@/models/Admin';
 import Role from '@/models/Role';
 import { auth } from '@/lib/auth/options';
 import { requireAdmin } from '@/lib/actions/auth';
+import { isOnline } from '@/lib/admin/presence';
 
 const ADMIN_PATH = '/admin/accounts';
 
@@ -63,7 +64,12 @@ export async function listAdmins() {
   const docs = await Admin.find({}, '-password')
     .sort({ createdAt: -1 })
     .lean();
-  return serialize(docs);
+  // `online` is decided HERE, with the server clock, and shipped as a boolean:
+  // the accounts page must not compare a visitor's laptop clock against a
+  // stamp the server wrote. `lastSeenAt` rides along for the "last seen …"
+  // line under an Offline row. See src/lib/admin/presence.js for the rule.
+  const now = Date.now();
+  return serialize(docs.map((d) => ({ ...d, online: isOnline(d, now) })));
 }
 
 /**

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Pencil, Trash2, KeyRound, X } from 'lucide-react';
 import {
@@ -36,6 +36,43 @@ function fmt(date) {
 }
 
 /**
+ * ออนไลน์ / ออฟไลน์ — a dot plus a word, deliberately NOT the plain green text
+ * that สถานะ uses two columns to the left: that column is "account enabled",
+ * this one is "here right now", and two green words side by side would read
+ * as one fact. `online` is decided by the server (listAdmins → isOnline) with
+ * the server clock; this component only draws the boolean. Offline shows when
+ * the person was last here, in the same format as เข้าใช้ล่าสุด, or nothing
+ * when there has never been a beat. A disabled account is always Offline —
+ * that is the server's rule, and it arrives here already applied.
+ */
+function PresenceCell({ online, lastSeenAt }) {
+  if (online) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[var(--text-primary)]" data-presence="online">
+        <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full bg-green-500" />
+        ออนไลน์
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex flex-col gap-0.5" data-presence="offline">
+      <span className="inline-flex items-center gap-1.5 text-[var(--text-secondary)]">
+        <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full border border-[var(--text-muted)]" />
+        ออฟไลน์
+      </span>
+      {lastSeenAt ? (
+        <span className="text-xs text-[var(--text-muted)]" data-last-seen>เห็นล่าสุด {fmt(lastSeenAt)}</span>
+      ) : null}
+    </span>
+  );
+}
+
+/** The accounts list re-reads itself this often while the tab is visible. */
+const REFRESH_MS = 60_000;
+/** Two refreshes are never closer than this (a focus right after an interval tick is one refresh). */
+const REFRESH_MIN_GAP_MS = 30_000;
+
+/**
  * ── ROWS RENDER FROM THE PROP, NEVER FROM A STATE COPY ──────────────────────
  * This used to be `const [admins] = useState(initialAdmins)`, and `setAdmins`
  * was never called. React keeps state across re-renders of a surviving
@@ -54,6 +91,34 @@ export function AccountsClient({ initialAdmins, roles = [], currentUserId }) {
 
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null); // admin doc
+
+  /**
+   * ── THE LIST RE-READS ITSELF, VISIBLE-ONLY, THROTTLED ─────────────────────
+   * Presence is a moving fact, so the page asks the server again every
+   * REFRESH_MS — but only while the tab is visible (a hidden tab's timer is
+   * throttled anyway, and a refresh nobody sees is a wasted listAdmins), and
+   * once more on window focus, so switching back shows the current state at
+   * once. The same 30 s throttle as PresenceHeartbeat keeps a focus that
+   * lands right after a tick from doubling the request. router.refresh()
+   * re-runs the server component; the rows follow the new prop (see above).
+   */
+  const lastRefreshAt = useRef(0);
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return;
+      const at = Date.now();
+      if (at - lastRefreshAt.current < REFRESH_MIN_GAP_MS) return;
+      lastRefreshAt.current = at;
+      startTransition(() => { router.refresh(); });
+    };
+    const timer = setInterval(tick, REFRESH_MS);
+    window.addEventListener('focus', tick);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', tick);
+    };
+  }, [router]);
   const [resetting, setResetting] = useState(null);
   const [deleting, setDeleting] = useState(null);
 
@@ -96,6 +161,7 @@ export function AccountsClient({ initialAdmins, roles = [], currentUserId }) {
               <th className="px-4 py-3 text-left font-medium text-[var(--text-secondary)]">Role</th>
               <th className="px-4 py-3 text-left font-medium text-[var(--text-secondary)]">สถานะ</th>
               <th className="px-4 py-3 text-left font-medium text-[var(--text-secondary)]">เข้าใช้ล่าสุด</th>
+              <th className="px-4 py-3 text-left font-medium text-[var(--text-secondary)]">ออนไลน์</th>
               <th className="px-4 py-3 text-right font-medium text-[var(--text-secondary)]">การจัดการ</th>
             </tr>
           </thead>
@@ -133,6 +199,9 @@ export function AccountsClient({ initialAdmins, roles = [], currentUserId }) {
                   <td className="px-4 py-3 text-xs text-[var(--text-muted)]">
                     {fmt(a.lastLoginAt)}
                   </td>
+                  <td className="px-4 py-3 text-sm" data-cell="presence">
+                    <PresenceCell online={a.online === true} lastSeenAt={a.lastSeenAt ?? null} />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <button
@@ -168,7 +237,7 @@ export function AccountsClient({ initialAdmins, roles = [], currentUserId }) {
             {admins.length === 0 && (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="px-4 py-8 text-center text-[var(--text-muted)]"
                 >
                   ไม่มีบัญชี
