@@ -235,12 +235,16 @@ test('(f) EXEMPTION, named: masterclass.js is the only src/ file left reading PO
   );
 });
 
-test('(f) no changed path passes a per-call bcc argument', () => {
-  // buildBcc() in postmark.js merges POSTMARK_BCC_EMAILS into every send, so
-  // the internal list is configured in ONE place. A per-call bcc makes two
-  // places that have to agree, and one of them gets missed.
+test('(f) no changed path hard-codes a cc/bcc recipient — the copies come from resolveRecipients', () => {
+  // Each flow's copies are its own POSTMARK_{CC,BCC}_<FLOW>_EMAILS pair, read
+  // by src/lib/email/recipients.js and passed on as the shorthand `cc, bcc`.
+  // A `bcc: process.env.X` or `bcc: 'someone@…'` at a call site is a second
+  // place that has to agree with Vercel, and one of them gets missed. (The
+  // app-wide pair postmark.js used to merge into every send is retired —
+  // test/fs/emailRecipientsWiring holds that repo-wide.)
   for (const rel of SEND_PATHS) {
-    assert.doesNotMatch(files[rel].code, /\bbcc\s*:/, `${rel} passes a per-call bcc`);
+    assert.doesNotMatch(files[rel].code, /\b(cc|bcc)\s*:\s*(process\.env|['"`])/, `${rel} hard-codes a copy recipient`);
+    assert.match(files[rel].code, /resolveRecipients\(/, `${rel} does not resolve its recipients`);
   }
 });
 
@@ -435,7 +439,7 @@ test('CONTROL: comment stripping is live, proven on the real files', () => {
 
   const pub = files[PUBLIC_SENDER];
   assert.match(pub.raw, /bcc: process\.env\.POSTMARK_ADMIN_EMAIL/, 'the explanatory note is gone');
-  assert.doesNotMatch(pub.code, /\bbcc\s*:/);
+  assert.doesNotMatch(pub.code, /\bbcc\s*:\s*process\.env/);
   assert.ok(pub.code.includes('sendTemplateEmail'), 'stripping ate the code');
 });
 

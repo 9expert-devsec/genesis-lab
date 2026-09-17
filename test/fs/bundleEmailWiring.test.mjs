@@ -163,19 +163,25 @@ test('the same asymmetric fallback policy, at the same two log levels', () => {
   assert.match(sender, /bundleConfirmationEmail\(/, 'there is no HTML fallback at all');
 });
 
-test('nothing passes a bcc — the internal list is one env var, merged by postmark.js', () => {
+test('the internal copies come from resolveRecipients("bundle") — no address or env var is named here', () => {
   /**
-   * A per-call `bcc: process.env.POSTMARK_ADMIN_EMAIL` means two places to edit
-   * and one of them gets missed. `buildBcc()` merges POSTMARK_BCC_EMAILS into
-   * every send, so the team receives this mail without this file naming them.
+   * A per-call `bcc: process.env.SOMETHING` means two places to edit and one of
+   * them gets missed. The bundle flow's copies are POSTMARK_CC_BUNDLE_EMAILS /
+   * POSTMARK_BCC_BUNDLE_EMAILS, resolved by src/lib/email/recipients.js and
+   * handed to both sends as the shorthand `cc, bcc` — this file names the FLOW
+   * and nothing else. (The app-wide pair postmark.js used to merge into every
+   * send is retired; test/fs/emailRecipientsWiring holds that repo-wide.)
    */
   const sender = read(SENDER);
-  assert.equal(/\bbcc:/.test(sender), false, 'the bundle sender passes its own bcc');
-  assert.match(read('src/lib/email/postmark.js'), /POSTMARK_BCC_EMAILS/, 'the global bcc merge is gone');
+  assert.match(sender, /resolveRecipients\('bundle', \{ kind: 'quote' \}\)/, 'the bundle sender does not resolve its own flow');
+  assert.equal(/\b(cc|bcc)\s*:\s*(process\.env|['"`])/.test(sender), false, 'the bundle sender hard-codes a copy recipient');
+  assert.equal(/POSTMARK_(CC|BCC)_EMAILS\b/.test(read('src/lib/email/postmark.js')), false, 'postmark.js still reads the retired app-wide pair');
 });
 
-test('CONTROL: the bcc probe would see one', () => {
-  assert.equal(/\bbcc:/.test('await sendEmail({ to, bcc: process.env.X, subject });'), true);
+test('CONTROL: the hard-coded-recipient probe would see one', () => {
+  assert.equal(/\b(cc|bcc)\s*:\s*(process\.env|['"`])/.test('await sendEmail({ to, bcc: process.env.X, subject });'), true);
+  assert.equal(/\b(cc|bcc)\s*:\s*(process\.env|['"`])/.test("sendEmail({ to, cc: 'ops@x.example' })"), true);
+  assert.equal(/\b(cc|bcc)\s*:\s*(process\.env|['"`])/.test('sendEmail({ to, cc, bcc, subject })'), false, 'the resolver shorthand is not a hard-coded recipient');
 });
 
 /**
