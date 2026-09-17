@@ -381,3 +381,27 @@ test('the proxy forwards the session id to the upstream as user_id', () => {
     'the upstream body carries user_id, and it is the SAME value as sessionId',
   );
 });
+
+test('every chat turn carries the page it was sent from — origin + pathname, never the query string', () => {
+  // The admin chat panel (docs/admin-chat-panel-phase-a.md §E1) found that only
+  // a RATED message ever carried a page URL. Now the store computes one per
+  // turn, the client sends it as `page_url`, and the proxy forwards it in the
+  // same upstream body as user_id. Origin + pathname ONLY: `window.location.href`
+  // would carry a query string, and a tracking token or a form's state would
+  // then sit in the transcript. Each hop is asserted on CODE (comments scrubbed).
+  const STORE = src('src/components/chat/useChatStore.js');
+  assert.match(
+    STORE,
+    /pageUrl:[^,]*`\$\{window\.location\.origin\}\$\{window\.location\.pathname\}`/,
+    'the store hands sendChat origin + pathname',
+  );
+  const sendCall = STORE.slice(STORE.indexOf('sendChat({'), STORE.indexOf('});', STORE.indexOf('sendChat({')));
+  assert.ok(sendCall.includes('pageUrl:'), 'the sendChat call was isolated and carries pageUrl');
+  assert.equal(/window\.location\.href/.test(sendCall), false,
+    'the chat turn must not send the full href (the FEEDBACK call still may — that field predates this)');
+  const CLIENT = src('src/lib/chat/chatClient.js');
+  assert.match(CLIENT, /page_url: String\(pageUrl \?\? ''\)/, 'sendChat puts it on the wire as page_url');
+  const ROUTE = src('src/app/api/chat/route.js');
+  assert.match(ROUTE, /JSON\.stringify\(\{[^}]*\bpage_url: pageUrl \|\| undefined\b[^}]*\}\)/, 'the proxy forwards page_url in the upstream body, omitted when empty');
+  assert.match(ROUTE, /const pageUrl = sanitizePageUrl\(payload\.page_url\)/, 'through the sanitiser, never verbatim');
+});

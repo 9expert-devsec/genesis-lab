@@ -43,6 +43,16 @@ test('chatClient — driven sequentially (the fetch handler is process-global)',
     });
   });
 
+  await t.test('the page the turn was sent from travels to the proxy as page_url; absent → ""', async () => {
+    await withChat({ response: 'x' }, async (calls) => {
+      await sendChat({ ...ARGS, pageUrl: 'https://www.9experttraining.com/excel-adv-training-course' });
+      assert.equal(calls[0].body.page_url, 'https://www.9experttraining.com/excel-adv-training-course');
+      assert.deepEqual(Object.keys(calls[0].body).sort(), ['history', 'message', 'page_url', 'sessionId'], 'and nothing else joined the body');
+      await sendChat(ARGS);
+      assert.equal(calls[1].body.page_url, '', 'no pageUrl → an empty string the proxy drops, never undefined-as-missing-key ambiguity');
+    });
+  });
+
   await t.test('missing, null, number, empty string, or over-100-char message_id → serverMessageId null', async () => {
     const cases = [
       ['missing', { response: 'x' }],

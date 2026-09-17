@@ -66,6 +66,12 @@ export function useChatStore() {
           sessionId,
           message: msg,
           history: toHistory(nextMessages),
+          // The page the customer was on when they sent THIS turn — origin +
+          // pathname only, never the query string or hash, so a URL carrying a
+          // tracking token or a form's state does not ride into the transcript.
+          // The admin panel's sessions list shows it (docs/admin-chat-panel-
+          // phase-a.md §E1: until now only a RATED message carried a page URL).
+          pageUrl: typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '',
         });
 
         dispatch({

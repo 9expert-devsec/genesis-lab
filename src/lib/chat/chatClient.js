@@ -139,11 +139,18 @@ export class ChatRequestError extends Error {
   }
 }
 
-export async function sendChat({ sessionId, message, history }) {
+/**
+ * `pageUrl` is the page the turn was sent from (origin + pathname, computed by
+ * the store). It travels as `page_url` — snake_case on the wire because that
+ * is the upstream ChatRequest field name, and the proxy rebuilds its upstream
+ * body from named keys, so the name has to match at both hops. Absent or
+ * empty → '' here, and the proxy omits it upstream.
+ */
+export async function sendChat({ sessionId, message, history, pageUrl }) {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ sessionId, message, history: asArray(history) }),
+    body: JSON.stringify({ sessionId, message, history: asArray(history), page_url: String(pageUrl ?? '') }),
     cache: 'no-store',
   });
 

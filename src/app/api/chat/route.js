@@ -154,6 +154,27 @@ function sanitizeHistory(history) {
 }
 
 /**
+ * The page URL the widget reports with each turn, reduced to what the panel
+ * needs: an absolute http(s) URL, origin + path only, capped like the feedback
+ * route's `pageUrl`. Anything else — a relative path, a javascript: scheme, a
+ * query string somebody appended — collapses to '' and is NOT forwarded. The
+ * widget already sends origin + pathname; this is the cap that holds when the
+ * request did not come from the widget.
+ */
+const MAX_PAGE_URL_CHARS = 500;
+function sanitizePageUrl(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw || raw.length > MAX_PAGE_URL_CHARS) return '';
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return '';
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return '';
+  }
+}
+
+/**
  * FIX 5 — an unset CHATBOT_V2_API_URL used to be a 500 on every keystroke.
  * A missing env var is a deployment state, not a fault, and the client renders
  * it as "chat unavailable". Returning null here (rather than throwing) is what
@@ -201,6 +222,7 @@ export async function POST(req) {
   }
 
   const sessionId = String(payload.sessionId ?? '').trim().slice(0, 100);
+  const pageUrl = sanitizePageUrl(payload.page_url);
 
   // FIX 4 — see src/lib/chat/rateLimit.js. In a serverless runtime this counter
   // is PER INSTANCE, so it is a speed bump against a runaway client, not a limit
@@ -242,6 +264,11 @@ export async function POST(req) {
         user_id: sessionId,
         message,
         history: sanitizeHistory(payload.history),
+        // The page the turn was sent from, for the admin chat panel. OMITTED
+        // (JSON.stringify drops an undefined property) rather than sent as ''
+        // when the widget had none, so an upstream that validates the field as
+        // a URL is not handed an empty string.
+        page_url: pageUrl || undefined,
       }),
       cache: 'no-store',
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
