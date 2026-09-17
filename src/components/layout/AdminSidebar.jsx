@@ -47,7 +47,7 @@ import { cn } from '@/lib/utils';
 import { logoutAction } from '@/lib/actions/auth';
 import { canAccess } from '@/lib/rbac/access';
 import { activeNavHref } from '@/lib/admin/activeNavItem';
-import { avatarUrl } from '@/lib/avatar/avatarUrl';
+import { AdminAvatar } from '@/components/admin/AdminAvatar';
 import {
   parseGroupCollapse,
   isGroupExpanded,
@@ -509,36 +509,13 @@ function ProfileIdentity({ userName, userEmail, badgeLabel, badgeStyle }) {
 /**
  * The signed-in admin's avatar, at the one size the rail uses.
  *
- * PLAIN <img>, NOT next/image, and the reasoning lives in
- * src/lib/avatar/avatarUrl.js: that function already returns an asset at
- * exactly the requested pixel size with f_auto/q_auto, so next/image would run
- * a second optimiser pass over an already-optimised URL and its srcset would
- * have nothing to choose between across four allowlisted sizes. It also keeps
- * the `Image` identifier out of this file — which imports lucide icons, and
- * where `new Map(...)` already cost the whole admin layout once.
- *
- * `aria-hidden` because in both rail states this sits inside a control that
- * already has an accessible name ("โปรไฟล์ของฉัน"), or beside text that says
- * the same thing. An alt of "profile photo" would make a screen reader
- * announce the person twice.
- *
- * NOT lazy: it is above the fold in every admin page load, in a fixed-size box
- * that is on screen the moment the rail paints. `loading="lazy"` is for the
- * things below it.
+ * The `<img>` itself — plain, not next/image; `alt=""`; the bundled default
+ * for an admin with no photo — is src/components/admin/AdminAvatar.jsx, which
+ * the /admin/accounts table renders too, so the rail and the list cannot
+ * disagree about what "no photo" looks like. This wrapper only fixes the size.
  */
 function SidebarAvatar({ publicId }) {
-  return (
-    /* eslint-disable-next-line @next/next/no-img-element */
-    <img
-      src={avatarUrl(publicId, AVATAR_PX)}
-      alt=""
-      width={AVATAR_PX}
-      height={AVATAR_PX}
-      aria-hidden="true"
-      className="shrink-0 rounded-full object-cover"
-      style={{ width: AVATAR_PX, height: AVATAR_PX }}
-    />
-  );
+  return <AdminAvatar publicId={publicId} size={AVATAR_PX} />;
 }
 
 /**

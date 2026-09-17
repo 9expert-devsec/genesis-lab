@@ -10,6 +10,7 @@ import {
   deleteAdmin,
 } from '@/lib/actions/admin-accounts';
 import { roleBadgeStyle } from '@/lib/rbac/roleColor';
+import { AdminAvatar } from '@/components/admin/AdminAvatar';
 
 /**
  * Role badge — resolves the admin's roleKey (fallback legacy `role`) to a
@@ -34,9 +35,20 @@ function fmt(date) {
   return date ? new Date(date).toLocaleString('th-TH') : '—';
 }
 
+/**
+ * ── ROWS RENDER FROM THE PROP, NEVER FROM A STATE COPY ──────────────────────
+ * This used to be `const [admins] = useState(initialAdmins)`, and `setAdmins`
+ * was never called. React keeps state across re-renders of a surviving
+ * instance, so after a create / edit / delete the modals' `router.refresh()`
+ * re-ran `listAdmins()` on the server, the page passed a NEW `initialAdmins`
+ * down, and the table went on drawing the old array — the list only changed on
+ * a full navigation. Reading the prop directly is the whole fix, and it is what
+ * lets a periodic refresh (round ③) show up at all. Same rule as the URL
+ * filters in test/fs/urlFilterNoState: a value seeded into state goes stale.
+ */
 export function AccountsClient({ initialAdmins, roles = [], currentUserId }) {
   const router = useRouter();
-  const [admins, setAdmins] = useState(initialAdmins);
+  const admins = Array.isArray(initialAdmins) ? initialAdmins : [];
   const [isPending, startTransition] = useTransition();
   const [globalError, setGlobalError] = useState('');
 
@@ -72,10 +84,13 @@ export function AccountsClient({ initialAdmins, roles = [], currentUserId }) {
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)]">
+      {/* overflow-x-auto, not overflow-hidden: eight columns at phone width
+          should scroll sideways, not be crushed into unreadable slivers. */}
+      <div className="overflow-x-auto rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)]">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--surface-border)] bg-[var(--surface-muted)]">
+              <th className="w-14 px-4 py-3 text-left font-medium text-[var(--text-secondary)]">โปรไฟล์</th>
               <th className="px-4 py-3 text-left font-medium text-[var(--text-secondary)]">อีเมล</th>
               <th className="px-4 py-3 text-left font-medium text-[var(--text-secondary)]">ชื่อ</th>
               <th className="px-4 py-3 text-left font-medium text-[var(--text-secondary)]">Role</th>
@@ -92,6 +107,12 @@ export function AccountsClient({ initialAdmins, roles = [], currentUserId }) {
                   key={a._id}
                   className="border-b border-[var(--surface-border)] last:border-b-0"
                 >
+                  <td className="px-4 py-2" data-cell="avatar">
+                    {/* The same component and the same bundled default as the
+                        sidebar footer — an admin with no photo looks identical
+                        in both places. The name is the next column, so alt="". */}
+                    <AdminAvatar publicId={a.imagePublicId ?? null} size={36} />
+                  </td>
                   <td className="px-4 py-3 text-[var(--text-primary)]">
                     {a.email}
                     {isSelf && (
@@ -147,7 +168,7 @@ export function AccountsClient({ initialAdmins, roles = [], currentUserId }) {
             {admins.length === 0 && (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   className="px-4 py-8 text-center text-[var(--text-muted)]"
                 >
                   ไม่มีบัญชี
