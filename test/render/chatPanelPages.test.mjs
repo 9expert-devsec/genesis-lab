@@ -103,8 +103,12 @@ test('chat panel pages — driven sequentially (session and env are process-glob
     delete process.env.CHAT_PANEL_API_URL;
     delete process.env.CHAT_PANEL_API_KEY;
     try {
-      // Any fetch at all is a failure here; the handler claims every URL.
-      await withFetch({ name: 'chatPanelPages', match: () => true, handle: () => { throw new Error('the page must not fetch without configuration'); } }, async (calls) => {
+      // Any PANEL fetch is a failure here. The matcher is the panel path, NOT a
+      // catch-all: the dispatcher is process-global and newest-first, so a
+      // `() => true` here would claim every other file's fetches for the
+      // duration (measured — it broke test/pure/chatRoutePageUrl when the two
+      // overlapped). A misconfigured page could only ever reach `…/api/panel/*`.
+      await withFetch({ name: 'chatPanelPages', match: (u) => u.includes('/api/panel/'), handle: () => { throw new Error('the page must not fetch without configuration'); } }, async (calls) => {
         setSessionUser(SUPER);
         const doc = dom(renderToStaticMarkup(await StatsPage({ searchParams: Promise.resolve({}) }, { now: NOW })));
         const notices = [...doc.querySelectorAll('[data-testid="panel-failure"]')];

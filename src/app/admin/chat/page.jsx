@@ -2,7 +2,8 @@ import { requirePage } from '@/lib/rbac/guard';
 import { canAccess } from '@/lib/rbac/access';
 import { getPanelSummary, getPanelTrends, TRENDS_LIMIT } from '@/lib/chatPanel/client';
 import { readPanelRange } from '@/lib/chatPanel/range';
-import { courseHref, careerPathHref } from '@/lib/utils';
+import { careerPathHref } from '@/lib/utils';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 import {
   PANEL_MAX_WIDTH, PanelHeading, PanelRangeControl, PanelFailure, PanelLink,
   TotalsRow, PlainTable, RankedTable, fmtInt,
@@ -92,14 +93,18 @@ function SummaryBlock({ data }) {
 }
 
 /**
- * Course ids link through `courseHref(id)` — the derived `/<id>-training-course`
- * path, which resolveCourse serves for every current id regardless of casing
- * (getCourseByCodeInsensitive; survey §E3). Masterclass and career-path slugs
- * link the way the corpus cards do. Queries and intents are text.
+ * Course ids link through `courseLinkHref({ course_id })` — THE function every
+ * internal course link goes through (test/fs/courseHrefCensus forbids the
+ * string-only `courseHref`). With no alias attached it yields the derived
+ * `/<id>-training-course` path, which resolveCourse serves for every current
+ * id regardless of casing (getCourseByCodeInsensitive; survey §E3); the day a
+ * row carries `urlAlias`, the same call emits the alias. Masterclass and
+ * career-path slugs link the way the corpus cards do. Queries and intents are
+ * text.
  */
 function TrendsBlock({ data }) {
   const list = (k) => (Array.isArray(data?.[k]) ? data[k] : []);
-  const courses = list('courses').map((r) => ({ label: String(r.id ?? ''), count: r.count, href: r.id ? courseHref(String(r.id).toLowerCase()) : null }));
+  const courses = list('courses').map((r) => ({ label: String(r.id ?? ''), count: r.count, href: r.id ? courseLinkHref({ course_id: String(r.id) }) : null }));
   const masterclasses = list('masterclasses').map((r) => ({ label: String(r.slug ?? ''), count: r.count, href: r.slug ? `/masterclass/${r.slug}` : null }));
   const careerPaths = list('career_paths').map((r) => ({ label: String(r.slug ?? ''), count: r.count, href: r.slug ? careerPathHref(String(r.slug)) : null }));
   const queries = list('search_queries').map((r) => ({ label: String(r.query ?? ''), count: r.count }));

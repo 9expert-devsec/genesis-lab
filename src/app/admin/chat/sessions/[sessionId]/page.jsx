@@ -1,7 +1,8 @@
 import { requirePage } from '@/lib/rbac/guard';
 import { getPanelSession } from '@/lib/chatPanel/client';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
-import { courseHref, careerPathHref } from '@/lib/utils';
+import { careerPathHref } from '@/lib/utils';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 import {
   PANEL_MAX_WIDTH, PanelHeading, PanelFailure, PanelNote, PanelLink, fmtBangkok,
 } from '../../_components/panelParts';
@@ -145,7 +146,7 @@ function Message({ m }) {
 function CardLinks({ cards }) {
   const list = (k) => (Array.isArray(cards[k]) ? cards[k].map(String).filter(Boolean) : []);
   const groups = [
-    { key: 'courses', label: 'หลักสูตร', items: list('courses').map((id) => ({ id, href: courseHref(id.toLowerCase()) })) },
+    { key: 'courses', label: 'หลักสูตร', items: list('courses').map((id) => ({ id, href: courseLinkHref({ course_id: id }) })) },
     { key: 'masterclasses', label: 'Masterclass', items: list('masterclasses').map((slug) => ({ id: slug, href: `/masterclass/${slug}` })) },
     { key: 'career_paths', label: 'Career Path', items: list('career_paths').map((slug) => ({ id: slug, href: careerPathHref(slug) })) },
   ].filter((g) => g.items.length > 0);
