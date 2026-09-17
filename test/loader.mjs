@@ -52,6 +52,13 @@ export const STUBS = {
   // request. Round 36 drives /preview/[slug] directly to prove what it renders
   // in each state, which is not something a source scan can establish.
   "next/headers": path.join(ROOT, "test", "stub-next-headers.mjs"),
+  // `server-only` is a marker package whose default export condition THROWS on
+  // import; only Next's react-server bundles see its empty variant. The panel
+  // client (src/lib/chatPanel/client.js) is the first module here to import
+  // it. Keyed on the bare specifier — not `@/` — so stubExportParity, which
+  // only compares app-source stubs, leaves it alone: there is no export set to
+  // compare, the real module has none.
+  "server-only": path.join(ROOT, "test", "stub-server-only.mjs"),
   // PreviewGate calls useActionState (React 19; installed React is 18.3.1) and
   // imports an action whose graph reaches the db layer. See the stub for what
   // stubbing it costs and what covers the gap.
