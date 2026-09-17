@@ -75,6 +75,31 @@ export const ADMIN_PAGES = [
     ],
   },
   {
+    // ── THE CHAT PANEL: TWO KEYS FOR ONE SURFACE, ON PURPOSE ──────────────
+    // The data behind /admin/chat comes from the chatbot service, not Mongo,
+    // and it splits along a privacy line: `chat_stats` is counts and ranked
+    // lists (thumbs, trends) with nothing a customer typed in them;
+    // `chat_transcripts` is the sessions list and the full transcript, which
+    // carries whatever the customer wrote — phone numbers and emails
+    // included. A role may hold the first without the second, which is why
+    // they are two page keys and not one key with a scope: the transcripts
+    // have their OWN route, so unlike the dashboard scopes there is an href
+    // for a nav row to point at and a path for resolvePageKey to resolve.
+    //
+    // `chat_transcripts` sits under `chat_stats` by prefix and wins by
+    // longest-href-match, exactly as `mc_registrations` sits under
+    // `masterclass` — /admin/chat/sessions/<id> resolves to the transcript
+    // key, never to the stats key. Both pages call requirePage with their own
+    // key regardless; the resolver is for the sidebar and the audit clamp.
+    //
+    // Survey: docs/admin-chat-panel-phase-a.md §A5, §G.
+    group: 'AI Chat',
+    pages: [
+      { key: 'chat_stats',       label: 'สถิติแชต AI',    href: '/admin/chat',          match: 'prefix' },
+      { key: 'chat_transcripts', label: 'บทสนทนาแชต AI', href: '/admin/chat/sessions', match: 'prefix' },
+    ],
+  },
+  {
     group: 'การลงทะเบียน',
     pages: [
       { key: 'registrations',             label: 'การลงทะเบียน',              href: '/admin/registrations',             match: 'prefix' },

@@ -44,17 +44,18 @@ const MARKUP = sidebar();
 const HEADERS = [...MARKUP.matchAll(/<button\b[^>]*aria-expanded[^>]*>/g)].map((m) => m[0]);
 
 test('group toggle: every group renders a header button, one per group', () => {
-  // Six groups plus the rail's own collapse toggle, which also carries
-  // aria-expanded — asserted separately so a miscount is legible.
+  // Seven groups (six, plus 'AI Chat' after ภาพรวม) plus the rail's own
+  // collapse toggle, which also carries aria-expanded — asserted separately so
+  // a miscount is legible.
   const controlled = HEADERS.filter((h) => /aria-controls="admin-nav-/.test(h));
-  assert.equal(controlled.length, 6, `expected 6 group headers, found ${controlled.length}`);
+  assert.equal(controlled.length, 7, `expected 7 group headers, found ${controlled.length}`);
 });
 
 test('group toggle: each header names the list it controls, and that list exists', () => {
   const ids = HEADERS
     .map((h) => (h.match(/aria-controls="([^"]+)"/) ?? [])[1])
     .filter(Boolean);
-  assert.equal(ids.length, 6);
+  assert.equal(ids.length, 7);
   for (const id of ids) {
     assert.match(
       MARKUP, new RegExp(`<ul id="${id}"`),
@@ -62,7 +63,7 @@ test('group toggle: each header names the list it controls, and that list exists
       + 'following the reference finds nothing, which is worse than no reference',
     );
   }
-  assert.deepEqual([...new Set(ids)].length, 6, 'two headers claim the same list');
+  assert.deepEqual([...new Set(ids)].length, 7, 'two headers claim the same list');
 });
 
 test('group toggle: the headers are <button>, not clickable text', () => {

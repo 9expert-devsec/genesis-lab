@@ -50,6 +50,9 @@ const ALL_PAGE_KEYS = [
   // role that this script grants the dashboard to also gets both halves of it
   // and nothing changes for anyone the day they ship.
   'dashboard_registrations', 'dashboard_system',
+  // AI Chat — see the PAGE_SET note; mirrored so the registry parity guard
+  // (test/fs/rbacRegistryMirror) holds, NOT so any seeded role receives them.
+  'chat_stats', 'chat_transcripts',
   'featured_courses', 'featured_online_courses', 'nav_featured_online_courses',
   'courses', 'schedules', 'instructors', 'programs', 'career_paths', 'masterclass',
   'mc_registrations', 'tnhs_courses', 'page_configs',
@@ -93,6 +96,13 @@ const PAGE_SET = {
   // dashboard changes. A role that can open the page keeps both halves of it.
   dashboard_registrations: 'ALL',
   dashboard_system: 'ALL',
+  // AI Chat — GRANTED TO NOBODY BY THIS SCRIPT. 'SUPER' keeps both keys out
+  // of every membership set, and ADMIN_EXCLUDED (below) keeps them out of the
+  // widened `admin` role too. Superadmin bypasses page checks and needs no
+  // grant; every other role is given these by hand in /admin/roles, because
+  // `chat_transcripts` reads whatever customers typed into the chat.
+  chat_stats: 'SUPER',
+  chat_transcripts: 'SUPER',
   // จัดการหลักสูตร
   featured_courses: 'IT',
   featured_online_courses: 'IT',
@@ -164,7 +174,10 @@ function assertRegistryCoverage() {
 }
 
 // ── The 5 default system roles ──────────────────────────────────────────
-const ADMIN_EXCLUDED = new Set(['accounts', 'roles']); // intentional admin cap
+// intentional admin cap — and the two AI Chat keys, which no seeded role
+// receives (see PAGE_SET). Without this line the `admin` filter below would
+// hand the transcripts to every admin on the next seed run.
+const ADMIN_EXCLUDED = new Set(['accounts', 'roles', 'chat_stats', 'chat_transcripts']);
 function buildSeedRoles() {
   return [
     {

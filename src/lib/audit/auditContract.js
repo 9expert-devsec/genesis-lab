@@ -422,6 +422,23 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
   // The highest-value rows in the log: a role edit silently changes what every
   // holder of that role can reach.
   entry('roles', 'role', 'บทบาทและสิทธิ์', 'full'),
+
+  // ── AI Chat ─────────────────────────────────────────────────────
+  /**
+   * THE FIRST READ THE TRAIL RECORDS. Opening one transcript writes a `view`
+   * row (src/app/admin/chat/sessions/[sessionId]/page.jsx) — only when the
+   * page actually rendered a transcript, never on the list, a 404 or an
+   * upstream failure. A transcript is whatever a customer typed, and "who
+   * opened this conversation, and when" is the question that data makes
+   * worth answering.
+   *
+   * `act_only`, and that is the whole point: WHO / WHAT / WHEN and the
+   * session id. No `before`, no `after`, no message text — the payload the
+   * customer wrote must not be copied into a second collection by the act of
+   * an admin reading it. `chat_stats` has no entry: counts and ranked lists
+   * are not a record anyone acts on, so it stays in MENUS_WITHOUT_MUTATIONS.
+   */
+  entry('chat_transcripts', 'transcript', 'บทสนทนาแชต AI', 'act_only'),
 ]);
 
 /**

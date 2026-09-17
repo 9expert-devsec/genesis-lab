@@ -55,8 +55,10 @@ test('the nested route resolves to the EXISTING media key, with no new page key'
    * checkbox, and a sidebar line unless somebody wrote down why not. Bumped in
    * the same commit as the key, which is the whole protocol.
    */
+  // 43 = 41 + the two AI Chat keys (`chat_stats`, `chat_transcripts`), each
+  // with its own checkbox and NAV_GROUPS row — see docs/admin-chat-panel-phase-a.md.
   assert.equal(
-    ALL_PAGE_KEYS.length, 41,
+    ALL_PAGE_KEYS.length, 43,
     'a page key was added or removed. This route is supposed to inherit `media` '
     + 'by href prefix; another key means a new checkbox in the role editor and a '
     + 'new NAV_GROUPS line, and rbacNavParity will say so',

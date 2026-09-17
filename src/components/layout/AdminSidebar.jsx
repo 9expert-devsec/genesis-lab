@@ -39,6 +39,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Shuffle,
+  BarChart3,
+  MessagesSquare,
   ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -219,6 +221,11 @@ const ICONS = {
   History,
   // Redirect Panel — a path going somewhere other than where it points.
   Shuffle,
+  // AI Chat — counts and ranked lists get a bar chart; the transcripts get
+  // the two-bubble mark rather than the single MessageSquare that รีวิวแนะนำ
+  // already uses, so the two rows read as different things at a glance.
+  BarChart3,
+  MessagesSquare,
 };
 
 // Nav config. Each item declares the `pageKey` it maps to (matching
@@ -246,6 +253,19 @@ const NAV_GROUPS = [
     label: 'ภาพรวม',
     items: [
       { label: 'แดชบอร์ด', href: '/admin', icon: 'LayoutDashboard', exact: true, pageKey: 'dashboard' },
+    ],
+  },
+  {
+    // Mirrors the 'AI Chat' group in src/lib/rbac/pages.js — same label, same
+    // position (immediately after ภาพรวม), same row order. adminNavShape holds
+    // the two lists in step. Row 2 sits under row 1 by URL prefix and wins by
+    // longest match in resolvePageKey, so the transcript pages light the
+    // transcript row, not the stats row.
+    id: 'ai-chat',
+    label: 'AI Chat',
+    items: [
+      { label: 'สถิติแชต AI',    href: '/admin/chat',          icon: 'BarChart3',      pageKey: 'chat_stats' },
+      { label: 'บทสนทนาแชต AI', href: '/admin/chat/sessions', icon: 'MessagesSquare', pageKey: 'chat_transcripts' },
     ],
   },
   {

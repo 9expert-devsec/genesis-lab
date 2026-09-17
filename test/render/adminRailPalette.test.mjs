@@ -124,7 +124,7 @@ test('THE GROUP HEADER TAKES NO HOVER FILL — it brightens its text instead', (
   // unreadable at exactly the moment the pointer was on it. Only a render can
   // see that the split was actually applied to the right element.
   const headers = tags(sidebar(), 'button').filter((t) => /aria-controls="admin-nav-/.test(t));
-  assert.equal(headers.length, 6, `expected 6 group headers, found ${headers.length}`);
+  assert.equal(headers.length, 7, `expected 7 group headers, found ${headers.length}`);
   for (const h of headers) {
     assert.match(h, /text-\[var\(--admin-rail-group\)\]/, h);
     assert.match(h, /hover:text-\[var\(--admin-rail-brand\)\]/, h);
