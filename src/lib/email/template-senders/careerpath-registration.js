@@ -1,4 +1,5 @@
 import { sendTemplateEmail } from '@/lib/email/postmark';
+import { resolveRecipients } from '@/lib/email/recipients';
 import { buildCareerPathRegistrationModel } from '@/lib/email/models/careerPathRegistrationModel';
 import { getCareerPathForRegistration } from '@/lib/actions/career-paths';
 
@@ -40,10 +41,12 @@ import { getCareerPathForRegistration } from '@/lib/actions/career-paths';
  *
  * ══ WHO RECEIVES IT ════════════════════════════════════════════════════════
  *
- * `to` is the contact who submitted. Everyone internal receives the same mail as
- * a BCC merged into every send by `buildBcc()` from POSTMARK_BCC_EMAILS — so
- * nothing here passes a `bcc`, and there is no second admin-only mail. Same
- * design the other three state.
+ * `to` is the contact who submitted. Everyone internal receives the same mail
+ * as a copy: `resolveRecipients('careerpath', { kind: 'quote' })` —
+ * POSTMARK_CC_CAREERPATH_EMAILS / POSTMARK_BCC_CAREERPATH_EMAILS. There is no
+ * second admin-only mail, and — this flow having no HTML fallback — exactly one
+ * send to hand the copies to. The app-wide pair postmark.js used to merge into
+ * every send is retired (see src/lib/email/recipients.js).
  *
  * @param {object} registration the CareerPathRegistration document, as created
  * @returns {Promise<{sent: boolean, reason?: string}>} never rejects
@@ -70,11 +73,14 @@ export async function sendCareerPathRegistrationEmail(registration) {
     }
 
     const coverImage = await resolveCoverImage(registration?.careerSlug);
+    const { cc, bcc } = resolveRecipients('careerpath', { kind: 'quote' });
 
     // SUBJECT COMES FROM THE POSTMARK TEMPLATE — deliberately no subject string
     // here, and no fallback body that would need one.
     const result = await sendTemplateEmail({
       to,
+      cc,
+      bcc,
       templateAlias: alias,
       templateModel: buildCareerPathRegistrationModel({ registration, coverImage }),
     });

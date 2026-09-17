@@ -2,6 +2,7 @@ import { sendEmail, sendTemplateEmail } from '@/lib/email/postmark';
 import { bundleConfirmationEmail } from '@/lib/email/templates/registration-bundle-user';
 import { buildBundleRegistrationModel } from '@/lib/email/models/bundleRegistrationModel';
 import { decideSendPlan } from '@/lib/email/sendPlan';
+import { resolveRecipients } from '@/lib/email/recipients';
 import { scheduleTypeLabel } from '@/lib/email/models/labels';
 
 /**
@@ -47,12 +48,13 @@ import { scheduleTypeLabel } from '@/lib/email/models/labels';
  *
  * ══ WHO RECEIVES IT ════════════════════════════════════════════════════════
  *
- * `to` is the coordinator. Everyone internal receives the same mail as a BCC,
- * merged into EVERY send by `buildBcc()` from POSTMARK_BCC_EMAILS — so nothing
- * here passes a `bcc`, and there is no second admin-only mail. That is the
- * design the public sender already states: one env var instead of one per call
- * site, and it has to live in this repo at all because a Postmark Template
- * stores Subject + HTML + Text and has no Cc/Bcc field.
+ * `to` is the coordinator. Everyone internal receives the same mail as a copy:
+ * `resolveRecipients('bundle', { kind: 'quote' })` — POSTMARK_CC_BUNDLE_EMAILS /
+ * POSTMARK_BCC_BUNDLE_EMAILS, resolved once and handed to BOTH the template send
+ * and the HTML fallback. There is no second admin-only mail. The app-wide pair
+ * postmark.js used to merge into every send is retired (see
+ * src/lib/email/recipients.js); routing lives in this repo at all because a
+ * Postmark Template stores Subject + HTML + Text and has no Cc/Bcc field.
  */
 export async function sendBundleRegistrationEmail({
   referenceNumber,
@@ -72,12 +74,15 @@ export async function sendBundleRegistrationEmail({
 }) {
   const alias = process.env.POSTMARK_TEMPLATE_ALIAS_REG_BUNDLE;
   const to = data.coordinator.email;
+  const { cc, bcc } = resolveRecipients('bundle', { kind: 'quote' });
 
   // SUBJECT COMES FROM THE POSTMARK TEMPLATE on this path — deliberately no
   // subject string here. The fallback below carries the one the HTML needs.
   const templateResult = alias
     ? await sendTemplateEmail({
         to,
+        cc,
+        bcc,
         templateAlias: alias,
         templateModel: buildBundleRegistrationModel({
           referenceNumber,
@@ -132,6 +137,8 @@ export async function sendBundleRegistrationEmail({
 
     await sendEmail({
       to,
+      cc,
+      bcc,
       subject: `ได้รับคำขอใบเสนอราคา ${bundleName || 'แพ็กเกจอบรม'} - ${referenceNumber}`,
       html: msg.html,
       text: msg.text,

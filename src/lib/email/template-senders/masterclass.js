@@ -1,4 +1,5 @@
 import { sendEmail, sendTemplateEmail } from "@/lib/email/postmark";
+import { resolveRecipients } from "@/lib/email/recipients";
 import { formatTHB } from "@/lib/pricing";
 import { formatBillingAddress } from "@/lib/address/formatBillingAddress";
 import { buildLicenseModel } from "@/lib/email/buildLicenseModel";
@@ -156,6 +157,11 @@ export async function sendMasterclassPaidReceipt(doc) {
   };
 
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
+  // The CUSTOMER mail copies POSTMARK_CC_MASTERCLASS_EMAILS /
+  // POSTMARK_BCC_MASTERCLASS_EMAILS plus — payment only — the extra
+  // POSTMARK_BCC_MASTERCLASS_PAYMENT_EMAILS list. The admin mail below is not a
+  // customer mail and deliberately gets NO cc/bcc: its recipient IS the team.
+  const { cc, bcc } = resolveRecipients("masterclass", { kind: "payment" });
 
   // TODO(temp-debug): remove after verifying flat license keys reach Postmark.
   console.log("[mc-license-debug]", JSON.stringify({
@@ -174,6 +180,8 @@ export async function sendMasterclassPaidReceipt(doc) {
   await Promise.allSettled([
     sendTemplateEmail({
       to: recipient.to,
+      cc,
+      bcc,
       templateAlias: alias,
       templateModel,
     }),
@@ -289,6 +297,10 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
   };
 
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
+  // Quote: POSTMARK_CC_MASTERCLASS_EMAILS / POSTMARK_BCC_MASTERCLASS_EMAILS only
+  // — the payment-only BCC list does not apply here. The admin mail below gets
+  // NO cc/bcc; see the paid receipt above.
+  const { cc, bcc } = resolveRecipients("masterclass", { kind: "quote" });
 
   // TODO(temp-debug): remove after verifying flat license keys reach Postmark.
   console.log("[mc-license-debug]", JSON.stringify({
@@ -307,6 +319,8 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
   await Promise.allSettled([
     sendTemplateEmail({
       to: recipient.to,
+      cc,
+      bcc,
       templateAlias: alias,
       templateModel,
     }),

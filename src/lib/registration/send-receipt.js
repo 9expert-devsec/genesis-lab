@@ -4,6 +4,7 @@ import { paidReceiptEmail } from '@/lib/email/templates/registration-paid';
 import { buildPublicPaidReceiptModel } from '@/lib/email/models/publicPaidReceiptModel';
 import { buildInvoiceDisplay } from '@/lib/registration/create-public';
 import { decideSendPlan } from '@/lib/email/sendPlan';
+import { resolveRecipients } from '@/lib/email/recipients';
 
 /**
  * Idempotently send THE paid-receipt email — one mail, to the customer.
@@ -21,11 +22,14 @@ import { decideSendPlan } from '@/lib/email/sendPlan';
  * The second `sendEmail` that went to POSTMARK_ADMIN_EMAIL — with the consent
  * audit lines (dataChecked / noRefund / changePolicy / termsAccepted, the
  * accepted-at timestamp and the IP) and the Omise charge id — is DELETED, not
- * migrated. Internal recipients now get a BCC of the customer's mail via
- * POSTMARK_BCC_EMAILS, which `buildBcc()` in src/lib/email/postmark.js merges
- * into every send; that is why nothing below passes a `bcc` argument. It cannot
- * be set on the Postmark side — a Template stores Subject + HTML + Text and has
- * no Cc/Bcc field — so recipient routing stays in this repo by necessity.
+ * migrated. Internal recipients now get a copy of the customer's mail through
+ * `resolveRecipients('public', { kind: 'payment' })` — the same
+ * POSTMARK_CC_PUBLIC_EMAILS / POSTMARK_BCC_PUBLIC_EMAILS pair the quote
+ * confirmation uses, resolved once and handed to BOTH branches below. The
+ * app-wide pair postmark.js used to merge into every send is retired (see
+ * src/lib/email/recipients.js). It cannot be set on the Postmark side — a
+ * Template stores Subject + HTML + Text and has no Cc/Bcc field — so recipient
+ * routing stays in this repo by necessity.
  *
  * WHAT THAT COSTS, stated rather than discovered later: the consent block and
  * the charge id were the audit trail, and they now live only in the database
@@ -67,12 +71,15 @@ export async function sendPaidReceipt(doc) {
   const refNo = toRefNo(doc._id);
   const alias = process.env.POSTMARK_TEMPLATE_ALIAS_PAID_USER;
   const to = doc.coordinator.email;
+  const { cc, bcc } = resolveRecipients('public', { kind: 'payment' });
 
   // SUBJECT COMES FROM THE POSTMARK TEMPLATE on this path — there is
   // deliberately no subject string here.
   const templateResult = alias
     ? await sendTemplateEmail({
         to,
+        cc,
+        bcc,
         templateAlias: alias,
         templateModel: buildPublicPaidReceiptModel({
           doc,
@@ -124,6 +131,8 @@ export async function sendPaidReceipt(doc) {
 
     await sendEmail({
       to,
+      cc,
+      bcc,
       subject: `ชำระเงินสำเร็จ ${doc.courseName || ''} - ${refNo}`,
       html: msg.html,
       text: msg.text,

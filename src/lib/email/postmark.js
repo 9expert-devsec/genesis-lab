@@ -9,42 +9,18 @@
  */
 
 /**
- * Merge caller-supplied bcc with the global POSTMARK_BCC_EMAILS env var.
- * POSTMARK_BCC_EMAILS is comma-separated e.g. "a@example.com, b@example.com"
- * Returns a single comma-joined string, or undefined if nothing to BCC.
+ * ── CC / BCC ARE THE CALLER'S, VERBATIM ─────────────────────────────────────
+ * There is no env read here any more. `buildCc()` / `buildBcc()` used to merge
+ * an app-wide pair, POSTMARK_{CC,BCC}_EMAILS, into EVERY send — and
+ * called `buildCc(undefined)`, so a caller-supplied CC was discarded — which
+ * copied the same people on every flow. That pair is retired. Each sender
+ * decides its own copies through src/lib/email/recipients.js and hands the
+ * result in as `cc` / `bcc`; this file sends exactly what it is given, and
+ * omits the header when given nothing.
  */
-function buildBcc(callerBcc) {
-  const envRaw = process.env.POSTMARK_BCC_EMAILS ?? '';
-  const envList = envRaw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const callerList = callerBcc
-    ? callerBcc.split(',').map((s) => s.trim()).filter(Boolean)
-    : [];
-  const merged = [...new Set([...envList, ...callerList])];
-  return merged.length > 0 ? merged.join(', ') : undefined;
-}
+const header = (value) => (typeof value === 'string' && value.trim() ? value.trim() : undefined);
 
-/**
- * Merge caller-supplied cc with the global POSTMARK_CC_EMAILS env var.
- * POSTMARK_CC_EMAILS is comma-separated e.g. "a@example.com, b@example.com"
- * Returns a single comma-joined string, or undefined if nothing to CC.
- */
-function buildCc(callerCc) {
-  const envRaw = process.env.POSTMARK_CC_EMAILS ?? '';
-  const envList = envRaw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const callerList = callerCc
-    ? callerCc.split(',').map((s) => s.trim()).filter(Boolean)
-    : [];
-  const merged = [...new Set([...envList, ...callerList])];
-  return merged.length > 0 ? merged.join(', ') : undefined;
-}
-
-export async function sendEmail({ to, bcc, subject, html, text }) {
+export async function sendEmail({ to, cc, bcc, subject, html, text }) {
   const token = process.env.POSTMARK_SERVER_TOKEN;
   const from = process.env.POSTMARK_FROM_EMAIL;
 
@@ -70,8 +46,8 @@ export async function sendEmail({ to, bcc, subject, html, text }) {
       body: JSON.stringify({
         From: from,
         To: to,
-        Cc: buildCc(undefined),
-        Bcc: buildBcc(bcc),
+        Cc: header(cc),
+        Bcc: header(bcc),
         Subject: subject,
         HtmlBody: html,
         TextBody: text,
@@ -94,7 +70,7 @@ export async function sendEmail({ to, bcc, subject, html, text }) {
   }
 }
 
-export async function sendTemplateEmail({ to, bcc, templateAlias, templateModel }) {
+export async function sendTemplateEmail({ to, cc, bcc, templateAlias, templateModel }) {
   const token = process.env.POSTMARK_SERVER_TOKEN;
   const from  = process.env.POSTMARK_FROM_EMAIL;
 
@@ -117,8 +93,8 @@ export async function sendTemplateEmail({ to, bcc, templateAlias, templateModel 
       body: JSON.stringify({
         From: from,
         To: to,
-        Cc: buildCc(undefined),
-        Bcc: buildBcc(bcc),
+        Cc: header(cc),
+        Bcc: header(bcc),
         TemplateAlias: templateAlias,
         TemplateModel: templateModel,
         MessageStream: 'outbound',

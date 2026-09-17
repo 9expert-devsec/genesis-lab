@@ -2,6 +2,7 @@ import { sendEmail, sendTemplateEmail } from '@/lib/email/postmark';
 import { userConfirmationEmail } from '@/lib/email/templates/registration-user';
 import { buildPublicRegistrationModel } from '@/lib/email/models/publicRegistrationModel';
 import { decideSendPlan } from '@/lib/email/sendPlan';
+import { resolveRecipients } from '@/lib/email/recipients';
 
 /**
  * ONE email: the public-registration confirmation, to the registrant.
@@ -10,12 +11,15 @@ import { decideSendPlan } from '@/lib/email/sendPlan';
  * there is no second, admin-only email any more, and the admin template it used
  * to render is deleted rather than migrated.
  *
- * ── WHERE THE INTERNAL RECIPIENTS WENT ──────────────────────────────────────
- * Nothing below passes a `bcc`, and that is the design, not an omission.
- * `buildBcc()` in src/lib/email/postmark.js merges POSTMARK_BCC_EMAILS into
- * EVERY send, so the internal list is configured in one env var instead of once
- * per call site. A per-call `bcc: process.env.POSTMARK_ADMIN_EMAIL` (which is
- * what used to be here) means two places to edit and one of them gets missed.
+ * ── WHERE THE INTERNAL RECIPIENTS COME FROM ─────────────────────────────────
+ * `resolveRecipients('public', { kind: 'quote' })` — the POSTMARK_CC_PUBLIC_EMAILS
+ * / POSTMARK_BCC_PUBLIC_EMAILS pair, resolved ONCE per send and handed to BOTH
+ * branches below, so the template path and the HTML fallback copy the same
+ * people. This flow's list is its own: the app-wide pair that postmark.js used
+ * to merge into every send is retired (see src/lib/email/recipients.js). A
+ * per-call `bcc: process.env.POSTMARK_ADMIN_EMAIL` (which is what used to be
+ * here before that) is not coming back either — the flow key is the one thing
+ * this file states, and which people that means is Vercel's.
  *
  * And it has to live in this repo at all because a Postmark Template stores
  * Subject + HTML + Text and NOTHING ELSE — there is no Cc/Bcc field in the
@@ -59,6 +63,7 @@ export async function sendPublicRegistrationEmails({
 }) {
   const alias = process.env.POSTMARK_TEMPLATE_ALIAS_REG_USER;
   const to = data.coordinator.email;
+  const { cc, bcc } = resolveRecipients('public', { kind: 'quote' });
 
   // SUBJECT COMES FROM THE POSTMARK TEMPLATE on this path — there is
   // deliberately no subject string here. See the fallback below for the one the
@@ -66,6 +71,8 @@ export async function sendPublicRegistrationEmails({
   const templateResult = alias
     ? await sendTemplateEmail({
         to,
+        cc,
+        bcc,
         templateAlias: alias,
         templateModel: buildPublicRegistrationModel({
           referenceNumber,
@@ -117,6 +124,8 @@ export async function sendPublicRegistrationEmails({
 
     await sendEmail({
       to,
+      cc,
+      bcc,
       subject: `ยืนยันการสมัครอบรม ${data.courseName || ''} - ${referenceNumber}`,
       html: userMsg.html,
       text: userMsg.text,

@@ -2,19 +2,21 @@ import { sendEmail, sendTemplateEmail } from '@/lib/email/postmark';
 import { inhouseUserConfirmationEmail } from '@/lib/email/templates/registration-inhouse-user';
 import { buildInhouseRegistrationModel } from '@/lib/email/models/inhouseRegistrationModel';
 import { decideSendPlan } from '@/lib/email/sendPlan';
+import { resolveRecipients } from '@/lib/email/recipients';
 
 /**
  * ONE email: the in-house enquiry acknowledgement, to the person who submitted
  * it. Internal staff receive that same mail as a BCC copy; the admin-only
  * notification and its template are deleted, not migrated.
  *
- * ── WHERE THE INTERNAL RECIPIENTS WENT ──────────────────────────────────────
- * Nothing below passes a `bcc`. `buildBcc()` in src/lib/email/postmark.js
- * merges POSTMARK_BCC_EMAILS into every send, so the internal list is one env
- * var rather than one env var plus a per-call argument that drifts from it.
- * It cannot be configured on the Postmark side either: a Template holds
- * Subject + HTML + Text and has no Cc/Bcc field, so recipient routing stays in
- * this repo by necessity.
+ * ── WHERE THE INTERNAL RECIPIENTS COME FROM ─────────────────────────────────
+ * `resolveRecipients('inhouse', { kind: 'quote' })` — POSTMARK_CC_INHOUSE_EMAILS
+ * / POSTMARK_BCC_INHOUSE_EMAILS, resolved once and handed to BOTH the template
+ * send and the HTML fallback, so the two branches copy the same people. The
+ * app-wide pair postmark.js used to merge into every send is retired (see
+ * src/lib/email/recipients.js). It cannot be configured on the Postmark side
+ * either: a Template holds Subject + HTML + Text and has no Cc/Bcc field, so
+ * recipient routing stays in this repo by necessity.
  *
  * ── WHAT THE TEAM LOSES, SAID OUT LOUD ──────────────────────────────────────
  * The deleted admin template carried the enquiry DETAIL — objective, skill
@@ -49,11 +51,14 @@ export async function sendInhouseRegistrationEmails({
 }) {
   const alias = process.env.POSTMARK_TEMPLATE_ALIAS_INHOUSE_USER;
   const to = data.contactEmail;
+  const { cc, bcc } = resolveRecipients('inhouse', { kind: 'quote' });
 
   // SUBJECT COMES FROM THE POSTMARK TEMPLATE on this path.
   const templateResult = alias
     ? await sendTemplateEmail({
         to,
+        cc,
+        bcc,
         templateAlias: alias,
         templateModel: buildInhouseRegistrationModel({
           referenceNumber,
@@ -100,6 +105,8 @@ export async function sendInhouseRegistrationEmails({
 
     await sendEmail({
       to,
+      cc,
+      bcc,
       subject: `ได้รับคำขอใบเสนอราคา In-house ${data.quotationCompany} - ${referenceNumber}`,
       html: userMsg.html,
       text: userMsg.text,
