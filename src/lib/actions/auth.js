@@ -3,6 +3,8 @@
 import { AuthError } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { signIn, signOut, auth } from '@/lib/auth/options';
+import { dbConnect } from '@/lib/db/connect';
+import Admin from '@/models/Admin';
 import { canAccess } from '@/lib/rbac/access';
 
 /**
@@ -100,6 +102,27 @@ export async function adminLogin(_prevState, formData) {
  * Admin logout — signs out directly and redirects, skipping NextAuth's
  * default "Are you sure?" confirmation page at /api/auth/signout.
  */
+/**
+ * Sign out — after stamping `lastSignedOutAt` on the admin's OWN document.
+ *
+ * NOT `$unset: { lastSeenAt }`: the accounts list still shows "last seen …"
+ * for a signed-out admin, and an admin who signs out on one device while a
+ * tab on another is still beating is Online again on that tab's next beat —
+ * src/lib/admin/presence.js compares the two stamps' ORDER. A wiped
+ * `lastSeenAt` would lose both. Best-effort: a failed stamp must never keep
+ * someone signed in, so it is caught and the sign-out proceeds; the presence
+ * threshold (150 s) then does the job a beat's silence always does.
+ */
 export async function logoutAction() {
+  try {
+    const session = await auth();
+    const id = session?.user?.id;
+    if (id) {
+      await dbConnect();
+      await Admin.updateOne({ _id: id }, { $set: { lastSignedOutAt: new Date() } });
+    }
+  } catch (err) {
+    console.warn('[auth] lastSignedOutAt stamp failed:', err?.message ?? err);
+  }
   await signOut({ redirectTo: '/admin/9x-portal' });
 }

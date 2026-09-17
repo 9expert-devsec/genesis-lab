@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { AdminSidebar } from '@/components/layout/AdminSidebar';
 import { AdminContentWrapper } from '@/components/layout/AdminContentWrapper';
+import { PresenceHeartbeat } from '@/components/admin/PresenceHeartbeat';
 import { auth } from '@/lib/auth/options';
 import { dbConnect } from '@/lib/db/connect';
 import Admin from '@/models/Admin';
@@ -79,6 +80,11 @@ export default async function AdminLayout({ children }) {
   // inside <AdminSidebar />).
   return (
     <div className="flex h-screen overflow-hidden">
+      {/* ONE heartbeat per admin page, here and nowhere else. The login page
+          returned above before reaching this tree, so it never beats; a
+          signed-in admin on any /admin/* route beats once a minute while the
+          tab is visible. See src/components/admin/PresenceHeartbeat.jsx. */}
+      <PresenceHeartbeat />
       <AdminSidebar
         pages={user?.pages ?? []}                          // array, or null = all (superadmin)
         isSuperadmin={user?.isSuperadmin ?? false}

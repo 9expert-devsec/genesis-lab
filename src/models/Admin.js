@@ -12,6 +12,19 @@ const AdminSchema = new mongoose.Schema(
     active:   { type: Boolean, default: true },
     lastLoginAt: { type: Date },
 
+    // ── Presence ──────────────────────────────────────────────────────
+    // `lastSeenAt` is stamped by POST /api/admin/presence, which the admin
+    // shell's PresenceHeartbeat calls every 60 s while a tab is VISIBLE —
+    // never on leave, so a departed admin drops off the moment the threshold
+    // lapses. `lastSignedOutAt` is stamped by logoutAction; `lastSeenAt` is
+    // deliberately KEPT on sign-out so the accounts list can still say when
+    // the person was last here, and so an admin still active on another
+    // device is Online again on that device's next beat. The two are read
+    // together by src/lib/admin/presence.js — the ONLY place "Online" is
+    // decided — and never by a client clock.
+    lastSeenAt:      { type: Date, default: null },
+    lastSignedOutAt: { type: Date, default: null },
+
     // ── Profile avatar — a Cloudinary public_id, NOT a URL ────────────
     // DELIBERATELY DIFFERENT FROM EVERY OTHER IMAGE FIELD IN THIS REPO.
     // Banners, instructors and course covers all store `secure_url`, and a
