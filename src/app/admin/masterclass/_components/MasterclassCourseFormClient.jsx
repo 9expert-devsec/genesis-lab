@@ -6,8 +6,6 @@ import {
   ChevronDown,
   Plus,
   X,
-  Upload,
-  Download,
   Image as ImageIcon,
   Youtube,
   Trash2,
@@ -20,6 +18,10 @@ import {
 } from '@/lib/actions/masterclass';
 import { SimpleRichTextEditor } from '@/components/admin/SimpleRichTextEditor';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The outline is a signed direct upload to /files now; the
+// free-text URL box and the POST /api/admin/upload call it replaces are gone.
+import { MasterclassOutlineUpload } from '@/components/admin/MasterclassOutlineUpload';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
 
 const inputCls =
@@ -442,47 +444,20 @@ export function MasterclassCourseFormClient({ course }) {
           <label className="block text-sm font-medium text-9e-navy dark:text-white">
             Course Outline (PDF)
           </label>
-          <p className="mt-0.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-            อัพโหลด PDF หรือวาง URL ตรงๆ
+          <p className="mt-0.5 mb-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+            ไฟล์จะถูกตั้งชื่อจาก slug โดยอัตโนมัติ — /files/masterclass-outline/&lt;slug&gt;-course-outline-th.pdf
           </p>
-          <div className="mt-1 flex gap-2">
-            <input
-              type="text"
-              placeholder="https://..."
-              value={courseOutlineUrl ?? ''}
-              onChange={(e) => setCourseOutlineUrl(e.target.value)}
-              className={inputCls + ' flex-1'}
-            />
-            <label className="flex cursor-pointer items-center gap-1.5 rounded-9e-md border border-9e-action px-3 py-2 text-sm text-9e-action hover:bg-9e-action/5 transition-colors whitespace-nowrap">
-              <Upload size={14} />
-              อัพโหลด PDF
-              <input
-                type="file"
-                accept="application/pdf"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const fd = new FormData();
-                  fd.append('file', file);
-                  fd.append('folder', 'masterclass');
-                  const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
-                  const result = await res.json().catch(() => ({}));
-                  if (result?.url) setCourseOutlineUrl(result.url);
-                }}
-              />
-            </label>
-          </div>
-          {courseOutlineUrl && (
-            <a
-              href={courseOutlineUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 inline-flex items-center gap-1 text-xs text-9e-action hover:underline"
-            >
-              <Download size={11} /> ดูไฟล์ที่อัพโหลด
-            </a>
-          )}
+          {/* Display-only value + the upload button as the ONLY writer of
+              course_outline_url. The signed publicPath lands in state and the
+              save carries it, the same channel the pasted URL used. */}
+          <MasterclassOutlineUpload
+            lang="th"
+            slug={slug}
+            courseId={course?._id ? String(course._id) : ''}
+            value={courseOutlineUrl}
+            onChange={setCourseOutlineUrl}
+            label="ภาษาไทย (TH)"
+          />
         </div>
       </Section>
 
