@@ -6,7 +6,12 @@ export const metadata = {
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/faq` },
   openGraph: { url: `${process.env.NEXT_PUBLIC_SITE_URL}/faq` },
 };
-export const dynamic = 'force-dynamic';
+// ISR, not force-dynamic. The FAQ set changes through the admin (faqs.js →
+// revalidatePath('/faq')), the MSDB webhook (faq.* → '/faq') and the 6-hourly
+// cron sync (triggerFaqSync → '/faq'); every writer already busts this path,
+// so a per-request render bought nothing but a function invocation per hit
+// (4.2K in 12 h, measured 2026-09-18).
+export const revalidate = 3600;
 
 function FaqHero() {
   return (

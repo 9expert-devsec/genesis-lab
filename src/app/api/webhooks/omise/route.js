@@ -4,6 +4,9 @@ import RegisterPublic from '@/models/RegisterPublic';
 import MasterclassRegistration from '@/models/MasterclassRegistration';
 import MasterclassBatch from '@/models/MasterclassBatch';
 import { retrieveCharge } from '@/lib/omise';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Public masterclass pages are ISR; a paid seat must bust them.
+import { revalidateMasterclassPublic } from '@/lib/masterclass/revalidatePublic';
 
 /** Fire-and-forget forward to legacy webhook endpoint. Never throws. */
 async function forwardToLegacy(rawBody, originalHeaders) {
@@ -145,6 +148,7 @@ export async function POST(req) {
           $set: { status: 'full' },
         });
       }
+      await revalidateMasterclassPublic(doc.course_id);
     } else {
       const { sendPaidReceipt } = await import('@/lib/registration/send-receipt');
       await sendPaidReceipt(doc);

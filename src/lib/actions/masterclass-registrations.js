@@ -9,6 +9,9 @@ import { requireAdmin }         from '@/lib/actions/auth';
 import { buildLicenseModel }   from '@/lib/email/buildLicenseModel';
 // import { recomputeBatchSeats } from '@/lib/masterclass/recomputeBatchSeats';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Public masterclass pages are ISR; a freed seat must bust them.
+import { revalidateMasterclassPublic } from '@/lib/masterclass/revalidatePublic';
 
 const ADMIN_PATH = '/admin/masterclass/registrations';
 const PAGE_SIZE  = 20;          // fallback / SSR default
@@ -166,6 +169,7 @@ export async function deleteMasterclassRegistration(id) {
     $inc: { registered_count: -1 },
   });
   revalidatePath(ADMIN_PATH);
+  await revalidateMasterclassPublic(doc.course_id);
 
   // The act and the id. `doc` IS in hand here — it has to be, for the batch
   // decrement — and it holds every attendee's name, email and phone. It is

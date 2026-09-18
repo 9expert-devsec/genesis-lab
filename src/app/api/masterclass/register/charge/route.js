@@ -6,6 +6,9 @@ import { createCardCharge, createPromptPayCharge, getPromptPayQrUrl } from '@/li
 import { toSatang } from '@/lib/pricing';
 import { sendMasterclassReceipt } from '@/lib/masterclass/send-receipt';
 import { refNo } from '@/lib/refNo';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Public masterclass pages are ISR; a paid seat must bust them.
+import { revalidateMasterclassPublic } from '@/lib/masterclass/revalidatePublic';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,6 +91,7 @@ export async function POST(req) {
           $set: { status: 'full' },
         });
       }
+      await revalidateMasterclassPublic(doc.course_id);
     }
 
     console.log('[charge] credit card result:', {

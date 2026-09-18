@@ -15,6 +15,7 @@
  * Intentionally NOT marked "use server" — server-internal helper.
  */
 
+import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Faq from '@/models/Faq';
 import { listFaqs } from '@/lib/api/faqs';
@@ -92,6 +93,22 @@ export async function syncFaqs() {
     } catch (err) {
       errors.push(`upsert ${shaped.filter.faq_id}: ${err?.message ?? 'failed'}`);
     }
+  }
+
+  /**
+   * /faq is ISR (1h) since the caching round — it used to be force-dynamic,
+   * which is why this sync had no revalidatePath: there was no baked output
+   * to invalidate. Now there is, and a cron sync that lands a new FAQ must not
+   * wait out the hour. `/faq` only; FAQs are not in the header, so this does
+   * not widen to '/' + 'layout' (see syncNavMenuData for that case).
+   *
+   * Guarded like syncPromotions: the cron route has no request scope to fail in.
+   */
+  try {
+    revalidatePath('/faq');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[syncFaqs] revalidatePath("/faq") skipped:', err?.message ?? err);
   }
 
   // eslint-disable-next-line no-console

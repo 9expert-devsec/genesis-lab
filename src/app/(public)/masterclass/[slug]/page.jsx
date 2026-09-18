@@ -6,7 +6,20 @@ import { generateMasterclassJsonLd } from '@/lib/masterclass/generateJsonLd';
 import { OG_DEFAULT_IMAGE, resolveCourseOgImage, toAbsoluteUrl } from '@/lib/seo/ogImage';
 import { MasterclassDetailClient } from './_components/MasterclassDetailClient';
 
-export const dynamic = 'force-dynamic';
+// ISR, not force-dynamic — and the declaration below is what makes the
+// revalidate real: a [param] segment with no generateStaticParams is left out
+// of prerender-manifest's dynamicRoutes and rendered per request whatever it
+// exports (see /articles/[slug] for the measurement). Empty on purpose: each
+// slug renders on its first request and is cached for the hour. Batch state
+// (open/full, seats) is refreshed by the registration and payment actions
+// through revalidateMasterclassPublic; content edits through
+// lib/actions/masterclass.js. `/masterclass/[slug]/register` is its own route
+// and stays force-dynamic (it reads searchParams).
+export const revalidate = 3600;
+
+export function generateStaticParams() {
+  return [];
+}
 
 export async function generateMetadata({ params }) {
   const { slug } = await params;

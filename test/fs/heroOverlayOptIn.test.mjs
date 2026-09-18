@@ -91,7 +91,11 @@ test('NO other route passes `overlay` — it is opt-in, not the new default', ()
       }
     }
   }
-  assert.ok(consumers >= 3, `only ${consumers} <PublicHeader> call sites found — did the scan run?`);
+  // Two, not three: the root not-found used to be the third consumer and no
+  // longer mounts PublicHeader at all (it fetches nav data, and Next renders
+  // the not-found into every page — see test/fs/notFoundChrome). The control
+  // below pins that it stays out rather than counting it in.
+  assert.ok(consumers >= 2, `only ${consumers} <PublicHeader> call sites found — did the scan run?`);
   assert.deepEqual(offenders, [], 'a route other than Home turned the header transparent');
 });
 
@@ -102,7 +106,10 @@ test('CONTROL: the call-site scan really sees the other consumers', () => {
     .map((s) => s.rel);
   assert.ok(rels.includes('src/app/page.jsx'), 'Home is not in the scan');
   assert.ok(rels.includes('src/app/(public)/layout.jsx'), 'the public layout is not in the scan');
-  assert.ok(rels.includes('src/app/not-found.jsx'), 'not-found is not in the scan');
+  // The scan DOES read not-found (walkSources covers src/app) — it is simply
+  // no longer a consumer, which is the invariant the caching round introduced.
+  assert.ok(!rels.includes('src/app/not-found.jsx'), 'not-found mounts PublicHeader again — that doubles the header on every page');
+  assert.ok(walkSources('src/app').some((s) => s.rel === 'src/app/not-found.jsx'), 'the walk still reaches not-found');
 });
 
 test('CONTROL: a comment MENTIONING <PublicHeader/> is not a call site', () => {

@@ -199,9 +199,24 @@ export const ROUTE_WINDOWS = Object.freeze([
   {
     path: '/faq',
     file: 'src/app/(public)/faq/page.jsx',
-    exported: "dynamic = 'force-dynamic'",
-    effective: 'Dynamic',
+    exported: 'revalidate = 3600',
+    effective: '1h',
     divergence: DIVERGENCE.NONE,
+  },
+  {
+    path: '/masterclass',
+    file: 'src/app/(public)/masterclass/page.jsx',
+    exported: 'revalidate = 3600',
+    effective: '1h',
+    divergence: DIVERGENCE.NONE,
+  },
+  {
+    path: '/masterclass/[slug]',
+    file: 'src/app/(public)/masterclass/[slug]/page.jsx',
+    exported: 'revalidate = 3600',
+    effective: '1h',
+    divergence: DIVERGENCE.NONE,
+    why: 'Same shape as /articles/[slug]: empty generateStaticParams, ƒ at build, cached per slug for 1h after the first request. Seat state is busted by the payment and registration writers (revalidateMasterclassPublic).',
   },
   {
     path: '/articles',

@@ -15,6 +15,18 @@ import { readSource, walkSources, blankStringBodies } from '../sourceScan.mjs';
 /** page: the segment file; tree: every source under it; revalidate: the exported window. */
 const ROUTES = [
   { path: '/articles/[slug]', page: 'src/app/(public)/articles/[slug]/page.jsx', tree: ['src/app/(public)/articles/[slug]'], revalidate: 3600, param: true },
+  { path: '/faq', page: 'src/app/(public)/faq/page.jsx', tree: ['src/app/(public)/faq'], revalidate: 3600, param: false },
+  { path: '/masterclass', page: 'src/app/(public)/masterclass/page.jsx', tree: ['src/app/(public)/masterclass/page.jsx', 'src/app/(public)/masterclass/_components'], revalidate: 3600, param: false },
+  // `[slug]/register` is its own force-dynamic route (it reads searchParams) and is
+  // deliberately NOT in this tree; only the detail page and its components are.
+  { path: '/masterclass/[slug]', page: 'src/app/(public)/masterclass/[slug]/page.jsx', tree: ['src/app/(public)/masterclass/[slug]/page.jsx', 'src/app/(public)/masterclass/[slug]/_components'], revalidate: 3600, param: true },
+];
+
+/** Every writer of masterclass BATCH state (paid seat, freed seat) must bust the public pages. */
+const SEAT_WRITERS = [
+  'src/app/api/masterclass/register/charge/route.js',
+  'src/app/api/webhooks/omise/route.js',
+  'src/lib/actions/masterclass-registrations.js',
 ];
 
 /** The chrome every (public) page renders — a dynamic read here defeats every route above. */
@@ -78,6 +90,26 @@ test('article revalidation encodes the slug the way Next keys the cache (Thai sl
     const nextKeysOn = new URL(`http://x/articles/${slug}`).pathname;
     assert.equal(helper, nextKeysOn, `${slug}: helper and URL.pathname diverge`);
   }
+});
+
+test('every masterclass seat writer busts the public pages after it moves registered_count', () => {
+  for (const rel of SEAT_WRITERS) {
+    const { code, withImports } = readSource(rel);
+    assert.match(withImports, /from\s+'@\/lib\/masterclass\/revalidatePublic'/, `${rel} does not import revalidateMasterclassPublic`);
+    const incs = (code.match(/registered_count:\s*-?1/g) || []).length;
+    assert.ok(incs >= 1, `${rel} no longer moves registered_count — is it still a seat writer?`);
+    const calls = (code.match(/await revalidateMasterclassPublic\(doc\.course_id\)/g) || []).length;
+    assert.equal(calls, incs, `${rel}: ${incs} registered_count write(s) but ${calls} public revalidation(s)`);
+  }
+});
+
+test('revalidateMasterclassPublic busts the listing and the slug, and never throws', () => {
+  const { code, withImports } = readSource('src/lib/masterclass/revalidatePublic.js');
+  assert.match(withImports, /from 'next\/cache'/);
+  assert.match(code, /revalidatePath\(PUBLIC_LISTING\)/);
+  assert.match(code, /revalidatePath\(`\$\{PUBLIC_LISTING\}\/\$\{course\.slug\}`\)/);
+  assert.match(code, /PUBLIC_LISTING = '\/masterclass'/);
+  assert.match(code, /try \{[\s\S]*\} catch \(err\) \{[\s\S]*console\.warn/, 'a missed revalidation must not fail a payment route');
 });
 
 test('the shared (public) chrome reads no dynamic API — one call there would defeat every ISR route', () => {

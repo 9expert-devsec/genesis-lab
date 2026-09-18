@@ -93,6 +93,12 @@ const WRITERS = [
     args: "'/promotions'",
     surface: '/promotions (○ Static)',
   },
+  {
+    rel: 'src/lib/faqs/syncFaqs.js',
+    collection: 'faqs',
+    args: "'/faq'",
+    surface: '/faq (○ 1h since the caching round; was force-dynamic and exempt)',
+  },
 ];
 
 /**
@@ -230,35 +236,39 @@ test('CONTROL: the import line alone does not satisfy the guard', () => {
 });
 
 /**
- * THE ONE EXEMPTION, AND ITS PREMISE.
+ * THE FORMER EXEMPTION, AND WHY IT ENDED.
  *
- * syncFaqs deliberately has no revalidatePath: `/faq` is force-dynamic, so it
- * renders fresh per request and there is no baked output to invalidate. Adding
- * one there would be cargo cult.
+ * Until the caching round, syncFaqs deliberately had no revalidatePath: `/faq`
+ * was force-dynamic, rendered fresh per request, and had no baked output to
+ * invalidate. This test pinned that premise so that removing the export could
+ * not silently put syncFaqs into the defect class.
  *
- * That reasoning depends entirely on /faq STAYING dynamic. If someone removes
- * the export, /faq becomes statically cached and syncFaqs silently joins the
- * defect class. So the exemption is not just asserted — its premise is.
+ * The export IS now removed — /faq exports `revalidate = 3600` — so the row
+ * moved into WRITERS above (where the generic checks apply) and this test now
+ * pins the inverse: while /faq bakes its output, the sync must bust it, and
+ * the old exemption must not creep back through a re-added force-dynamic.
  */
-test('faqs is exempt ONLY because /faq is force-dynamic', () => {
+test('faqs is a WRITER now because /faq is ISR — the force-dynamic exemption is gone', () => {
   const faqPage = readSource('src/app/(public)/faq/page.jsx');
+  const code = faqPage.code.replace(/\s+/g, ' ');
 
-  assert.match(
-    faqPage.code.replace(/\s+/g, ' '),
+  assert.doesNotMatch(
+    code,
     /export const dynamic = 'force-dynamic'/,
-    "/faq is no longer force-dynamic. It now bakes its output, so syncFaqs "
-      + 'needs a revalidatePath and a row in WRITERS above — the reason it was '
-      + 'exempt has just stopped being true.',
+    '/faq is force-dynamic again. Then syncFaqs has nothing to invalidate — '
+      + 'take its WRITERS row out and restore the exemption deliberately.',
   );
+  assert.match(code, /export const revalidate = 3600/, '/faq must declare its ISR window');
 
-  // And while that holds, syncFaqs is expected NOT to have one. This is a
-  // deliberate absence, recorded so that adding one is a decision rather than
-  // a reflex.
   const sync = readSource('src/lib/faqs/syncFaqs.js');
   assert.deepEqual(
     revalidateCalls(sync.code),
-    [],
-    'syncFaqs now calls revalidatePath. That may well be right — but /faq is '
-      + 'force-dynamic, so say why in the sync and move it into WRITERS.',
+    ["'/faq'"],
+    'syncFaqs must bust /faq, and only /faq — FAQs are not in the header, so '
+      + "no '/', 'layout' widening.",
+  );
+  assert.ok(
+    WRITERS.some((w) => w.rel === 'src/lib/faqs/syncFaqs.js' && w.args === "'/faq'"),
+    'and the WRITERS table carries the row so the generic guards apply to it',
   );
 });

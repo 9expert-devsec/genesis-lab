@@ -1,7 +1,11 @@
 import { getPublishedMasterclasses } from '@/lib/masterclass/getMasterclass';
 import { MasterclassListingClient } from './_components/MasterclassListingClient';
 
-export const dynamic = 'force-dynamic';
+// ISR, not force-dynamic. Course content changes revalidate '/masterclass'
+// from lib/actions/masterclass.js; batch state (open/full) changes on
+// registration and payment, and those actions now revalidate the public paths
+// too — see revalidateMasterclassPublic in lib/actions/masterclass-registrations.js.
+export const revalidate = 3600;
 
 export const metadata = {
   title: 'Masterclass — 9Expert Training',
