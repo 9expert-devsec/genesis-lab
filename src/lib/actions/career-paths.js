@@ -22,6 +22,10 @@ import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The save guard for links.outlineUrl reads the same rule
+// the upload button and the form's stale warning read.
+import { isFilesPdfPath } from '@/lib/careerPaths/careerPathOutline';
 
 function serialize(v) {
   return v == null ? v : JSON.parse(JSON.stringify(v));
@@ -121,6 +125,31 @@ function toNum(v) {
  * resolve `course_id` strings into the `publicCourse` ObjectId refs
  * MSDB expects on curriculum items.
  */
+/**
+ * `links.outlineUrl` is a `/files/<category>/<file>.pdf` path or nothing.
+ *
+ * The form sets it only from what signCareerPathOutlineUpload returned, so a
+ * legitimate save never trips this. It exists for the other two sources:
+ * a stale tab still carrying a `9exp.link` paste, and anything that posts the
+ * field by hand. Strict on purpose — the re-point script cleared the stored
+ * short links, so there is no legacy value a save has to let through, and a
+ * working external link is kept by NOT saving over it (the form renders it
+ * read-only until an upload replaces it). Empty stays legal: clearing is a
+ * decision, and it must reach MSDB as '' rather than as an omitted key.
+ *
+ * Throws, like the curriculum parse above it: shapePayload's callers turn a
+ * throw into `{ ok: false, error }` and the form shows the message.
+ */
+function outlineUrlFromForm(raw) {
+  const value = String(raw ?? '').trim();
+  if (!value) return '';
+  if (isFilesPdfPath(value)) return value;
+  throw new Error(
+    `Course Outline (links_outlineUrl) ต้องเป็นไฟล์ที่อัปโหลดผ่านระบบ (/files/…/*.pdf) หรือเว้นว่าง — `
+      + `ได้รับ "${value.slice(0, 80)}"`
+  );
+}
+
 function shapePayload(formData, courses) {
   // Map { course_id → ObjectId } for resolving curriculum items.
   const courseMap = Object.fromEntries(
@@ -215,7 +244,7 @@ function shapePayload(formData, courses) {
     links: {
       detailUrl:  String(formData.get('links_detailUrl')  ?? ''),
       signupUrl:  String(formData.get('links_signupUrl')  ?? ''),
-      outlineUrl: String(formData.get('links_outlineUrl') ?? ''),
+      outlineUrl: outlineUrlFromForm(formData.get('links_outlineUrl')),
     },
     detail: {
       tagline:       String(formData.get('detail_tagline')     ?? ''),

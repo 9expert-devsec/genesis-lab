@@ -10,6 +10,11 @@ import {
   createCareerPath,
   updateCareerPath,
 } from '@/lib/actions/career-paths';
+// ADDED beside the statements above rather than folded into any — the standing
+// rule in this repo. The outline is an UPLOAD now, and the rename warning is
+// the lib's, so the form and the save guard read the same rule.
+import { CareerPathOutlineUpload } from '@/components/admin/CareerPathOutlineUpload';
+import { careerOutlineWouldGoStale } from '@/lib/careerPaths/careerPathOutline';
 
 /**
  * Auto-slug from a Thai/English title: ASCII only, lowercase, dashes.
@@ -109,6 +114,25 @@ export function CareerPathForm({ careerPath, courses }) {
   const [detailUrl,   setDetailUrl]   = useState(linksInit.detailUrl ?? '');
   const [signupUrl,   setSignupUrl]   = useState(linksInit.signupUrl ?? '');
   const [outlineUrl,  setOutlineUrl]  = useState(linksInit.outlineUrl ?? '');
+
+  /**
+   * ── THE OUTLINE GOES STALE ON A SLUG RENAME ────────────────────────────────
+   * The stored path embeds the slug key, so editing the slug leaves the saved
+   * row pointing at a file named for the OLD slug. Nothing breaks on save —
+   * the file still resolves — which is why this WARNS in the form rather than
+   * blocking (the course form makes the same call), and says exactly what is
+   * stored and what the new slug would derive, so the admin can re-upload
+   * under the new name. Fires only on an actual change of key; the rule and
+   * its edge cases are careerOutlineWouldGoStale's.
+   */
+  const outlineStale = useMemo(
+    () => careerOutlineWouldGoStale({
+      previousApiSlug: careerPath?.api_slug ?? '',
+      nextApiSlug: slug,
+      outlineUrl,
+    }),
+    [careerPath?.api_slug, slug, outlineUrl],
+  );
 
   // ── Section 4 — รายละเอียด ────────────────────────────────────
   const [tagline,     setTagline]     = useState(careerPath?.tagline ?? '');
@@ -405,17 +429,34 @@ export function CareerPathForm({ careerPath, courses }) {
               className={inputCls}
             />
           </label>
-          <label className="block">
-            <span className="text-sm font-medium text-9e-navy dark:text-white">Outline URL</span>
-            <span className="mt-0.5 block text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">PDF ดาวน์โหลด</span>
-            <input
-              type="text"
+          <div className="block">
+            <span className="text-sm font-medium text-9e-navy dark:text-white">Course Outline (PDF)</span>
+            <span className="mt-0.5 mb-1 block text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              ไฟล์จะถูกตั้งชื่อจาก slug โดยอัตโนมัติ — /files/course-outline/career-&lt;slug&gt;-course-outline-th.pdf
+            </span>
+            {/* Controlled: the server-signed publicPath lands in `outlineUrl`
+                state and the submit carries it into links_outlineUrl, the same
+                channel the pasted URL used. The client never types a path. */}
+            <CareerPathOutlineUpload
+              lang="th"
+              apiSlug={slug}
+              careerPathId={careerPath?.career_path_id ?? ''}
               value={outlineUrl}
-              onChange={(e) => setOutlineUrl(e.target.value)}
-              placeholder="https://..."
-              className={inputCls}
+              onChange={setOutlineUrl}
+              label="ภาษาไทย (TH)"
             />
-          </label>
+            {outlineStale ? (
+              <p
+                role="status"
+                className="mt-2 rounded-9e-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+              >
+                slug เปลี่ยนจาก <code>{outlineStale.from}</code> เป็น <code>{outlineStale.to}</code>{' '}
+                แต่ไฟล์ Outline ที่บันทึกไว้ยังชื่อตาม slug เดิม (<code>{outlineStale.stored}</code>)
+                — ลิงก์ยังใช้งานได้ แต่จะไม่ตรงกับชื่อที่ระบบคาดไว้ (<code>{outlineStale.derived}</code>)
+                จนกว่าจะอัปโหลด PDF ใหม่ภายใต้ slug ใหม่
+              </p>
+            ) : null}
+          </div>
         </div>
       </section>
 

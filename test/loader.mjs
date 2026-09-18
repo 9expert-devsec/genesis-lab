@@ -141,6 +141,12 @@ export const STUBS = {
     "test",
     "stub-course-outline-actions.mjs",
   ),
+  // Its mirror for career paths: CareerPathOutlineUpload inside CareerPathForm.
+  "@/lib/actions/career-path-outlines": path.join(
+    ROOT,
+    "test",
+    "stub-career-path-outline-actions.mjs",
+  ),
   // MirrorResetClient imports the cache-console actions for its preview/apply
   // handlers; that chain reaches next-auth → next/headers. Same reasoning as
   // the lines above — and see the stub's own note on why it throws rather than
