@@ -161,11 +161,25 @@ function serialize(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+/**
+ * The public path of an article AS NEXT KEYS ITS CACHE. `revalidatePath` is a
+ * tag match — `_N_T_` + the string given — against the tag Next stamped at
+ * render, which is the request's `URL.pathname`: percent-encoded. A Thai slug
+ * passed raw here produces `_N_T_/articles/…คืออะไร`, the entry carries
+ * `_N_T_/articles/…%E0%B8%84…`, and the save silently refreshes nothing.
+ * MEASURED 2026-09-18 on a local `next start` (.next/server/app/articles/*.meta).
+ * `encodeURIComponent` reproduces `URL.pathname` for every slug shape the
+ * schema admits; test/fs/isrRoutes pins the equivalence.
+ */
+function publicArticlePath(slug) {
+  return `${PUBLIC_PATH}/${encodeURIComponent(slug)}`;
+}
+
 function bustCaches(slug) {
   revalidateTag('articles');
   revalidatePath(ADMIN_PATH);
   revalidatePath(PUBLIC_PATH);
-  if (slug) revalidatePath(`${PUBLIC_PATH}/${slug}`);
+  if (slug) revalidatePath(publicArticlePath(slug));
 }
 
 function firstZodMessage(error) {
@@ -464,7 +478,7 @@ export async function updateArticle(id, formData) {
     // expires, serving an article that has moved. Not a drive-by: reading the
     // pre-image is what made the old slug available to bust in the first place.
     bustCaches(data.slug);
-    if (previous.slug && previous.slug !== data.slug) revalidatePath(`${PUBLIC_PATH}/${previous.slug}`);
+    if (previous.slug && previous.slug !== data.slug) revalidatePath(publicArticlePath(previous.slug));
 
     recordAdminActionAfter({
       menu:        'articles',

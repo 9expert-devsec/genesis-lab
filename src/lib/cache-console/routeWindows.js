@@ -31,9 +31,16 @@
  *      dynamic. The exported value is inert.
  *
  *   3. DEFEATED BY AN UNENUMERABLE SEGMENT. A dynamic segment with no
- *      `generateStaticParams` cannot be prerendered, so it builds ƒ Dynamic
- *      whatever it exports. There is NO generateStaticParams anywhere in
- *      src/app — verified — so this applies to every [param] route in the app.
+ *      `generateStaticParams` is not registered as an ISR route at all: it is
+ *      absent from prerender-manifest's `dynamicRoutes`, so Vercel runs a
+ *      function on every request and the exported revalidate is inert. The
+ *      build glyph does not tell these apart — a segment WITH an empty
+ *      `generateStaticParams` also prints ƒ (nothing to prerender), yet it IS
+ *      in `dynamicRoutes` and is cached per slug after the first request.
+ *      MEASURED 2026-09-18 on /articles/[slug]: the manifest gained the route
+ *      and the second `next start` request answered `x-nextjs-cache: HIT`.
+ *      The rows below marked INERT_UNENUMERABLE are the segments that still
+ *      have no declaration; test/fs/routeWindowTable pins both sets.
  *
  * Keep `exported` as the literal text of the segment export so the fs guard can
  * grep the source and compare. `effective` cannot be verified that way and is
@@ -42,9 +49,14 @@
  */
 
 /** When the `effective` column was last read off a real build. */
-export const MEASURED_AT = '2026-08-12';
-/** The commit whose `next build` produced the `effective` column. */
-export const MEASURED_COMMIT = 'da643a9';
+export const MEASURED_AT = '2026-09-18';
+/**
+ * The commit whose `next build` produced the `effective` column. The build was
+ * run on the working tree of the caching round A (on top of 262872d9) before
+ * its route commits landed, so this names the base rather than a commit that
+ * cannot contain its own hash.
+ */
+export const MEASURED_COMMIT = '262872d9';
 
 export const DIVERGENCE = Object.freeze({
   NONE: 'none',
@@ -103,14 +115,6 @@ export const ROUTE_WINDOWS = Object.freeze([
   {
     path: '/promotions/[slug]',
     file: 'src/app/(public)/promotions/[slug]/page.jsx',
-    exported: 'revalidate = 3600',
-    effective: 'Dynamic',
-    divergence: DIVERGENCE.INERT_UNENUMERABLE,
-    why: 'Dynamic segment, no generateStaticParams anywhere in src/app.',
-  },
-  {
-    path: '/articles/[slug]',
-    file: 'src/app/(public)/articles/[slug]/page.jsx',
     exported: 'revalidate = 3600',
     effective: 'Dynamic',
     divergence: DIVERGENCE.INERT_UNENUMERABLE,
@@ -183,6 +187,14 @@ export const ROUTE_WINDOWS = Object.freeze([
     exported: 'revalidate = 3600',
     effective: '1h',
     divergence: DIVERGENCE.NONE,
+  },
+  {
+    path: '/articles/[slug]',
+    file: 'src/app/(public)/articles/[slug]/page.jsx',
+    exported: 'revalidate = 3600',
+    effective: '1h',
+    divergence: DIVERGENCE.NONE,
+    why: 'Builds ƒ (an EMPTY generateStaticParams prerenders nothing) but is in the manifest\'s dynamicRoutes: each slug renders on its first request and is cached for 1h. Not build-time static — the glyph is not the cache.',
   },
   {
     path: '/faq',

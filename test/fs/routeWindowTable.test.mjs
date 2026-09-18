@@ -87,7 +87,9 @@ test('CONTROL: the export matcher really does read these files', () => {
   assert.ok(m, 'the matcher extracts a revalidate export it is pointed at');
   assert.equal(m[1], '1800');
 
-  const dyn = readSource('src/app/(public)/faq/page.jsx').code;
+  // /articles, not /faq: the FAQ page moved to ISR in the caching round, and
+  // the list page is the one that stays force-dynamic (it is searchParams-driven).
+  const dyn = readSource('src/app/(public)/articles/page.jsx').code;
   const d = /export const dynamic\s*=\s*'([a-z-]+)'/.exec(dyn);
   assert.ok(d, 'and a dynamic export');
   assert.equal(d[1], 'force-dynamic');
@@ -132,11 +134,14 @@ test('every divergent row explains itself; every agreeing row needs no excuse', 
 
 test('the unenumerable-segment rows rest on a fact that still holds', () => {
   /**
-   * Three rows claim their exported revalidate is inert because the segment is
-   * dynamic with no generateStaticParams. That reasoning is only true while
-   * the app has none — so assert the premise rather than the conclusion. Adding
-   * a generateStaticParams anywhere would make those rows wrong, and this is
-   * what would say so.
+   * Rows marked INERT_UNENUMERABLE claim their exported revalidate is inert
+   * because the segment has no generateStaticParams; rows for a `[param]`
+   * segment marked NONE claim the opposite — the segment declares one (empty is
+   * enough: it is what puts the route into prerender-manifest's dynamicRoutes
+   * and makes the revalidate real). Both are premises the source can be
+   * checked against, so assert the premise for every row rather than the
+   * conclusion. This used to assert "no declaration anywhere in src/app";
+   * that encoded the decision the caching round reversed for /articles/[slug].
    */
   const unenumerable = ROUTE_WINDOWS.filter((r) => r.divergence === DIVERGENCE.INERT_UNENUMERABLE);
   assert.ok(unenumerable.length >= 3, 'the rows that depend on this exist');
@@ -149,13 +154,44 @@ test('the unenumerable-segment rows rest on a fact that still holds', () => {
   // what generateStaticParams is — a string, not a route export. Blanking
   // string bodies first removes that whole class; the declaration pattern is
   // then what actually decides whether a segment can be prerendered.
+  const declares = (rel) => DECLARES_STATIC_PARAMS.test(blankStringBodies(readSource(rel).code));
   const withStaticParams = files
     .filter((f) => DECLARES_STATIC_PARAMS.test(blankStringBodies(f.code)))
     .map((f) => f.rel);
+  assert.ok(withStaticParams.length >= 1, 'at least one ISR [param] route exists (the check can see something)');
+
+  // Every INERT_UNENUMERABLE row's file(s) still lack the declaration.
+  for (const r of unenumerable) {
+    // `{program,skill}` brace groups expand to one path per alternative.
+    const brace = /\{([^}]*)\}/.exec(r.file);
+    const rels = brace
+      ? brace[1].split(',').map((s) => r.file.replace(brace[0], s.trim()))
+      : [r.file];
+    for (const rel of rels) {
+      assert.ok(!declares(rel), `${r.path} is marked INERT_UNENUMERABLE but ${rel} declares generateStaticParams — the row is wrong`);
+    }
+  }
+
+  // Every [param] row marked NONE declares it, and its body is the EMPTY list —
+  // on-demand ISR, not a build-time enumeration this table would then have to
+  // describe differently.
+  const isrParamRows = CONCRETE.filter((r) => r.divergence === DIVERGENCE.NONE && r.file.includes('['));
+  assert.ok(isrParamRows.length >= 1, 'the ISR [param] rows exist');
+  for (const r of isrParamRows) {
+    assert.ok(declares(r.file), `${r.path} is marked NONE but ${r.file} has no generateStaticParams — its revalidate is inert`);
+    assert.match(
+      blankStringBodies(readSource(r.file).code),
+      /export\s+(?:async\s+)?function\s+generateStaticParams\s*\(\s*\)\s*\{\s*return\s*\[\s*\]\s*;?\s*\}/,
+      `${r.file}: generateStaticParams must return [] (on-demand ISR)`
+    );
+  }
+
+  // And no declaration exists that the table does not account for.
+  const accounted = new Set(isrParamRows.map((r) => r.file));
   assert.deepEqual(
-    withStaticParams,
+    withStaticParams.filter((rel) => !accounted.has(rel)),
     [],
-    'a generateStaticParams appeared — the INERT_UNENUMERABLE rows are now wrong'
+    'a generateStaticParams appeared in a file the table has no ISR row for'
   );
 });
 

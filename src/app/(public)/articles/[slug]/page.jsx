@@ -15,6 +15,26 @@ import { ArticleDetailClient } from './_components/ArticleDetailClient';
 
 export const revalidate = 3600;
 
+/**
+ * EMPTY ON PURPOSE. A dynamic segment with no `generateStaticParams` at all is
+ * not an ISR route: `next build` leaves it out of prerender-manifest's
+ * `dynamicRoutes`, Vercel runs a function for every request, and the
+ * `revalidate` above is inert (MEASURED 2026-09-18: `x-vercel-cache: MISS`,
+ * `cache-control: private, no-cache, no-store` on repeat requests; 26K
+ * invocations / 2 h CPU in 12 h). Declaring it — even returning nothing to
+ * prerender — registers the route, and with `dynamicParams` at its default
+ * every slug is rendered on first request and served from the cache for the
+ * next hour. Admin saves refresh it through `bustCaches` → `revalidatePath`.
+ *
+ * Nothing in this tree may read `searchParams`, `cookies()`, `headers()` or
+ * `draftMode()`; any of those silently turns a render back into a per-request
+ * function. `ArticleBackLink` reads the query on the CLIENT under Suspense,
+ * which is the one shape that keeps the shell static.
+ */
+export function generateStaticParams() {
+  return [];
+}
+
 export async function generateMetadata({ params }) {
   const { slug: rawSlug } = await params;
   // Thai slugs arrive URL-encoded from the router — decode before the
