@@ -40,6 +40,10 @@ register(new URL('../test/loader.mjs', import.meta.url));
 
 const { listCareerPaths } = await import('@/lib/api/career-paths');
 const { msdbUpdate } = await import('@/lib/api/msdb-write');
+// The derivation is the app's, not a copy: what this script links to is what
+// the upload button will overwrite.
+const { careerOutlineSlugKey, careerOutlinePublicPath, CAREER_OUTLINE_CATEGORY } =
+  await import('@/lib/careerPaths/careerPathOutline');
 
 const APPLY = process.argv.includes('--apply');
 /**
@@ -50,24 +54,24 @@ const APPLY = process.argv.includes('--apply');
  */
 const SITE = (process.argv.find((a) => a.startsWith('--site='))?.slice('--site='.length)
   ?? 'https://www.9experttraining.com').replace(/\/$/, '');
-const CATEGORY = 'course-outline';
 const LANG = 'th';
 
 /**
  * api_slug → the file OUT-RDR actually shipped, where it does not follow the
- * slug. Everything else derives. Add a row here, never a special case below.
+ * slug. Everything else derives through careerOutlinePublicPath. Add a row
+ * here, never a special case below. (The lib has no override on purpose — an
+ * UPLOAD must land at the derived name; only the existing LINK is allowed to
+ * point at the odd file. See careerPathOutline.js.)
  */
 const OVERRIDES = Object.freeze({
   'data-engineer-bi-career-path': 'career-data-engineering-and-business-intelligence-course-outline-th.pdf',
 });
 
-function slugKey(apiSlug) {
-  return String(apiSlug ?? '').trim().toLowerCase().replace(/-career-path$/, '');
-}
-
 function targetFor(apiSlug) {
-  const file = OVERRIDES[apiSlug] ?? `career-${slugKey(apiSlug)}-course-outline-${LANG}.pdf`;
-  return `/files/${CATEGORY}/${file}`;
+  if (OVERRIDES[apiSlug]) return `/files/${CAREER_OUTLINE_CATEGORY}/${OVERRIDES[apiSlug]}`;
+  const key = careerOutlineSlugKey(apiSlug);
+  if (!key.ok) return null;
+  return careerOutlinePublicPath(key.value, LANG);
 }
 
 async function headTarget(publicPath) {
@@ -107,7 +111,7 @@ for (const item of items) {
   const links = item?.links && typeof item.links === 'object' ? item.links : {};
   const before = String(links.outlineUrl ?? '');
   const target = targetFor(apiSlug);
-  const head = await headTarget(target);
+  const head = target ? await headTarget(target) : { ok: false, status: 0, type: 'slug not derivable' };
   let action;
   if (before === target) action = 'unchanged';
   else if (!head.ok) action = `SKIP — target answered ${head.status} ${head.type || '(no content-type)'}`;
