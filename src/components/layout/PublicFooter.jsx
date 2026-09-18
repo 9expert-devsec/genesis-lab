@@ -94,7 +94,7 @@ export function PublicFooter() {
               ที่อยู่ติดต่อ
             </h4>
             <p className="text-xs leading-relaxed text-9e-slate-dp-50 dark:text-[#94a3b8]">
-              9EXPERT COMPANY LIMITED
+              บริษัท นายน์เอ็กซ์เพิร์ท จำกัด
               <br />
               เลขที่ 318 อาคารเอเวอร์กรีน เพลส ชั้น 2 ห้อง 2B
               <br />
