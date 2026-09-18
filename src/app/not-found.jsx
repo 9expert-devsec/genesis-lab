@@ -1,12 +1,21 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { PublicHeader } from '@/components/layout/PublicHeader';
+import { StaticHeader } from '@/components/layout/StaticHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 
+/**
+ * Root not-found. Next renders this into EVERY page's RSC tree, not only into
+ * 404 responses — so nothing here may fetch. `StaticHeader` (logo + links) is
+ * the data-free bar; `PublicFooter` is static imports only. `PublicHeader`
+ * (nine Mongo reads + the nav catalogue) must never come back here, and must
+ * not be reintroduced through a `(public)/not-found.jsx` either — that doubles
+ * the header for every page in the group. See StaticHeader's header comment
+ * for the measured cost, and test/fs/notFoundChrome.test.mjs for the guard.
+ */
 export default function NotFound() {
   return (
     <>
-      <PublicHeader />
+      <StaticHeader />
       <main className="mx-auto max-w-[680px] px-4 py-24 text-center lg:py-32">
         <p className="text-xs font-semibold uppercase tracking-wider text-9e-action">
           404 — Page not found
