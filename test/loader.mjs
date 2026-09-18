@@ -153,6 +153,12 @@ export const STUBS = {
     "test",
     "stub-masterclass-outline-actions.mjs",
   ),
+  // The schedule PDF admin client, on the same signed-upload shape.
+  "@/lib/actions/schedule-pdf": path.join(
+    ROOT,
+    "test",
+    "stub-schedule-pdf-actions.mjs",
+  ),
   // MirrorResetClient imports the cache-console actions for its preview/apply
   // handlers; that chain reaches next-auth → next/headers. Same reasoning as
   // the lines above — and see the stub's own note on why it throws rather than

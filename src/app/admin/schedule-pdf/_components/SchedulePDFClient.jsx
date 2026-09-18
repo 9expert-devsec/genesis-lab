@@ -4,7 +4,8 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileText, Upload, Trash2, ExternalLink } from 'lucide-react';
 import {
-  uploadSchedulePDF,
+  signSchedulePDFUpload,
+  recordSchedulePDFUpload,
   deleteSchedulePDF,
 } from '@/lib/actions/schedule-pdf';
 import { formatBytes } from '@/lib/formatBytes.mjs';
@@ -53,11 +54,32 @@ export default function SchedulePDFClient({ current }) {
     setSuccess('');
     setSubmitting(true);
     try {
-      const fd = new FormData();
-      fd.set('file', file);
-      const res = await uploadSchedulePDF(fd);
-      if (!res.ok) {
-        setError(res.error ?? 'อัปโหลดไม่สำเร็จ');
+      // Signed direct upload: the server names the one fixed target and
+      // refuses size/type at the sign step (its message is shown as-is);
+      // the bytes go from the browser straight to Cloudinary; then the row
+      // is recorded. Same shape as the course-outline upload.
+      const signed = await signSchedulePDFUpload({ bytes: file.size });
+      if (!signed?.ok) {
+        setError(signed?.error ?? 'ขอลายเซ็นอัปโหลดไม่สำเร็จ');
+        return;
+      }
+      const body = new FormData();
+      for (const [k, v] of Object.entries(signed.params)) body.append(k, String(v));
+      body.append('api_key', signed.apiKey);
+      body.append('file', file);
+      const up = await fetch(signed.uploadUrl, { method: 'POST', body });
+      const json = await up.json().catch(() => ({}));
+      if (!up.ok) {
+        setError(json?.error?.message ?? `อัปโหลดไม่สำเร็จ (HTTP ${up.status})`);
+        return;
+      }
+      const res = await recordSchedulePDFUpload({
+        filename: file.name ?? '',
+        bytes: json?.bytes ?? file.size,
+        contentType: file.type,
+      });
+      if (!res?.ok) {
+        setError(res?.error ?? 'อัปโหลดสำเร็จ แต่บันทึกไม่สำเร็จ');
       } else {
         setSuccess('อัปโหลดเรียบร้อย');
         setFile(null);

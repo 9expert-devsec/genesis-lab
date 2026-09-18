@@ -1,8 +1,11 @@
 import mongoose from 'mongoose';
 
 // Single-row collection storing the latest "training schedule" PDF the
-// admin has uploaded. Replaced in place on each new upload — old files
-// stay in Cloudinary unless explicitly cleaned up.
+// admin has uploaded. Since the signed-upload round `url` is the
+// ROOT-RELATIVE `/files/schedule/9expert-training-schedule.pdf` and each
+// upload overwrites that one asset in place; a row written before that round
+// still holds an absolute res.cloudinary.com secure_url, and both consumers
+// put the value straight into `href`, so either shape renders.
 const SchedulePDFSchema = new mongoose.Schema(
   {
     key:        { type: String, default: 'schedule_pdf', unique: true },

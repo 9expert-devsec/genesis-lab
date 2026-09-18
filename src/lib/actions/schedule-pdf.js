@@ -1,13 +1,55 @@
 'use server';
-
+/**
+ * THE SCHEDULE PDF — one file, one fixed address, signed direct upload.
+ *
+ *   /files/schedule/9expert-training-schedule.pdf
+ *
+ * Same shape as the course / career-path / masterclass outline uploads: the
+ * server derives the path (there is exactly one, and it never changes), signs
+ * a browser-direct Cloudinary upload with overwrite + invalidate, and records
+ * what landed. The bytes never pass through a server action any more, so the
+ * old 25 MB `MAX_BYTES` and the FormData upload are gone; size is refused at
+ * the sign step by the shared `refuseUpload` (10 MB raw), and its Thai message
+ * is returned to the admin UI.
+ *
+ * ── WHY A FIXED NAME AND NO TIMESTAMP ────────────────────────────────────────
+ * The site links to ONE schedule. A timestamped name meant a new asset per
+ * upload and a stored secure_url that changed every time; the previous file
+ * was supposed to be destroyed afterwards and never was (the destroy call
+ * omitted `resource_type: 'raw'` — every generation since April is still in
+ * Cloudinary). A fixed public_id with `overwrite: true` replaces the bytes in
+ * place and `invalidate: true` purges the CDN copy; nothing needs cleaning up
+ * because nothing accumulates. The `/files/` document rule in next.config
+ * already holds these paths out of the edge cache, so the new bytes are what
+ * the next visitor gets.
+ *
+ * The stored `url` is now the ROOT-RELATIVE path. Both consumers (/schedule's
+ * HeroPdfButton and the admin's เปิดไฟล์ link) put it straight into `href`, so
+ * the old absolute secure_url keeps working until the first upload replaces it.
+ */
+import { v2 as cloudinary } from 'cloudinary';
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import SchedulePDF from '@/models/SchedulePDF';
 import { requireAdmin } from '@/lib/actions/auth';
-import { uploadToCloudinary, deleteFromCloudinary } from '@/lib/cloudinary';
+import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
+import { SCHEDULE_PDF_FILE_NAME, schedulePdfPublicPath } from '@/lib/schedule/schedulePdf';
+import { LEGACY_PUBLIC_ID_PREFIX, legacyPathToPublicId } from '@/lib/legacyPublicId';
+import { extensionOf, refuseUpload } from '@/lib/legacyUploadPolicy.mjs';
 
 const KEY = 'schedule_pdf';
-const MAX_BYTES = 25 * 1024 * 1024; // 25 MB — generous for a PDF
+
+function revalidate() {
+  revalidatePath('/schedule');
+  revalidatePath('/admin/schedule-pdf');
+}
+
+function deriveTarget() {
+  const fileName = SCHEDULE_PDF_FILE_NAME;
+  const publicPath = schedulePdfPublicPath();
+  const { publicId } = legacyPathToPublicId(publicPath, 'raw', LEGACY_PUBLIC_ID_PREFIX);
+  return { fileName, publicPath, publicId };
+}
 
 export async function getSchedulePDF() {
   await dbConnect();
@@ -15,91 +57,112 @@ export async function getSchedulePDF() {
   return doc ? JSON.parse(JSON.stringify(doc)) : null;
 }
 
-export async function uploadSchedulePDF(formData) {
+/** Step 1 — sign the browser-direct upload to the one fixed public_id. */
+export async function signSchedulePDFUpload({ bytes } = {}) {
   const session = await requireAdmin('schedule_pdf');
 
-  const file = formData.get('file');
-  if (!file || typeof file !== 'object' || !file.size) {
-    return { ok: false, error: 'ไม่ได้แนบไฟล์' };
-  }
-  if (file.size > MAX_BYTES) {
-    return { ok: false, error: `ไฟล์ใหญ่เกิน ${MAX_BYTES / 1024 / 1024} MB` };
-  }
-  if (file.type && file.type !== 'application/pdf') {
+  const target = deriveTarget();
+  const refusal = refuseUpload({ filename: target.fileName, bytes });
+  if (refusal) return { ok: false, error: refusal };
+  if (extensionOf(target.fileName) !== 'pdf') {
     return { ok: false, error: 'รองรับเฉพาะไฟล์ PDF' };
   }
 
-  await dbConnect();
-  const previous = await SchedulePDF.findOne({ key: KEY }).lean();
+  const timestamp = Math.round(Date.now() / 1000);
+  const toSign = {
+    public_id: target.publicId,
+    timestamp,
+    overwrite: true,
+    invalidate: true,
+    unique_filename: false,
+  };
+  const signature = cloudinary.utils.api_sign_request(toSign, process.env.CLOUDINARY_API_SECRET);
 
-  /**
-   * THE `.pdf` IS LOAD-BEARING — it is what makes the file open instead of save.
-   *
-   * For `resource_type: 'raw'` Cloudinary does NOT keep a separate `format`
-   * field the way it does for images: the public_id IS the delivery path, so an
-   * extensionless public_id produces an extensionless URL, and with nothing to
-   * infer a type from Cloudinary answers
-   *
-   *   content-type: application/octet-stream
-   *   content-disposition: attachment; filename="schedule-1777452321941"
-   *
-   * A browser must save that. No markup can override it — /schedule's button
-   * already carries `target="_blank"` and no `download` attribute, and the file
-   * downloaded anyway, because the header wins. Measured against this account,
-   * uploading the same PDF three ways:
-   *
-   *   public_id `x`            → application/octet-stream + attachment
-   *   public_id `x.pdf`        → application/pdf, no disposition
-   *   public_id `x` + format   → application/pdf, no disposition
-   *
-   * The last two are the same thing: for a raw upload `format: 'pdf'` simply
-   * appends the extension to the stored public_id, so both end up at `x.pdf`.
-   * The suffix is chosen over `format` because `uploadToCloudinary` already
-   * passes `publicId` through, so this stays one token in one file — widening
-   * the shared helper with a `format` option would touch every other caller of
-   * it for no additional behaviour.
-   *
-   * `uploaded.public_id` therefore comes back WITH the extension and is what
-   * gets stored, so the delete path keeps addressing the same asset.
-   */
-  const uploaded = await uploadToCloudinary(file, 'schedule', {
-    resourceType: 'raw',
-    publicId: `schedule-${Date.now()}.pdf`,
+  recordAdminActionAfter({
+    menu: 'schedule_pdf',
+    action: 'update',
+    entity: 'pdf',
+    recordId: KEY,
+    recordLabel: `schedule PDF — ${target.publicPath}`,
+    after: { publicPath: target.publicPath, publicId: target.publicId, bytes: Number(bytes) || 0 },
+    actor: { id: session.user?.id, name: session.user?.name },
   });
 
+  return {
+    ok: true,
+    uploadUrl: `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/raw/upload`,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    params: { ...toSign, signature },
+    resourceType: 'raw',
+    publicId: target.publicId,
+    publicPath: target.publicPath,
+    fileName: target.fileName,
+  };
+}
+
+/**
+ * Step 2 — the browser reports that Cloudinary accepted the bytes; store the
+ * path and the same metadata the old action stored (original filename,
+ * uploadedAt, uploadedBy), and revalidate the two pages that read it.
+ */
+export async function recordSchedulePDFUpload({ filename, bytes, contentType } = {}) {
+  const session = await requireAdmin('schedule_pdf');
+  const target = deriveTarget();
+
+  await dbConnect();
   await SchedulePDF.findOneAndUpdate(
     { key: KEY },
     {
-      url: uploaded.secure_url,
-      publicId: uploaded.public_id,
-      filename: file.name ?? '',
+      url: target.publicPath,
+      publicId: target.publicId,
+      filename: String(filename ?? ''),
       uploadedAt: new Date(),
       uploadedBy: session.user?.email ?? '',
     },
     { upsert: true, new: true }
   );
 
-  // Best-effort cleanup of the previous file. We don't fail the upload
-  // if the destroy fails — the new doc is already saved.
-  if (previous?.publicId) {
-    deleteFromCloudinary(previous.publicId).catch(() => {});
-  }
+  recordAdminActionAfter({
+    menu: 'schedule_pdf',
+    action: 'update',
+    entity: 'pdf',
+    recordId: KEY,
+    recordLabel: `schedule PDF landed — ${target.publicPath}`,
+    after: {
+      publicPath: target.publicPath,
+      filename: String(filename ?? ''),
+      bytes: Number(bytes) || 0,
+      contentType: String(contentType || 'application/pdf'),
+    },
+    actor: { id: session.user?.id, name: session.user?.name },
+  });
 
-  revalidatePath('/schedule');
-  revalidatePath('/admin/schedule-pdf');
-  return { ok: true, url: uploaded.secure_url };
+  revalidate();
+  return { ok: true, url: target.publicPath };
 }
 
+/**
+ * Forget the schedule PDF: the row goes, the button disappears. The asset is
+ * NOT touched — the next upload overwrites it in place, and an admin who
+ * deletes by mistake loses only the link, not the file.
+ */
 export async function deleteSchedulePDF() {
-  await requireAdmin('schedule_pdf');
+  const session = await requireAdmin('schedule_pdf');
   await dbConnect();
-  const doc = await SchedulePDF.findOne({ key: KEY });
+  const doc = await SchedulePDF.findOne({ key: KEY }).lean();
   if (!doc) return { ok: true };
-  if (doc.publicId) {
-    deleteFromCloudinary(doc.publicId).catch(() => {});
-  }
   await SchedulePDF.deleteOne({ key: KEY });
-  revalidatePath('/schedule');
-  revalidatePath('/admin/schedule-pdf');
+
+  recordAdminActionAfter({
+    menu: 'schedule_pdf',
+    action: 'delete',
+    entity: 'pdf',
+    recordId: KEY,
+    recordLabel: `schedule PDF link removed — ${doc.url ?? ''}`,
+    before: { url: doc.url ?? '', filename: doc.filename ?? '' },
+    actor: { id: session.user?.id, name: session.user?.name },
+  });
+
+  revalidate();
   return { ok: true };
 }
