@@ -14,6 +14,10 @@ import CareerPathRegistration from '@/models/CareerPathRegistration';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { sendCareerPathRegistrationEmail } from '@/lib/email/template-senders/careerpath-registration';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The public create has no zod on the server; the note cap
+// is checked explicitly against the shared constant.
+import { customerNoteFits, CUSTOMER_NOTE_TOO_LONG_MESSAGE } from '@/lib/registration/noteField';
 
 const ADMIN_PATH = '/admin/career-path-registrations';
 
@@ -36,6 +40,9 @@ function serialize(v) {
 }
 
 export async function createCareerPathRegistration(data) {
+  // The customer's note is capped on the client (maxLength + zod); this is
+  // the server half of the same rule, so a hand-built call cannot exceed it.
+  if (!customerNoteFits(data?.note)) return { ok: false, error: CUSTOMER_NOTE_TOO_LONG_MESSAGE };
   await dbConnect();
   const doc = await CareerPathRegistration.create(data);
   revalidatePath(ADMIN_PATH);

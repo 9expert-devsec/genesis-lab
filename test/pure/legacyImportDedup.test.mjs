@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import RegisterPublic from '@/models/RegisterPublic';
 import RegisterInhouse from '@/models/RegisterInhouse';
 import { publicRegistrationSchema } from '@/lib/schemas/register-public';
+import { CUSTOMER_NOTE_MAX_LENGTH } from '@/lib/registration/noteField';
 
 /**
  * THE DEDUP KEY FOR THE LEGACY IMPORT — the field, and the index that makes it
@@ -183,17 +184,20 @@ test('the customer\'s own text fields are UNTOUCHED — the address may not be m
    * and a floor that refused them would drop a customer's words or fail a row
    * that is not wrong about anything.
    *
-   * The WIZARD still takes 500, because that is a product decision about how
-   * long a note a customer should type, not a fact about storage. Asserted here
-   * TOGETHER, the way test/fs/rosterSeatLock pins the AttendeeSchema asymmetry —
-   * so that "tidying" either side into agreement goes red rather than silently
-   * changing the other decision.
+   * The WIZARD takes CUSTOMER_NOTE_MAX_LENGTH (200 since the note-cap ticket;
+   * 500 before it), because that is a product decision about how long a note a
+   * customer should type, not a fact about storage — and it now lives in ONE
+   * module, src/lib/registration/noteField.js, which every flow reads. Asserted
+   * here TOGETHER, the way test/fs/rosterSeatLock pins the AttendeeSchema
+   * asymmetry — so that "tidying" either side into agreement goes red rather
+   * than silently changing the other decision.
    */
   assert.equal(notes.options.maxlength, 2000,
     'the storage floor no longer accepts what the legacy import writes (max 559 chars)');
-  assert.equal(wizardNotesMax(), 500,
-    "the WIZARD's 500-character rule was changed — that is a product decision and "
-    + 'widening the storage floor was never a reason to touch it');
+  assert.equal(wizardNotesMax(), CUSTOMER_NOTE_MAX_LENGTH,
+    "the WIZARD's note rule no longer reads the shared constant — every flow must");
+  assert.ok(notes.options.maxlength > CUSTOMER_NOTE_MAX_LENGTH,
+    'the storage floor must stay wider than the wizard cap: imported and pre-cap rows are longer than what a customer may now type');
 
   const message = RegisterInhouse.schema.path('message');
   assert.equal(message.instance, 'String');

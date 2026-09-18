@@ -34,6 +34,9 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { BundleTermsModal } from '@/components/registration/BundleTermsModal';
 import { BUNDLE_TERMS_TITLE } from '@/lib/registration/bundleTerms';
+// ADDED beside the statements above rather than folded into any — the
+// standing rule in this repo. One cap and one placeholder for every flow's note.
+import { CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_PLACEHOLDER, customerNoteCounterLabel } from '@/lib/registration/noteField';
 
 /**
  * Keyed to THIS form and version. The pair is stored inside the payload and
@@ -520,10 +523,14 @@ export function BundleStepForm({ pageId, sectionId, initialValues, onSubmit, bac
         <Textarea
           id="bundle-notes"
           rows={3}
-          placeholder="เช่น ต้องการใบเสนอราคาในนามบริษัท หรือวันที่ที่ต้องการให้ออกเอกสาร (ไม่เกิน 500 ตัวอักษร)"
-          maxLength={500}
+          placeholder={CUSTOMER_NOTE_PLACEHOLDER}
+          maxLength={CUSTOMER_NOTE_MAX_LENGTH}
           {...register('notes')}
         />
+        {/* From the live value (watch), never separate state. */}
+        <p className="mt-1 text-right text-xs tabular-nums text-[var(--text-secondary)]" data-testid="notes-counter">
+          {customerNoteCounterLabel(watch('notes'))}
+        </p>
         {errors.notes?.message && (
           <p className="mt-1 text-xs text-red-500">{errors.notes.message}</p>
         )}

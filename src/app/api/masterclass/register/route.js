@@ -8,6 +8,9 @@ import { isQuoteEnabled }    from '@/lib/masterclass/quoteAccess';
 import { computePricing }    from '@/lib/pricing';
 import { headers }           from 'next/headers';
 import { refNo } from '@/lib/refNo';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. This route has no zod; the note cap is checked explicitly.
+import { customerNoteFits, CUSTOMER_NOTE_TOO_LONG_MESSAGE } from '@/lib/registration/noteField';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +36,11 @@ export async function POST(req) {
   const primaryEmail = coordinator?.email || attendee?.email;
   if (!batchId || !primaryEmail) {
     return NextResponse.json({ error: 'missing_required_fields' }, { status: 400 });
+  }
+  // The customer's note is capped on the client (maxLength); this is the
+  // server half of the same rule, so a hand-built request cannot exceed it.
+  if (!customerNoteFits(notes)) {
+    return NextResponse.json({ error: 'note_too_long', message: CUSTOMER_NOTE_TOO_LONG_MESSAGE }, { status: 400 });
   }
 
   try {

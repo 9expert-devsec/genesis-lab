@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { containsThai, ENGLISH_ONLY_MESSAGE } from '@/lib/registration/englishOnly';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The note cap is shared with every registration flow.
+import { CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_TOO_LONG_MESSAGE } from '@/lib/registration/noteField';
 import {
   thaiPhone,
   isValidThaiPhone,
@@ -243,7 +246,7 @@ export const publicRegistrationSchema = z
     invoice:        invoiceSchema.optional().nullable(),
 
     // Meta
-    notes: z.string().trim().max(500).optional().or(z.literal('')),
+    notes: z.string().trim().max(CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_TOO_LONG_MESSAGE).optional().or(z.literal('')),
 
     // ── Online payment (Omise) — optional; absent = legacy quote flow
     paymentMethod: z.enum(['quote', 'credit_card', 'promptpay']).optional(),

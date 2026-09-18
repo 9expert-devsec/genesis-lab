@@ -43,6 +43,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+// ADDED beside the statements above rather than folded into any — the
+// standing rule in this repo. One cap and one placeholder for every flow's note.
+import { CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_PLACEHOLDER, customerNoteCounterLabel } from "@/lib/registration/noteField";
 
 const STORAGE_KEY = "registration-public-v3";
 const RESULT_KEY = "registration-public-result-v3";
@@ -1031,10 +1034,15 @@ export function StepForm({
             <Textarea
               id="notes"
               rows={3}
-              placeholder="เช่น ต้องการใบแจ้งหนี้ , ระบุชื่อผู้รับ ที่อยู่สำหรับจัดส่งใบแจ้งหนี้ฉบับจริง หรือวันที่ที่ต้องการให้ออกเอกสาร (ไม่เกิน 500 ตัวอักษร)"
-              maxLength={500}
+              placeholder={CUSTOMER_NOTE_PLACEHOLDER}
+              maxLength={CUSTOMER_NOTE_MAX_LENGTH}
               {...register("notes")}
             />
+            {/* From the live value (watch), never separate state: a truncated
+                paste shows as 200/200 the moment it lands. */}
+            <p className="mt-1 text-right text-xs tabular-nums text-[var(--text-secondary)]" data-testid="notes-counter">
+              {customerNoteCounterLabel(watched.notes)}
+            </p>
             {errors.notes?.message && (
               <p className="mt-1 text-xs text-red-500">
                 {errors.notes.message}
