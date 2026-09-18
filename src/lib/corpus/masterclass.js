@@ -49,6 +49,26 @@ const text = (v) => (plainText(v) === '' ? null : plainText(v));
 const rich = (v) => (htmlToText(v) === '' ? null : htmlToText(v));
 const lines = (arr) => (Array.isArray(arr) ? arr.map(plainText).filter((s) => s !== '') : []);
 
+/**
+ * `course_outline_url` as the chatbot must receive it: ABSOLUTE.
+ *
+ * The site now stores the outline as a root-relative `/files/…` path (signed
+ * upload to our own domain); a bare path handed to the bot would be pasted
+ * into a chat as a link that resolves nowhere. Both shapes are live during the
+ * transition — the two courses keep their full Cloudinary URLs until they are
+ * re-uploaded by hand — so:
+ *   starts with `/`     → CORPUS_PUBLIC_ORIGIN + path
+ *   starts with `http`  → passed through untouched
+ *   anything else       → null (a paste that was never a link is not one now)
+ */
+export function absoluteOutlineUrl(value, origin = CORPUS_PUBLIC_ORIGIN) {
+  const v = str(value);
+  if (!v) return null;
+  if (v.startsWith('/')) return `${origin}${v}`;
+  if (/^https?:\/\//i.test(v)) return v;
+  return null;
+}
+
 function num(value) {
   if (value == null || value === '') return null;
   const n = Number(value);
@@ -114,7 +134,7 @@ export function masterclassCourseItem(course, { faqs = [], instructors = [] } = 
     title:       text(c.title_th),
     subtitle:    text(c.subtitle_th),
     url:         `${CORPUS_PUBLIC_ORIGIN}/masterclass/${str(c.slug)}`,
-    outline_pdf_url: text(c.course_outline_url),
+    outline_pdf_url: absoluteOutlineUrl(c.course_outline_url),
     level:       text(c.level),
     duration:    { days: num(c.duration_days), hours: num(c.duration_hours) },
     schedule: {
