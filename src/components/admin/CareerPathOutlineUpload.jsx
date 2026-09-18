@@ -6,7 +6,7 @@ import {
   signCareerPathOutlineUpload,
   recordCareerPathOutlineUpload,
 } from '@/lib/actions/career-path-outlines';
-import { isFilesPdfPath } from '@/lib/careerPaths/careerPathOutline';
+import { isFilesPdfPath } from '@/lib/career-paths/careerPathOutline';
 
 /**
  * Career-path outline PDF — an upload button where a text box used to be.

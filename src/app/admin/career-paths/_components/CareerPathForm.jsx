@@ -14,7 +14,7 @@ import {
 // rule in this repo. The outline is an UPLOAD now, and the rename warning is
 // the lib's, so the form and the save guard read the same rule.
 import { CareerPathOutlineUpload } from '@/components/admin/CareerPathOutlineUpload';
-import { careerOutlineWouldGoStale } from '@/lib/careerPaths/careerPathOutline';
+import { careerOutlineWouldGoStale } from '@/lib/career-paths/careerPathOutline';
 
 /**
  * Auto-slug from a Thai/English title: ASCII only, lowercase, dashes.

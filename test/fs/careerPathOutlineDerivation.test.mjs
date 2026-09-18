@@ -2,7 +2,7 @@
 //
 // src/lib/actions/career-path-outlines.js signs uploads with overwrite:true, so
 // whoever names the path names the asset that gets destroyed. The only safe
-// author of that name is src/lib/careerPaths/careerPathOutline.js, and the
+// author of that name is src/lib/career-paths/careerPathOutline.js, and the
 // only safe author of the public_id is legacyPathToPublicId. A copy of either
 // rule inside the action would pass every render test and quietly drift.
 // Same guard, same probes, as test/fs/courseOutlineDerivation.test.mjs — the

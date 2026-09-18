@@ -25,7 +25,7 @@ import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo. The save guard for links.outlineUrl reads the same rule
 // the upload button and the form's stale warning read.
-import { isFilesPdfPath } from '@/lib/careerPaths/careerPathOutline';
+import { isFilesPdfPath } from '@/lib/career-paths/careerPathOutline';
 
 function serialize(v) {
   return v == null ? v : JSON.parse(JSON.stringify(v));

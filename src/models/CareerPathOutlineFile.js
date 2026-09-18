@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { CAREER_OUTLINE_LANGS } from '@/lib/careerPaths/careerPathOutline';
+import { CAREER_OUTLINE_LANGS } from '@/lib/career-paths/careerPathOutline';
 
 /**
  * CareerPathOutlineFile — which bytes landed at a career path's outline path,

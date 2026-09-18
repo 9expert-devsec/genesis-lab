@@ -11,7 +11,7 @@
  *
  * ── THE RULE THE WHOLE FEATURE RESTS ON ─────────────────────────────────────
  * The filename and the public_id are DERIVED from (api_slug, lang) by
- * src/lib/careerPaths/careerPathOutline.js and never accepted from the client.
+ * src/lib/career-paths/careerPathOutline.js and never accepted from the client.
  * Uploads are signed with overwrite:true, so whoever names the path names the
  * asset that gets destroyed — and MEASURED 2026-09-18, the ten existing
  * career-path outlines sit at exactly the public_id this derives (10/10 via
@@ -33,7 +33,7 @@ import {
   careerOutlinePublicPath,
   careerOutlineSlugKey,
   isCareerOutlineLang,
-} from '@/lib/careerPaths/careerPathOutline';
+} from '@/lib/career-paths/careerPathOutline';
 import { LEGACY_PUBLIC_ID_PREFIX, legacyPathToPublicId } from '@/lib/legacyPublicId';
 import { extensionOf, refuseUpload } from '@/lib/legacyUploadPolicy.mjs';
 

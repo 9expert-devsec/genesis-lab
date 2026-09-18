@@ -16,7 +16,7 @@ import {
   careerOutlineWouldGoStale,
   isCareerOutlineLang,
   isFilesPdfPath,
-} from '@/lib/careerPaths/careerPathOutline';
+} from '@/lib/career-paths/careerPathOutline';
 import { LEGACY_PUBLIC_ID_PREFIX, legacyPathToPublicId } from '@/lib/legacyPublicId';
 
 /** Nine of the ten OUT-RDR files, whose names derive from api_slug. */

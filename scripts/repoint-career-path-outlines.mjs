@@ -49,7 +49,7 @@ const { msdbUpdate } = await import('@/lib/api/msdb-write');
 // The derivation is the app's, not a copy: what this script links to is what
 // the upload button will overwrite.
 const { careerOutlineSlugKey, careerOutlinePublicPath, CAREER_OUTLINE_CATEGORY, isFilesPdfPath } =
-  await import('@/lib/careerPaths/careerPathOutline');
+  await import('@/lib/career-paths/careerPathOutline');
 
 const APPLY = process.argv.includes('--apply');
 /**

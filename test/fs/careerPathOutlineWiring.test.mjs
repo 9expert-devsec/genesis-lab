@@ -34,7 +34,7 @@ test('the form mounts the upload field, controlled by outlineUrl, and no longer 
 
 test('the form renders the rename warning from the lib, keyed on the stored api_slug, the live slug and the value', () => {
   const { code, withImports } = readSource(FORM);
-  assert.match(withImports, /import \{ careerOutlineWouldGoStale \} from '@\/lib\/careerPaths\/careerPathOutline'/);
+  assert.match(withImports, /import \{ careerOutlineWouldGoStale \} from '@\/lib\/career-paths\/careerPathOutline'/);
   assert.match(code, /careerOutlineWouldGoStale\(\{\s*previousApiSlug: careerPath\?\.api_slug \?\? '',\s*nextApiSlug: slug,\s*outlineUrl,\s*\}\)/);
   assert.match(code, /\{outlineStale \? \(/, 'the warning is rendered, not console.warn-ed');
   assert.match(code, /\{outlineStale\.stored\}/);
@@ -44,7 +44,7 @@ test('the form renders the rename warning from the lib, keyed on the stored api_
 
 test('shapePayload accepts a /files pdf path or empty for links_outlineUrl and refuses the rest by field name', () => {
   const { code, withImports } = readSource(ACTIONS);
-  assert.match(withImports, /import \{ isFilesPdfPath \} from '@\/lib\/careerPaths\/careerPathOutline'/);
+  assert.match(withImports, /import \{ isFilesPdfPath \} from '@\/lib\/career-paths\/careerPathOutline'/);
   assert.match(code, /outlineUrl: outlineUrlFromForm\(formData\.get\('links_outlineUrl'\)\)/);
   const fn = code.match(/function outlineUrlFromForm\(raw\) \{([\s\S]*?)\n\}/);
   assert.ok(fn, 'outlineUrlFromForm is missing');
@@ -65,7 +65,7 @@ test('CONTROL: shapePayload throws are turned into { ok:false, error } by both c
 test('the upload field never builds a path and only ever emits what the server signed', () => {
   const { code, withImports } = readSource(FIELD);
   assert.match(withImports, /from '@\/lib\/actions\/career-path-outlines'/);
-  assert.match(withImports, /import \{ isFilesPdfPath \} from '@\/lib\/careerPaths\/careerPathOutline'/);
+  assert.match(withImports, /import \{ isFilesPdfPath \} from '@\/lib\/career-paths\/careerPathOutline'/);
   assert.equal(/['"`]\/files\//.test(code), false, 'the field spells no /files path of its own');
   assert.match(code, /onChange\?\.\(signed\.publicPath\)/, 'the emitted value is the signed publicPath');
   const emits = code.match(/onChange\?\.\((.*?)\)/g) || [];
