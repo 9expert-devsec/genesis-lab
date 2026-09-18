@@ -1185,7 +1185,7 @@ function ProgramGroup({
         </span>
       </div>
 
-      <div className="hidden lg:block">
+      <div className="hidden sm:block">
         <ProgramTable
           courses={courses}
           monthHeaders={monthHeaders}
@@ -1196,7 +1196,7 @@ function ProgramGroup({
         />
       </div>
 
-      <div className="flex flex-col gap-4 lg:hidden">
+      <div className="flex flex-col gap-4 sm:hidden">
         {courses.map((c) => (
           <CourseCard
             key={c._id ?? c.course_id}
