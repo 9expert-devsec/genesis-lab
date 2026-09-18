@@ -24,9 +24,6 @@ import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatThaiAddress } from '@/lib/address/formatThaiAddress';
 import { cn } from '@/lib/utils';
 import { phoneInputProps } from '@/lib/registration/phoneInputProps';
-// ADDED beside the statement above rather than folded into it — the standing
-// rule in this repo. One cap and one placeholder for every flow's note.
-import { CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_PLACEHOLDER, customerNoteCounterLabel } from '@/lib/registration/noteField';
 import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 
 // ── Storage keys (mirror the Public wizard pattern) ────────────────
@@ -713,16 +710,8 @@ export function InhouseStepForm({ courses = [], preselectedCourse = null, initia
         <Textarea
           {...register('message')}
           rows={4}
-          placeholder={CUSTOMER_NOTE_PLACEHOLDER}
-          maxLength={CUSTOMER_NOTE_MAX_LENGTH}
+          placeholder="ระบุข้อมูลเพิ่มเติม"
         />
-        {/* From the live value (watched), never separate state. */}
-        <p className="mt-1 text-right text-xs tabular-nums text-[var(--text-secondary)]" data-testid="notes-counter">
-          {customerNoteCounterLabel(watched.message)}
-        </p>
-        {errors.message?.message && (
-          <p className="mt-1 text-xs text-red-500">{errors.message.message}</p>
-        )}
       </FormSection>
 
       {/* Friendly error summary (Thai messages, no field paths) */}

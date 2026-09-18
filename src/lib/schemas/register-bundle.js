@@ -6,9 +6,6 @@ import {
   invoiceContradictsFlag,
   invoiceSchema,
 } from '@/lib/schemas/register-public';
-// ADDED beside the statement above rather than folded into it — the standing
-// rule in this repo. The note cap is shared with every registration flow.
-import { CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_TOO_LONG_MESSAGE } from '@/lib/registration/noteField';
 
 /**
  * What a CUSTOMER may send when requesting a quotation for a bundle.
@@ -87,7 +84,7 @@ export const bundleRegistrationSchema = z
     requestInvoice: z.boolean().default(false),
     invoice:        invoiceSchema.optional().nullable(),
 
-    notes: z.string().trim().max(CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_TOO_LONG_MESSAGE).optional().or(z.literal('')),
+    notes: z.string().trim().max(500).optional().or(z.literal('')),
 
     consent: consentSchema.optional().nullable(),
   })

@@ -37,9 +37,6 @@ import { CardPanelFull } from "@/components/payment/CardPanelFull";
 import { Step2MobileBar } from "@/components/payment/Step2MobileBar";
 import { TermsModal } from "@/components/payment/TermsModal";
 import { trackPurchase, trackFormSubmitLead } from "@/lib/analytics/conversions";
-// ADDED beside the statement above rather than folded into it — the standing
-// rule in this repo. One cap and one placeholder for every flow's note.
-import { CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_PLACEHOLDER, customerNoteCounterLabel } from "@/lib/registration/noteField";
 
 const STORAGE_KEY = "masterclass-register-v1";
 
@@ -1779,14 +1776,10 @@ export function MasterclassRegisterClient({ course, batch }) {
                   value={formState.notes ?? ""}
                   onChange={(e) => setField("notes", e.target.value)}
                   rows={3}
-                  maxLength={CUSTOMER_NOTE_MAX_LENGTH}
-                  placeholder={CUSTOMER_NOTE_PLACEHOLDER}
+                  maxLength={500}
+                  placeholder="หมายเหตุ"
                   className={`${inputCls} resize-none`}
                 />
-                {/* From the live value, never separate state. */}
-                <p className="mt-1 text-right text-xs tabular-nums text-9e-slate-dp-50 dark:text-[#94a3b8]" data-testid="notes-counter">
-                  {customerNoteCounterLabel(formState.notes)}
-                </p>
               </div>
 
               {submitError && (

@@ -1,9 +1,6 @@
 import { z } from 'zod';
 import { containsThai, ENGLISH_ONLY_MESSAGE } from '@/lib/registration/englishOnly';
 import { thaiPhone, THAI_PHONE_ERROR_MESSAGE } from '@/lib/registration/thaiPhone';
-// ADDED beside the statement above rather than folded into it — the standing
-// rule in this repo. The note cap is shared with every registration flow.
-import { CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_TOO_LONG_MESSAGE } from '@/lib/registration/noteField';
 
 // ── Address schemas ────────────────────────────────────────────────
 //
@@ -134,8 +131,8 @@ export const inhouseRegistrationSchema = z
     thaiAddress:          thaiAddressSchema.optional().nullable(),
     internationalAddress: internationalAddressSchema.optional().nullable(),
 
-    // Notes — the customer's หมายเหตุเพิ่มเติม, capped like every other flow's.
-    message: z.string().trim().max(CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_TOO_LONG_MESSAGE).optional().or(z.literal('')),
+    // Notes
+    message: z.string().trim().max(2000).optional().or(z.literal('')),
   })
   .superRefine((data, ctx) => {
     // ── Onsite: the venue is the quotation address shape, required in full ──

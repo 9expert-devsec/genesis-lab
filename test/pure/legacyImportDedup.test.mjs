@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 
 import RegisterPublic from '@/models/RegisterPublic';
 import RegisterInhouse from '@/models/RegisterInhouse';
-import { publicRegistrationSchema } from '@/lib/schemas/register-public';
-import { CUSTOMER_NOTE_MAX_LENGTH } from '@/lib/registration/noteField';
 
 /**
  * THE DEDUP KEY FOR THE LEGACY IMPORT — the field, and the index that makes it
@@ -108,27 +106,6 @@ const MODELS = [
   ['RegisterInhouse', RegisterInhouse],
 ];
 
-/**
- * The wizard's `notes` max, dug out of the zod tree.
- *
- * `publicRegistrationSchema` is `z.object({...}).superRefine(...)`, so it is a
- * ZodEffects wrapping the object, and `notes` is itself
- * `.max(500).optional().or(z.literal(''))` — a union over an optional over a
- * string. Both wrappers are unwrapped by SHAPE rather than by a fixed path, so
- * a harmless reformulation (dropping the `.or`, say) does not fail this while
- * the 500 is still there. It returns null when nothing is found, and the
- * assertion's `500` is what catches that.
- */
-function wizardNotesMax() {
-  let root = publicRegistrationSchema;
-  for (let i = 0; i < 10 && root?._def?.typeName === 'ZodEffects'; i++) root = root._def.schema;
-  let node = root?.shape?.notes ?? null;
-  for (let i = 0; i < 10 && node && !node._def?.checks; i++) {
-    node = node._def?.innerType ?? node._def?.options?.[0] ?? null;
-  }
-  return node?._def?.checks?.find((c) => c.kind === 'max')?.value ?? null;
-}
-
 // ── 1. THE FIELDS ARE DECLARED, ON BOTH COLLECTIONS ─────────────────────────
 
 test('both models declare `legacy` as a subdocument defaulting to null', () => {
@@ -176,28 +153,20 @@ test('the customer\'s own text fields are UNTOUCHED — the address may not be m
   const notes = RegisterPublic.schema.path('notes');
   assert.equal(notes.instance, 'String');
   /**
-   * ── 500 → 2000 WHEN THE IMPORT BECAME A WRITER, AND THE ASYMMETRY IS PINNED
-   *    IN BOTH DIRECTIONS ─────────────────────────────────────────────────
+   * ── 500 → 2000 WHEN THE IMPORT BECAME A WRITER ───────────────────────────
    *
    * The STORAGE FLOOR takes 2000: the legacy import carries customer `remark`
    * text up to 559 characters (measured across 275 rows, two of them over 500),
    * and a floor that refused them would drop a customer's words or fail a row
    * that is not wrong about anything.
    *
-   * The WIZARD takes CUSTOMER_NOTE_MAX_LENGTH (200 since the note-cap ticket;
-   * 500 before it), because that is a product decision about how long a note a
-   * customer should type, not a fact about storage — and it now lives in ONE
-   * module, src/lib/registration/noteField.js, which every flow reads. Asserted
-   * here TOGETHER, the way test/fs/rosterSeatLock pins the AttendeeSchema
-   * asymmetry — so that "tidying" either side into agreement goes red rather
-   * than silently changing the other decision.
+   * The asymmetry against the WIZARD's typing cap (a product decision, not a
+   * storage fact) is pinned in test/pure/registrationNoteField — the suite
+   * that owns the note field — together with the cap itself. Only the storage
+   * side, which is what the import depends on, is asserted here.
    */
   assert.equal(notes.options.maxlength, 2000,
     'the storage floor no longer accepts what the legacy import writes (max 559 chars)');
-  assert.equal(wizardNotesMax(), CUSTOMER_NOTE_MAX_LENGTH,
-    "the WIZARD's note rule no longer reads the shared constant — every flow must");
-  assert.ok(notes.options.maxlength > CUSTOMER_NOTE_MAX_LENGTH,
-    'the storage floor must stay wider than the wizard cap: imported and pre-cap rows are longer than what a customer may now type');
 
   const message = RegisterInhouse.schema.path('message');
   assert.equal(message.instance, 'String');

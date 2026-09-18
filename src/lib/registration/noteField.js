@@ -1,17 +1,20 @@
 /**
- * The customer's "หมายเหตุเพิ่มเติม" note — ONE limit, ONE placeholder, every flow.
+ * The PUBLIC registration form's "หมายเหตุเพิ่มเติม" note — one limit, one
+ * placeholder, read by both sides of that one flow.
  *
- * Public, bundle, in-house, masterclass and career-path registrations each
- * carried their own copy of this rule (500 / 500 / none / 500 / none, four
- * different placeholders) and drifted. Every flow now reads these three
- * values: the client textarea (`maxLength`, `placeholder`, the live counter)
- * and the server rule (`.max(CUSTOMER_NOTE_MAX_LENGTH)` in the zod schemas, or the
- * explicit check in the two flows that have no zod on the server).
- * test/fs/registrationNoteField pins that no flow spells the number itself.
+ * Consumers: the client textarea in components/registration/RegisterWizard.jsx
+ * (`maxLength`, `placeholder`, the live counter) and the server rule in
+ * lib/schemas/register-public.js (`.max(CUSTOMER_NOTE_MAX_LENGTH)`). Both read
+ * these values so the counter, the browser and the server agree on the same
+ * text; the cap is on CHARACTERS as JavaScript counts them (`String.length`),
+ * the count `maxLength` and zod's `.max()` share.
  *
- * The cap is on CHARACTERS as JavaScript counts them (`String.length`), the
- * same count `maxLength` and zod's `.max()` use, so the counter, the browser
- * and the server always agree on the same text.
+ * ── SCOPE: PUBLIC ONLY, ON PURPOSE ───────────────────────────────────────────
+ * The bundle (500), in-house (2000), masterclass (500 client / mongoose) and
+ * career-path (uncapped) notes keep their own rules and placeholders. A sweep
+ * once put all five on this module and was reverted; test/fs/
+ * registrationNoteFieldWiring pins that no other flow imports it, so widening
+ * the scope again is a decision that has to be made in a test, not by grep.
  */
 export const CUSTOMER_NOTE_MAX_LENGTH = 200;
 

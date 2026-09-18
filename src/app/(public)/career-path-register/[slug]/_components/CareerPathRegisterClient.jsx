@@ -38,9 +38,6 @@ import { createCareerPathRegistration } from '@/lib/actions/career-path-registra
 import { isValidThaiPhone } from '@/lib/registration/thaiPhone';
 import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 import { cn } from '@/lib/utils';
-// ADDED beside the statements above rather than folded into any — the
-// standing rule in this repo. One cap and one placeholder for every flow's note.
-import { CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_PLACEHOLDER, CUSTOMER_NOTE_TOO_LONG_MESSAGE, customerNoteCounterLabel } from '@/lib/registration/noteField';
 
 // ── Constants ───────────────────────────────────────────────────
 
@@ -199,7 +196,7 @@ const baseSchema = z.object({
 
   invoice: invoiceShape,
 
-  note: z.string().max(CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_TOO_LONG_MESSAGE).default(''),
+  note: z.string().default(''),
 }).superRefine((val, ctx) => {
   const inv = val.invoice ?? {};
   if (inv.type === 'individual') {
@@ -1212,16 +1209,8 @@ export function Step2Form({ defaultValues, selected, curriculum, onBack, onSubmi
           rows={3}
           {...register('note')}
           className={inputClass}
-          placeholder={CUSTOMER_NOTE_PLACEHOLDER}
-          maxLength={CUSTOMER_NOTE_MAX_LENGTH}
+          placeholder="ระบุข้อมูลเพิ่มเติม (ถ้ามี)"
         />
-        {/* From the live value (watch), never separate state. */}
-        <p className="mt-1 text-right text-xs tabular-nums text-9e-slate-dp-50 dark:text-[#94a3b8]" data-testid="notes-counter">
-          {customerNoteCounterLabel(watch('note'))}
-        </p>
-        {errors.note?.message && (
-          <p className="mt-1 text-xs text-red-600">{errors.note.message}</p>
-        )}
       </Section>
 
       {Object.keys(errors).length > 0 && (
