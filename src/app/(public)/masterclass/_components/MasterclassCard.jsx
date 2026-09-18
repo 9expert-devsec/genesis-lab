@@ -10,11 +10,12 @@ import { MASTERCLASS_LEVEL_LABEL as LEVEL_MAP } from "@/lib/masterclass/levelLab
  *
  * Extracted out of MasterclassListingClient.jsx, which used to define this
  * inline and unexported. All data below is REAL — course + batch records
- * from MongoDB via getPublishedMasterclasses(), the same pricing/countdown/
- * capacity logic the previous card used. Only the presentation changed to
- * match the new design; no static Figma numbers (its mock 12,900 บาท, "ว่าง
- * 4 ที่นั่ง", 18-day countdown, etc.) were ported — those were placeholder
- * values in the design file, not data.
+ * from MongoDB via getPublishedMasterclasses(), the same pricing/countdown
+ * logic the previous card used. Only the presentation changed to match the
+ * new design; no static Figma numbers (its mock 12,900 บาท, 18-day countdown,
+ * etc.) were ported — those were placeholder values in the design file, not
+ * data. The seat row (รับจำกัด / ว่าง / progress bar) was removed from this
+ * card on purpose; the detail page's batch cards still show seat state.
  *
  * ROUND M-C: the top visual band now uses each course's own
  * `cover_image_url` instead of the shared 13/14 orange/blue art — design
@@ -145,35 +146,12 @@ export function MasterclassCard({ course }) {
               </div>
             )}
 
-            {/* Capacity */}
-            <div className="flex w-full flex-col gap-2">
-              <div className="flex w-full items-start justify-between text-xs">
-                <span className="text-[#475569]">
-                  รับจำกัด {firstBatch.capacity} ที่นั่ง
-                </span>
-                <span
-                  className={
-                    firstBatch.status === "full"
-                      ? "font-semibold text-red-500"
-                      : "font-semibold text-[#10b981]"
-                  }
-                >
-                  {firstBatch.status === "full"
-                    ? "เต็มแล้ว"
-                    : `ว่าง ${Math.max(0, firstBatch.capacity - firstBatch.registered_count)} ที่นั่ง`}
-                </span>
-              </div>
-              <div className="h-1.5 w-full rounded-full bg-[#e2e8f0]">
-                <div
-                  className={`h-1.5 rounded-full transition-all ${
-                    firstBatch.status === "full" ? "bg-red-500" : "bg-[#10b981]"
-                  }`}
-                  style={{
-                    width: `${Math.min(100, (firstBatch.registered_count / firstBatch.capacity) * 100)}%`,
-                  }}
-                />
-              </div>
-            </div>
+            {/* No seat row here — the listing card shows nothing about seats
+                (no รับจำกัด / ว่าง figures, no progress bar). The CTA below
+                still keys on `batch.status`, which the seat writers maintain
+                (auto-flip to `full` at capacity), so "เต็มแล้ว" is decided by
+                the batch state, not by a number this card no longer reads.
+                test/render/masterclassCardSeats pins the absence. */}
 
             {/* CTA */}
             {firstBatch.status === "full" ? (
