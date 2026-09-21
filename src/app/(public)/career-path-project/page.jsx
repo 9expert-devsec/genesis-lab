@@ -245,7 +245,7 @@ function CareerPathPromotionSection() {
             เพิ่มอีก 1 ใบ
           </li>
           <li>
-            <strong className="text-[#00AEEF]">ใช้สิทธิ์ได้ภายใน 10 ปี</strong>{" "}
+            <strong className="text-[#00AEEF]">ใช้สิทธิ์ได้ภายใน 1 ปี</strong>{" "}
             นับจากวันเรียนเดิมของคอร์สนั้น ๆ
           </li>
         </ul>
