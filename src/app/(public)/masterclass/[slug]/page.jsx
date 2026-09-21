@@ -5,6 +5,10 @@ import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { generateMasterclassJsonLd } from '@/lib/masterclass/generateJsonLd';
 import { OG_DEFAULT_IMAGE, resolveCourseOgImage, toAbsoluteUrl } from '@/lib/seo/ogImage';
 import { MasterclassDetailClient } from './_components/MasterclassDetailClient';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. See /articles/[slug] for why the catch-all's boundary
+// cannot be used on an ISR route.
+import { recordStaticNotFound } from '@/lib/redirects/recordStaticNotFound';
 
 // ISR, not force-dynamic — and the declaration below is what makes the
 // revalidate real: a [param] segment with no generateStaticParams is left out
@@ -80,7 +84,10 @@ export async function generateMetadata({ params }) {
 export default async function MasterclassDetailPage({ params }) {
   const { slug } = await params;
   const course = await getMasterclassBySlug(slug);
-  if (!course) notFound();
+  if (!course) {
+    recordStaticNotFound(`/masterclass/${slug}`);
+    notFound();
+  }
   const [faqs, instructors] = await Promise.all([
     getLocalFaqsForCourse('masterclass', String(course._id)),
     getInstructorsByIds(course.instructor_ids ?? []),

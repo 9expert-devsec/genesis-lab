@@ -11,6 +11,11 @@ import { pickPinnedCourses } from '@/lib/articles/pinnedCourses';
 import { normalizeAuthoredColors } from '@/lib/articles/normalizeAuthoredColors';
 import { wrapArticleTables } from '@/lib/articles/wrapArticleTables';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The catch-all's boundary reads headers() and would make
+// this route per-request; this one records the 404 with the canonical host,
+// after the response, and only when a render actually happens (a MISS).
+import { recordStaticNotFound } from '@/lib/redirects/recordStaticNotFound';
 import { ArticleDetailClient } from './_components/ArticleDetailClient';
 
 export const revalidate = 3600;
@@ -88,7 +93,12 @@ export default async function ArticleDetailPage({ params }) {
   try { slug = decodeURIComponent(rawSlug); } catch { /* malformed → keep raw */ }
 
   const article = await getArticleBySlug(slug);
-  if (!article) notFound();
+  if (!article) {
+    // The raw (still percent-encoded) slug, so the row normalises the same
+    // way the catch-all's pathFromSlug rows do.
+    recordStaticNotFound(`/articles/${rawSlug}`);
+    notFound();
+  }
 
   // Related articles: prefer explicit relations the admin set on the
   // doc, fall back to "anything sharing a tag" so we always have
