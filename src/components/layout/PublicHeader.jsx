@@ -5,6 +5,12 @@ import { getActiveTnhsCourses } from '@/lib/actions/tnhs-courses';
 import { getActiveNavFeaturedOnlineCourses } from '@/lib/actions/nav-featured-online-courses';
 import { getNavMenuData } from '@/lib/navmenu/getNavMenuData';
 import { getPublishedMasterclasses } from '@/lib/masterclass/getMasterclass';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The catalogue is projected down to the fields the menu
+// reads BEFORE it crosses into the client component: everything passed there
+// is serialised into every page's RSC flight data and every ISR write. See
+// lib/navmenu/headerProps.js for the measurement and the field lists.
+import { projectHeaderProps } from '@/lib/navmenu/headerProps';
 import { PublicHeaderClient } from './PublicHeaderClient';
 
 /**
@@ -72,14 +78,28 @@ export async function PublicHeader({ overlay = false }) {
     return entry && Array.isArray(entry.items) && entry.items.length > 0;
   });
 
+  // Projected HERE, on the server, and not inside PublicHeaderClient: a client
+  // component cannot shrink what it was handed — by the time it runs, the full
+  // documents are already in the flight data. The hidden-course filter above
+  // and every fetch stay exactly as they were; only the shape that crosses
+  // the boundary changes.
+  const clientProps = projectHeaderProps({
+    programs: publicPrograms,
+    dynamicCareerPaths,
+    tnhsCourses,
+    navOnlineCourses,
+    navMenuData,
+    navMasterclasses,
+  });
+
   return (
     <PublicHeaderClient
-      programs={publicPrograms}
-      dynamicCareerPaths={dynamicCareerPaths}
-      tnhsCourses={tnhsCourses}
-      navOnlineCourses={navOnlineCourses}
-      navMenuData={navMenuData}
-      navMasterclasses={navMasterclasses}
+      programs={clientProps.programs}
+      dynamicCareerPaths={clientProps.dynamicCareerPaths}
+      tnhsCourses={clientProps.tnhsCourses}
+      navOnlineCourses={clientProps.navOnlineCourses}
+      navMenuData={clientProps.navMenuData}
+      navMasterclasses={clientProps.navMasterclasses}
       overlay={overlay}
     />
   );
