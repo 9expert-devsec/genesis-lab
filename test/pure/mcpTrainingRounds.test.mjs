@@ -188,6 +188,25 @@ test('the helper\'s raw signup_url fallback is omitted, never emitted', async ()
   assert.ok(!JSON.stringify(out).includes('localhost'), 'no localhost URL may reach the model');
 });
 
+test('every round carries a course_url on the canonical origin', async () => {
+  // The link the model falls back to when a round has no registration_url —
+  // so it must be there on exactly the rounds that have none: full and started.
+  const items = [
+    round({ id: 'open', code: 'POWER-BI', dates: ['2026-10-01'], status: 'open' }),
+    round({ id: 'full', code: 'EXCEL-ADV', dates: ['2026-10-02'], status: 'full' }),
+    round({ id: 'live', code: 'SQL-PG', dates: ['2026-09-22', '2026-09-24'], status: 'open' }),
+  ];
+  const out = await listTrainingRounds({ include_in_progress: true }, deps(items));
+
+  assert.equal(out.rounds.length, 3);
+  for (const r of out.rounds) {
+    assert.ok(
+      typeof r.course_url === 'string' && r.course_url.startsWith('https://www.9experttraining.com/'),
+      `round ${r.course_id} starting ${r.first_day} must carry a course_url on the www origin; got ${r.course_url}`
+    );
+  }
+});
+
 test('a full round and a started round carry no registration link', async () => {
   const items = [
     round({ id: 'full', dates: ['2026-10-01'], status: 'full' }),

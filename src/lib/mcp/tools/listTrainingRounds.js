@@ -57,11 +57,19 @@
  * which point at http://localhost:3000. So only a site-relative
  * `/registration/` path is accepted and made absolute on SITE_ORIGIN; any
  * other result means the round is emitted WITHOUT `registration_url`. A round
- * that has started gets no link at all: registration is closed.
+ * that has started gets no registration link: registration is closed.
+ *
+ * ── (7) EVERY ROUND CARRIES ITS COURSE PAGE AS `course_url` ────────────────
+ * Built by shape.js `publicCourseUrl`, the same helper get_course_detail uses,
+ * so a round with no registration_url (full, started, or a fallback that was
+ * omitted) still gives the model a real link rather than one it would guess.
+ * The course a round is populated with carries no `urlAlias`, so an aliased
+ * course gets its derived `/<id>-training-course` path here — a URL
+ * `resolveCourse` also serves, though not the canonical one.
  */
 
 import { siteTodayKey } from '@/lib/articlePublishTime';
-import { McpToolError, SITE_ORIGIN, dropEmpty } from '@/lib/mcp/shape';
+import { McpToolError, SITE_ORIGIN, dropEmpty, publicCourseUrl } from '@/lib/mcp/shape';
 import { roundHasEnded, roundHasStarted, roundFirstDayKey, roundLastDayKey } from '@/lib/schedule/roundHasStarted';
 import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';
 import { scheduleStatusLabel } from '@/lib/scheduleStatus';
@@ -69,20 +77,21 @@ import { scheduleStatusLabel } from '@/lib/scheduleStatus';
 export const LIST_TRAINING_ROUNDS_DESCRIPTION =
   'List scheduled classroom and hybrid training rounds for 9Expert courses, optionally ' +
   'filtered by course and by date range. Each round gives its course, its training days, ' +
-  'its delivery type and, while it can still be booked, its registration_url — the ' +
-  'registration page on the 9Expert website. Registration closes when a round starts: by ' +
+  'its delivery type, its course_url — the course page on the 9Expert website — and, ' +
+  'while it can still be booked, its registration_url — the registration page on the ' +
+  '9Expert website. Registration closes when a round starts: by ' +
   'default only rounds that have not yet begun are returned, and those carry a status in ' +
   'the words the website uses — เปิดรับ (open), ใกล้เต็ม (nearly full), เต็ม (full). A full ' +
-  'round has no registration_url. When a round has no registration_url, do not construct ' +
-  'or guess a link; tell the user to register via the course page instead. This tool ' +
-  'does not return the course page link, so get it as the url field of get_course_detail ' +
-  'for the round\'s course_id. To see rounds that are currently running, set ' +
+  'round has no registration_url. When a round has no registration_url, point the user to ' +
+  'that round\'s course_url instead, and never construct or guess a link. To see rounds ' +
+  'that are currently running, set ' +
   'include_in_progress to true; those are reported with in_progress true and ' +
   'registration_open false, and carry no status and no registration_url — do not quote a ' +
   'status for them. Rounds that have finished are never returned. Dates are individual ' +
   'training days in Asia/Bangkok, not a start and end range. This tool has no ' +
   'seat-availability data. If the user asks how many seats remain, say that information is ' +
-  'not available here and point them to the round\'s registration_url from the results. ' +
+  'not available here and point them to the round\'s registration_url from the results, or ' +
+  'to its course_url when there is none. ' +
   'Do not describe this as a company policy. Do not tell the user how rounds are ' +
   'filtered, dropped, or sourced; just answer with the rounds returned.';
 
@@ -215,6 +224,9 @@ export async function listTrainingRounds(input, deps) {
         // never emitted. Only a future round's status is worth a word.
         status: started ? null : scheduleStatusLabel(row.status),
         registration_url: href ? `${SITE_ORIGIN}${href}` : null,
+        // (7) — always present, so a round with no registration_url still has
+        // a real link to hand out.
+        course_url: publicCourseUrl(row.course),
       })
     );
   }
