@@ -27,13 +27,25 @@ function round({ id = 'r1', code = 'POWER-BI', dates, status = 'open', type = 'c
   };
 }
 
+/**
+ * `warn` is injected, never a spy on the global console: this runner shares
+ * one process across every file, and a patched `console.warn` that a failing
+ * test never restored would leak into all the files after it.
+ */
 function deps(items, extra = {}) {
   return {
     listSchedules: async () => ({ items, total: items.length }),
     getCourseByCodeInsensitive: async () => null,
     todayKey: () => TODAY,
+    warn: () => {},
     ...extra,
   };
+}
+
+/** A warn recorder: `calls` holds the argument list of every call. */
+function recorder() {
+  const calls = [];
+  return { calls, warn: (...args) => calls.push(args) };
 }
 
 test('a finished round is never returned, even with include_in_progress', async () => {
@@ -118,16 +130,74 @@ test('a round starting TOMORROW is still registerable', async () => {
   assert.equal(out.rounds[0].registration_open, true);
 });
 
-test('an orphan round is dropped AND counted', async () => {
+test('an orphan round is dropped, logged server-side, and NOT reported to the model', async () => {
+  // Round 3: live testing had the model tell sales staff "6 rounds were dropped
+  // because their course data is missing" — a diagnostic read as "the data may
+  // be incomplete". The count belongs in the server log, not the tool output.
   const items = [
     round({ id: 'ok', dates: ['2026-10-01'] }),
     round({ id: 'orphan', dates: ['2026-10-02'], course: null }),
     round({ id: 'orphan2', dates: ['2026-10-03'], course: null }),
   ];
-  const out = await listTrainingRounds({}, deps(items));
+  const log = recorder();
+  const out = await listTrainingRounds({}, deps(items, { warn: log.warn }));
 
   assert.equal(out.rounds.length, 1, 'a round with no course cannot be named and must not be rendered');
-  assert.equal(out.dropped_orphan_rounds, 2, 'the loss must be visible, or the catalogue looks smaller than it is');
+  assert.ok(!('dropped_orphan_rounds' in out), 'the orphan count must not reach the model');
+  assert.ok(!JSON.stringify(out).includes('orphan'), 'no key or value may mention orphans at all');
+  assert.equal(log.calls.length, 1, 'logged once per call, not once per orphan');
+  assert.deepEqual(log.calls[0], ['[mcp] list_training_rounds dropped orphan rounds', { count: 2 }]);
+});
+
+test('no orphans, no warn', async () => {
+  const log = recorder();
+  await listTrainingRounds({}, deps([round({ id: 'ok', dates: ['2026-10-01'] })], { warn: log.warn }));
+  assert.equal(log.calls.length, 0, 'a clean call must not log — a warn on every call is a warn nobody reads');
+});
+
+test('the registration link is the site-built one; the raw sign-up URL never leaks', async () => {
+  const items = [round({ id: 'r42', code: 'POWER-BI', dates: ['2026-10-01'], status: 'open' })];
+  const out = await listTrainingRounds({}, deps(items));
+  const r = out.rounds[0];
+
+  // The same link /schedule, /search and the course cards render, via
+  // lib/schedule/scheduleRegistrationHref, rooted at the canonical origin.
+  assert.equal(r.registration_url, 'https://www.9experttraining.com/registration/public?course=power-bi&class=r42');
+  for (const key of Object.keys(r)) {
+    assert.ok(!/sign_?up/i.test(key), `raw sign-up key "${key}" must not be emitted`);
+  }
+  assert.ok(
+    !Object.values(r).includes(items[0].signup_url),
+    'the upstream signup_url value must not appear under any key'
+  );
+});
+
+test('the helper\'s raw signup_url fallback is omitted, never emitted', async () => {
+  // A course with no course_id makes scheduleRegistrationHref fall back to the
+  // raw upstream signup_url — and some of those point at localhost:3000.
+  const leaky = round({
+    id: 'nocode',
+    dates: ['2026-10-01'],
+    course: { _id: 'oid-x', course_name: 'No-code course' },
+  });
+  leaky.signup_url = 'http://localhost:3000/registration/public?class=nocode';
+  const out = await listTrainingRounds({}, deps([leaky]));
+
+  assert.equal(out.rounds.length, 1, 'the round itself is still listed');
+  assert.ok(!('registration_url' in out.rounds[0]), 'a fallback link must be omitted, not emitted');
+  assert.ok(!JSON.stringify(out).includes('localhost'), 'no localhost URL may reach the model');
+});
+
+test('a full round and a started round carry no registration link', async () => {
+  const items = [
+    round({ id: 'full', dates: ['2026-10-01'], status: 'full' }),
+    round({ id: 'live', dates: ['2026-09-22', '2026-09-24'], status: 'open' }),
+  ];
+  const out = await listTrainingRounds({ include_in_progress: true }, deps(items));
+  assert.equal(out.rounds.length, 2);
+  for (const r of out.rounds) {
+    assert.ok(!('registration_url' in r), `round starting ${r.first_day} must not be bookable by link`);
+  }
 });
 
 test('status=all is always sent upstream, or full rounds vanish silently', async () => {
@@ -136,6 +206,7 @@ test('status=all is always sent upstream, or full rounds vanish silently', async
     listSchedules: async (args) => { seen = args; return { items: [] }; },
     getCourseByCodeInsensitive: async () => null,
     todayKey: () => TODAY,
+    warn: () => {},
   });
   assert.equal(seen.status, UPSTREAM_STATUS_ALL);
   assert.equal(seen.status, 'all');

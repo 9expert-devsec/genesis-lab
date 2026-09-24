@@ -158,7 +158,7 @@ Five tools, all read-only:
 | **list_programs_and_skills** | The list of valid programs (.NET, Power BI, Excel…) and skills (AI, Data…) with their public page links. Claude uses this to get filter values right before searching. |
 | **search_courses** | Finds courses by keyword, and can narrow by program or skill. Returns a short card per course — name, teaser, duration, price, link. Covers classroom and online courses. |
 | **get_course_detail** | Everything published about one course: objectives, who it is for, prerequisites, system requirements and the full topic outline. |
-| **list_training_rounds** | Scheduled classroom and hybrid rounds with their training dates and sign-up links. |
+| **list_training_rounds** | Scheduled classroom and hybrid rounds with their training dates and registration links (the same links the website shows). |
 | **list_live_promotions** | The promotions and early-bird offers that are valid right now, with prices and deadlines. |
 
 ### Things it deliberately will not tell you
@@ -166,8 +166,8 @@ Five tools, all read-only:
 These are not gaps to work around — they are limits built in because the underlying data cannot
 support the answer:
 
-- **No seat counts.** 9Expert publishes no capacity or places-remaining figure anywhere, so Claude is
-  instructed never to state or estimate one. To check availability, open the round's sign-up link.
+- **No seat counts.** The tools have no seat-availability data, so Claude is told to say the figure is
+  not available here and to point you at the round's or masterclass's registration link.
 - **No status on a class already running.** Registration closes when a round starts. A round that has
   begun is reported as in progress with no status word, because the stored status is not updated once
   a round is under way and quoting it would be misleading.
@@ -188,3 +188,10 @@ support the answer:
 | `503 mcp_not_configured` | Server-side: `MCP_API_KEY` is not set on the deployment. Tell the dev team; nothing you can fix locally. |
 | Worked yesterday, 401 today | The key was probably rotated. Get the new one and update your file. |
 | Claude does not use the tools | Ask it something concrete — "what Power BI courses does 9Expert run, and when is the next class?" — rather than a general question. |
+
+**"Links may not be accurate" banner.** Claude Desktop sometimes shows a banner suggesting you turn on
+web search because links "may not be accurate". Links returned by the `9expert` tools come straight
+from the 9Expert website and are accurate, so you can ignore the banner.
+
+**Testing how the tools behave.** Turn off **Memory** and **Web search** in that chat first, so the
+answers come from the `9expert` tools only and not from earlier chats or the open web.

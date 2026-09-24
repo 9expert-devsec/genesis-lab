@@ -33,45 +33,67 @@
  * has NOT ended (`<`). Trainees are in the room on the last day. `siteTodayKey`
  * owns the zone; this module never calls `new Date()` for a comparison.
  *
- * ── (4) ORPHANS ARE DROPPED, AND COUNTED ───────────────────────────────────
+ * ── (4) ORPHANS ARE DROPPED, AND LOGGED — NOT REPORTED TO THE MODEL ────────
  * 12 of 77 rows came back with `course: null` — the populate found no course
  * document. They cannot be attributed and must not be rendered with a blank
- * name, but dropping them silently would let a model conclude the course has
- * fewer rounds than it does. `dropped_orphan_rounds` makes the loss visible,
- * the same instinct as `joinCourseSchedules` reporting what it drops.
+ * name. Round 2 surfaced the count in the output as `dropped_orphan_rounds`;
+ * live testing showed the model relaying it to sales staff as "some rounds may
+ * be missing", which undermines every answer. The count now goes to the
+ * server log only (`deps.warn`, console.warn in production), where the people
+ * who can fix the data will see it.
  *
  * ── (5) THERE ARE NO SEAT COUNTS ANYWHERE ──────────────────────────────────
  * Not `seats`, not `capacity`, not `remaining`. `status` is the only liveness
  * signal upstream publishes and it is the one above. Nothing in this file may
- * emit a number of places, and the description says so to the model as well.
+ * emit a number of places. The description tells the model this TOOL has no
+ * seat data — a fact about the tool, never phrased as company policy.
+ *
+ * ── (6) THE REGISTRATION LINK IS THE SITE'S OWN, NOT THE RAW `signup_url` ──
+ * `registration_url` is built by lib/schedule/scheduleRegistrationHref — the
+ * one builder every public round list (/schedule, /search, course cards)
+ * uses — so the model hands out exactly the link the website renders. That
+ * helper returns null for a full round, and when the round has no `_id` or
+ * the course no id it falls back to the raw upstream `signup_url` — some of
+ * which point at http://localhost:3000. So only a site-relative
+ * `/registration/` path is accepted and made absolute on SITE_ORIGIN; any
+ * other result means the round is emitted WITHOUT `registration_url`. A round
+ * that has started gets no link at all: registration is closed.
  */
 
 import { siteTodayKey } from '@/lib/articlePublishTime';
-import { McpToolError, dropEmpty } from '@/lib/mcp/shape';
+import { McpToolError, SITE_ORIGIN, dropEmpty } from '@/lib/mcp/shape';
 import { roundHasEnded, roundHasStarted, roundFirstDayKey, roundLastDayKey } from '@/lib/schedule/roundHasStarted';
+import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';
 import { scheduleStatusLabel } from '@/lib/scheduleStatus';
 
 export const LIST_TRAINING_ROUNDS_DESCRIPTION =
   'List scheduled classroom and hybrid training rounds for 9Expert courses, optionally ' +
   'filtered by course and by date range. Each round gives its course, its training days, ' +
-  'its delivery type and its official sign-up URL. Registration closes when a round ' +
-  'starts: by default only rounds that have not yet begun are returned, and those carry a ' +
-  'status in the words the website uses — เปิดรับ (open), ใกล้เต็ม (nearly full), เต็ม ' +
-  '(full). To see rounds that are currently running, set include_in_progress to true; ' +
-  'those are reported with in_progress true and registration_open false, and deliberately ' +
-  'carry no status, because the upstream status of a round that has already begun is stale ' +
-  'and must not be quoted. Rounds that have finished are never returned. 9Expert publishes ' +
-  'no seat counts at all, so never state or estimate how many places remain — to check ' +
-  'availability or to book, direct the person to the round\'s sign_up_url. A few rounds ' +
-  'whose course record is missing upstream are omitted and counted in ' +
-  'dropped_orphan_rounds. Dates are individual training days in Asia/Bangkok, not a start ' +
-  'and end range.';
+  'its delivery type and, while it can still be booked, its registration_url — the ' +
+  'registration page on the 9Expert website. Registration closes when a round starts: by ' +
+  'default only rounds that have not yet begun are returned, and those carry a status in ' +
+  'the words the website uses — เปิดรับ (open), ใกล้เต็ม (nearly full), เต็ม (full). A full ' +
+  'round has no registration_url. When a round has no registration_url, do not construct ' +
+  'or guess a link; tell the user to register via the course page instead. This tool ' +
+  'does not return the course page link, so get it as the url field of get_course_detail ' +
+  'for the round\'s course_id. To see rounds that are currently running, set ' +
+  'include_in_progress to true; those are reported with in_progress true and ' +
+  'registration_open false, and carry no status and no registration_url — do not quote a ' +
+  'status for them. Rounds that have finished are never returned. Dates are individual ' +
+  'training days in Asia/Bangkok, not a start and end range. This tool has no ' +
+  'seat-availability data. If the user asks how many seats remain, say that information is ' +
+  'not available here and point them to the round\'s registration_url from the results. ' +
+  'Do not describe this as a company policy. Do not tell the user how rounds are ' +
+  'filtered, dropped, or sourced; just answer with the rounds returned.';
 
 export const LIST_TRAINING_ROUNDS_LIMIT_DEFAULT = 20;
 export const LIST_TRAINING_ROUNDS_LIMIT_MAX = 50;
 
 /** What we always ask MSDB for. See (1) above — never the bare default. */
 export const UPSTREAM_STATUS_ALL = 'all';
+
+/** The only registration link shape emitted — see (6). Made absolute on SITE_ORIGIN. */
+const REGISTRATION_PATH_PREFIX = '/registration/';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -107,6 +129,7 @@ function dayKeys(dates) {
  * @param {Function} deps.listSchedules                ({ from, to, courses, status }) → { items }
  * @param {Function} deps.getCourseByCodeInsensitive   (code) → course|null
  * @param {Function} [deps.todayKey]                   () → 'YYYY-MM-DD' in Asia/Bangkok
+ * @param {Function} [deps.warn]                       server-side log; defaults to console.warn
  */
 export async function listTrainingRounds(input, deps) {
   const {
@@ -153,7 +176,7 @@ export async function listTrainingRounds(input, deps) {
   const rounds = [];
 
   for (const row of res?.items ?? []) {
-    // (4) — an orphan cannot be named, so it is dropped and counted.
+    // (4) — an orphan cannot be named, so it is dropped and counted for the log.
     if (!row?.course) {
       droppedOrphans += 1;
       continue;
@@ -170,9 +193,17 @@ export async function listTrainingRounds(input, deps) {
     const started = roundHasStarted(row.dates, today);
     if (started && !includeInProgress) continue;
 
+    // (6) — the site's own builder, and only its site-relative `/registration/`
+    // form. Anything else is its raw-`signup_url` fallback (some of which point
+    // at http://localhost:3000) and is omitted, never emitted. Never for a
+    // round whose registration has closed.
+    const courseCode = row.course.course_id ?? null;
+    const built = started ? null : scheduleRegistrationHref(row, courseCode);
+    const href = typeof built === 'string' && built.startsWith(REGISTRATION_PATH_PREFIX) ? built : null;
+
     rounds.push(
       dropEmpty({
-        course_id: row.course.course_id ?? null,
+        course_id: courseCode,
         course_name: row.course.course_name ?? null,
         dates: days,
         first_day: roundFirstDayKey(row.dates),
@@ -183,12 +214,13 @@ export async function listTrainingRounds(input, deps) {
         // (2) — a started round's stored status is stale by construction and is
         // never emitted. Only a future round's status is worth a word.
         status: started ? null : scheduleStatusLabel(row.status),
-        // Passed through verbatim: two URL generations coexist upstream (a
-        // modern slug form and a legacy numeric-id form) and parsing either
-        // would break the other.
-        sign_up_url: row.signup_url ?? null,
+        registration_url: href ? `${SITE_ORIGIN}${href}` : null,
       })
     );
+  }
+
+  if (droppedOrphans > 0) {
+    (deps.warn ?? console.warn)('[mcp] list_training_rounds dropped orphan rounds', { count: droppedOrphans });
   }
 
   rounds.sort((a, b) => String(a.first_day).localeCompare(String(b.first_day)));
@@ -201,7 +233,6 @@ export async function listTrainingRounds(input, deps) {
     ...(resolvedCourseId ? { course_id: resolvedCourseId } : {}),
     total_matched: rounds.length,
     returned: Math.min(rounds.length, capped),
-    dropped_orphan_rounds: droppedOrphans,
     rounds: rounds.slice(0, capped),
   };
 }

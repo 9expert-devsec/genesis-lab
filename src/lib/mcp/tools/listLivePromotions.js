@@ -35,16 +35,18 @@ import { dropEmpty } from '@/lib/mcp/shape';
 export const LIST_LIVE_PROMOTIONS_DESCRIPTION =
   'List the 9Expert promotions and special offers that are live right now. Each entry ' +
   'gives its title, the public page URL, the date it stops being valid, and the courses it ' +
-  'covers. Liveness is already decided by the source, which excludes promotions that have ' +
-  'expired, have not yet started, or have been unpublished — treat everything returned as ' +
-  'currently valid, and never mention a promotion that is not in this list. Entries of ' +
+  'covers. Every entry returned is currently valid — treat it as live, and never mention ' +
+  'a promotion that is not in this list. Entries of ' +
   'kind "early_bird" carry a price block with the normal price, the special price and the ' +
   'discount percentage, in Thai baht. Entries of kind "page" are promotional landing pages ' +
   'covering several offers and deliberately carry NO price at all, because they have no ' +
   'single normal price — present those as a page to visit and never infer or estimate a ' +
-  'price for them. Masterclass entries carry no seat counts and no batch dates; do not ' +
-  'state how many places are left. Always quote the deadline alongside a discount, and ' +
-  'send the person to the entry\'s url to claim it.';
+  'price for them. Masterclass entries carry no batch dates. This tool has no ' +
+  'seat-availability data. If the user asks how many seats remain, say that information ' +
+  'is not available here and point them to the masterclass registration page link — the ' +
+  'entry\'s url — from the results. Do not describe this as a company policy. Always ' +
+  'quote the deadline alongside a discount, and send the person to the entry\'s url to ' +
+  'claim it.';
 
 /**
  * @param {object} input

@@ -41,7 +41,7 @@ export const SEARCH_COURSES_DESCRIPTION =
   'and skill filters take internal ids, not display names: call list_programs_and_skills ' +
   'first to get them, because an unrecognised value is rejected rather than ignored. Prices ' +
   'are the standard list price in Thai baht and exclude VAT and any active promotion; a ' +
-  'course shown as "Inhouse Only" has no public seat price and is booked as a private ' +
+  'course shown as "Inhouse Only" has no public per-person price and is booked as a private ' +
   'class. For current discounts call list_live_promotions. This tool knows nothing about ' +
   'training dates or availability — call list_training_rounds for those. Results are ' +
   'capped, so narrow the query rather than asking for more.';

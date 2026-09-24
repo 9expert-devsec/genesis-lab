@@ -36,9 +36,12 @@ export const GET_COURSE_DETAIL_DESCRIPTION =
   'case-insensitive, so "sql-pg-query" and "SQL-PG-Query" both resolve, and the id echoed ' +
   'back is the canonical one to quote. The price is the standard list price in Thai baht ' +
   'and excludes VAT and any active promotion — a course labelled "Inhouse Only" has no ' +
-  'public seat price and is sold as a private class, so do not describe it as free. For ' +
-  'current discounts call list_live_promotions. This tool returns no training dates and no ' +
-  'seat availability; call list_training_rounds for scheduled dates. If no course matches, ' +
+  'public per-person price and is sold as a private class, so do not describe it as free. ' +
+  'For current discounts call list_live_promotions. This tool returns no training dates; ' +
+  'call list_training_rounds for scheduled dates. This tool has no seat-availability data. ' +
+  'If the user asks how many seats remain, say that information is not available here and ' +
+  'point them to the course page url from the results, or to a round\'s registration_url ' +
+  'from list_training_rounds. Do not describe this as a company policy. If no course matches, ' +
   'say so plainly rather than offering a similar course as though it were the one asked for.';
 
 /** Numeric level code → the words the site uses. */

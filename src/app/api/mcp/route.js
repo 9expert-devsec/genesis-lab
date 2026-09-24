@@ -1,32 +1,24 @@
 /**
  * The 9Expert MCP server. Read-only, header-key authenticated, stateless.
  *
- * ── WHY THE FILE IS AT `api/[transport]` AND NOT `api/mcp/[transport]` ─────
+ * ── WHY A STATIC `api/mcp` ROUTE AND NOT THE README'S `api/[transport]` ─────
  * mcp-handler decides which transport a request wants by comparing
  * `url.pathname` to an endpoint it derives from `basePath`
  * (node_modules/mcp-handler/dist/index.js:140-143 builds
  * `${basePath}/mcp`, and :279 does `if (url.pathname === streamableHttpEndpoint)`).
- * For the public URL to be `/api/mcp`, `basePath` must be `/api` and the
- * dynamic segment must therefore sit directly under `app/api/`. That is
- * exactly what the package's own README shows:
+ * With `basePath: "/api"` that endpoint is `/api/mcp` — exactly this file's
+ * static path, so the handler's own match succeeds with no dynamic segment.
  *
- *     // app/api/[transport]/route.ts
- *     basePath: "/api", // must match where [transport] is located
+ * The package README puts the file at `app/api/[transport]/` so ONE route can
+ * serve `/api/mcp`, `/api/sse` and `/api/message`. SSE is disabled here, so the
+ * segment bought nothing — and it cost a lot: a dynamic segment directly under
+ * `app/api/` claims every unmatched single-segment `/api/*` path, so every
+ * probe of `/api/<anything>` became a function invocation instead of reaching
+ * the site's normal not-found handling. The static route removes that surface.
  *
- * Nesting it one level deeper and setting `basePath: "/api/mcp"` would serve
- * the server at `/api/mcp/mcp`.
- *
- * ── WHAT THAT COSTS, AND HOW IT IS PAID BACK ──────────────────────────────
- * A dynamic segment under `app/api/` would otherwise claim every unmatched
- * single-segment `/api/*` path. Static routes win over dynamic ones in Next, so
- * none of the eleven existing `/api/*` routes is affected — but `/api/anything`
- * would newly reach this handler instead of 404ing, and with the auth gate in
- * front it would answer 401. That is a visible behaviour change on a surface
- * this round is not supposed to touch.
- *
- * So the gate below checks the PATHNAME FIRST and hands anything that is not
- * exactly `/api/mcp` a plain 404, before auth and before the handler. Unknown
- * `/api/*` paths answer exactly what they answered yesterday.
+ * The pathname check in `guarded` is kept as a belt-and-braces guard: Next
+ * only routes `/api/mcp` here now, but the handler must never be reached on a
+ * path it was not configured for.
  *
  * ── STATELESS, AND REDIS IS NEVER CONSTRUCTED ─────────────────────────────
  * `disableSse: true` (the option is declared at dist/index.d.mts:101, "If true,
@@ -52,7 +44,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
-/** The one path this route answers. Everything else 404s, as it did before. */
+/** The one path this route answers — the handler's `${basePath}/mcp`. */
 const MCP_PATH = '/api/mcp';
 
 const NO_STORE = { 'cache-control': 'no-store' };
