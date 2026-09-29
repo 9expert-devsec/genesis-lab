@@ -173,6 +173,76 @@ test('the title SEGMENT does not itself contain the brand', () => {
   );
 });
 
+/**
+ * THE DETAIL ROUTE'S NOT-FOUND BRANCH READS THE SAME SEGMENT.
+ *
+ * ── WHY THIS TEST IS HERE AND WHY IT IS A SOURCE SCAN ───────────────────────
+ * generateMetadata is not invocable from this tier — it awaits
+ * getMasterclassBySlug, which opens a Mongo connection — so this reads the
+ * route's source, comments stripped, exactly as the layout-template test above
+ * does. Same split, same stated limitation.
+ *
+ * It lives in THIS file rather than beside the detail route's own tests because
+ * the claim is about MASTERCLASS_TITLE having one spelling: /masterclass's
+ * metadata.title, CollectionPage.name and the detail route's not-found title
+ * are three consumers of one constant, and a test that only watched two of them
+ * would go green on the third drifting back to a literal.
+ *
+ * ── WHAT IS NOT CLAIMED, MEASURED RATHER THAN ASSUMED ───────────────────────
+ * That this branch RENDERS. It does not: curl'd against a production build, a
+ * missing slug serves 404 with the ROOT layout's default title, because Next
+ * discards a route's generateMetadata when the segment calls notFound(). The
+ * doubled brand this removes was latent, never shipped. The value is still
+ * worth pinning — it is what a segment-level not-found.jsx would read, and it
+ * is the nearest thing a future author copies from.
+ */
+test('the masterclass detail not-found title is the shared segment, not a branded literal', () => {
+  const { code, withImports } = readSource("src/app/(public)/masterclass/[slug]/page.jsx");
+
+  // 1. the not-found branch's own branded literal is gone from the CODE.
+  //    Comments are stripped, so the docblock explaining the removal cannot
+  //    satisfy this.
+  //
+  //    SCOPED TO THAT ONE STATEMENT, NOT TO THE WHOLE FILE, and the difference
+  //    is a finding rather than a convenience: line 83 still reads
+  //        const title = `${course.title_th} | Masterclass — 9Expert Training`;
+  //    which the root template turns into
+  //        <course> | Masterclass — 9Expert Training | 9Expert Training
+  //    on every masterclass detail page — the SAME doubling, and unlike this
+  //    branch it really is served. It is deliberately not fixed in this round:
+  //    the round named the not-found title, that title is a different string
+  //    with a different shape (it interpolates the course), and changing what
+  //    two live pages put in their <title> is its own decision. A whole-file
+  //    scan here would have to be weakened or would fail on that line, and
+  //    either way it would bury the finding instead of stating it.
+  assert.ok(
+    !code.includes("const title = 'Masterclass — 9Expert Training';"),
+    'the branded literal is back — the root template would append the brand again'
+  );
+
+  // 2. and the segment comes from this module, not from a second spelling.
+  //    The import is read from `withImports` and the USE from `code`, which is
+  //    the distinction sourceScan's header insists on: an import-line check read
+  //    from `code` passes vacuously, and a use-check read from `withImports` is
+  //    satisfied by the import alone.
+  assert.ok(
+    withImports.includes("import { MASTERCLASS_TITLE } from '@/lib/seo/masterclassListJsonLd'"),
+    'the route no longer imports the shared title constant'
+  );
+  assert.ok(code.includes('const title = MASTERCLASS_TITLE;'), 'metadata.title is not the shared segment');
+
+  // 3. the share titles are the COMPOSED form. No template applies to og or
+  //    twitter, so the bare segment there would drop the brand from the card.
+  assert.ok(
+    code.includes('const shareTitle = `${MASTERCLASS_TITLE} | ${siteConfig.name}`;'),
+    'the share title is not composed from the segment and the brand'
+  );
+
+  // 4. CONTROL: the scan really read the route, and really sees strings in it.
+  assert.ok(code.length > 1000, 'readSource returned something too small to be the route');
+  assert.ok(code.includes('generateMetadata'), 'the scan is not looking at the metadata function');
+});
+
 test('the layout template is still the shape the name composes', () => {
   const { code } = readSource('src/app/layout.jsx');
   assert.ok(

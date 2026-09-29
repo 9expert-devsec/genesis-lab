@@ -4,6 +4,7 @@ import { getMasterclassBySlug, getInstructorsByIds } from '@/lib/masterclass/get
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { generateMasterclassJsonLd } from '@/lib/masterclass/generateJsonLd';
 import { masterclassCanonicalUrl } from '@/lib/masterclass/masterclassUrl';
+import { MASTERCLASS_TITLE } from '@/lib/seo/masterclassListJsonLd';
 import { OG_DEFAULT_IMAGE, resolveCourseOgImage, toAbsoluteUrl } from '@/lib/seo/ogImage';
 import { MasterclassDetailClient } from './_components/MasterclassDetailClient';
 // ADDED beside the statement above rather than folded into it — the standing
@@ -34,15 +35,48 @@ export async function generateMetadata({ params }) {
   const defaultImage = toAbsoluteUrl(OG_DEFAULT_IMAGE.url, siteConfig.url);
 
   if (!course) {
-    const title = 'Masterclass — 9Expert Training';
+    /**
+     * THE NOT-FOUND SHARE CARD. Two values, because two consumers.
+     *
+     * ── THE BRAND USED TO APPEAR TWICE ──────────────────────────────────────
+     * This was one string, 'Masterclass — 9Expert Training', used for
+     * metadata.title AND for both share titles. The root layout's template is
+     * "%s | ${siteConfig.name}", so the <title> it composes read
+     * "Masterclass — 9Expert Training | 9Expert Training". The brand belongs to
+     * the template; the segment is MASTERCLASS_TITLE, read from the module
+     * /masterclass's own metadata.title reads, so the listing and the not-found
+     * case are one value. Exactly the fix 65792c3b made next door.
+     *
+     * ── WHY og/twitter GET THE COMPOSED FORM AND NOT THE SEGMENT ────────────
+     * No template applies to them. The root sets openGraph.title as a plain
+     * string, so a page-level openGraph.title REPLACES it outright — handing it
+     * the bare segment would ship a share card reading just "Masterclass", with
+     * the brand nowhere on it. SHARE_TITLE is therefore the same string the
+     * <title> resolves to, composed once, the way
+     * lib/seo/masterclassListJsonLd composes CollectionPage.name.
+     *
+     * ── MEASURED, AND WHY THIS IS A SOURCE FIX AND NOT A RENDER FIX ─────────
+     * curl'd against a production build, before and after: a missing slug
+     * serves 404 with <title>9Expert Training — Knowledge Provider</title> —
+     * the ROOT DEFAULT. Next discards a route's generateMetadata entirely when
+     * the segment calls notFound(), and renders app/not-found.jsx under the
+     * root layout's metadata instead, so NONE of this branch reaches the HTML
+     * today; og:title and twitter:title are the root's too. The doubled brand
+     * was latent, not shipped, and removing it does not change a byte of what
+     * is served. It is fixed anyway: this branch is what a segment-level
+     * not-found.jsx would read, and a wrong value parked in the one place a
+     * future reader will copy from is worth more to remove than to keep.
+     */
+    const title = MASTERCLASS_TITLE;
+    const shareTitle = `${MASTERCLASS_TITLE} | ${siteConfig.name}`;
     return {
       title,
       openGraph: {
-        title,
+        title: shareTitle,
         url: `${siteConfig.url}/masterclass`,
         images: [{ url: defaultImage, width: OG_DEFAULT_IMAGE.width, height: OG_DEFAULT_IMAGE.height, alt: OG_DEFAULT_IMAGE.alt }],
       },
-      twitter: { card: 'summary_large_image', title, images: [defaultImage] },
+      twitter: { card: 'summary_large_image', title: shareTitle, images: [defaultImage] },
     };
   }
 
