@@ -5,6 +5,18 @@
 
 export const GA4_ID = 'G-6043WVS74D';
 export const ADS_ID = 'AW-1060453366';
+
+/**
+ * Meta (Facebook) Pixel.
+ *
+ * Public in the same sense as the two above — it ships in the browser and is
+ * visible to anyone who opens devtools on the page. It is NOT, however, loaded
+ * on the same terms: gtag.js loads for everyone under Consent Mode advanced,
+ * while fbevents.js is not requested at all until marketing consent exists.
+ * See src/lib/analytics/metaPixel.js for why the two differ.
+ */
+export const META_PIXEL_ID = '1256361497884237';
+
 export const DEFAULT_CURRENCY = 'THB';
 
 // Google Ads conversion labels (send_to = `${ADS_ID}/${label}`)

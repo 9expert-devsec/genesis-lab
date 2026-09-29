@@ -15,6 +15,33 @@
  * on the device. No `_ga`, no `_gcl_*`. See the closing line of the round
  * report for what a rejecting visitor still transmits.
  *
+ * ── AND WHY THE META PIXEL DOES THE EXACT OPPOSITE ─────────────────────────
+ *
+ * src/lib/analytics/metaPixel.js does NOT load until marketing consent is
+ * true. That is not an inconsistency with everything above, and it is not
+ * somebody forgetting this note — the two vendors are being paid in different
+ * currencies for the same permission.
+ *
+ * Google's loaded-but-denied tag EARNS something: the cookieless pings feed
+ * behavioural modelling, and that modelling is forfeited permanently for any
+ * visitor whose tag never loaded. There is a real cost to withholding it, and
+ * that cost is what advanced mode exists to avoid paying.
+ *
+ * Meta has no equivalent. There is no modelling, no conversion lift, nothing
+ * at all that a denied-but-loaded pixel contributes. So requesting
+ * fbevents.js for a visitor who declined would hand Meta that visitor's IP
+ * address and user agent — the unavoidable content of any HTTP request to
+ * connect.facebook.net, before a single line of their script runs — in
+ * exchange for nothing whatsoever.
+ *
+ * So the rule is not "gate the tag" or "never gate the tag". It is: load a
+ * denied tag when the denied state buys something, and do not when it does
+ * not. Do NOT "make these consistent" in either direction.
+ *
+ * `fbq('consent','revoke')` exists and is used, but only for the visitor who
+ * granted and then withdrew — by then the script has run and cannot be
+ * unloaded. It is the fallback, not the control.
+ *
  * ── WHY security_storage IS ALWAYS GRANTED ─────────────────────────────────
  * It covers fraud prevention and authentication — the strictly-necessary
  * category, which is not a choice under PDPA/GDPR and is not offered as a
