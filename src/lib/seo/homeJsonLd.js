@@ -48,8 +48,14 @@ import { HOME_TITLE } from '@/lib/seo/homeMeta';
  */
 const TRAINING_ADDRESS = {
   '@type': 'PostalAddress',
-  streetAddress:
-    '318 ชั้น 2 ห้อง 2B อาคาร เอเวอร์กรีนเพลส ซ.วรฤทธิ์ ถนนพญาไท แขวงถนนเพชรบุรี เขตราชเทวี',
+  /**
+   * From siteConfig, not a literal. This line used to spell the building
+   * `อาคาร เอเวอร์กรีนเพลส` while /contact-us rendered `อาคารเอเวอร์กรีน เพลส` —
+   * one building, two strings, so the graph's address and the page's address did
+   * not match. Ruled 2026-09-29 in favour of the page's spelling; both now
+   * compose from `siteConfig.buildingTh`.
+   */
+  streetAddress: siteConfig.addressStreetTh,
   addressLocality: 'Bangkok',
   addressRegion: 'Bangkok',
   postalCode: '10400',
@@ -187,6 +193,13 @@ export function buildHomeJsonLd(siteUrl = SITE_URL) {
           'สถาบันสอนคอมพิวเตอร์ 9Expert Training บริการจัดอบรมหลักสูตร Microsoft Office, Programming, Data Analysis, AI และ Automation สำหรับบุคคลและองค์กร สอนเข้าใจง่าย ใช้งานได้จริง',
         telephone: TELEPHONE,
         email: 'training@9expert.co.th',
+        /**
+         * The registered tax ID, which /contact-us has always shown and this
+         * graph did not carry at all — so the one machine-readable statement of
+         * who this company legally is was missing the number that identifies it.
+         * Added 2026-09-29, from siteConfig, alongside `legalName` above.
+         */
+        taxID: siteConfig.taxId,
         address: TRAINING_ADDRESS,
         founder: {
           '@type': 'Person',
@@ -235,11 +248,22 @@ export function buildHomeJsonLd(siteUrl = SITE_URL) {
         '@id': placeId,
         name: siteConfig.name,
         address: TRAINING_ADDRESS,
-        hasMap: 'https://maps.app.goo.gl/8ny66J39HeZ2Yh678',
+        /**
+         * Both from siteConfig, and both used to disagree with /contact-us.
+         *
+         * `hasMap` was a DIFFERENT Google Maps short link
+         * (`8ny66J39HeZ2Yh678`) than the one the page's "open in Maps" button
+         * uses, and `geo` sat about 60 metres from the centre of the map the
+         * page actually embeds. Ruled 2026-09-29 in favour of the page's values
+         * for both, because the page is the one a human looks at and checks.
+         * MapSection now reads the same two fields, so the pin a visitor sees
+         * and the coordinates a crawler reads cannot drift apart again.
+         */
+        hasMap: siteConfig.mapLink,
         geo: {
           '@type': 'GeoCoordinates',
-          latitude: 13.750661,
-          longitude: 100.531117,
+          latitude: siteConfig.geo.latitude,
+          longitude: siteConfig.geo.longitude,
         },
         openingHoursSpecification: {
           '@type': 'OpeningHoursSpecification',

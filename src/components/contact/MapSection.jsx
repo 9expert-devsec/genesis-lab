@@ -12,10 +12,42 @@ import {
   MapPin,
 } from "lucide-react";
 
-const MAP_EMBED =
-  "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15501.899657662734!2d100.53041585085921!3d13.750209711931717!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x30e29d1d9b23ffe5%3A0xea1cd3822743c584!2s9Expert%20Training!5e0!3m2!1sen!2sus!4v1741239839027!5m2!1sen!2sus";
+import { siteConfig } from "@/config/site";
 
-const MAP_LINK = "https://maps.app.goo.gl/vKekFgf7kHkzaQwq9";
+/**
+ * The embed URL, with its CENTRE read from siteConfig.geo.
+ *
+ * ── WHAT IS INTERPOLATED AND WHAT IS UNTOUCHED ──────────────────────────────
+ * Google's `pb=` parameter is a positional, opaque encoding. Exactly two of its
+ * segments are substituted and every other byte is preserved verbatim:
+ *
+ *   !2d<longitude>   the map centre's longitude
+ *   !3d<latitude>    the map centre's latitude
+ *
+ * Untouched: `!1d15501.899…` (the span, i.e. the zoom), `!4f13.1`, the viewport
+ * `!1i1024!2i768`, the locale pair, the cache-buster `!4v…`, and critically
+ * `!1s0x30e29d1d9b23ffe5%3A0xea1cd3822743c584` — the Google place ID, which is
+ * what actually pins the MARKER to 9Expert Training. So the marker does not move
+ * at all; only the centre, and only by the rounding below.
+ *
+ * ── THE PRECISION CHANGE, STATED ────────────────────────────────────────────
+ * The literal this replaced carried the centre at full float precision
+ * (100.53041585085921, 13.750209711931717). siteConfig.geo holds the ruled pair
+ * rounded to five decimals (100.53042, 13.75021) — the same point to within
+ * about half a metre, which is far below the resolution of a map at this zoom.
+ * That rounding is the ONLY difference in the rendered src, and it buys the
+ * property worth having: the graph's `geo` and this embed are now one value, so
+ * they cannot drift ~60m apart again the way they had.
+ */
+const MAP_EMBED =
+  `https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15501.899657662734!2d${siteConfig.geo.longitude}!3d${siteConfig.geo.latitude}!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x30e29d1d9b23ffe5%3A0xea1cd3822743c584!2s9Expert%20Training!5e0!3m2!1sen!2sus!4v1741239839027!5m2!1sen!2sus`;
+
+/**
+ * The "open in Google Maps" target. From siteConfig, which the home graph's
+ * `hasMap` now also reads — this link and that one were two different short
+ * links to the same place before 2026-09-29.
+ */
+const MAP_LINK = siteConfig.mapLink;
 
 const TABS = [
   {

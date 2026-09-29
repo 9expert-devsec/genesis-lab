@@ -164,3 +164,72 @@ test('external URLs are untouched by the origin swap', () => {
   assert.ok(organization.sameAs.includes(siteConfig.facebookUrl));
   assert.ok(organization.sameAs.every((u) => !u.startsWith(OTHER)));
 });
+
+// ── 4. the contact facts come from siteConfig, not from literals here ───────
+
+/**
+ * Four facts used to exist twice — once in this builder and once in the
+ * /contact-us sections that display them — and all four pairs had drifted:
+ *
+ *   hasMap         a DIFFERENT Google Maps short link than the page's button
+ *   geo            ~60m from the centre of the map the page embeds
+ *   streetAddress  `อาคาร เอเวอร์กรีนเพลส` against the page's `อาคารเอเวอร์กรีน เพลส`
+ *   taxID          shown on the page, absent from the graph entirely
+ *
+ * Ruled 2026-09-29 in favour of the page's values and moved into siteConfig.
+ * These assert the graph now READS that one source; test/fs/homeJsonLdWiring
+ * asserts the literals are gone from this module's source, which is the half a
+ * value comparison cannot see (a literal that happens to equal the config
+ * passes everything below).
+ */
+test('the Place hasMap and geo are siteConfig\'s map link and coordinate pair', () => {
+  const place = nodeOfType(buildHomeJsonLd(), 'Place');
+  assert.equal(place.hasMap, siteConfig.mapLink);
+  assert.equal(place.geo.latitude, siteConfig.geo.latitude);
+  assert.equal(place.geo.longitude, siteConfig.geo.longitude);
+});
+
+test('the ruled values are the ones emitted — the page\'s, not the old graph\'s', () => {
+  const place = nodeOfType(buildHomeJsonLd(), 'Place');
+  assert.equal(place.hasMap, 'https://maps.app.goo.gl/vKekFgf7kHkzaQwq9');
+  assert.equal(place.geo.latitude, 13.75021);
+  assert.equal(place.geo.longitude, 100.53042);
+  assert.notEqual(place.hasMap, 'https://maps.app.goo.gl/8ny66J39HeZ2Yh678', 'the superseded link');
+  assert.notEqual(place.geo.latitude, 13.750661, 'the superseded latitude');
+});
+
+test('streetAddress is siteConfig\'s one-line form, on both nodes that carry it', () => {
+  const graph = buildHomeJsonLd();
+  const organization = nodeOfType(graph, 'EducationalOrganization');
+  const place = nodeOfType(graph, 'Place');
+  assert.equal(organization.address.streetAddress, siteConfig.addressStreetTh);
+  assert.equal(place.address.streetAddress, siteConfig.addressStreetTh);
+  // the same object, so the two can never diverge
+  assert.deepEqual(organization.address, place.address);
+});
+
+test('streetAddress carries the RULED building spelling, not the old one', () => {
+  const street = nodeOfType(buildHomeJsonLd(), 'Place').address.streetAddress;
+  assert.ok(street.includes('อาคารเอเวอร์กรีน เพลส'), `ruled spelling missing: ${street}`);
+  assert.ok(!street.includes('อาคาร เอเวอร์กรีนเพลส'), `superseded spelling present: ${street}`);
+});
+
+test('the building name inside streetAddress is siteConfig.buildingTh', () => {
+  const street = nodeOfType(buildHomeJsonLd(), 'Place').address.streetAddress;
+  assert.ok(street.includes(siteConfig.buildingTh));
+  // and the page's display form composes from the SAME field
+  assert.ok(siteConfig.addressDisplayTh[0].includes(siteConfig.buildingTh));
+});
+
+test('the organisation carries taxID, from siteConfig', () => {
+  const organization = nodeOfType(buildHomeJsonLd(), 'EducationalOrganization');
+  assert.equal(organization.taxID, siteConfig.taxId);
+  assert.equal(organization.taxID, '0105548019065');
+});
+
+test('the contact facts do NOT move with the origin — they are not URLs on this site', () => {
+  const place = nodeOfType(buildHomeJsonLd(OTHER), 'Place');
+  assert.equal(place.hasMap, siteConfig.mapLink, 'hasMap is an external link, not an origin-relative one');
+  assert.equal(place.address.streetAddress, siteConfig.addressStreetTh);
+  assert.equal(nodeOfType(buildHomeJsonLd(OTHER), 'EducationalOrganization').taxID, siteConfig.taxId);
+});

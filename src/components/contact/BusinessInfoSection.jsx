@@ -23,6 +23,8 @@ import {
 } from "react-icons/fa";
 import OpenNowBadge from "./OpenNowBadge";
 
+import { siteConfig } from "@/config/site";
+
 const SOCIALS = [
   {
     label: "Facebook",
@@ -56,17 +58,29 @@ const COMPANY_LINES = [
   {
     icon: Building2,
     text: "บริษัท นายน์เอ็กซ์เพิร์ท จำกัด (สำนักงานใหญ่)",
-    text2: "เลขที่ 318 อาคารเอเวอร์กรีน เพลส ชั้น 2 ห้อง 2B ซ.วรฤทธิ์ ถนนพญาไท",
-    text3: "แขวงถนนเพชรบุรี เขตราชเทวี กรุงเทพฯ 10400",
-    text4: "เลขประจำตัวผู้เสียภาษี: 0105548019065",
+    /**
+     * The two Thai address lines and the tax ID, from siteConfig — the same
+     * fields lib/seo/homeJsonLd now reads for `streetAddress` and `taxID`.
+     *
+     * THE RENDERED TEXT IS UNCHANGED: `addressDisplayTh` was defined FROM these
+     * two literals, so this is a move, not an edit. This side already used the
+     * ruled building spelling, which is why it won the disagreement with the
+     * graph rather than the other way round.
+     */
+    text2: siteConfig.addressDisplayTh[0],
+    text3: siteConfig.addressDisplayTh[1],
+    text4: `เลขประจำตัวผู้เสียภาษี: ${siteConfig.taxId}`,
   },
   {
     icon: Globe,
     text: "9 EXPERT COMPANY LIMITED (Head Office)",
+    // The ENGLISH address lines stay literals: nothing else in the tree spells
+    // them, so they have one reader and belong here rather than in siteConfig.
+    // Only the tax NUMBER is shared, and it comes from the one field.
     text2: "318 Evergreen Place Tower, 2nd Floor, Room No.2B, Soi Worarit,",
     text3:
       "Phaya Thai Road, Thanon Phetchaburi Sub-district, Ratchathewi District, Bangkok 10400, Thailand.",
-    text4: "Tax ID 0105548019065",
+    text4: `Tax ID ${siteConfig.taxId}`,
   },
 ];
 
