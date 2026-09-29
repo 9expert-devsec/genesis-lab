@@ -69,6 +69,24 @@ function strings(value, out = []) {
 const urlsIn = (graph) =>
   strings(graph).filter((s) => s.startsWith('http') && !s.startsWith('https://schema.org'));
 
+/**
+ * Every object in a JSON document whose `@type` is `Offer`, at ANY depth.
+ *
+ * Deliberately a WALK and not `instance.offers` — the point of the assertion
+ * below is that no Offer anywhere carries `availability`, including one added
+ * later somewhere this file does not currently look (on the Course node, on a
+ * nested `priceSpecification`, inside a future `subjectOf`). Reaching in by
+ * the known path would pass against exactly the regression it guards.
+ */
+function offersIn(value, out = []) {
+  if (Array.isArray(value)) for (const v of value) offersIn(v, out);
+  else if (value !== null && typeof value === 'object') {
+    if (value['@type'] === 'Offer') out.push(value);
+    for (const v of Object.values(value)) offersIn(v, out);
+  }
+  return out;
+}
+
 // ── 1. masterclassCanonicalUrl ─────────────────────────────────────────────
 
 test('the canonical is the origin plus /masterclass/<slug>', () => {
@@ -232,10 +250,13 @@ test('the references follow the origin too', () => {
 // ── 5. everything else is UNCHANGED ──────────────────────────────────────
 
 /**
- * The round moved origins and two organisation references. The instance content
- * — dates, mode, venue, prices, availability, the early-bird deadline — is
- * explicitly out of scope, including its ISR staleness. These pin that it did not
- * move by accident.
+ * The instance content — dates, mode, venue, prices, the early-bird deadline —
+ * is what the origin round explicitly left alone. These pin that it did not move
+ * by accident.
+ *
+ * `availability` is the one field that HAS moved, and it moved OUT: see the
+ * assertion below and the builder's own note. The ISR staleness these tests
+ * used to record as out-of-scope is the whole reason it went.
  */
 test('hasCourseInstance still carries dates, mode, location and both offers', () => {
   const instance = nodeOfType(generateMasterclassJsonLd(course(), INSTRUCTORS, FAQS), 'Course')
@@ -249,17 +270,74 @@ test('hasCourseInstance still carries dates, mode, location and both offers', ()
   assert.equal(instance.offers.length, 2);
 });
 
-test('the offers still carry price, currency, availability and priceValidUntil', () => {
+test('the offers still carry price, currency and priceValidUntil', () => {
   const [eb, regular] = nodeOfType(generateMasterclassJsonLd(course(), INSTRUCTORS, FAQS), 'Course')
     .hasCourseInstance[0].offers;
   assert.equal(eb.name, 'Early Bird Price');
   assert.equal(eb.price, 6900);
   assert.equal(eb.priceCurrency, 'THB');
   assert.equal(eb.priceValidUntil, '2026-10-31T23:59:59+07:00');
-  assert.equal(eb.availability, 'https://schema.org/InStock');
+  assert.deepEqual(eb.priceSpecification, {
+    '@type': 'PriceSpecification',
+    valueAddedTaxIncluded: false,
+  });
+  assert.equal(eb.url, `${SITE_URL}/masterclass/mas-ai-dmc/register?batch=b1`);
   assert.equal(regular.name, 'Regular Price');
   assert.equal(regular.price, 8900);
-  assert.equal(regular.availability, 'https://schema.org/InStock');
+  assert.equal(regular.priceCurrency, 'THB');
+  assert.deepEqual(regular.priceSpecification, {
+    '@type': 'PriceSpecification',
+    valueAddedTaxIncluded: false,
+  });
+  assert.equal(regular.url, `${SITE_URL}/masterclass/mas-ai-dmc/register?batch=b1`);
+});
+
+/**
+ * NO OFFER CARRIES `availability`, AT ANY DEPTH.
+ *
+ * ── WHY THIS IS A WALK AND NOT TWO `assert.ok(!('availability' in o))` ──────
+ * The builder had two independent availability expressions — the Early Bird's
+ * from the deadline, the Regular Price's from `batch.status` — and the reason
+ * they went is a property of the PAGE, not of either expression: the route is
+ * ISR with revalidate 3600, so a sold-out batch keeps serving InStock for up to
+ * an hour. That reason applies to any Offer this builder ever emits, so the
+ * assertion is over all of them rather than over the two that exist today.
+ *
+ * Both fixture branches are exercised on purpose. The default course() has an
+ * open batch inside its early-bird window — the case that used to produce
+ * InStock TWICE, and the one a careless re-introduction would make pass a
+ * `!== 'OutOfStock'` check. The second has a full batch past its deadline — the
+ * case that used to produce OutOfStock, and the honest-but-stale claim that is
+ * the actual defect.
+ */
+test('no Offer carries availability, at any depth, in either batch state', () => {
+  const stale = course({
+    batches: [
+      {
+        ...course().batches[0],
+        status: 'full',
+        early_bird_deadline: '2020-01-01',
+      },
+    ],
+  });
+
+  for (const [label, graph] of [
+    ['open batch, inside the early-bird window', generateMasterclassJsonLd(course(), INSTRUCTORS, FAQS)],
+    ['full batch, past the deadline', generateMasterclassJsonLd(stale, INSTRUCTORS, FAQS)],
+  ]) {
+    const offers = offersIn(graph);
+    // CONTROL: the walk really found them. `for (const o of [])` passes.
+    assert.equal(offers.length, 2, `${label}: the walk found ${offers.length} offers`);
+    for (const o of offers) {
+      assert.ok(!('availability' in o), `${label}: ${o.name} still carries availability`);
+    }
+    // And no schema.org availability token survives anywhere else in the graph
+    // either — e.g. moved onto the CourseInstance or the priceSpecification.
+    assert.ok(
+      !strings(graph).some((s) => s.startsWith('https://schema.org/') && /Stock|Order|SoldOut|Discontinued/.test(s)),
+      `${label}: an availability token is still in the graph`
+    );
+  }
 });
 
 test('a cancelled batch is still excluded, and no batches means no instances key', () => {
