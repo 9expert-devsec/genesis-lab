@@ -142,6 +142,13 @@ export const RESERVED_PATHS = Object.freeze([
   { segment: 'hero-img', source: 'static' },
   { segment: 'logo', source: 'static' },
   { segment: 'mock-article', source: 'static' },
+  // The Home motto band's wallpaper (src/app/_components/home/InstructorQuote.jsx
+  // renders /motto/wallpaper-motto.png). Listed on the same conservative basis
+  // as /avatar above: public/motto/ makes Next serve the file but does not claim
+  // the bare URL /motto, so an alias of /motto would probably still resolve —
+  // and "probably" is exactly what this block refuses, because an alias that
+  // loses to a static file loses silently.
+  { segment: 'motto', source: 'static' },
   { segment: 'people', source: 'static' },
   // The legal centre's hero artwork. NOT `policies` — that is the /policies
   // route, and a public/ directory of the same name would shadow it in a way
