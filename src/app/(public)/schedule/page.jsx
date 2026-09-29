@@ -5,13 +5,38 @@ import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getSchedulePDF } from '@/lib/actions/schedule-pdf';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { joinCourseSchedules } from '@/lib/schedule/joinCourseSchedules';
+import { SITE_URL } from '@/lib/seo/siteUrl';
+import {
+  SCHEDULE_TITLE,
+  buildScheduleJsonLd,
+  scheduleGraphRows,
+} from '@/lib/seo/scheduleJsonLd';
 import { ScheduleClient } from './_components/ScheduleClient';
 
+/**
+ * The canonical URL of this page. ONE expression of the origin, shared with the
+ * JSON-LD below.
+ *
+ * ── WHY SITE_URL AND NOT process.env.NEXT_PUBLIC_SITE_URL ───────────────────
+ * This line used to read the env var directly. SITE_URL *is* that env var, read
+ * through siteConfig (`process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.9experttraining.com'`),
+ * so the PRODUCTION VALUE IS UNCHANGED — but it was a second EXPRESSION of the
+ * same value on the page whose structured data is built from the first, and two
+ * ways of spelling one host is how they eventually become two hosts. Same change,
+ * for the same reason, as app/(public)/training-course/page.jsx.
+ *
+ * It also gains the fallback the bare env read did not have: on a deployment
+ * that forgets NEXT_PUBLIC_SITE_URL, this emitted `undefined/schedule`.
+ */
+const CANONICAL_URL = `${SITE_URL}/schedule`;
+
 export const metadata = {
-  title: 'ตารางฝึกอบรม',
+  // The `%s` the root layout's template composes into `<title>`. Read from the
+  // JSON-LD module so the tag and CollectionPage.name are one value.
+  title: SCHEDULE_TITLE,
   description:
     'ตารางการฝึกอบรมหลักสูตรทั้งหมด Public Training — เลือกเดือน ทักษะ และรูปแบบการอบรม',
-  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/schedule` },
+  alternates: { canonical: CANONICAL_URL },
 };
 
 export const revalidate = 1800;
@@ -77,12 +102,38 @@ export default async function SchedulePage() {
     program_name: p.program_name,
   }));
 
+  // The rounds the page opens on, described for readers that never run its
+  // JavaScript. `null` when no course has a round in the default window, in
+  // which case no script tag is emitted at all — see lib/seo/scheduleJsonLd.js.
+  //
+  // `scheduleGraphRows` re-attaches `course_teaser` from the upstream rows: the
+  // client row drops it as a payload guarantee, and the shared Course node's
+  // `description` reads it. Server-only, so it never reaches the browser — see
+  // that function for the measurement behind it.
+  const scheduleJsonLd = buildScheduleJsonLd(
+    scheduleGraphRows(coursesWithSchedules, courses)
+  );
+
   return (
-    <ScheduleClient
-      courses={coursesWithSchedules}
-      programs={programsLite}
-      schedulePDF={schedulePDF}
-      earlyBirdMap={earlyBirdMap}
-    />
+    <>
+      {/* Same pattern and placement as /training-course: a plain ld+json script
+          guarded on the builder returning null, rendered from server data before
+          the client component. ScheduleClient holds every filter in `useState`,
+          so what it draws narrows as a visitor filters; this graph describes the
+          page as the canonical URL serves it, which is the unfiltered default
+          window. */}
+      {scheduleJsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(scheduleJsonLd) }}
+        />
+      )}
+      <ScheduleClient
+        courses={coursesWithSchedules}
+        programs={programsLite}
+        schedulePDF={schedulePDF}
+        earlyBirdMap={earlyBirdMap}
+      />
+    </>
   );
 }
