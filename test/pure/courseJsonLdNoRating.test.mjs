@@ -97,18 +97,24 @@ test('an unpriced course with no rounds has NO aggregateRating and NO review', (
 test('the rest of the document is unchanged by the removal', () => {
   // Pins the keys that DO remain, so the removal cannot have taken a
   // neighbour with it — and so a re-added rating shows up as an extra key.
+  //
+  // `@id` JOINED THE LIST 2026-09-29, deliberately and in one place: the node
+  // now carries the identity the two listings already used (lib/seo/courseNode,
+  // via the detail builder). Both fixtures have a course_id, so both get one.
+  // Whitelisting it here is the point of a whitelist — a key that appears
+  // without this line being edited is still a failure.
   assert.deepEqual(Object.keys(withInstances).sort(), [
-    '@context', '@type', 'description', 'hasCourseInstance', 'image',
+    '@context', '@id', '@type', 'description', 'hasCourseInstance', 'image',
     'inLanguage', 'name', 'offers', 'provider', 'url',
   ]);
   assert.deepEqual(Object.keys(bare).sort(), [
-    '@context', '@type', 'description', 'hasCourseInstance', 'image',
+    '@context', '@id', '@type', 'description', 'hasCourseInstance', 'image',
     'inLanguage', 'name', 'offers', 'provider', 'url',
   ]);
   // JSON.stringify drops the undefined ones; that is what the page serialises.
   const serialised = JSON.parse(JSON.stringify(bare));
   assert.deepEqual(Object.keys(serialised).sort(), [
-    '@context', '@type', 'description', 'inLanguage', 'name', 'provider', 'url',
+    '@context', '@id', '@type', 'description', 'inLanguage', 'name', 'provider', 'url',
   ]);
 });
 

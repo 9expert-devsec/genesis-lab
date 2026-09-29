@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildCourseJsonLd } from '@/lib/courses/buildCourseJsonLd';
 import { courseCanonicalPath, courseCanonicalUrl } from '@/lib/courses/courseCanonicalPath';
+import { courseListNode } from '@/lib/seo/courseNode';
 
 /**
  * THE CANONICAL TAG AND THE JSON-LD NAME THE SAME PAGE.
@@ -117,4 +118,75 @@ test('CONTROL: the builder still refuses a course it cannot name', () => {
   // course, the sitemap and the page would both gain a URL out of nothing.
   assert.equal(buildCourseJsonLd({ course: null, extension: EXT, siteUrl: SITE }), null);
   assert.equal(buildCourseJsonLd({ course: {}, extension: EXT, siteUrl: SITE }), null);
+});
+
+// ── the detail page and the two listings name ONE entity ────────────────────
+
+/**
+ * THE DETAIL Course `@id` EQUALS THE LISTINGS' Course `@id`, FOR THE SAME COURSE.
+ *
+ * ══ WHY THIS IS THE SAME SHAPE OF TEST AS THE ONE ABOVE ═════════════════════
+ * /training-course and /schedule both build their Course nodes with
+ * `courseListNode`, and the detail page had no `@id` at all — so a crawler
+ * reading a listing and then the detail page could not merge the two by
+ * identity and fell back to matching on `url`. Three documents, two of them
+ * naming an entity the third does not.
+ *
+ * The assertion is `detail['@id'] === courseListNode(...)['@id']`, computed from
+ * the function the listings actually call and compared as values — not against
+ * a literal, and not against `detail.url`. Both of those would pass today (the
+ * id IS the canonical URL today) and would keep passing the moment courseNode
+ * gained a fragment or a normalisation the detail page did not, which is the
+ * only way this property can break.
+ *
+ * ── THE ROW ADAPTER IS THE TEST'S, NOT THE BUILDER'S ────────────────────────
+ * `courseListNode` reads a list row with a flat `urlAlias`; the detail builder
+ * reads `(course, extension)`. The spread here is the same one-line adapter the
+ * builder now applies internally, written out so the two sides are visibly fed
+ * the SAME course rather than two fixtures that happen to agree.
+ *
+ * What this tier cannot reach: whether the PAGES pass those shapes. That is
+ * asserted from source in test/fs/courseCanonicalWiring and, end to end, by a
+ * production build — /training-course, /schedule and the detail page were
+ * curl'd and their ids compared byte for byte.
+ */
+test('the detail Course @id EQUALS the courseNode @id for the same course', () => {
+  const ORG = `${SITE}/#organization`;
+  const row = (extension) => ({ ...COURSE, urlAlias: extension?.urlAlias });
+
+  // 1. the aliased course — the 80-course majority.
+  const detail = jsonLd(COURSE, EXT);
+  const listed = courseListNode(row(EXT), SITE, ORG);
+  assert.ok(detail['@id'], 'the detail node carries no @id at all');
+  assert.ok(listed, 'courseListNode returned null for a course it can name');
+  assert.equal(detail['@id'], listed['@id']);
+
+  // 2. the derived-path branch. A private fallback on either side would show
+  //    here while the aliased case stayed green.
+  for (const extension of [null, undefined, { urlAlias: '' }, { urlAlias: '   ' }]) {
+    assert.equal(
+      jsonLd(COURSE, extension)['@id'],
+      courseListNode(row(extension), SITE, ORG)['@id'],
+      JSON.stringify(extension)
+    );
+  }
+
+  // 3. a trailing slash on the base cannot part them either — courseNodeUrl
+  //    documents a pre-trimmed origin and the builder is what satisfies that.
+  assert.equal(
+    buildCourseJsonLd({ course: COURSE, extension: EXT, schedules: [], siteUrl: `${SITE}/` })['@id'],
+    courseListNode(row(EXT), `${SITE}/`, ORG)['@id']
+  );
+
+  // 4. CONTROL: the equality is not two undefineds, and the value MOVES with
+  //    the alias — an @id both sides ignored would satisfy every line above.
+  assert.equal(typeof detail['@id'], 'string');
+  assert.equal(detail['@id'], `${SITE}${ALIAS}`);
+  assert.notEqual(jsonLd(COURSE, { urlAlias: '/one' })['@id'], jsonLd(COURSE, { urlAlias: '/two' })['@id']);
+
+  // 5. OMITTED, not null, for a course that can be named but not located.
+  const unlocatable = { course_name: 'No id, no alias' };
+  const built = buildCourseJsonLd({ course: unlocatable, extension: null, schedules: [], siteUrl: SITE });
+  assert.ok(built, 'the builder refused a course that HAS a name');
+  assert.ok(!('@id' in built), `emitted '@id': ${JSON.stringify(built['@id'])}`);
 });

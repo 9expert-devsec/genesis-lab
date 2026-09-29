@@ -9,6 +9,7 @@
  * Google rich results: https://developers.google.com/search/docs/appearance/structured-data/course
  */
 import { courseCanonicalUrl } from '@/lib/courses/courseCanonicalPath';
+import { courseNodeUrl } from '@/lib/seo/courseNode';
 import { SITE_URL } from '@/lib/seo/siteUrl';
 
 export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }) {
@@ -47,6 +48,56 @@ export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }
    */
   const courseUrl = courseCanonicalUrl(course, extension, base);
 
+  /**
+   * THE COURSE'S IDENTITY — and the end of a KNOWN MISMATCH.
+   *
+   * ══ WHAT WAS WRONG ══════════════════════════════════════════════════════
+   * This node emitted `url` and no `@id` at all, while /training-course and
+   * /schedule both name the same course with an `@id` built by
+   * lib/seo/courseNode. A crawler reading a listing and then the detail page
+   * had an identity on one side and none on the other, so it could not merge
+   * them by identity — it had to fall back to matching on `url`. That fallback
+   * worked only because both sides spell the URL identically, which is a
+   * property nothing asserted across the two modules.
+   *
+   * lib/seo/courseNode's own docblock recorded this as a known mismatch and
+   * deliberately did not fix it there, on the grounds that the detail page's
+   * structured data was a separate decision. This is that decision.
+   *
+   * ── WHY courseNodeUrl AND NOT courseUrl, WHICH IS THE SAME STRING ───────
+   * It IS the same string today: `courseCanonicalUrl` and `courseNodeUrl` both
+   * bottom out in `courseCanonicalPath`, so `@id === url` on every course that
+   * exists. Setting `'@id': courseUrl` would therefore pass every value
+   * comparison — and would be a SECOND construction of the identity, agreeing
+   * with the listings by coincidence rather than by derivation. The first time
+   * courseNode gains a rule (a fragment, a normalisation) the two would part
+   * and nothing here would notice. So the id comes from the function the
+   * listings call, and test/render/courseCanonicalMetadata asserts it EQUALS
+   * the `@id` `courseListNode` produces for the same course rather than merely
+   * equalling a string that looks right.
+   *
+   * ── THE ADAPTER AND THE TRIM ────────────────────────────────────────────
+   * `courseNodeUrl` reads a LIST ROW, whose alias is the flat `urlAlias` that
+   * `listPublicCourses` attaches; here the alias lives on the CourseExtension.
+   * The spread is that adapter and nothing more — the alias RULE is not
+   * restated, it is still `courseCanonicalPath`'s.
+   *
+   * The base is trimmed here rather than at `base` itself because
+   * `courseNodeUrl` documents a pre-trimmed origin (`courseListNode` trims with
+   * this exact expression before calling it) and because trimming `base` would
+   * also move `provider.sameAs`, which is not this change.
+   *
+   * OMITTED, NEVER NULL, when the course cannot be named. A course with a name
+   * but neither a course_id nor an alias yields null — `url` has always emitted
+   * that null and this round does not touch `url`, but an `'@id': null` is an
+   * assertion that the entity's identity is the null value, which is worse than
+   * making no assertion. Same contract courseNode states for the whole node.
+   */
+  const courseId = courseNodeUrl(
+    { ...course, urlAlias: extension?.urlAlias },
+    String(base ?? '').replace(/\/+$/, '')
+  );
+
   // Build hasCourseInstance from live schedules (open/nearly_full only).
   // Each schedule becomes a CourseInstance with startDate/endDate/location.
   const instances = schedules
@@ -80,6 +131,7 @@ export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }
   return {
     '@context': 'https://schema.org',
     '@type':    'Course',
+    ...(courseId ? { '@id': courseId } : {}),
     name:        course.course_name,
     description: course.course_teaser?.slice(0, 300) || course.course_name,
     url:         courseUrl,
