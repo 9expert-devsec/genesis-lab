@@ -44,7 +44,7 @@
 import { siteConfig } from '@/config/site';
 import { SITE_URL } from '@/lib/seo/siteUrl';
 import { homeGraphIds } from '@/lib/seo/homeJsonLd';
-import { courseCanonicalPath } from '@/lib/courses/courseCanonicalPath';
+import { courseListNode } from '@/lib/seo/courseNode';
 
 /** The route this graph describes. One spelling, used for the URL and the ids. */
 const PATH = '/training-course';
@@ -101,34 +101,6 @@ function renderedTitle() {
 }
 
 /**
- * The absolute canonical URL of one course, or null when it cannot be named.
- *
- * ── WHY NOT courseLinkHref, WHICH IS THE BRIDGE FOR THIS EXACT ROW SHAPE ────
- * `courseLinkHref(row)` is the adapter that turns a list row's flat `urlAlias`
- * into the `{ urlAlias }` extension object `courseCanonicalPath` wants, and it is
- * what the cards link through. It is the right ADAPTER and the wrong FUNCTION
- * here, for one reason: it never returns null. A course with neither a code nor
- * an alias falls back to `/training-course`, which is correct for an `<a href>`
- * (a visible link to the catalog beats a dead link) and catastrophic in an
- * ItemList — the entry would claim the listing page is a Course, and 1..n
- * positions would silently describe the wrong entities.
- *
- * So this reproduces courseLinkHref's ADAPTER — the same one-line
- * `{ urlAlias: row.urlAlias }` object, nothing more — and delegates to the same
- * rule, keeping the null. The alias rule itself is NOT re-derived here; that
- * lives in courseCanonicalPath and this file has no opinion about it.
- *
- * The join cannot double-slash: courseCanonicalPath returns a path with exactly
- * one leading slash, and the base is trimmed. That defect has shipped three
- * times in this repo (the mega menu, the Course JSON-LD, the BreadcrumbList) and
- * is the reason neither side of this join is allowed to be hand-built.
- */
-function courseUrlFor(row, base) {
-  const path = courseCanonicalPath(row, { urlAlias: row?.urlAlias });
-  return path ? `${base}${path}` : null;
-}
-
-/**
  * Build /training-course's `@graph`.
  *
  * @param {object[]} rows the projected list rows the server is rendering, in
@@ -154,53 +126,23 @@ export function buildCourseListJsonLd(rows, siteUrl = SITE_URL) {
 
   const listItems = [];
   for (const row of Array.isArray(rows) ? rows : []) {
-    if (!row || typeof row !== 'object') continue;
-    const url = courseUrlFor(row, base);
-    // SKIPPED, NOT GUESSED. A row the canonical rule cannot name has no URL
-    // that is known to resolve, and an ItemList entry pointing at a plausible
-    // 404 is worse than an entry that is absent. Positions below are assigned
-    // after the skip, so they stay contiguous.
-    if (!url) continue;
-
-    const name = row.course_name;
-    if (!name) continue;
-
-    const description =
-      typeof row.course_teaser === 'string' ? row.course_teaser.trim() : '';
+    // THE SHARED NODE. /schedule emits the same one for the same course, so a
+    // crawler reading both pages sees one entity referenced twice rather than
+    // two courses — see lib/seo/courseNode.js.
+    //
+    // SKIPPED, NOT GUESSED, when it returns null (no canonical path, or no
+    // name). A row the canonical rule cannot name has no URL that is known to
+    // resolve, and an ItemList entry pointing at a plausible 404 is worse than
+    // an entry that is absent. Positions are assigned after the skip, so they
+    // stay contiguous.
+    const item = courseListNode(row, base, organizationId);
+    if (!item) continue;
 
     listItems.push({
       '@type': 'ListItem',
       position: listItems.length + 1,
-      url,
-      item: {
-        '@type': 'Course',
-        /**
-         * THE COURSE'S IDENTITY — the canonical URL, and a KNOWN MISMATCH.
-         *
-         * lib/courses/buildCourseJsonLd.js, which emits the Course node on the
-         * detail page, carries NO `@id` at all — it sets `url` (through the same
-         * courseCanonicalPath rule) and stops. So a crawler reading both
-         * documents has an `@id` here and none there, and cannot merge the list
-         * entry with the detail node by identity; it has to fall back to
-         * matching on `url`, which both sides do spell identically.
-         *
-         * Using the canonical URL as the `@id` is what makes that fallback work
-         * and is what a later round would give the detail node too. Adding the
-         * `@id` there is the actual fix and it is NOT taken here: the detail
-         * page's structured data is out of this round's scope, and changing what
-         * 77 course pages emit is its own decision with its own verification.
-         * Recorded, not fixed — deliberately the same posture, and the same
-         * wording, lib/seo/siteUrl.js used for the origin it could not take.
-         */
-        '@id': url,
-        url,
-        name,
-        // Omitted ENTIRELY when blank, never emitted as ''. An empty string is a
-        // claim that the description is the empty text; a missing key is the
-        // absence of a claim. Same rule buildListJsonLd applies to image.
-        ...(description ? { description } : {}),
-        provider: { '@id': organizationId },
-      },
+      url: item.url,
+      item,
     });
   }
 

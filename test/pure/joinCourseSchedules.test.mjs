@@ -72,10 +72,14 @@ test('happy path: 2 courses / 3 schedules → rows keep render fields, nothing d
   assert.deepEqual(rows[0].schedules.map((s) => s._id), ['s1', 's2']);
   assert.deepEqual(rows[1].schedules.map((s) => s._id), ['s3']);
 
-  // exactly the fields the table renders — no more, no less
+  // exactly the fields the table renders — no more, no less.
+  // `urlAlias` joined the list on 2026-09-29: the row feeds courseLinkHref and
+  // the page's JSON-LD, both of which resolve the canonical path from the alias
+  // first, and its absence silently sent all 44 course links through a 308 and
+  // gave /schedule a different @id than /training-course for the same course.
   assert.deepEqual(Object.keys(rows[0]).sort(), [
     '_id', 'course_id', 'course_name', 'course_price',
-    'course_trainingdays', 'program', 'schedules',
+    'course_trainingdays', 'program', 'schedules', 'urlAlias',
   ]);
   assert.deepEqual(Object.keys(rows[0].program).sort(), [
     '_id', 'program_id', 'program_name', 'programiconurl',
@@ -233,6 +237,11 @@ test('CONTROL: fixed join is deep-identical to the pre-fix replica, and only it 
     course_name: 'Machine Learning using Python',
     course_trainingdays: 3,
     course_price: 11900,
+    // An admin-set alias that is NOT derivable from `course_id` — so a join that
+    // drops the field yields `/python-l2-training-course` and this fixture can
+    // tell the difference. SPARSE and NO_PROGRAM below deliberately have none,
+    // which exercises the `?? null` fallback in the same run.
+    urlAlias: '/machine-learning-using-python-training-course',
     program: {
       _id: '68da61c687a228e4c5f4c2d4',
       program_id: 'PYTHON',
@@ -287,10 +296,38 @@ test('CONTROL: fixed join is deep-identical to the pre-fix replica, and only it 
   const old = preFix(courses, schedules);
   const fixed = joinCourseSchedules(courses, schedules);
 
-  // CLAIM 2 — the row payload is byte-identical: same rows, same order, same
-  // fields, same nested program, same nullish fallbacks. This is the assertion
-  // a silently-narrowed or silently-widened whitelist cannot survive.
-  assert.deepStrictEqual(fixed.rows, old.rows, 'refactor changed the row payload');
+  // CLAIM 2 — the row payload is byte-identical to the pre-fix replica APART
+  // FROM `urlAlias`, and that exception is the one deliberate widening of the
+  // whitelist (2026-09-29; see the field's comment in the module for the two
+  // bugs its absence caused).
+  //
+  // THE CONTROL IS NOT DEFANGED BY THE EXCEPTION. `preFix` is a frozen replica
+  // of the original inline join and is deliberately NOT updated — that is what
+  // makes it a control. So the compare strips exactly one KNOWN key and then
+  // asserts, separately, that stripping it was enough: any SECOND difference,
+  // in any direction, still fails here. A silently-narrowed or otherwise
+  // silently-widened whitelist cannot survive the pair.
+  const withoutAlias = fixed.rows.map(({ urlAlias, ...rest }) => rest);
+  assert.deepStrictEqual(withoutAlias, old.rows, 'refactor changed the row payload');
+
+  // ...and the exception is real, carried, and sourced from the input rather
+  // than invented — RICH has an alias the code could not have derived, the
+  // other two have none and take the `?? null` fallback.
+  assert.equal(
+    fixed.rows[0].urlAlias,
+    '/machine-learning-using-python-training-course',
+    'the admin alias must be carried through verbatim'
+  );
+  assert.notEqual(
+    fixed.rows[0].urlAlias,
+    '/python-l2-training-course',
+    'the derived code path is what a dropped alias would yield'
+  );
+  assert.deepEqual(
+    fixed.rows.map((r) => r.urlAlias),
+    ['/machine-learning-using-python-training-course', null, null],
+    'every row carries the key — present or null, never absent on some rows only'
+  );
 
   // CLAIM 1 — the drop rule is unchanged. Kept ALONGSIDE the deep compare:
   // these are two distinct claims and a deep-equal on rows says nothing about
@@ -317,7 +354,7 @@ test('CONTROL: fixed join is deep-identical to the pre-fix replica, and only it 
   }
   assert.deepEqual(Object.keys(fixed.rows[0]).sort(), [
     '_id', 'course_id', 'course_name', 'course_price',
-    'course_trainingdays', 'program', 'schedules',
+    'course_trainingdays', 'program', 'schedules', 'urlAlias',
   ], 'row carries EXACTLY the whitelisted fields — no more, no less');
 
   // ...and only one of the two implementations can tell you what it threw away.

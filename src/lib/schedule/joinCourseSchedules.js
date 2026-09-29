@@ -87,6 +87,35 @@ export function joinCourseSchedules(courses, schedules) {
       _id: c._id,
       course_id: c.course_id,
       course_name: c.course_name,
+      /**
+       * THE ADMIN'S CUSTOM PATH, AND WHY IT WAS MISSING.
+       *
+       * `courseCanonicalPath` answers "what is this course's canonical URL?" from
+       * the alias FIRST and the `course_id` only as a fallback. This projection
+       * did not carry the alias, so every consumer of a row from here fell
+       * through to the derived path — and two of them did so silently:
+       *
+       *   · ScheduleClient's CourseCard calls `courseLinkHref(course)` under a
+       *     comment reading "the row carries urlAlias". It did not. Measured on a
+       *     production build 2026-09-29: all 44 course links on /schedule pointed
+       *     at `/<code>-training-course` (e.g. /claude-ai-training-course) while
+       *     the course's canonical is its alias (/claude-cowork-training-course),
+       *     so every one of them took a 308 through courseRedirectTarget before
+       *     landing. A working link with an extra hop is the quietest possible
+       *     version of this bug.
+       *   · lib/seo/scheduleJsonLd emits each course's `@id` from the same rule.
+       *     Without the alias, /schedule and /training-course named the SAME
+       *     course with two different URLs — 44 of 44 — which is two entities to
+       *     a crawler and defeats the point of a shared Course node.
+       *
+       * `listPublicCourses` attaches `urlAlias` to every course it returns (see
+       * attachAliases in lib/courses/hiddenCourses), so the value was always
+       * present on the input and only this projection dropped it. `?? null`
+       * matches the sibling fields and is what `normaliseAlias` reads as "no
+       * alias", falling through to the derived path exactly as before for the
+       * courses that genuinely have none.
+       */
+      urlAlias: c.urlAlias ?? null,
       course_trainingdays: c.course_trainingdays ?? null,
       course_price: c.course_price ?? null,
       program: c.program

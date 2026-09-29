@@ -84,7 +84,23 @@ function yearText(date) {
  * training day fifty-six years in the past. Caught by the `allInvalid` row in
  * test/pure/roundDateLabel.
  */
-function calendarDays(dates) {
+/**
+ * EXPORTED for lib/seo/scheduleJsonLd.js, which needs a round's FIRST and LAST
+ * day as machine-readable dates for `CourseInstance.startDate` / `endDate`.
+ *
+ * Exported rather than reimplemented there because this function is where four
+ * decisions about what a round's days ARE already live — the null/''/undefined
+ * filter, the Invalid Date filter, the normalisation to local midnight, the sort,
+ * and the de-duplication. A second implementation would agree on ordinary data
+ * and disagree on exactly the rows this one was written for (see the epoch note
+ * above: a `null` in `dates` rendered as `1 ม.ค. 13` before that filter existed).
+ * The JSON-LD dates and the label a visitor reads in the table have to be the
+ * same days, and sharing this is what makes that true by construction.
+ *
+ * Nothing else about the function changes; `roundMonthSpan` and
+ * `formatRoundDays` below still call it exactly as before.
+ */
+export function calendarDays(dates) {
   const seen = new Set();
   return (Array.isArray(dates) ? dates : [])
     .filter((d) => d !== null && d !== undefined && d !== '')
