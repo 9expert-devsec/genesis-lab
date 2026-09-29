@@ -131,8 +131,10 @@ const nextConfig = {
      * a second 308 in front of the platform's, which is a redirect chain.
      *
      * The dead `MASTERCLASS_DOMAIN` and `isMasterclassRoute` in src/middleware.js
-     * are the other remnant of the same migration — declared, never called. Also
-     * left alone, also a separate clean-up.
+     * were the other remnant of the same migration — declared, never called.
+     * They were that separate clean-up and are GONE as of 2026-09-29. This rule
+     * is the last piece of the migration still in the tree, and it stays for the
+     * reason above: it is inert, and it is the documented fallback.
      *
      * TO ARM IT (only if the Vercel domain config is lost): set
      * MASTERCLASS_REDIRECT_HOST to the source host on the deployment that should
