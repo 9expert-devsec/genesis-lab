@@ -95,22 +95,25 @@ export function courseListNode(row, siteUrl, organizationId) {
   return {
     '@type': 'Course',
     /**
-     * THE COURSE'S IDENTITY — the canonical URL, and a KNOWN MISMATCH.
+     * THE COURSE'S IDENTITY — the canonical URL, and THREE PAGES NOW AGREE.
      *
-     * lib/courses/buildCourseJsonLd.js, which emits the Course node on the
-     * detail page, carries NO `@id` at all — it sets `url` (through the same
-     * courseCanonicalPath rule) and stops. So a crawler reading a listing and
-     * the detail page has an `@id` here and none there, and cannot merge the two
-     * by identity; it has to fall back to matching on `url`, which both sides do
-     * spell identically.
+     * This used to be recorded here as a KNOWN MISMATCH: lib/courses/
+     * buildCourseJsonLd.js, which emits the Course node on the detail page,
+     * carried NO `@id` at all — it set `url` (through the same
+     * courseCanonicalPath rule) and stopped. A crawler reading a listing and
+     * then the detail page had an `@id` here and none there, so it could not
+     * merge the two by identity and had to fall back to matching on `url`.
      *
-     * Using the canonical URL as the `@id` is what makes that fallback work and
-     * is what a later round would give the detail node too. Adding the `@id`
-     * there is the actual fix and it is NOT taken here: the detail page's
-     * structured data is out of scope, and changing what 77 course pages emit is
-     * its own decision with its own verification. Recorded, not fixed —
-     * deliberately the same posture, and the same wording, lib/seo/siteUrl.js
-     * used for the origin it could not take.
+     * FIXED 2026-09-29. The detail builder now calls `courseNodeUrl` — THIS
+     * function, not a second construction that agrees with it — so the id a
+     * listing emits and the id the detail page emits are one derivation.
+     * test/render/courseCanonicalMetadata asserts the two are EQUAL rather than
+     * merely both plausible, which is the same shape of assertion, for the same
+     * reason, as the canonical-vs-JSON-LD equality in that file.
+     *
+     * What did NOT change there: the id is still the canonical URL with no
+     * fragment. If it ever gains one, it gains it here, once, and all three
+     * pages move together — which is the whole reason this module exists.
      */
     '@id': url,
     url,
