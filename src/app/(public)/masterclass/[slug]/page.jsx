@@ -3,6 +3,7 @@ import { siteConfig } from '@/config/site';
 import { getMasterclassBySlug, getInstructorsByIds } from '@/lib/masterclass/getMasterclass';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { generateMasterclassJsonLd } from '@/lib/masterclass/generateJsonLd';
+import { masterclassCanonicalUrl } from '@/lib/masterclass/masterclassUrl';
 import { OG_DEFAULT_IMAGE, resolveCourseOgImage, toAbsoluteUrl } from '@/lib/seo/ogImage';
 import { MasterclassDetailClient } from './_components/MasterclassDetailClient';
 // ADDED beside the statement above rather than folded into it — the standing
@@ -47,7 +48,16 @@ export async function generateMetadata({ params }) {
 
   const title = `${course.title_th} | Masterclass — 9Expert Training`;
   const description = course.subtitle_th || '';
-  const canonicalUrl = `${siteConfig.url}/masterclass/${slug}`;
+  /**
+   * THE canonical, from the shared function — the same one
+   * lib/masterclass/generateJsonLd builds the Course `@id` and `url` from, so the
+   * tag and the graph are one value rather than two that happened to agree.
+   *
+   * It resolves to exactly what `${siteConfig.url}/masterclass/${slug}` produced
+   * before, because SITE_URL *is* siteConfig.url — the production value is
+   * unchanged. What changed is that the graph no longer names a different host.
+   */
+  const canonicalUrl = masterclassCanonicalUrl(slug);
   const imageUrl = resolveCourseOgImage(course, siteConfig.url);
 
   // Only claim 1200×630 dims when we actually fell back to the default
