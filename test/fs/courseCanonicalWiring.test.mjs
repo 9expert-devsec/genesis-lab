@@ -84,16 +84,61 @@ test('the BreadcrumbList names the same URL as the canonical tag', () => {
 });
 
 // ── the regression guard for every OTHER page type ──────────────────────────
+
+/**
+ * THE CUSTOM PAGE CANONICAL IS STILL NOT THE COURSE RULE.
+ *
+ * ── WHAT THIS GUARDS, WHICH IS NOT WHAT IT USED TO MATCH ───────────────────
+ * The guarantee has never changed: the COURSE round must not have widened its
+ * fix across the file. A custom page has one URL; `customPage.canonicalUrl`
+ * overriding the bare slug is a deliberate admin affordance and is none of the
+ * course helper's business.
+ *
+ * The EXPRESSION changed, once, for an unrelated and deliberate reason. The
+ * assertion was written against
+ *     const canonical = customPage.canonicalUrl || \`\${base}/\${segment}\`;
+ * and 1816f50c (feat(promotions): an Advanced HTML page can be a promotion,
+ * 2026-09-04) turned it into a ternary, adding a promotion arm ABOVE that
+ * fallback. Checked: the test was GREEN when it was written — at 778589a7 the
+ * custom-page line was still the plain `||` — and 1816f50c reached this branch
+ * afterwards. So this was a stale MATCH, never a broken guarantee.
+ *
+ * ── WHY THE PROMOTION ARM IS CORRECT AND IS NOT BEING "FIXED" ──────────────
+ * A promotion page is DIVERTED off its bare slug: `/<slug>` answers 308 and
+ * only `/promotions/<slug>` renders it (lib/pages/promotionMode.js). A
+ * canonical naming the bare slug would therefore point search engines at a
+ * redirect. Pointing it at the URL that actually renders is the right answer,
+ * and the builder arm directly above had already done the same thing.
+ *
+ * ── WHY THE NEW MATCH IS STRICTLY STRONGER, NOT A WEAKENING ────────────────
+ * It pins the WHOLE expression, both arms, rather than the one sub-expression
+ * that survived. The old regex would have passed against a file that kept the
+ * fallback and silently changed the promotion target; this one would not. The
+ * fallback is ALSO asserted on its own line below, so the guarantee the test
+ * is named for stays legible instead of being buried inside a long pattern.
+ *
+ * NOTE the sibling below matches only `seo.canonicalUrl || …`, unanchored, which
+ * is why the same 1816f50c-era change to the BUILDER arm never reddened it.
+ * That looseness is why this one caught a real edit and that one did not.
+ */
 test('the custom page canonical is UNCHANGED — it still prefers its own field', () => {
-  // The exact expression, because the claim is "untouched" rather than
-  // "equivalent". A custom page has one URL and self-canonicalising is right
-  // for it; `customPage.canonicalUrl` overriding that is a deliberate admin
-  // affordance and is not this round's business.
+  // 1. the whole expression, both arms, as the source now spells it.
   assert.match(
     code,
-    /const canonical = customPage\.canonicalUrl \|\| `\$\{base\}\/\$\{segment\}`/,
+    /const canonical = isPromotionPage\(customPage\)\s*\n\s*\? `\$\{base\}\/promotions\/\$\{segment\}`\s*\n\s*: \(customPage\.canonicalUrl \|\| `\$\{base\}\/\$\{segment\}`\);/,
     'the custom page canonical changed',
   );
+
+  // 2. and the ORIGINAL guarantee, stated on its own so it cannot be lost in
+  //    the pattern above: an ordinary custom page still prefers its authored
+  //    field over the bare slug.
+  assert.match(
+    code,
+    /customPage\.canonicalUrl \|\| `\$\{base\}\/\$\{segment\}`/,
+    'a non-promotion custom page no longer prefers its own canonicalUrl',
+  );
+
+  // 3. the claim this file exists for, unchanged.
   assert.ok(!/courseCanonicalUrl\(customPage/.test(code), 'the course helper leaked into custom pages');
 });
 
