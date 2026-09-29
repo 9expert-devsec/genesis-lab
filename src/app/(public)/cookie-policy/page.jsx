@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { SiYoutube, SiGoogleanalytics, SiGoogleads } from 'react-icons/si';
+import { SiYoutube, SiGoogleanalytics, SiGoogleads, SiMeta } from 'react-icons/si';
 import { PolicyLayout } from '@/components/policies/PolicyLayout';
 import { PolicyAccordion } from '@/components/policies/PolicyAccordion';
 import { PolicyIcon } from '@/components/policies/PolicyIcon';
@@ -125,7 +125,20 @@ const COOKIE_TYPES = [
     name: 'การตลาด/โฆษณา',
     nameEn: 'Targeting-Advertising',
     purpose: 'นำเสนอโฆษณาที่ตรงกับความสนใจของท่าน',
-    provider: 'Google Ads',
+    /*
+     * ── META ADDED WHEN THE PIXEL SHIPPED ─────────────────────────────────
+     * The document's bracketed cell here was "[ระบุ — เช่น Meta Pixel,
+     * TikTok Pixel ถ้ามีการใช้งานจริง]" — it was asking whether we ran one.
+     * Half of that question now has an answer: the Meta Pixel is real, gated
+     * on this exact category. There is still no TikTok pixel and none is
+     * named, for the reason the header gives about listing trackers we do
+     * not run.
+     *
+     * This is the category the pixel is gated on, so the cell and the gate
+     * must agree. If the pixel is ever moved to a different category, or
+     * ungated, this line is wrong the same day.
+     */
+    provider: 'Google Ads, Meta (Facebook Pixel)',
   },
 ];
 
@@ -155,17 +168,33 @@ const COOKIE_TYPES = [
  *                      conversion ID is stated on the page for that reason.
  *   Google Tag Manager NOT FOUND. Not rendered at all — a different product
  *                      from the gtag.js loader above; confirmed absent.
- *   Meta / Facebook    NO PIXEL. There is no fbq( and no connect.facebook.
- *                      siteConfig has a link to the Facebook page; an outbound
- *                      link is not a pixel and sets no cookie here.
+ *   Meta / Facebook    IN USE — AND ON DIFFERENT TERMS FROM EVERYTHING ELSE
+ *                      IN THIS LIST. This entry read "NO PIXEL" until the
+ *                      pixel round; it is now real.
+ *                      src/components/analytics/MetaPixel.jsx loads
+ *                      connect.facebook.net/en_US/fbevents.js and initialises
+ *                      the pixel — but ONLY once the visitor has granted the
+ *                      marketing category. Someone who declines, or who has
+ *                      not answered yet, causes no request to Meta at all:
+ *                      not a denied tag, not a stub, nothing.
+ *                      That distinction is written into the entry's purpose
+ *                      text below rather than left to this comment. Every
+ *                      other service on this page loads for everyone, so a
+ *                      reader who assumed this one did too would have the
+ *                      wrong idea of what declining actually buys them —
+ *                      which is the one thing a cookie policy exists to tell
+ *                      them accurately.
+ *                      (The Facebook PAGE link in siteConfig is unchanged and
+ *                      is still just an outbound link, setting nothing.)
  *   LINE               NO SDK. line.me appears only as outbound href links and
  *                      a social-plugins share URL the visitor clicks. No LINE
  *                      code executes on our pages.
  *
- * Meta, LINE and GTM are therefore not rendered. Listing a tracker we do not
- * run is the same class of error as omitting one we do — it is a false
- * statement about what happens on the visitor's device, just in the flattering
- * direction.
+ * LINE and GTM are therefore not rendered. Listing a tracker we do not run is
+ * the same class of error as omitting one we do — it is a false statement
+ * about what happens on the visitor's device, just in the flattering
+ * direction. Meta moved across that line the day the pixel shipped, which is
+ * exactly when this list had to move with it.
  *
  * The trademarks are rendered from react-icons/si rather than committed image
  * files: the monochrome set inherits currentColor, so one icon works on both
@@ -188,6 +217,22 @@ const THIRD_PARTY = [
     Icon: SiGoogleads,
     name: 'Google Ads',
     purpose: 'ติดตามผลลัพธ์จากโฆษณาและวัดผล conversion',
+    confirmed: true,
+  },
+  {
+    Icon: SiMeta,
+    name: 'Meta (Facebook)',
+    /*
+     * The ONLY entry whose purpose text states when it loads, because it is
+     * the only one whose answer is not "always". Saying so here is not
+     * decoration: the sentence is the difference between a visitor knowing
+     * that declining stops the request and assuming, correctly for every
+     * other row on this page, that it merely stops a cookie.
+     */
+    purpose:
+      'วัดผลโฆษณาและ conversion บน Facebook และ Instagram '
+      + 'โดยจะเริ่มทำงานเมื่อท่านให้ความยินยอมคุกกี้ประเภทการตลาดแล้วเท่านั้น '
+      + 'หากท่านไม่ให้ความยินยอม เว็บไซต์จะไม่เรียกใช้งานสคริปต์ของ Meta เลย',
     confirmed: true,
   },
 ];
