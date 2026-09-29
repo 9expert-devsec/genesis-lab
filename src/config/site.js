@@ -8,6 +8,24 @@
  * component.
  */
 
+/**
+ * The Thai building name, spelled ONCE.
+ *
+ * ── WHY IT IS ITS OWN CONST ─────────────────────────────────────────────────
+ * It is the sub-fact that was actually wrong. The JSON-LD graph carried
+ * `อาคาร เอเวอร์กรีนเพลส` while /contact-us rendered `อาคารเอเวอร์กรีน เพลส` —
+ * the same building, the space in a different place, so the graph's address and
+ * the page's address were two strings. The two address FORMS below genuinely
+ * differ (one line for schema.org, two lines for a rendered card, different word
+ * order, and only the display form carries the postcode), so they cannot be one
+ * string — but the building name inside them can be, and is.
+ *
+ * Ruled 2026-09-29: the /contact-us spelling is the correct one. Composed into
+ * both forms below rather than retyped, so the next edit cannot reintroduce the
+ * split.
+ */
+const BUILDING_TH = 'อาคารเอเวอร์กรีน เพลส';
+
 export const siteConfig = {
   name:        '9Expert Training',
   nameFull:    'บริษัท นายน์เอ็กซ์เพิร์ท จำกัด',
@@ -23,13 +41,82 @@ export const siteConfig = {
 
   // Social
   facebookUrl: 'https://www.facebook.com/9ExpertTraining',
-  // The two chat channels. Spelled HERE and read from here — the footer used
-  // to carry the LINE URL as a literal, and it is spelled two more ways
-  // elsewhere in the tree (`%40` vs `@` on the career-path pages, and a
-  // different page.line.me link in the JSON-LD sameAs). New readers take
-  // these; the older literals are a separate clean-up.
+  /**
+   * The two chat channels. Spelled HERE and read from here — the footer used to
+   * carry the LINE URL as a literal, and one more spelling is still live in the
+   * tree (`%40` vs `@` on the career-path pages), which remains a separate
+   * clean-up.
+   *
+   * ── THE page.line.me URL IN THE JSON-LD `sameAs` IS NOT A MISMATCH ──────────
+   * This comment used to list it as one, alongside the `%40` variant. Ruled
+   * 2026-09-29: the two are the same LINE account doing DIFFERENT JOBS, and both
+   * are correct where they stand.
+   *
+   *   · `line.me/R/ti/p/@9expert` — the ADD-FRIEND action link. It is what a
+   *     button should open, and it is what this field feeds.
+   *   · `page.line.me/gic1119p`   — the stable PROFILE URL of the same account.
+   *     `sameAs` is an identity claim about a page that represents the
+   *     organisation, which is what that one is; an action link is not.
+   *
+   * So neither is changed, and neither should be "unified" into the other. If a
+   * future round touches the `%40` variant, it must leave these two alone.
+   */
   messengerUrl: 'https://m.me/9ExpertTraining',
   lineUrl:      'https://line.me/R/ti/p/@9expert',
+
+  /**
+   * ══ THE CONTACT FACTS, SINGLE-SOURCED ═══════════════════════════════════════
+   * Read by BOTH lib/seo/homeJsonLd (which declares them as structured data,
+   * once, for the whole site) and the /contact-us sections that display them
+   * (MapSection, BusinessInfoSection). Before this round each fact existed twice
+   * and four of the pairs had drifted apart — a different Google Maps short
+   * link, coordinates ~60m apart, two spellings of the building, and a tax ID the
+   * graph did not carry at all. A visitor and a crawler were being told
+   * different things about where the company is.
+   *
+   * Values ruled 2026-09-29; the /contact-us side won every disagreement,
+   * because it is the one a human reads and checks.
+   *
+   * ANYTHING ADDED HERE MUST HAVE MORE THAN ONE READER. A fact with a single
+   * consumer belongs at that consumer; this block exists for the ones that would
+   * otherwise be spelled twice.
+   */
+
+  /** Company tax ID. Shown on /contact-us and emitted as `taxID` on the graph. */
+  taxId: '0105548019065',
+
+  /** The one Google Maps short link. Ruled: the /contact-us value. */
+  mapLink: 'https://maps.app.goo.gl/vKekFgf7kHkzaQwq9',
+
+  /**
+   * The one coordinate pair — the centre /contact-us's embedded map already
+   * used. Read by the graph's `geo` and by that embed's own URL, so the pin and
+   * the structured data cannot point at different places again.
+   */
+  geo: {
+    latitude: 13.75021,
+    longitude: 100.53042,
+  },
+
+  /** The building, for callers that compose their own line. */
+  buildingTh: BUILDING_TH,
+
+  /**
+   * schema.org `streetAddress` — ONE line, no postcode (that is `postalCode`),
+   * carrying แขวง/เขต as the sub-locality. Shape unchanged from what the graph
+   * has always emitted; only the building spelling moved to the ruled one.
+   */
+  addressStreetTh: `318 ชั้น 2 ห้อง 2B ${BUILDING_TH} ซ.วรฤทธิ์ ถนนพญาไท แขวงถนนเพชรบุรี เขตราชเทวี`,
+
+  /**
+   * The DISPLAY form — two lines, as /contact-us's company card renders them,
+   * with `เลขที่` and the postcode. Byte-identical to what that card showed
+   * before this round; it already used the ruled spelling.
+   */
+  addressDisplayTh: [
+    `เลขที่ 318 ${BUILDING_TH} ชั้น 2 ห้อง 2B ซ.วรฤทธิ์ ถนนพญาไท`,
+    'แขวงถนนเพชรบุรี เขตราชเทวี กรุงเทพฯ 10400',
+  ],
 };
 
 /**

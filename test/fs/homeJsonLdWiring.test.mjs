@@ -108,6 +108,66 @@ for (const rel of [BUILDER, ORIGIN]) {
   });
 }
 
+// ── the contact facts are READ, not spelled ────────────────────────────────
+
+/**
+ * The half test/pure/homeJsonLd cannot see.
+ *
+ * That file asserts the emitted `hasMap`, `geo`, `streetAddress` and `taxID`
+ * EQUAL the siteConfig fields — which a literal that happens to match would
+ * satisfy perfectly, right up until someone edits one side. These four facts each
+ * existed twice before 2026-09-29 and all four pairs had drifted apart, so
+ * "equal today" is exactly the property that was already true and still broke.
+ *
+ * This asserts the values are ABSENT from the builder's source: the only way the
+ * graph can carry them is by reading the one field. Read from `code`, so the
+ * docblock explaining the round cannot satisfy it.
+ */
+const FACT_LITERALS = [
+  // the ruled values — present in siteConfig, and must not be duplicated here
+  'maps.app.goo.gl',
+  '13.75021',
+  '100.53042',
+  '0105548019065',
+  'อาคารเอเวอร์กรีน เพลส',
+  // the superseded ones — must not survive anywhere in this file
+  '8ny66J39HeZ2Yh678',
+  '13.750661',
+  '100.531117',
+  'อาคาร เอเวอร์กรีนเพลส',
+];
+
+test(`${BUILDER} spells none of the contact facts as a literal`, () => {
+  const { code } = readSource(BUILDER);
+  const found = FACT_LITERALS.filter((v) => code.includes(v));
+  assert.deepEqual(
+    found,
+    [],
+    `these must come from siteConfig, not be spelled here: ${found.join(', ')}`
+  );
+});
+
+test('CONTROL: the same scan DOES fire when a fact literal is planted', () => {
+  const { code } = readSource(BUILDER);
+  const poisoned = `${code}\nconst m = 'https://maps.app.goo.gl/8ny66J39HeZ2Yh678';`;
+  const found = FACT_LITERALS.filter((v) => poisoned.includes(v));
+  assert.ok(found.includes('8ny66J39HeZ2Yh678'), 'the scan must catch a re-added literal');
+  assert.ok(found.includes('maps.app.goo.gl'), 'and the generic host too');
+});
+
+test(`${BUILDER} reads each fact from siteConfig by name`, () => {
+  const { code } = readSource(BUILDER);
+  for (const field of [
+    'siteConfig.mapLink',
+    'siteConfig.geo.latitude',
+    'siteConfig.geo.longitude',
+    'siteConfig.addressStreetTh',
+    'siteConfig.taxId',
+  ]) {
+    assert.ok(code.includes(field), `the builder must read ${field}`);
+  }
+});
+
 test('CONTROL: the host scan DOES fire on a file that spells one out', () => {
   const { code } = readSource('src/config/site.js');
   assert.ok(
