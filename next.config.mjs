@@ -105,22 +105,38 @@ const nextConfig = {
      * itself, so a rule that also caught www would redirect the host that is
      * supposed to answer. It does not.
      *
-     * ── ⚠ WHY IT IS ENV-GATED, WHICH IS A DELIBERATE DEVIATION ⚠ ────────────
-     * `main` currently SERVES masterclass.9experttraining.com and takes real
-     * course payments. This file is shared between branches, so an unconditional
-     * rule here becomes live the moment this branch merges — and if that merge
-     * happens for any reason before the cutover, every payment URL on that host
-     * 308s away and the money stops.
+     * ── ⚠ THE CUTOVER HAPPENED, AND NOT THROUGH THIS RULE ⚠ ─────────────────
+     * UPDATED 2026-09-29. This block used to warn that `main` SERVED
+     * masterclass.9experttraining.com and took real course payments, so an
+     * unconditional rule here would 308 every payment URL away the moment the
+     * branch merged. BOTH HALVES OF THAT WARNING ARE NOW STALE:
      *
-     * Gating it on an env var makes the rule reviewable in the diff (its whole
-     * justification) while keeping it INERT until a deployment deliberately
-     * switches it on. That is the same shape, in this same function's
-     * neighbourhood, as `BLOB_PUBLIC_BASE` gating the webroot and blob rewrites
-     * — "inert until the variable is set, because pointing at an undefined
-     * origin would turn working URLs into broken ones".
+     *   · the redirect was done on 2026-09-08 at the VERCEL DOMAIN LEVEL — the
+     *     host was moved into the Production domain set and configured there as a
+     *     308 to www preserving the path. Not by this rule, which never armed.
+     *   · `main` was deleted on 2026-09-10, so the branch the warning was about
+     *     does not exist.
      *
-     * TO ARM IT: set MASTERCLASS_REDIRECT_HOST to the source host on the
-     * deployment that should redirect. Unset everywhere else.
+     * Verified 2026-09-29:
+     *     curl -sI https://masterclass.9experttraining.com/masterclass/mas-ai-dmc
+     *       → HTTP/1.1 308 Permanent Redirect
+     *         Location: https://www.9experttraining.com/masterclass/mas-ai-dmc
+     *         Server: Vercel
+     *
+     * WHY THE CODE IS LEFT EXACTLY AS IT IS. The rule stays env-gated and stays
+     * inert: `MASTERCLASS_REDIRECT_HOST` is unset on every deployment and the
+     * platform already does the job. Deleting it is a separate decision — it is
+     * the documented fallback if the domain config is ever lost, and removing a
+     * redirect is the kind of change that wants its own diff. Arming it would put
+     * a second 308 in front of the platform's, which is a redirect chain.
+     *
+     * The dead `MASTERCLASS_DOMAIN` and `isMasterclassRoute` in src/middleware.js
+     * are the other remnant of the same migration — declared, never called. Also
+     * left alone, also a separate clean-up.
+     *
+     * TO ARM IT (only if the Vercel domain config is lost): set
+     * MASTERCLASS_REDIRECT_HOST to the source host on the deployment that should
+     * redirect. Unset everywhere else.
      */
     const masterclassRedirectHost = process.env.MASTERCLASS_REDIRECT_HOST;
     const masterclassHostRedirect = masterclassRedirectHost

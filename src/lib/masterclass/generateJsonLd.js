@@ -1,9 +1,27 @@
 /**
  * Build @graph JSON-LD (Course + FAQPage) for a Masterclass detail page.
  * Rendered server-side as <script type="application/ld+json">.
+ *
+ * ── THE ORIGIN IS NO LONGER SPELLED HERE ────────────────────────────────────
+ * This module used to open with `const BASE_URL =
+ * 'https://masterclass.9experttraining.com'` and build every `@id` and every
+ * registration URL from it, while the page's own `<link rel="canonical">` named
+ * www — so each masterclass page declared one host canonical and described
+ * itself on another. `provider.url` was a third spelling of the origin.
+ *
+ * All of it now comes from lib/masterclass/masterclassUrl, which the page's
+ * canonical also calls, so the tag and the graph cannot disagree. See that
+ * module for the ruling and the verified 308 that settled which host wins.
+ *
+ * `provider` and `instructor[].worksFor` are now `@id` REFERENCES to the
+ * organisation the home graph declares, rather than two more inline Organization
+ * objects: an organisation spelled out in three places is three organisations to
+ * a crawler, and none of them resolves to the one with the address and the logo.
  */
 
-const BASE_URL = 'https://masterclass.9experttraining.com';
+import { SITE_URL } from '@/lib/seo/siteUrl';
+import { homeGraphIds } from '@/lib/seo/homeJsonLd';
+import { masterclassCanonicalUrl, masterclassCourseId } from '@/lib/masterclass/masterclassUrl';
 
 /** Format a date + "HH:mm" time into an ISO 8601 string with the +07:00 offset. */
 function toThaiIso(dateValue, timeStr) {
@@ -32,22 +50,44 @@ function deadlineToIso(deadline) {
   return new Date(deadline).toISOString();
 }
 
-export function generateMasterclassJsonLd(course, instructors, faqs) {
-  const courseUrl = `${BASE_URL}/masterclass/${course.slug}`;
+/**
+ * @param {object} course
+ * @param {object[]} instructors
+ * @param {object[]} faqs
+ * @param {string} [siteUrl] origin without a trailing slash. Defaults to the
+ *   site's one origin; pass a different one only from a test, which is what
+ *   proves every URL here is composed rather than restated.
+ */
+export function generateMasterclassJsonLd(course, instructors, faqs, siteUrl) {
+  // ONE trimmed base, handed to every builder below, so a caller passing a
+  // trailing slash cannot produce a clean course URL and a `//#organization`
+  // beside it.
+  const base = String(siteUrl ?? SITE_URL).replace(/\/+$/, '');
+
+  // The page's canonical, character for character — the same function
+  // generateMetadata calls for `alternates.canonical`.
+  const courseUrl = masterclassCanonicalUrl(course.slug, base);
+  const organizationId = homeGraphIds(base).organization;
 
   // ── Course node ──────────────────────────────────────────────────────────
   const courseNode = {
     '@type': 'Course',
-    '@id': `${courseUrl}#course`,
+    '@id': masterclassCourseId(course.slug, base),
+    /**
+     * ADDED 2026-09-29. This node carried an `@id` and no `url` at all, so a
+     * crawler had an identity for the course and no statement of where it is
+     * published — the exact mirror image of lib/courses/buildCourseJsonLd, which
+     * emits a `url` and no `@id`. It is the canonical, so it equals the page's
+     * own tag and the `@id` above minus the fragment.
+     */
+    url: courseUrl,
     name: `${course.title_th} | Masterclass`,
     description: course.subtitle_th || '',
     courseCode: course.course_code || '',
     educationalCredentialAwarded: 'e-Certificate',
-    provider: {
-      '@type': 'Organization',
-      name: '9Expert Training',
-      url: 'https://www.9experttraining.com',
-    },
+    // A REFERENCE to the organisation the home graph declares, not a third
+    // inline copy of its name and URL.
+    provider: { '@id': organizationId },
   };
 
   // instructor array (omit key entirely when empty)
@@ -57,10 +97,10 @@ export function generateMasterclassJsonLd(course, instructors, faqs) {
       name: inst.name,
       jobTitle: inst.title || '',
       image: inst.image_url || '',
-      worksFor: {
-        '@type': 'Organization',
-        name: '9Expert Training',
-      },
+      // Was a bare `{'@type':'Organization', name:'9Expert Training'}` with no
+      // url and no @id — an anonymous fourth organisation that resolved to
+      // nothing. Now the same entity the provider names.
+      worksFor: { '@id': organizationId },
     }));
   }
 
