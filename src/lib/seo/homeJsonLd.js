@@ -104,6 +104,44 @@ function prune(value) {
 }
 
 /**
+ * The `@id`s of the site-wide entities this graph DEFINES.
+ *
+ * ── WHY THIS IS EXPORTED, AND WHY IT IS A FUNCTION ──────────────────────────
+ * An `@id` is only an identity if it is byte-identical everywhere it appears —
+ * the argument lib/seo/siteUrl.js makes about the host, one level down. Home
+ * is where the Organization and the WebSite are DECLARED; every other page that
+ * wants to say "I am part of that site" or "I am about that organisation" has to
+ * reference the same string, and the only way a second page cannot drift is for
+ * it to call this rather than retype `${siteUrl}/#organization`.
+ *
+ * First external consumer: lib/seo/courseListJsonLd.js, whose CollectionPage
+ * carries `isPartOf` and `about` pointing back here. A hand-written fragment
+ * there would agree today and split the graph in two the day either side is
+ * edited — two organisations, and every cross-reference silently unresolvable.
+ *
+ * A FUNCTION, not a frozen object, because the origin is an argument: the tests
+ * rebuild the whole graph on a control origin and assert nothing survived the
+ * swap. A module-level constant would capture SITE_URL once at import and defeat
+ * exactly that check.
+ *
+ * `webPage` and `logo` are Home's OWN nodes, not site-wide entities. They are
+ * returned for completeness and so this stays the one place the fragments are
+ * spelled; nothing outside this module should reference them.
+ *
+ * @param {string} [siteUrl] Origin WITHOUT a trailing slash.
+ * @returns {{organization: string, website: string, webPage: string, logo: string, place: string}}
+ */
+export function homeGraphIds(siteUrl = SITE_URL) {
+  return {
+    organization: `${siteUrl}/#organization`,
+    website: `${siteUrl}/#website`,
+    webPage: `${siteUrl}/#webpage`,
+    logo: `${siteUrl}/#logo`,
+    place: `${siteUrl}/#training-location`,
+  };
+}
+
+/**
  * Build Home's JSON-LD.
  *
  * @param {string} [siteUrl] Origin WITHOUT a trailing slash. Defaults to the
@@ -111,11 +149,16 @@ function prune(value) {
  * @returns {object} The `@graph` document, ready to stringify.
  */
 export function buildHomeJsonLd(siteUrl = SITE_URL) {
-  const organizationId = `${siteUrl}/#organization`;
-  const websiteId = `${siteUrl}/#website`;
-  const webPageId = `${siteUrl}/#webpage`;
-  const logoId = `${siteUrl}/#logo`;
-  const placeId = `${siteUrl}/#training-location`;
+  // Destructured from the exported builder rather than spelled here, so this
+  // graph and every graph that references it read ONE construction. The emitted
+  // values are unchanged from when these were five inline template literals.
+  const {
+    organization: organizationId,
+    website: websiteId,
+    webPage: webPageId,
+    logo: logoId,
+    place: placeId,
+  } = homeGraphIds(siteUrl);
 
   // The canonical URL of this page. `alternates.canonical` on app/page.jsx is
   // this same value, and the two are REQUIRED to be byte-identical — see
