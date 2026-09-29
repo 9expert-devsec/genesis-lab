@@ -5,6 +5,8 @@ import { OG_DEFAULT_IMAGE } from '@/lib/seo/ogImage';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { Analytics } from '@/components/analytics/Analytics';
 import { AnalyticsPageTracker } from '@/components/analytics/AnalyticsPageTracker';
+import { MetaPixel } from '@/components/analytics/MetaPixel';
+import { MetaPixelPageTracker } from '@/components/analytics/MetaPixelPageTracker';
 import { FloatingActionDock } from '@/components/ui/FloatingActionDock';
 import { ChatLauncher } from '@/components/chat/ChatLauncher';
 import { ReadingProgressRing } from '@/components/ui/ReadingProgressRing';
@@ -123,8 +125,28 @@ export default function RootLayout({ children }) {
     >
       <body className="font-en antialiased ">
         <Analytics />
+        {/* ── THE META PIXEL, AND WHY IT IS NOT INSIDE <Analytics /> ───────
+            Analytics is a SERVER component and must stay one — it is what
+            keeps this layout, and every page under it, prerenderable. The
+            pixel cannot be: whether it loads at all depends on a cookie that
+            only the browser may read, and reading it on the server would opt
+            the whole site into dynamic rendering (see the note in
+            src/lib/analytics/consentMode.js).
+
+            No Suspense boundary: it calls no URL hooks. It renders NOTHING —
+            and requests nothing from connect.facebook.net — until marketing
+            consent is granted, which is the opposite of how gtag.js is
+            loaded one line above. That asymmetry is deliberate and its
+            reasoning is in consentMode.js; do not "make them consistent". */}
+        <MetaPixel />
         <Suspense fallback={null}>
           <AnalyticsPageTracker />
+          {/* A SIBLING, not a few lines inside AnalyticsPageTracker: GA4
+              counts a page view per full path INCLUDING the query string,
+              Meta counts one per pathname. One effect cannot hold both
+              rules. It needs no Suspense of its own (no useSearchParams) and
+              sits here only to keep the two page trackers together. */}
+          <MetaPixelPageTracker />
         </Suspense>
         <ThemeProvider>
           {children}

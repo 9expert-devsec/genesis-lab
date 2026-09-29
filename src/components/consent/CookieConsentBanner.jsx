@@ -13,6 +13,7 @@ import {
 } from '@/lib/cookieConsentStore';
 import { gtagConsentUpdate } from '@/lib/analytics/gtag';
 import { consentSignalsFor } from '@/lib/analytics/consentMode';
+import { publishConsentDecision } from '@/lib/consentBroadcast';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -181,6 +182,25 @@ export function CookieConsentBanner() {
      */
     gtagConsentUpdate(consentSignalsFor(categories));
     writeConsentCookie(categories, new Date().toISOString());
+    /* ── THIRD, AND ONLY THIRD: TELL EVERYTHING THAT IS NOT GOOGLE ────────
+     *
+     * Added when the Meta pixel arrived. The two steps above are unchanged in
+     * content and in order, and this one is deliberately behind both: it is
+     * the step with the most listeners and the least ceremony, so it is also
+     * the most likely to grow something that throws. Behind the cookie write,
+     * a subscriber that breaks costs this page view's pixel and nothing else —
+     * ahead of it, the same break would lose the RECORD of a decision the user
+     * made, and the banner would ask again as if they never answered.
+     *
+     * Google is not on this channel. gtag is told directly, one line up,
+     * because Consent Mode's update has to reach a tag that is already loaded
+     * and waiting for it; routing that through a fan-out would add a hop to
+     * the one consumer that must not miss it.
+     *
+     * publishConsentDecision swallows its own failures for the same reason
+     * gtagConsentUpdate returns silently — see src/lib/consentBroadcast.js.
+     */
+    publishConsentDecision(categories);
     setDecision(categories);
   }, []);
 

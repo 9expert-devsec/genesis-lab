@@ -41,6 +41,11 @@ const EXTS = [".js", ".jsx"];
 export const STUBS = {
   "next/link": path.join(ROOT, "test", "stub-next-link.mjs"),
   "next/image": path.join(ROOT, "test", "stub-next-image.mjs"),
+  // next/script does not resolve outside a Next runtime at all — the package's
+  // export map only names it under Next's own conditions, so a bare import
+  // throws "Cannot find module .../next/script". MetaPixel.jsx renders one, and
+  // whether that element exists IS the consent claim under test.
+  "next/script": path.join(ROOT, "test", "stub-next-script.mjs"),
   // Client components in the render tier call useRouter/useSearchParams during
   // SSR; next/navigation does not resolve outside a Next runtime.
   "next/navigation": path.join(ROOT, "test", "stub-next-navigation.mjs"),
