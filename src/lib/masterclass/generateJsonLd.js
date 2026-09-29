@@ -133,7 +133,33 @@ export function generateMasterclassJsonLd(course, instructors, faqs, siteUrl) {
         },
       };
 
-      // offers array
+      /**
+       * ── NO `availability` ON ANY OFFER, DELIBERATELY ────────────────────
+       *
+       * Every Offer below used to carry one: the Early Bird's was computed from
+       * the deadline, the Regular Price's from `batch.status === 'open'`. Both
+       * were removed 2026-09-29.
+       *
+       * THE PAGE CANNOT HONESTLY MAKE THE CLAIM. This route is ISR with
+       * `revalidate = 3600` (see the page's own note on why the declaration is
+       * real), so the HTML a crawler reads can be up to an hour old. A batch
+       * that sells its last seat — or whose early-bird deadline passes — keeps
+       * serving `https://schema.org/InStock` until the window turns over or a
+       * registration action revalidates the path. `availability` is the one
+       * field in an Offer that flips on a timescale shorter than the cache, and
+       * an InStock on a sold-out batch is a wrong answer to the exact question
+       * the field exists to answer.
+       *
+       * PRICE STAYS. It changes when an admin edits the batch, not when a seat
+       * sells, so an hour-old price is the price. The Early Bird offer also
+       * carries `priceValidUntil`, which states its own expiry as a DATE rather
+       * than as a boolean computed at render time — a stale document and a fresh
+       * one say the same thing, and the reader works out the rest.
+       *
+       * /schedule's Course nodes omit availability for this same reason. Same
+       * line, same argument: the facts a buyer acts on in real time belong to
+       * the live page, not to cached structured data.
+       */
       const offers = [];
 
       // Early Bird offer
@@ -147,13 +173,6 @@ export function generateMasterclassJsonLd(course, instructors, faqs, siteUrl) {
 
         const priceValidUntil = deadlineToIso(batch.early_bird_deadline);
         if (priceValidUntil) ebOffer.priceValidUntil = priceValidUntil;
-
-        const ebAvailable =
-          batch.early_bird_deadline == null ||
-          new Date(batch.early_bird_deadline) > new Date();
-        ebOffer.availability = ebAvailable
-          ? 'https://schema.org/InStock'
-          : 'https://schema.org/OutOfStock';
 
         ebOffer.priceSpecification = {
           '@type': 'PriceSpecification',
@@ -170,10 +189,6 @@ export function generateMasterclassJsonLd(course, instructors, faqs, siteUrl) {
         name: 'Regular Price',
         price: batch.price_normal,
         priceCurrency: 'THB',
-        availability:
-          batch.status === 'open'
-            ? 'https://schema.org/InStock'
-            : 'https://schema.org/OutOfStock',
         priceSpecification: {
           '@type': 'PriceSpecification',
           valueAddedTaxIncluded: false,
