@@ -268,22 +268,109 @@ test('CONTROL: the key scan really does find those keys when they are planted', 
 });
 
 /**
+ * The facts that now have exactly ONE home, read FROM that home.
+ *
+ * ── WHY DERIVED, AND WHAT WENT WRONG WHILE THEY WERE LITERALS ───────────────
+ * This list used to spell every value out, and two entries went stale the moment
+ * the contact facts were single-sourced into siteConfig (2026-09-29): it went on
+ * forbidding the SUPERSEDED coordinates — 13.750661 / 100.531117, which by then
+ * existed nowhere in the tree — while the coordinates actually in use,
+ * 13.75021 / 100.53042, were not checked at all. The scan stayed green and
+ * guarded nothing about the live values, which is the worst state for a check to
+ * be in: it reads as coverage.
+ *
+ * So each of these is read from siteConfig. A future ruling that moves a
+ * coordinate, the map link, the building spelling or the tax ID drags this scan
+ * along in the same commit, without anyone having to remember it exists.
+ */
+const SINGLE_SOURCED_FORBIDDEN = [
+  siteConfig.taxId,
+  siteConfig.mapLink,
+  // The host on its own, so a restatement that rebuilt the link differently is
+  // still caught. Parsed rather than typed — no second spelling of it here.
+  new URL(siteConfig.mapLink).host,
+  String(siteConfig.geo.latitude),
+  String(siteConfig.geo.longitude),
+  siteConfig.buildingTh,
+  siteConfig.addressStreetTh,
+  ...siteConfig.addressDisplayTh,
+];
+
+/**
+ * Facts siteConfig does NOT hold — the phones, the three mailboxes, the opening
+ * hours and the two social hosts — plus two deliberately SHORT Thai fragments.
+ *
+ * THE FRAGMENTS ARE NOT REDUNDANT with the full address lines above. This scan is
+ * a substring test, so forbidding a whole line only catches a graph that restates
+ * the whole line; `เอเวอร์กรีน` and `ราชเทวี` catch one that restates just the
+ * building or just the district, which is the likelier way a fact creeps back.
+ */
+const LITERAL_FORBIDDEN = [
+  '10400', '+6622194304', '02-219-4304', '086-322-2423',
+  'training@9expert.co.th', 'instructor@9expert.co.th', 'sponsor@9expert.co.th',
+  'เอเวอร์กรีน', 'ราชเทวี', '08:00', '17:00', 'line.me', 'tiktok.com',
+];
+
+const FORBIDDEN = [...SINGLE_SOURCED_FORBIDDEN, ...LITERAL_FORBIDDEN];
+
+/**
  * The same claim from the other direction: no VALUE from the live contact
  * details may appear either. A fact can be restated under an unexpected key name
  * and the key scan above would miss it.
  */
 test('no live contact VALUE appears anywhere in either graph', () => {
-  const forbidden = [
-    '10400', '+6622194304', '02-219-4304', '086-322-2423',
-    'training@9expert.co.th', 'instructor@9expert.co.th', 'sponsor@9expert.co.th',
-    '0105548019065', 'เอเวอร์กรีน', 'ราชเทวี', 'maps.app.goo.gl',
-    '13.750661', '100.531117', '08:00', '17:00', 'line.me', 'tiktok.com',
-  ];
   for (const { label, build } of PAGES) {
     const serialised = JSON.stringify(build());
-    for (const value of forbidden) {
+    for (const value of FORBIDDEN) {
       assert.ok(!serialised.includes(value), `${label}: leaked contact value ${value}`);
     }
+  }
+});
+
+/**
+ * CONTROL: the scan checks TODAY'S values.
+ *
+ * Plants the live coordinate in a graph-shaped object and requires the list to
+ * catch it. This is the assertion the stale list could not have passed: before
+ * the derivation above, `13.75021` was absent from the forbidden values, so a
+ * graph restating the current position sailed through while the check reported
+ * success.
+ *
+ * The second half pins that the staleness is gone rather than merely papered
+ * over — the superseded pair must no longer be in the list at all, or the scan
+ * is still partly spending its assertions on values nothing can emit.
+ */
+test('CONTROL: a graph carrying the CURRENT coordinates FAILS the scan', () => {
+  const planted = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'ContactPage',
+        geo: { latitude: siteConfig.geo.latitude, longitude: siteConfig.geo.longitude },
+        hasMap: siteConfig.mapLink,
+        taxID: siteConfig.taxId,
+      },
+    ],
+  });
+  const caught = FORBIDDEN.filter((v) => planted.includes(v));
+
+  for (const value of [
+    String(siteConfig.geo.latitude),
+    String(siteConfig.geo.longitude),
+    siteConfig.mapLink,
+    siteConfig.taxId,
+  ]) {
+    assert.ok(
+      caught.includes(value),
+      `the live value ${value} was NOT caught — the scan is not checking today's facts`
+    );
+  }
+
+  for (const superseded of ['13.750661', '100.531117']) {
+    assert.ok(
+      !FORBIDDEN.includes(superseded),
+      `${superseded} is superseded and exists nowhere — forbidding it spends an assertion on nothing`
+    );
   }
 });
 
