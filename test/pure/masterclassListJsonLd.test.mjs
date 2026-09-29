@@ -174,7 +174,7 @@ test('the title SEGMENT does not itself contain the brand', () => {
 });
 
 /**
- * THE DETAIL ROUTE'S NOT-FOUND BRANCH READS THE SAME SEGMENT.
+ * BOTH OF THE DETAIL ROUTE'S TITLES READ THE SAME SEGMENT.
  *
  * ── WHY THIS TEST IS HERE AND WHY IT IS A SOURCE SCAN ───────────────────────
  * generateMetadata is not invocable from this tier — it awaits
@@ -183,41 +183,47 @@ test('the title SEGMENT does not itself contain the brand', () => {
  * does. Same split, same stated limitation.
  *
  * It lives in THIS file rather than beside the detail route's own tests because
- * the claim is about MASTERCLASS_TITLE having one spelling: /masterclass's
- * metadata.title, CollectionPage.name and the detail route's not-found title
- * are three consumers of one constant, and a test that only watched two of them
- * would go green on the third drifting back to a literal.
+ * the claim is about MASTERCLASS_TITLE having ONE spelling. Four consumers now:
+ * /masterclass's metadata.title, CollectionPage.name, and the detail route's
+ * two branches.
  *
- * ── WHAT IS NOT CLAIMED, MEASURED RATHER THAN ASSUMED ───────────────────────
- * That this branch RENDERS. It does not: curl'd against a production build, a
- * missing slug serves 404 with the ROOT layout's default title, because Next
- * discards a route's generateMetadata when the segment calls notFound(). The
- * doubled brand this removes was latent, never shipped. The value is still
- * worth pinning — it is what a segment-level not-found.jsx would read, and it
- * is the nearest thing a future author copies from.
+ * ── WHY THE SCAN IS WHOLE-FILE, WRITTEN THE HARD WAY ───────────────────────
+ * It was scoped to a single statement when it was written, with a comment
+ * explaining that the found-course title two lines below carried the same
+ * doubled brand and was out of that round's scope. The comment was accurate and
+ * the test was still the wrong shape: a guard narrowed to the instance someone
+ * already noticed cannot catch the one they did not, and the live defect sat
+ * directly under it for a round. The scan is now over the whole route and the
+ * assertion is "the brand is not spelled here AT ALL".
+ *
+ * ── THE TWO BRANCHES WERE NOT EQUALLY SERIOUS, AND THAT IS RECORDED ───────
+ * The not-found branch never renders: Next discards a route's generateMetadata
+ * when the segment calls notFound(), so a missing slug serves the ROOT layout's
+ * default title. Its doubled brand was latent. The FOUND-course branch shipped,
+ * on every published masterclass — curl'd on a production build, the served
+ * title read
+ *     Claude AI for Data Analyst | Masterclass — 9Expert Training | 9Expert Training
+ * and now reads
+ *     Claude AI for Data Analyst | Masterclass | 9Expert Training
  */
-test('the masterclass detail not-found title is the shared segment, not a branded literal', () => {
+test('neither masterclass detail title carries the brand — both read the shared segment', () => {
   const { code, withImports } = readSource("src/app/(public)/masterclass/[slug]/page.jsx");
 
-  // 1. the not-found branch's own branded literal is gone from the CODE.
-  //    Comments are stripped, so the docblock explaining the removal cannot
-  //    satisfy this.
+  // 1. THE BRAND IS NOT SPELLED ANYWHERE IN THE ROUTE'S CODE — whole file, not
+  //    one statement. Comments are stripped, so the docblocks that quote the
+  //    old strings in order to explain their removal cannot satisfy this.
   //
-  //    SCOPED TO THAT ONE STATEMENT, NOT TO THE WHOLE FILE, and the difference
-  //    is a finding rather than a convenience: line 83 still reads
-  //        const title = `${course.title_th} | Masterclass — 9Expert Training`;
-  //    which the root template turns into
-  //        <course> | Masterclass — 9Expert Training | 9Expert Training
-  //    on every masterclass detail page — the SAME doubling, and unlike this
-  //    branch it really is served. It is deliberately not fixed in this round:
-  //    the round named the not-found title, that title is a different string
-  //    with a different shape (it interpolates the course), and changing what
-  //    two live pages put in their <title> is its own decision. A whole-file
-  //    scan here would have to be weakened or would fail on that line, and
-  //    either way it would bury the finding instead of stating it.
+  //    The route has no legitimate reason to spell the brand: the root
+  //    template appends it to metadata.title, and shareTitle composes it from
+  //    siteConfig.name for the share cards. So ANY occurrence is a failure,
+  //    which is the assertion a single-statement scan could not make.
   assert.ok(
-    !code.includes("const title = 'Masterclass — 9Expert Training';"),
-    'the branded literal is back — the root template would append the brand again'
+    !code.includes('Masterclass — 9Expert Training'),
+    'a branded title literal is back — the root template would append the brand again'
+  );
+  assert.ok(
+    !code.includes(siteConfig.name),
+    'the route spells the brand literally; it must come from siteConfig.name'
   );
 
   // 2. and the segment comes from this module, not from a second spelling.
@@ -229,13 +235,35 @@ test('the masterclass detail not-found title is the shared segment, not a brande
     withImports.includes("import { MASTERCLASS_TITLE } from '@/lib/seo/masterclassListJsonLd'"),
     'the route no longer imports the shared title constant'
   );
-  assert.ok(code.includes('const title = MASTERCLASS_TITLE;'), 'metadata.title is not the shared segment');
+  //    Both branches' metadata.title, each reading the segment.
+  assert.ok(
+    code.includes('const title = MASTERCLASS_TITLE;'),
+    'the not-found metadata.title is not the shared segment'
+  );
+  assert.ok(
+    code.includes('const title = `${course.title_th} | ${MASTERCLASS_TITLE}`;'),
+    'the found-course metadata.title is not built from the shared segment'
+  );
 
-  // 3. the share titles are the COMPOSED form. No template applies to og or
-  //    twitter, so the bare segment there would drop the brand from the card.
+  // 3. the share titles are the COMPOSED form, in BOTH branches. No template
+  //    applies to og or twitter — the root sets openGraph.title as a plain
+  //    string, so a page-level one replaces it outright, and an un-composed
+  //    value would ship a card with no brand on it at all.
   assert.ok(
     code.includes('const shareTitle = `${MASTERCLASS_TITLE} | ${siteConfig.name}`;'),
-    'the share title is not composed from the segment and the brand'
+    'the not-found share title is not composed from the segment and the brand'
+  );
+  assert.ok(
+    code.includes('const shareTitle = `${title} | ${siteConfig.name}`;'),
+    'the found-course share title is not composed from its title and the brand'
+  );
+  // and og/twitter really CONSUME shareTitle — two keys in each of two
+  // branches. Without this the composition above could be dead code while the
+  // cards still shipped the bare, brandless segment.
+  assert.equal(
+    (code.match(/title: shareTitle/g) || []).length,
+    4,
+    'og:title and twitter:title, in both branches, must read shareTitle'
   );
 
   // 4. CONTROL: the scan really read the route, and really sees strings in it.
