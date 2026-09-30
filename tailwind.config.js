@@ -245,7 +245,9 @@ module.exports = {
       //         page chrome cannot cover it, below the whole overlay tier so
       //         anything the user opened deliberately still wins. Frees this
       //         rung again when the preview wrapper is deleted.
-      //   80  reserved for future chrome
+      //   80  SkipLink, while focused  (above the header it is drawn over and
+      //       the consent banner; below the overlay tier, so an open modal
+      //       still wins)
       // Overlay tier — must cover all chrome; kept as arbitrary values so the
       // ladder above stays readable, low → high:
       //   9000  SitePopup                (promotional image overlay)

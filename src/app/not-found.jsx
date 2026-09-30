@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { SkipLink } from '@/components/layout/SkipLink';
 import { StaticHeader } from '@/components/layout/StaticHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 
@@ -15,8 +16,15 @@ import { PublicFooter } from '@/components/layout/PublicFooter';
 export default function NotFound() {
   return (
     <>
+      {/* FIRST — see SkipLink. The 404 replaces the (public) layout, so it
+          carries its own copy, and its <main> the id + tabIndex it targets. */}
+      <SkipLink />
       <StaticHeader />
-      <main className="mx-auto max-w-[680px] px-4 py-24 text-center lg:py-32">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="mx-auto max-w-[680px] px-4 py-24 text-center outline-none focus-visible:ring-0 focus-visible:ring-offset-0 lg:py-32"
+      >
         <p className="text-xs font-semibold uppercase tracking-wider text-9e-action">
           404 — Page not found
         </p>

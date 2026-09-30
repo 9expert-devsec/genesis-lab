@@ -67,11 +67,17 @@
  */
 export function formatThaiAddress(address) {
   const raw = address ?? {};
+  // EVERY FIELD IS READ BY NAME — NO `...raw`. The masterclass senders pass a
+  // hydrated Mongoose subdocument, whose fields are prototype getters and whose
+  // own keys are `$__`, `_doc` & co. A spread copied none of them, so the email
+  // lost addressLine and postalCode (the two fields not re-read below) and
+  // mailed "ตำบล… อำเภอ… จังหวัด…". Guard: test/pure/thaiAddressHydratedDoc.
   const a = {
-    ...raw,
+    addressLine: raw.addressLine,
     subDistrict: stripPrefix(raw.subDistrict, SUB_DISTRICT_PREFIXES),
     district:    stripPrefix(raw.district, DISTRICT_PREFIXES),
     province:    stripPrefix(raw.province, PROVINCE_PREFIXES),
+    postalCode:  raw.postalCode,
   };
   const province = a.province || '';
   const isBangkok = province.startsWith('กรุงเทพ');
