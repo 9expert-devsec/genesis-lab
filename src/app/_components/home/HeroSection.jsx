@@ -42,6 +42,11 @@ import { HERO_OVERLAY_SENTINEL_ID } from "@/lib/heroOverlay";
  * ── COLOURS ARE NOT THEME-DEPENDENT ─────────────────────────────────────────
  * The artwork is permanently dark in both themes, so the text and buttons are
  * the dark-on-image treatment unconditionally. No `dark:` variants here.
+ *
+ * `bg-9e-navy` on the section is the image's FALLBACK, not decoration: the
+ * header's overlay text is white, and without a declared background colour a
+ * failed image load leaves it white-on-white (WCAG F24) — which is also what a
+ * DOM-walking contrast checker computes. The image covers it completely.
  */
 
 const HERO_DESCRIPTION =
@@ -49,7 +54,7 @@ const HERO_DESCRIPTION =
 
 export function HeroSection() {
   return (
-    <section className="relative w-full -mt-[81px]  
+    <section className="relative w-full -mt-[81px] bg-9e-navy
     min-h-dvh min-[1537px]:h-[601px] min-[1537px]:min-h-0 overflow-hidden min-[1400px]:portrait:h-[601px] min-[1400px]:portrait:min-h-0">
       {/* 2545 จอกลาง - 1425 จอแนวตั้ง */}
       {/* THE LCP ELEMENT, and it is FULL-BLEED at every width — no cap, no

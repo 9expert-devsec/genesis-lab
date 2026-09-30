@@ -151,120 +151,135 @@ export default async function HomePage() {
   return (
     <>
       <TopNotificationBar bars={bars} />
-      {/* `overlay` is opt-in and Home is the ONLY route that passes it: the
-          header is shared by every public page, and every other one must keep
-          its opaque per-theme treatment. It goes transparent while the hero
-          below is under it and switches back at that hero's bottom edge — see
-          src/lib/heroOverlay.js. */}
-      <PublicHeader overlay />
+      {/* ── THE NAVY WRAPPER IS FOR CONTRAST, AND PAINTS NOTHING VISIBLE ─────
+          While the header is transparent its text is white, and its nearest
+          OPAQUE ancestor used to be <body> — white. A contrast checker that
+          walks ancestors (and a visitor whose hero image failed to load) got
+          white-on-white. This div makes that ancestor navy. Nothing of it
+          shows: the hero pulls itself up under the header and paints over it,
+          <main> paints --page-bg over the rest, and the footer is opaque.
 
-      {/* The site's organisation entity — EducationalOrganization + WebSite +
-          WebPage + Place, cross-linked by @id. Inlined here (vs. layout) so it
-          only appears on the home page, where the Organization claim is
-          canonical. The graph itself lives in lib/seo/homeJsonLd.js so it can be
-          invoked by a test rather than only scanned as source text.
+          THE FOOTER AND POPUP ARE INSIDE ON PURPOSE. A sticky header is held
+          within its parent; with the wrapper ending at </main>, the header
+          scrolled off at the page bottom whenever the footer is taller than
+          the viewport (measured −507px at 390×844). Containing everything
+          after the top bar keeps the sticky range what it was under <body>. */}
+      <div className="bg-9e-navy">
+        {/* `overlay` is opt-in and Home is the ONLY route that passes it: the
+            header is shared by every public page, and every other one must keep
+            its opaque per-theme treatment. It goes transparent while the hero
+            below is under it and switches back at that hero's bottom edge — see
+            src/lib/heroOverlay.js. */}
+        <PublicHeader overlay />
 
-          POSITION IS LOAD-BEARING: this sits OUTSIDE <main>, between the header
-          and the main landmark, exactly where the previous block sat. The
-          element structure inside <main> is asserted by fs/heroOverlayOptIn and
-          render/homeHeroSection — do not move this inside it. */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildHomeJsonLd()) }}
-      />
+        {/* The site's organisation entity — EducationalOrganization + WebSite +
+            WebPage + Place, cross-linked by @id. Inlined here (vs. layout) so it
+            only appears on the home page, where the Organization claim is
+            canonical. The graph itself lives in lib/seo/homeJsonLd.js so it can be
+            invoked by a test rather than only scanned as source text.
 
-      <main id="main">
-        {/* Visually hidden H1 — present in the DOM for crawlers and
-            screen readers, takes up zero visual space. Uses the
-            clip-rect pattern instead of font-size:0 because some
-            assistive tech skips zero-sized text. Must be the first
-            heading in DOM order so Ahrefs / Google see H1 before any
-            section H2/H3. */}
-        <h1
-          aria-label="9Expert Training อบรมคอร์สเทคโนโลยีชั้นนำ AI Data Automation Power BI Excel ด้วยผู้เชี่ยวชาญตัวจริง"
-          className="absolute -m-px h-px w-px overflow-hidden whitespace-nowrap border-0 p-0"
-          style={{ clip: 'rect(0,0,0,0)' }}
-        >
-          9Expert Training อบรมคอร์สเทคโนโลยีชั้นนำ AI Data Automation Power BI Excel ด้วยผู้เชี่ยวชาญตัวจริง
-        </h1>
-
-        {/* FIRST thing in <main> after the hidden H1. It pulls itself up under
-            the sticky header (see HeroSection) — the banner carousel below is
-            untouched, including its banners.length fallback. */}
-        <HeroSection />
-
-        {/* ── THE BANNER SLIDE IS SWAPPED OUT, NOT REMOVED ──────────────────
-            Feature Content takes the slot the Banner Slide held. Reverting is
-            deleting this comment and un-commenting the ternary — nothing else
-            moved:
-              • HeroBannerCarousel and HeroBanner are untouched and still
-                imported above;
-              • `banners` is still destructured from getLandingData() and the
-                landing cache still syncs it, so the data path is warm and the
-                admin's banner edits keep flowing;
-              • the `banners.length > 0` fallback to <HeroBanner /> is intact.
-            The ternary is preserved verbatim so the revert is a one-line
-            decision by a reviewer, not a reconstruction. */}
-        {/* {banners.length > 0 ? (
-          <HeroBannerCarousel banners={banners} />
-        ) : (
-          <HeroBanner />
-        )} */}
-
-        {/* Fed by the SAME `banners` array the carousel above used to take —
-            the landing_cache snapshot, unchanged. The Banner shape stops at
-            src/lib/home/featureContentFromBanners.js; this call site just
-            hands the payload across. */}
-        <FeatureContentSection banners={banners} />
-
-        <ProgramSelector
-          programs={programs}
-          skills={skills}
-          programSlugs={programSlugs}
-          skillSlugs={skillSlugs}
-          // False only when getLandingData could not serve a snapshot at all,
-          // which is what separates "nothing here yet" from "could not load".
-          snapshotAvailable={landing._meta?.snapshotAvailable !== false}
+            POSITION IS LOAD-BEARING: this sits OUTSIDE <main>, between the header
+            and the main landmark, exactly where the previous block sat. The
+            element structure inside <main> is asserted by fs/heroOverlayOptIn and
+            render/homeHeroSection — do not move this inside it. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(buildHomeJsonLd()) }}
         />
 
-        {/* `skillSlugs` is the SAME map already fetched above for the
-            Program/Skill selector — one getNavMenuData() call feeds both. The
-            course cards' skill capsules link through it; see
-            lib/skillCapsuleHref. */}
-        <NewCoursesSection
-          courses={newCoursesWithSchedules}
-          currentYear={siteCurrentYear()}
-          skillSlugs={skillSlugs}
+        <main id="main" className="bg-[var(--page-bg)]">
+          {/* Visually hidden H1 — present in the DOM for crawlers and
+              screen readers, takes up zero visual space. Uses the
+              clip-rect pattern instead of font-size:0 because some
+              assistive tech skips zero-sized text. Must be the first
+              heading in DOM order so Ahrefs / Google see H1 before any
+              section H2/H3. */}
+          <h1
+            aria-label="9Expert Training อบรมคอร์สเทคโนโลยีชั้นนำ AI Data Automation Power BI Excel ด้วยผู้เชี่ยวชาญตัวจริง"
+            className="absolute -m-px h-px w-px overflow-hidden whitespace-nowrap border-0 p-0"
+            style={{ clip: 'rect(0,0,0,0)' }}
+          >
+            9Expert Training อบรมคอร์สเทคโนโลยีชั้นนำ AI Data Automation Power BI Excel ด้วยผู้เชี่ยวชาญตัวจริง
+          </h1>
+
+          {/* FIRST thing in <main> after the hidden H1. It pulls itself up under
+              the sticky header (see HeroSection) — the banner carousel below is
+              untouched, including its banners.length fallback. */}
+          <HeroSection />
+
+          {/* ── THE BANNER SLIDE IS SWAPPED OUT, NOT REMOVED ──────────────────
+              Feature Content takes the slot the Banner Slide held. Reverting is
+              deleting this comment and un-commenting the ternary — nothing else
+              moved:
+                • HeroBannerCarousel and HeroBanner are untouched and still
+                  imported above;
+                • `banners` is still destructured from getLandingData() and the
+                  landing cache still syncs it, so the data path is warm and the
+                  admin's banner edits keep flowing;
+                • the `banners.length > 0` fallback to <HeroBanner /> is intact.
+              The ternary is preserved verbatim so the revert is a one-line
+              decision by a reviewer, not a reconstruction. */}
+          {/* {banners.length > 0 ? (
+            <HeroBannerCarousel banners={banners} />
+          ) : (
+            <HeroBanner />
+          )} */}
+
+          {/* Fed by the SAME `banners` array the carousel above used to take —
+              the landing_cache snapshot, unchanged. The Banner shape stops at
+              src/lib/home/featureContentFromBanners.js; this call site just
+              hands the payload across. */}
+          <FeatureContentSection banners={banners} />
+
+          <ProgramSelector
+            programs={programs}
+            skills={skills}
+            programSlugs={programSlugs}
+            skillSlugs={skillSlugs}
+            // False only when getLandingData could not serve a snapshot at all,
+            // which is what separates "nothing here yet" from "could not load".
+            snapshotAvailable={landing._meta?.snapshotAvailable !== false}
+          />
+
+          {/* `skillSlugs` is the SAME map already fetched above for the
+              Program/Skill selector — one getNavMenuData() call feeds both. The
+              course cards' skill capsules link through it; see
+              lib/skillCapsuleHref. */}
+          <NewCoursesSection
+            courses={newCoursesWithSchedules}
+            currentYear={siteCurrentYear()}
+            skillSlugs={skillSlugs}
+          />
+
+          <OnlineCoursesSection
+            courses={onlineCoursesForSection}
+            skillSlugs={skillSlugs}
+          />
+
+          {/* ROUND HS-B: moved here from right after FeatureContentSection —
+              was rendering 3rd, ahead of ProgramSelector and the course
+              sections, which didn't match the intended order. Position only;
+              its background (the blue brand-gradient band) is unchanged. */}
+          <ServicesSection />
+
+          {/* <InhouseCTA /> */}
+
+          <ClientLogosSection logos={clientLogos} />
+
+          <TestimonialStats reviews={reviews} />
+
+          <BlogSection
+          articles={featuredArticles}
+          programNames={articleProgramNames}
+          skillNames={articleSkillNames}
         />
 
-        <OnlineCoursesSection
-          courses={onlineCoursesForSection}
-          skillSlugs={skillSlugs}
-        />
+          <InstructorQuote />
+        </main>
 
-        {/* ROUND HS-B: moved here from right after FeatureContentSection —
-            was rendering 3rd, ahead of ProgramSelector and the course
-            sections, which didn't match the intended order. Position only;
-            its background (the blue brand-gradient band) is unchanged. */}
-        <ServicesSection />
-
-        {/* <InhouseCTA /> */}
-
-        <ClientLogosSection logos={clientLogos} />
-
-        <TestimonialStats reviews={reviews} />
-
-        <BlogSection
-        articles={featuredArticles}
-        programNames={articleProgramNames}
-        skillNames={articleSkillNames}
-      />
-
-        <InstructorQuote />
-      </main>
-
-      <PublicFooter />
-      <SitePopup />
+        <PublicFooter />
+        <SitePopup />
+      </div>
       {/* The floating dock (back-to-top + chat launcher) is NOT mounted here.
           It is mounted once from src/app/layout.jsx — see the note there. This
           page sits outside the (public) group, so it used to carry its own
