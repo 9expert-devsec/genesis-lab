@@ -547,6 +547,7 @@ export function MasterclassRegistrationsClient({
                       onClose={() => setOpenMenuId(null)}
                       onDelete={() => { setOpenMenuId(null); handleDelete(reg._id); }}
                       busy={updatingId === reg._id}
+                      listQuery={listQuery}
                     />
                   </td>
                 </tr>
@@ -572,7 +573,7 @@ export function MasterclassRegistrationsClient({
 
 // ── Sub-components ─────────────────────────────────────────────────
 
-function RowActionsMenu({ reg, isOpen, onToggle, onClose, onDelete, busy }) {
+function RowActionsMenu({ reg, isOpen, onToggle, onClose, onDelete, busy, listQuery = '' }) {
   const btnRef  = useRef(null);
   const menuRef = useRef(null);
   const [coords, setCoords] = useState(null); // { top, right } in viewport space
