@@ -1,4 +1,5 @@
 // src/app/page.jsx
+import { SkipLink } from "@/components/layout/SkipLink";
 import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { TopNotificationBar } from "@/components/notifications/TopNotificationBar";
@@ -150,6 +151,8 @@ export default async function HomePage() {
 
   return (
     <>
+      {/* FIRST, ahead of the top bar's own link — see SkipLink. */}
+      <SkipLink />
       <TopNotificationBar bars={bars} />
       {/* ── THE NAVY WRAPPER IS FOR CONTRAST, AND PAINTS NOTHING VISIBLE ─────
           While the header is transparent its text is white, and its nearest
@@ -187,7 +190,13 @@ export default async function HomePage() {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(buildHomeJsonLd()) }}
         />
 
-        <main id="main" className="bg-[var(--page-bg)]">
+        {/* tabIndex -1 so the skip link moves focus here; the ring is
+            suppressed so a keyboard jump does not outline the whole page. */}
+        <main
+          id="main"
+          tabIndex={-1}
+          className="bg-[var(--page-bg)] outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+        >
           {/* Visually hidden H1 — present in the DOM for crawlers and
               screen readers, takes up zero visual space. Uses the
               clip-rect pattern instead of font-size:0 because some
