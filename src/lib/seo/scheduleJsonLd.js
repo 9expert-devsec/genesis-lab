@@ -15,13 +15,14 @@
  *     with zero rounds are dropped by joinCourseSchedules. This builder takes
  *     that output as given and narrows no further on status or recency.
  *
- *   · THE MONTH WINDOW — lib/schedule/scheduleFilters' defaultScheduleFilters()
- *     and lib/schedule/monthWindow's windowBetween(). The page opens on a
- *     ROLLING six-month window from the current month
- *     (PUBLIC_SCHEDULE_DEFAULT_MONTHS), and this asks those same functions for
- *     it. Hand-writing "six months from now" here would be the exact defect
- *     monthWindow.js exists to remove — a window that silently meant something
- *     else — wearing a different hat.
+ *   · THE MONTH RANGE — lib/schedule/scheduleFilters' defaultScheduleFilters()
+ *     and lib/schedule/monthWindow's windowBetween(). The page opens on the
+ *     FULL range: the current Bangkok month through December of this year, or
+ *     of next year when an eligible round reaches past it. This asks those same
+ *     functions for it and takes the END as an argument, because the end is
+ *     derived from the rounds and only the page has them. Hand-writing the rule
+ *     here would be the exact defect monthWindow.js exists to remove — a window
+ *     that silently meant something else — wearing a different hat.
  *
  *   · WHETHER A ROUND IS IN THAT WINDOW — lib/schedule/monthLanes'
  *     roundInWindow(), which its own docstring calls "THE ONE ANSWER" and which
@@ -252,13 +253,20 @@ export function scheduleGraphRows(joinedRows, upstreamCourses) {
  * @param {string} [opts.siteUrl] origin without a trailing slash. Defaults to
  *   the site's one origin; pass a different one only from a test, which is what
  *   proves the URLs are composed rather than restated.
- * @param {Date} [opts.now] the instant the rolling month window starts from.
- *   Defaults to the current time; passed explicitly by tests so a window that
- *   depends on the clock can be asserted at all.
+ * @param {Date} [opts.now] the instant the month range STARTS from. Defaults to
+ *   the current time; passed explicitly by tests so a range that depends on the
+ *   clock can be asserted at all.
+ * @param {string} [opts.endKey] `YYYY-MM`, the range END — the page's own
+ *   `scheduleWindowEnd` answer, threaded in from schedule/page.jsx so the graph
+ *   and the table describe the same months. Omitted, `defaultScheduleFilters`
+ *   falls back to December of the start's year, which is the rule's floor.
  * @returns {object|null} the `@graph` document, or null when no course has a
- *   round in the window.
+ *   round in the range.
  */
-export function buildScheduleJsonLd(courses, { siteUrl = SITE_URL, now = new Date() } = {}) {
+export function buildScheduleJsonLd(
+  courses,
+  { siteUrl = SITE_URL, now = new Date(), endKey = null } = {}
+) {
   const base = String(siteUrl ?? '').replace(/\/+$/, '');
   const canonicalUrl = `${base}${PATH}`;
 
@@ -270,9 +278,10 @@ export function buildScheduleJsonLd(courses, { siteUrl = SITE_URL, now = new Dat
   // construction, never spelled here.
   const { website: websiteId, organization: organizationId } = homeGraphIds(base);
 
-  // The page's opening filter state, and the window it implies — both from the
+  // The page's opening filter state, and the range it implies — both from the
   // modules the client component uses, so this cannot drift from what renders.
-  const defaults = defaultScheduleFilters(now);
+  // The END arrives as an argument because it is data-derived; see the param doc.
+  const defaults = defaultScheduleFilters(now, endKey);
   const visibleMonths = windowBetween(defaults.monthFrom, defaults.monthTo);
 
   const listItems = [];

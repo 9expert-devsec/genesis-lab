@@ -4,13 +4,9 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
 import { ScheduleBoard } from '@/app/(public)/schedule/_components/ScheduleClient';
-import {
-  PUBLIC_SCHEDULE_DEFAULT_MONTHS,
-  PUBLIC_SCHEDULE_FILTER_HORIZON,
-  rollingWindow,
-} from '@/lib/schedule/monthWindow';
+import { decemberOf, windowBetween } from '@/lib/schedule/monthWindow';
 import { defaultScheduleFilters } from '@/lib/schedule/scheduleFilters';
-import { siteDateParts } from '@/lib/articlePublishTime';
+import { siteDateParts, siteMonthKey } from '@/lib/articlePublishTime';
 
 /**
  * THE FROZEN CELLS ARE OPAQUE IN DARK MODE — every row, both stripes, header.
@@ -36,9 +32,24 @@ import { siteDateParts } from '@/lib/articlePublishTime';
  */
 
 const now = new Date();
-const WINDOW = rollingWindow(now, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
-const OPTIONS = rollingWindow(now, PUBLIC_SCHEDULE_FILTER_HORIZON);
-const DEFAULTS = defaultScheduleFilters(now);
+/**
+ * The month range the page opens on: this month through December of NEXT year —
+ * the rule's longer branch, i.e. an eligible round reaches past this year.
+ *
+ * Pinned to next December rather than left to whatever the live clock implies,
+ * because a range derived from `now` alone is ONE month long every December and
+ * three in October; these fixtures would assert almost nothing for part of the
+ * year. Next December keeps it 13-24 months wide whenever the suite runs.
+ *
+ * `RANGE_END` is exactly what schedule/page.jsx passes down as `monthRangeEnd`.
+ * The default view and the dropdown are the SAME range now, so one list serves
+ * both; `OPTIONS` survives as a separate name only because the prop is.
+ */
+const RANGE_START = siteMonthKey(now);
+const RANGE_END = decemberOf(RANGE_START, 1);
+const WINDOW = windowBetween(RANGE_START, RANGE_END);
+const OPTIONS = WINDOW;
+const DEFAULTS = defaultScheduleFilters(now, RANGE_END);
 const CURRENT_YEAR = siteDateParts(now).year;
 
 const course = (id, name) => ({

@@ -7,16 +7,15 @@ import {
   courseRounds,
 } from '@/app/(public)/schedule/_components/ScheduleClient';
 import {
-  PUBLIC_SCHEDULE_DEFAULT_MONTHS,
-  PUBLIC_SCHEDULE_FILTER_HORIZON,
+  MOBILE_ROUND_COLLAPSE_THRESHOLD,
   addMonths,
+  decemberOf,
   monthLabel,
   monthLabelWithYear,
-  rollingWindow,
   windowBetween,
 } from '@/lib/schedule/monthWindow';
 import { defaultScheduleFilters } from '@/lib/schedule/scheduleFilters';
-import { siteDateParts } from '@/lib/articlePublishTime';
+import { siteDateParts, siteMonthKey } from '@/lib/articlePublishTime';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { scrollTrackInset } from '@/lib/schedule/scheduleTableLayout';
 
@@ -45,9 +44,23 @@ import { scrollTrackInset } from '@/lib/schedule/scheduleTableLayout';
  */
 
 const now = new Date();
-const WINDOW = rollingWindow(now, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
-const OPTIONS = rollingWindow(now, PUBLIC_SCHEDULE_FILTER_HORIZON);
-const DEFAULTS = defaultScheduleFilters(now);
+/**
+ * The month range the page opens on: this month through December of NEXT year —
+ * the rule's longer branch, i.e. an eligible round reaches past this year.
+ *
+ * Pinned to next December rather than left to whatever the live clock implies,
+ * because a range derived from `now` alone is ONE month long every December,
+ * and `manyRounds` below spreads its rounds across `WINDOW` — a one-month
+ * window would stack ten rounds into one month and the collapse tests would be
+ * measuring something else. Next December keeps it 13-24 months wide.
+ *
+ * `RANGE_END` is exactly what schedule/page.jsx passes down as `monthRangeEnd`.
+ */
+const RANGE_START = siteMonthKey(now);
+const RANGE_END = decemberOf(RANGE_START, 1);
+const WINDOW = windowBetween(RANGE_START, RANGE_END);
+const OPTIONS = WINDOW;
+const DEFAULTS = defaultScheduleFilters(now, RANGE_END);
 
 // The year the card measures `showYear: 'auto'` against, in Asia/Bangkok — the
 // same derivation the page itself does, off the same instant WINDOW came from.
@@ -515,16 +528,21 @@ const renderCourse = (course, overrides = {}) =>
   );
 
 test('a card at the threshold shows every round and no toggle', () => {
-  const html = renderCourse(manyRounds(PUBLIC_SCHEDULE_DEFAULT_MONTHS));
-  assert.equal(roundIds(cardRegion(html)).length, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
+  // The threshold is a ROUND COUNT and reads as one now. It used to be
+  // PUBLIC_SCHEDULE_DEFAULT_MONTHS — a MONTH count that happened to equal it
+  // while the default window was six months long. The window is a calendar
+  // range now and can be 24 months, so the two had to come apart; the number
+  // itself is unchanged at six, and so is every assertion below.
+  const html = renderCourse(manyRounds(MOBILE_ROUND_COLLAPSE_THRESHOLD));
+  assert.equal(roundIds(cardRegion(html)).length, MOBILE_ROUND_COLLAPSE_THRESHOLD);
   assert.equal(html.includes('ดูรอบทั้งหมด'), false, 'no toggle is warranted yet');
 });
 
 test('a longer card collapses to the threshold behind ดูรอบทั้งหมด (N)', () => {
-  const total = PUBLIC_SCHEDULE_DEFAULT_MONTHS + 4;
+  const total = MOBILE_ROUND_COLLAPSE_THRESHOLD + 4;
   const html = renderCourse(manyRounds(total));
   const shown = roundIds(cardRegion(html));
-  assert.equal(shown.length, PUBLIC_SCHEDULE_DEFAULT_MONTHS, 'collapsed to the threshold');
+  assert.equal(shown.length, MOBILE_ROUND_COLLAPSE_THRESHOLD, 'collapsed to the threshold');
   assert.ok(
     html.includes(`ดูรอบทั้งหมด (${total})`),
     'the toggle must name the FULL count, not the hidden remainder',
@@ -534,7 +552,7 @@ test('a longer card collapses to the threshold behind ดูรอบทั้�
 });
 
 test('the collapse toggle is a real disclosure, not a link', () => {
-  const html = renderCourse(manyRounds(PUBLIC_SCHEDULE_DEFAULT_MONTHS + 4));
+  const html = renderCourse(manyRounds(MOBILE_ROUND_COLLAPSE_THRESHOLD + 4));
   assert.match(html, /aria-expanded="false" aria-controls="[^"]+"/, 'the toggle must be a disclosure button');
 });
 
@@ -555,7 +573,7 @@ test('both layouts are in the DOM at once, and nothing keys off a hand-written i
    * twice the moment a second course renders, and `aria-controls` would then
    * point at whichever one the browser found first.
    */
-  const long = manyRounds(PUBLIC_SCHEDULE_DEFAULT_MONTHS + 4);
+  const long = manyRounds(MOBILE_ROUND_COLLAPSE_THRESHOLD + 4);
   const html = renderToStaticMarkup(
     createElement(ScheduleBoard, {
       courses: [long, { ...long, _id: 'c4', course_id: 'POWER-BI-2' }],

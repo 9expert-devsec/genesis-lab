@@ -31,12 +31,11 @@ import {
   resolveScheduleBadge,
 } from "@/lib/scheduleStatus";
 import {
-  PUBLIC_SCHEDULE_DEFAULT_MONTHS,
-  PUBLIC_SCHEDULE_FILTER_HORIZON,
+  MOBILE_ROUND_COLLAPSE_THRESHOLD,
+  decemberOf,
   monthColumns,
   monthLabel,
   monthLabelWithYear,
-  rollingWindow,
   windowBetween,
 } from "@/lib/schedule/monthWindow";
 import { formatRoundDays } from "@/lib/schedule/roundDateLabel";
@@ -99,19 +98,21 @@ const TYPE_LEGEND = [
 /**
  * How many rounds a mobile card lists before collapsing behind ดูรอบทั้งหมด.
  *
- * Tied to the DEFAULT WINDOW LENGTH rather than picked as a round number,
- * because that is the thing which actually makes the list long: a course
- * running one round a month fills exactly `PUBLIC_SCHEDULE_DEFAULT_MONTHS` rows
- * in the default view, so the untouched page never shows a toggle at all. The
- * toggle appears once the visitor widens the window (the filter horizon is 18
- * months) or once a course runs more than one round in a month — i.e. exactly
- * when a card would otherwise become a scroll of its own.
+ * SIX, and no longer derived from the month window. It used to be
+ * `PUBLIC_SCHEDULE_DEFAULT_MONTHS`, on the reasoning that a course running one
+ * round a month fills exactly a default window's worth of rows — sound while
+ * the default window WAS six months. The default view is now the whole calendar
+ * range, which can be 24 months wide, so deriving from it would let a card list
+ * two dozen rounds before offering the toggle: precisely the scroll the
+ * collapse exists to prevent.
  *
- * Deriving it also means the two numbers cannot drift: raise the default window
- * to 9 and the cards keep showing a full default window's worth of rounds
- * without anyone remembering to come here.
+ * The literal lives in lib/schedule/monthWindow, where the retired constant it
+ * replaces lived, so a reader looking for the old name finds the reasoning
+ * rather than an absence. It is a ROUND COUNT, not a month count.
+ *
+ * BEHAVIOUR IS UNCHANGED: six before, six now.
  */
-const ROUND_COLLAPSE_THRESHOLD = PUBLIC_SCHEDULE_DEFAULT_MONTHS;
+const ROUND_COLLAPSE_THRESHOLD = MOBILE_ROUND_COLLAPSE_THRESHOLD;
 
 /** A schedule's valid dates, ascending. Used to ORDER rounds, not to label them. */
 function sortedScheduleDates(scheduleItem) {
@@ -230,17 +231,31 @@ export function courseRounds(schedules, visibleMonths, matches) {
  * the sheet from props alone, so "the sheet shows something the list does not
  * yet reflect" is not a state it can represent.
  *
- * The clock is read ONCE, into `now`, and the FOUR things derived from it — the
- * initial window, the reset target, the dropdown horizon, and now the year the
- * mobile card measures "is this round in the current year" against — all come
- * off that single instant. Previously three separate `new Date()` calls agreed
- * only because nothing crossed a month boundary between them.
+ * The clock is read ONCE, into `now`, and everything derived from it — the
+ * range start, the initial filter state, the reset target, the dropdown
+ * options, the year-end clamp, and the year the mobile card measures "is this
+ * round in the current year" against — all come off that single instant.
+ * Previously three separate `new Date()` calls agreed only because nothing
+ * crossed a month boundary between them.
+ *
+ * ── THE RANGE END COMES FROM THE SERVER, AND ONLY THE END ───────────────────
+ * `monthRangeEnd` is a `YYYY-MM` prop: December of this year, or of next year
+ * when an eligible round reaches past it (schedule/page.jsx decides, from the
+ * rounds it already holds — see monthWindow's `scheduleWindowEnd`). It cannot
+ * be computed here, because the rule is about the DATA and the client is handed
+ * only the rows it renders.
+ *
+ * The START stays a client-side clock read, so the two halves of the range come
+ * from different instants on purpose: the start must follow the visitor's
+ * calendar, the end must follow the published rounds. `rangeEnd` below is where
+ * those two are reconciled.
  */
 export function ScheduleClient({
   courses,
   programs,
   schedulePDF,
   earlyBirdMap = {},
+  monthRangeEnd = null,
 }) {
   const [now] = useState(() => new Date());
 
@@ -266,28 +281,66 @@ export function ScheduleClient({
   const currentYear = useMemo(() => siteDateParts(now).year, [now]);
 
   /**
-   * The defaults are STATE, not a memo, for one reason: ล้างตัวกรอง has to
-   * restore the window the page opened with, and the "N active" badge has to
-   * measure against that same window. A memo recomputed from a live clock would
-   * make a page left open across the 1st of the month reset to a window it never
-   * showed, and light its own badge with no user action.
+   * THE RANGE START — the current month in BANGKOK, off the one mount-time
+   * clock read. Not `monthKey(now)`: Vercel is UTC, so for the last seven hours
+   * of a Bangkok month those are different months and the server-rendered
+   * option list would not match the one hydration recomputes. Same instant and
+   * same reasoning as `currentYear` above.
    */
-  const [defaults] = useState(() => defaultScheduleFilters(now));
+  const rangeStart = useMemo(() => siteMonthKey(now), [now]);
+
+  /**
+   * THE RANGE END — the server's answer, clamped UP to the client's own
+   * year-end.
+   *
+   * `monthRangeEnd` was computed when the HTML was built (schedule/page.jsx),
+   * and this page is ISR-cached for 30 minutes — so it can be served to a
+   * visitor whose calendar has moved on. The case that matters is NEW YEAR: a
+   * page built on 31 December carries an end of `2026-12`, and a visitor
+   * opening it on 1 January would get a range of exactly one month, every
+   * later round dropped from a page that is otherwise correct.
+   *
+   * So the floor is December of the CLIENT's current Bangkok year, and the
+   * effective end is whichever reaches further. The server can only ever extend
+   * the range (to next December, when the data warrants it); it can never
+   * shorten it below the year the visitor is actually in.
+   *
+   * Clamping UP and not down is the deliberate asymmetry: a range that is too
+   * long shows empty columns, which is already normal here and costs a reader
+   * nothing. A range that is too short HIDES ROUNDS, which is the defect this
+   * whole change exists to remove.
+   */
+  const rangeEnd = useMemo(() => {
+    const clientFloor = decemberOf(rangeStart, 0);
+    if (!monthRangeEnd) return clientFloor;
+    return monthRangeEnd < clientFloor ? clientFloor : monthRangeEnd;
+  }, [monthRangeEnd, rangeStart]);
+
+  /**
+   * The defaults are STATE, not a memo, for one reason: ล้างตัวกรอง has to
+   * restore the range the page opened with, and the "N active" badge has to
+   * measure against that same range. A memo recomputed from a live clock would
+   * make a page left open across the 1st of the month reset to a range it never
+   * showed, and light its own badge with no user action.
+   *
+   * The defaults are now the FULL range — `monthFrom` is the start and
+   * `monthTo` is the end, so the page opens on everything the dropdowns can
+   * reach. There is no narrower default left that could hide a round the filter
+   * would have found.
+   */
+  const [defaults] = useState(() =>
+    defaultScheduleFilters(now, rangeEnd),
+  );
   const [filters, setFilters] = useState(defaults);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  // What the two month dropdowns offer. A rolling horizon from the same
-  // instant, so it never shrinks as the year goes on — the defect this replaced.
-  //
-  // The START is `siteMonthKey(now)`, i.e. the month in BANGKOK — not
-  // `rollingWindow(now, …)`, which would run the instant through `monthKey`'s
-  // runtime-local getters. Vercel is UTC, so for the last seven hours of a
-  // Bangkok month those are different months and the server-rendered option
-  // list would not match the one hydration recomputes. Same instant, same
-  // reasoning as `currentYear` above.
+  // What the two month dropdowns offer — THE SAME RANGE the defaults span, from
+  // the same two keys. One list, so "what the page opens on" and "what the
+  // filter can reach" are the same set by construction rather than by two
+  // numbers that happened to be ordered correctly.
   const monthOptions = useMemo(
-    () => rollingWindow(siteMonthKey(now), PUBLIC_SCHEDULE_FILTER_HORIZON),
-    [now],
+    () => windowBetween(rangeStart, rangeEnd),
+    [rangeStart, rangeEnd],
   );
 
   const changeFilters = useCallback(

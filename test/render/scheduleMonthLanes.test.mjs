@@ -4,14 +4,13 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ScheduleBoard } from '@/app/(public)/schedule/_components/ScheduleClient';
 import {
-  PUBLIC_SCHEDULE_DEFAULT_MONTHS,
-  PUBLIC_SCHEDULE_FILTER_HORIZON,
   addMonths,
+  decemberOf,
   monthLabel,
-  rollingWindow,
+  windowBetween,
 } from '@/lib/schedule/monthWindow';
 import { defaultScheduleFilters } from '@/lib/schedule/scheduleFilters';
-import { siteDateParts } from '@/lib/articlePublishTime';
+import { siteDateParts, siteMonthKey } from '@/lib/articlePublishTime';
 import { FROZEN_COLUMNS } from '@/lib/schedule/scheduleTableLayout';
 
 /**
@@ -39,9 +38,21 @@ import { FROZEN_COLUMNS } from '@/lib/schedule/scheduleTableLayout';
  */
 
 const now = new Date();
-const WINDOW = rollingWindow(now, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
-const OPTIONS = rollingWindow(now, PUBLIC_SCHEDULE_FILTER_HORIZON);
-const DEFAULTS = defaultScheduleFilters(now);
+/**
+ * The month range the page opens on: this month through December of NEXT year —
+ * the rule's longer branch, i.e. an eligible round reaches past this year.
+ *
+ * Pinned to next December rather than left to whatever the live clock implies,
+ * because a range derived from `now` alone is ONE month long every December and
+ * the lane-packing fixtures below need several columns to pack into.
+ *
+ * `RANGE_END` is exactly what schedule/page.jsx passes down as `monthRangeEnd`.
+ */
+const RANGE_START = siteMonthKey(now);
+const RANGE_END = decemberOf(RANGE_START, 1);
+const WINDOW = windowBetween(RANGE_START, RANGE_END);
+const OPTIONS = WINDOW;
+const DEFAULTS = defaultScheduleFilters(now, RANGE_END);
 const CURRENT_YEAR = siteDateParts(now).year;
 
 /** The month immediately BEFORE the window — where the clipped round starts. */
@@ -512,5 +523,12 @@ test('CONTROL: the fixture really produces the three cases it claims', () => {
     rows[0].includes('ต่อจาก'),
     'and one clipped cell with a continuation marker',
   );
-  assert.equal(WINDOW.length, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
+  // Fixture guard, same role as before: if WINDOW degenerated the lane packing
+  // above would hold for the wrong reason. The claim was `=== DEFAULT_MONTHS`
+  // while the window was a fixed six; the range is variable now, so what is
+  // pinned is that it really is long enough to pack lanes into and really does
+  // start where it claims.
+  assert.ok(WINDOW.length >= 13, 'the pinned range spans at least to next December');
+  assert.equal(WINDOW[0], RANGE_START, 'and starts at the current month');
+  assert.equal(WINDOW.at(-1), RANGE_END, 'and ends at the range end');
 });

@@ -5,6 +5,8 @@ import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getSchedulePDF } from '@/lib/actions/schedule-pdf';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { joinCourseSchedules } from '@/lib/schedule/joinCourseSchedules';
+import { scheduleWindowEnd } from '@/lib/schedule/monthWindow';
+import { siteMonthKey } from '@/lib/articlePublishTime';
 import { SITE_URL } from '@/lib/seo/siteUrl';
 import {
   SCHEDULE_TITLE,
@@ -95,6 +97,50 @@ export default async function SchedulePage() {
     );
   }
 
+  /**
+   * THE END OF THE MONTH RANGE, decided here and nowhere else.
+   *
+   * ── WHY ON THE SERVER ───────────────────────────────────────────────────────
+   * The rule is data-driven ("does an eligible round reach past this December"),
+   * and `coursesWithSchedules` is the data — already fetched, already joined,
+   * about to be rendered. Asking it here costs one pass over rows that are
+   * already in memory and NO second request. The client cannot compute it
+   * without being handed the rounds a second time, and a second fetch to answer
+   * a question the server already holds the answer to is the shape of defect
+   * this page has paid for before.
+   *
+   * ── WHAT "ELIGIBLE" MEANS, AND WHY IT CAN ONLY BE DECIDED HERE ─────────────
+   * A round counts only if it ACTUALLY REACHES THE PAGE. Three filters stand
+   * between the feed and a rendered column, and this is the first point past
+   * all of them:
+   *
+   *   · `excludeStartedRounds` — applied inside getAllSchedules, so `schedules`
+   *     already excludes rounds whose first day has arrived.
+   *   · `joinCourseSchedules` — drops rows with no resolvable course ref. That
+   *     matters concretely: on 2026-10-01 BOTH of the feed's two furthest rounds
+   *     (2027-12, i.e. +14) carried `course: null`, so a range derived from the
+   *     raw feed would have stretched fifteen months on the strength of two rows
+   *     that render nowhere. Reading `coursesWithSchedules` rather than
+   *     `schedules` is what makes that impossible.
+   *   · the ZZTEST- exclusion below.
+   *
+   * ── THE ZZTEST- EXCLUSION ──────────────────────────────────────────────────
+   * Upstream carries live test rows (8 future ones on 2026-10-01, including a
+   * `zztest-canva-01` at 2027-12). They render — nothing here hides them, and
+   * that is a separate decision not being made in this commit — but they must
+   * not be allowed to MOVE THE RANGE for every real visitor. A test round in
+   * the new year would otherwise add twelve columns to everyone's dropdown.
+   *
+   * Matched on `course_id`, the upstream course CODE, case-insensitively and
+   * anchored at the start so a real course merely containing the letters cannot
+   * be caught by it.
+   */
+  const ZZTEST_CODE = /^zztest-/i;
+  const eligibleSpans = coursesWithSchedules
+    .filter((c) => !ZZTEST_CODE.test(String(c.course_id ?? '')))
+    .flatMap((c) => (c.schedules ?? []).map((s) => s.dates ?? []));
+  const monthRangeEnd = scheduleWindowEnd(siteMonthKey(), eligibleSpans);
+
   // Reduce programs payload to what the filter dropdown needs.
   const programsLite = programs.map((p) => ({
     _id: p._id,
@@ -110,8 +156,12 @@ export default async function SchedulePage() {
   // client row drops it as a payload guarantee, and the shared Course node's
   // `description` reads it. Server-only, so it never reaches the browser — see
   // that function for the measurement behind it.
+  // `endKey` is the SAME range end the client is handed below, so the graph
+  // describes the months the page actually opens on. Deriving it twice is how
+  // the ld+json and the table come to disagree about what "the default view" is.
   const scheduleJsonLd = buildScheduleJsonLd(
-    scheduleGraphRows(coursesWithSchedules, courses)
+    scheduleGraphRows(coursesWithSchedules, courses),
+    { endKey: monthRangeEnd }
   );
 
   return (
@@ -133,6 +183,7 @@ export default async function SchedulePage() {
         programs={programsLite}
         schedulePDF={schedulePDF}
         earlyBirdMap={earlyBirdMap}
+        monthRangeEnd={monthRangeEnd}
       />
     </>
   );

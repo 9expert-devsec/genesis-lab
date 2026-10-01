@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PUBLIC_SCHEDULE_DEFAULT_MONTHS,
-  PUBLIC_SCHEDULE_FILTER_HORIZON,
+  MOBILE_ROUND_COLLAPSE_THRESHOLD,
   addMonths,
+  decemberOf,
   monthColumns,
   monthKey,
   monthLabel,
@@ -12,6 +12,7 @@ import {
   parseMonthKey,
   rollingWindow,
   scheduleMonthKey,
+  scheduleWindowEnd,
   windowBetween,
 } from '@/lib/schedule/monthWindow';
 import { withTZ } from '../withTZ.mjs';
@@ -197,105 +198,270 @@ test('YYYY-MM string order IS chronological order — the load-bearing property'
   assert.deepEqual([...window].sort(), window, 'a generated window is already sorted');
 });
 
-// ── The default constant ────────────────────────────────────────────────────
+// ── The range end ───────────────────────────────────────────────────────────
+//
+// THIS SECTION WAS REWRITTEN, NOT RENUMBERED. It used to pin two constants —
+// `PUBLIC_SCHEDULE_DEFAULT_MONTHS === 6` for the default view and
+// `PUBLIC_SCHEDULE_FILTER_HORIZON === 12` for the dropdown — and the
+// relationship between them. Both are retired. The range now runs from the
+// current Bangkok month to December of this year, or of NEXT year when an
+// eligible round reaches past this one, and the dropdown and the default view
+// share it. Each test below says which old claim it replaces and why.
 
-test('the default is 6, and the window it produces is 6 long', () => {
-  // Pinned together so the constant and the behaviour cannot drift — the shape
-  // of defect ADMIN_SCHEDULE_MONTHS was extracted to prevent.
-  assert.equal(PUBLIC_SCHEDULE_DEFAULT_MONTHS, 6);
-  for (const start of ['2026-01', '2026-08', '2026-12']) {
+test('scheduleWindowEnd: December of THIS year when nothing reaches past it', () => {
+  /**
+   * The short branch, and the floor of the rule. Replaces "the default is 6",
+   * which pinned a rolling count; there is no count any more, so what is pinned
+   * is the calendar boundary the count was replaced by.
+   */
+  const inRange = [['2026-03-10'], ['2026-11-30'], ['2026-12-31']];
+  assert.equal(scheduleWindowEnd('2026-01', inRange), '2026-12', 'from January');
+  assert.equal(scheduleWindowEnd('2026-10', inRange), '2026-12', 'from October');
+  assert.equal(scheduleWindowEnd('2026-12', inRange), '2026-12', 'from December itself');
+});
+
+test('scheduleWindowEnd: December of NEXT year as soon as one round reaches past', () => {
+  // A single eligible round in the new year extends it — and only to December.
+  assert.equal(scheduleWindowEnd('2026-10', [['2027-01-05']]), '2027-12');
+  assert.equal(scheduleWindowEnd('2026-01', [['2027-01-05']]), '2027-12');
+  // The boundary is exact: 2026-12-31 does NOT extend, 2027-01-01 does.
+  assert.equal(scheduleWindowEnd('2026-10', [['2026-12-31']]), '2026-12', 'the last day of this year');
+  assert.equal(scheduleWindowEnd('2026-10', [['2027-01-01']]), '2027-12', 'the first day of next');
+});
+
+test('the four worked examples the rule was specified with', () => {
+  /**
+   * Stated as a table because these are the cases the behaviour was AGREED on,
+   * and a reader checking the implementation against the decision should not
+   * have to derive them. Length is what each example names.
+   */
+  const NEXT_YEAR = [['2027-04-20']];
+  const NONE = [['2026-11-02']];
+  const cases = [
+    { start: '2026-01', rounds: NONE, end: '2026-12', length: 12 },
+    { start: '2026-10', rounds: NONE, end: '2026-12', length: 3 },
+    { start: '2026-10', rounds: NEXT_YEAR, end: '2027-12', length: 15 },
+    { start: '2026-01', rounds: NEXT_YEAR, end: '2027-12', length: 24 },
+  ];
+  for (const { start, rounds, end, length } of cases) {
+    const actual = scheduleWindowEnd(start, rounds);
+    assert.equal(actual, end, `${start} → ${end}`);
     assert.equal(
-      rollingWindow(start, PUBLIC_SCHEDULE_DEFAULT_MONTHS).length,
-      6,
-      `${start} must yield six columns regardless of the month`
+      windowBetween(start, actual).length,
+      length,
+      `${start} → ${end} must be ${length} months long`,
     );
   }
 });
 
-test('the filter horizon is twelve months, i.e. offsets 0..11', () => {
+test('a round SPANNING new year counts as next year, on any of its days', () => {
   /**
-   * ── THIS TEST WAS REWRITTEN, NOT RENUMBERED ─────────────────────────────────
-   * It used to assert `=== 18`, `=== 12 + DEFAULT`, and that the SAME MONTH NEXT
-   * YEAR is always selectable. That third assertion was the whole justification
-   * for the 18, and it is now FALSE by construction: reaching the same month
-   * next year needs thirteen options (offsets 0..12), and there are twelve.
-   * Deleting it silently would have left the number unexplained; renumbering it
-   * to `=== 12` while keeping the next-year claim would have been a test
-   * asserting something the code deliberately gave up.
-   *
-   * What replaces it is what 12 actually guarantees, below.
+   * A 30 Dec – 2 Jan round reaches past this December, so it extends the range —
+   * even though its FIRST date does not. The rule reads every day of the span
+   * for the same reason `roundInWindow` does: a month key cannot express a round
+   * that occupies two months, and the one that matters here is the later one.
    */
-  assert.equal(PUBLIC_SCHEDULE_FILTER_HORIZON, 12);
+  const spanning = [['2026-12-30', '2026-12-31', '2027-01-01', '2027-01-02']];
+  assert.equal(scheduleWindowEnd('2026-10', spanning), '2027-12');
+  // And order within the span is irrelevant — it is a scan, not a `dates[0]` read.
+  assert.equal(scheduleWindowEnd('2026-10', [['2027-01-02', '2026-12-30']]), '2027-12');
+});
 
+test('a round TWO years out still caps at December of next year', () => {
+  /**
+   * The cap is on the OUTPUT, not a filter on the input, so no amount of
+   * far-future data can stretch the dropdown further. This is what stops one
+   * stray row from drawing dozens of empty columns for every visitor.
+   */
+  assert.equal(scheduleWindowEnd('2026-10', [['2028-06-01']]), '2027-12');
+  assert.equal(scheduleWindowEnd('2026-10', [['2031-01-01']]), '2027-12');
+  assert.equal(scheduleWindowEnd('2026-01', [['2099-12-31']]), '2027-12', 'not even then');
+});
+
+test('empty, missing and junk input fall back to December of this year', () => {
+  /**
+   * The fallback is the rule's FLOOR, never a bare `start`: a one-column page
+   * is what a failed fetch would otherwise render, and it looks like a bug
+   * rather than like an empty year.
+   */
+  assert.equal(scheduleWindowEnd('2026-10', []), '2026-12', 'no rounds at all');
+  assert.equal(scheduleWindowEnd('2026-10', null), '2026-12');
+  assert.equal(scheduleWindowEnd('2026-10', undefined), '2026-12');
+  assert.equal(scheduleWindowEnd('2026-10', [[]]), '2026-12', 'a round with no dates');
+  assert.equal(scheduleWindowEnd('2026-10', [['not-a-date']]), '2026-12', 'an unparseable date');
+  assert.equal(scheduleWindowEnd('2026-10', [null, undefined]), '2026-12');
+  // An unparseable START has nothing to anchor a year on.
+  assert.equal(scheduleWindowEnd('nope', [['2027-01-01']]), null);
+  assert.equal(scheduleWindowEnd(null, [['2027-01-01']]), null);
+});
+
+test('scheduleWindowEnd accepts Dates as well as date strings', () => {
+  // The page passes `s.dates`, which upstream sends as ISO strings but which a
+  // hydrated Mongoose row can carry as Dates. Both must read the same.
+  assert.equal(scheduleWindowEnd('2026-10', [[new Date(2027, 0, 5)]]), '2027-12');
+  assert.equal(scheduleWindowEnd('2026-10', [[new Date(2026, 10, 5)]]), '2026-12');
+});
+
+test('decemberOf is the one spelling of a year end, and crosses years', () => {
+  assert.equal(decemberOf('2026-01', 0), '2026-12');
+  assert.equal(decemberOf('2026-12', 0), '2026-12', 'already December');
+  assert.equal(decemberOf('2026-10', 1), '2027-12');
+  assert.equal(decemberOf('2026-12', 1), '2027-12');
+  assert.equal(decemberOf('nope', 0), null);
+  assert.equal(decemberOf(null, 1), null);
+  // The default is this year, so a caller that omits the argument cannot
+  // accidentally reach into the next one.
+  assert.equal(decemberOf('2026-05'), '2026-12');
+});
+
+test('the option range runs from the current month to the range end, inclusive', () => {
+  /**
+   * ── REPLACES "the filter horizon is twelve months, i.e. offsets 0..11" ──────
+   * That test asserted `PUBLIC_SCHEDULE_FILTER_HORIZON === 12` plus a length and
+   * two offsets. The horizon is retired: the dropdown no longer looks a fixed
+   * distance ahead, it looks to the end of a calendar range. So what is pinned
+   * is the shape the options now take — anchored at the current month at one
+   * end and at `scheduleWindowEnd`'s answer at the other, with no gaps.
+   *
+   * The ONE claim carried over verbatim is that the current month is offset 0: a
+   * range that started next month would hide every round still running this one.
+   */
   for (const start of ['2026-01', '2026-08', '2026-12']) {
-    const options = rollingWindow(start, PUBLIC_SCHEDULE_FILTER_HORIZON);
-    assert.equal(options.length, 12, `${start}: twelve options`);
-    assert.equal(options[0], start, `${start}: the current month is offset 0`);
-    assert.equal(options.at(-1), addMonths(start, 11), `${start}: the last is offset 11`);
+    for (const rounds of [[['2026-11-02']], [['2027-04-20']]]) {
+      const end = scheduleWindowEnd(start, rounds);
+      const options = windowBetween(start, end);
+      assert.equal(options[0], start, `${start}: the current month is first`);
+      assert.equal(options.at(-1), end, `${start}: the range end is last`);
+      assert.equal(new Set(options).size, options.length, `${start}: no duplicates`);
+      // Consecutive, so every month in between is offered — no gaps to fall into.
+      for (let i = 1; i < options.length; i++) {
+        assert.equal(options[i], addMonths(options[i - 1], 1), `${start}: consecutive at ${i}`);
+      }
+    }
   }
 });
 
-test('THE PROPERTY THAT SURVIVES: the default window never ends at the last option', () => {
+test('THE DEFAULT VIEW IS THE WHOLE OPTION RANGE — not a shorter window inside it', () => {
   /**
-   * The 6 term's purpose, and the only one left. A visitor opens on a six-month
-   * window; if its last column were also the last dropdown option there would be
-   * nowhere to extend to, and the filter would look broken at first use.
+   * ── REPLACES "the default window never ends at the last option" ─────────────
+   * That test asserted HORIZON > DEFAULT_MONTHS, i.e. that the default view
+   * stopped SHORT of the last option, so a visitor always had somewhere further
+   * to go. That property is deliberately gone, and its disappearance is the
+   * change: stopping short is exactly how the page came to hide rounds it had
+   * already fetched. Measured on the live feed on 2026-10-01, 37 of 144 future
+   * rounds fell outside the six-month default while sitting inside the
+   * twelve-month dropdown — visible only to someone who thought to widen a
+   * filter they had no reason to suspect.
    *
-   * This is what would break if the horizon were ever set to 6 or below, which
-   * is the realistic direction of a future edit — so it is asserted as a
-   * RELATIONSHIP between the two constants rather than as a second literal.
+   * The replacement claim is the opposite one, and it is an IDENTITY rather than
+   * an inequality, because an identity cannot drift back into two numbers that
+   * merely happen to be ordered: the default view spans precisely the months the
+   * dropdowns offer. "Nowhere further to go" is now correct and intended — there
+   * is nothing further to go TO.
    */
-  assert.ok(
-    PUBLIC_SCHEDULE_FILTER_HORIZON > PUBLIC_SCHEDULE_DEFAULT_MONTHS,
-    'the horizon must exceed the default window, or there is nowhere to extend to',
-  );
   for (const start of ['2026-01', '2026-08', '2026-12']) {
-    const options = rollingWindow(start, PUBLIC_SCHEDULE_FILTER_HORIZON);
-    const defaultEnd = rollingWindow(start, PUBLIC_SCHEDULE_DEFAULT_MONTHS).at(-1);
-    assert.ok(options.includes(defaultEnd), `${start}: the default window fits inside the options`);
-    assert.ok(options.indexOf(defaultEnd) < options.length - 1, `${start}: room to extend`);
+    for (const rounds of [[['2026-11-02']], [['2027-04-20']]]) {
+      const end = scheduleWindowEnd(start, rounds);
+      const options = windowBetween(start, end);
+      // The default view's two ends, as defaultScheduleFilters composes them.
+      assert.equal(options[0], start, `${start}: opens on the first option`);
+      assert.equal(options.at(-1), end, `${start}: runs to the last option`);
+      assert.deepEqual(
+        windowBetween(start, end),
+        options,
+        `${start}: the default months ARE the option months`,
+      );
+    }
   }
 });
 
-test('the horizon DELIBERATELY no longer reaches the same month next year', () => {
+test('the range CAPS at December of next year — it is not unbounded', () => {
   /**
-   * Stated as an explicit expectation rather than left as an absence, because it
-   * is the property that was given up and the one a future reader is most likely
-   * to try to "restore" without knowing it was a decision.
+   * ── REPLACES "the horizon no longer reaches the same month next year" ───────
+   * That test pinned the cap at offset +11 and explained the property given up
+   * when 18 became 12. The cap is a calendar boundary now, so the same guard is
+   * restated against it: the range reaches December of next year and never the
+   * January after, however far the data goes.
    *
-   * It was given up because it was buying nothing: measured against the live
-   * feed on 2026-08-12, of 104 future rounds ZERO were at offset >= 12 and the
-   * furthest was +5. If upstream ever publishes further out, this test is the
-   * place that says what changing the number back would mean.
+   * Stated as an explicit expectation rather than left as an absence, for the
+   * same reason the old one was: a future reader looking at a page full of empty
+   * columns is likely to try "just use max(dates)" without knowing the cap was a
+   * decision. On 2026-10-01 the two furthest rounds in the feed sat at 2027-12
+   * and BOTH were orphans with `course: null`, one of them a ZZTEST- row — so
+   * max(dates) would have stretched the dropdown on the strength of rows that
+   * render nowhere.
    *
-   * Note a round beyond the horizon is still FETCHED and still rendered when the
-   * window reaches it — `getAllSchedules()` is unbounded. Only the dropdown is
-   * capped.
+   * A round past the cap is still FETCHED and still rendered when the range
+   * reaches it — `getAllSchedules()` stays unbounded. Only the range is capped.
    */
   for (const start of ['2026-01', '2026-08', '2026-12']) {
-    const options = rollingWindow(start, PUBLIC_SCHEDULE_FILTER_HORIZON);
+    const far = scheduleWindowEnd(start, [['2029-05-01']]);
+    assert.equal(far, decemberOf(start, 1), `${start}: capped at next December`);
+    const options = windowBetween(start, far);
     assert.equal(
-      options.includes(addMonths(start, 12)),
+      options.includes(addMonths(decemberOf(start, 1), 1)),
       false,
-      `${start}: offset +12 must be out of reach — that needs THIRTEEN options`,
+      `${start}: the January after the cap must be out of reach`,
     );
-    // …and the boundary is exactly there: +11 is the last one in.
-    assert.ok(options.includes(addMonths(start, 11)), `${start}: offset +11 is still selectable`);
+    assert.ok(options.includes(decemberOf(start, 1)), `${start}: the cap itself is selectable`);
+    assert.ok(options.length <= 24, `${start}: 24 months is the worst case`);
   }
+  // January is the worst case, and it really is 24 — the maximum the UI can show.
+  assert.equal(windowBetween('2026-01', scheduleWindowEnd('2026-01', [['2029-01-01']])).length, 24);
 });
 
-test('CONTROL: the offset probes DO distinguish 12 from 13 options', () => {
+test('CONTROL: the probes DO distinguish the new cap from +11 and from unbounded', () => {
   /**
-   * Both assertions above turn on one option's presence, so the probe is shown
-   * to move: a thirteen-long window DOES contain the same month next year, which
-   * is precisely what the old 18 bought and the new 12 does not.
+   * Every assertion above turns on one month's presence or absence, so the probe
+   * is shown to move against BOTH neighbours of the new rule — the thing it
+   * replaced and the thing it refuses to become.
    */
   const start = '2026-08';
-  assert.equal(rollingWindow(start, 13).includes(addMonths(start, 12)), true, '13 reaches it');
-  assert.equal(rollingWindow(start, 12).includes(addMonths(start, 12)), false, '12 does not');
-  assert.equal(rollingWindow(start, 18).includes(addMonths(start, 12)), true, 'the old 18 did');
-  // And the two window lengths really are different lists.
-  assert.notDeepEqual(rollingWindow(start, 12), rollingWindow(start, 18));
+  const capped = windowBetween(start, scheduleWindowEnd(start, [['2029-01-01']]));
+
+  // vs THE OLD +11 HORIZON. From August that reached 2027-07; the cap reaches
+  // 2027-12, so five months the old rule could not offer are now selectable.
+  const oldHorizon = rollingWindow(start, 12);
+  assert.equal(oldHorizon.at(-1), '2027-07', 'the old rule stopped here');
+  assert.equal(capped.at(-1), '2027-12', 'the new one stops here');
+  assert.notDeepEqual(capped, oldHorizon, 'the two really are different lists');
+  for (const month of ['2027-08', '2027-09', '2027-10', '2027-11', '2027-12']) {
+    assert.equal(oldHorizon.includes(month), false, `${month}: unreachable under the old horizon`);
+    assert.ok(capped.includes(month), `${month}: reachable now`);
+  }
+
+  // vs UNBOUNDED. A round in 2029 is in the data and still does NOT appear.
+  assert.equal(capped.includes('2029-01'), false, 'the cap is a real bound, not a formality');
+  assert.ok(capped.length < windowBetween(start, '2029-01').length, 'unbounded would be longer');
+
+  // And the short branch is a different list again, so the two branches of the
+  // rule are themselves distinguishable — otherwise every case above could be
+  // passing on one of them.
+  const short = windowBetween(start, scheduleWindowEnd(start, [['2026-09-01']]));
+  assert.equal(short.at(-1), '2026-12');
+  assert.notDeepEqual(short, capped);
+});
+
+test('the mobile collapse threshold is SIX ROUNDS, and not a month count', () => {
+  /**
+   * It used to be `PUBLIC_SCHEDULE_DEFAULT_MONTHS`, which equalled six only
+   * because the default window happened to be six months long. The range is a
+   * calendar span now and can be 24 months, so a card deriving from it would
+   * list two dozen rounds before offering the toggle.
+   *
+   * The VALUE is unchanged — six before, six now — and that is the point: this
+   * commit separated two numbers, it did not retune either. Pinned as a literal
+   * because there is nothing left for it to be derived from, and pinned here
+   * because this is where the constant it replaced lived.
+   */
+  assert.equal(MOBILE_ROUND_COLLAPSE_THRESHOLD, 6);
+  // It must not have been quietly re-coupled to anything month-shaped: a range
+  // of six months is now one of many lengths, not the length.
+  assert.notEqual(
+    MOBILE_ROUND_COLLAPSE_THRESHOLD,
+    windowBetween('2026-01', scheduleWindowEnd('2026-01', [['2027-01-01']])).length,
+    'a 24-month range must not be what sizes a card',
+  );
 });
 
 // ── Labels ──────────────────────────────────────────────────────────────────
