@@ -359,15 +359,50 @@ test('the sheet reads the page’s own count, not a second derivation', () => {
 
 test('the defaults, the initial state and the reset target are one object', () => {
   const shell = functionSlice(CLIENT.code, 'ScheduleClient');
-  assert.match(shell, /const \[defaults\] = useState\(\(\) => defaultScheduleFilters\(now\)\)/);
+  // `defaultScheduleFilters` takes the RANGE END as a second argument now — the
+  // rule is data-driven and the end arrives as a prop, so the call can no
+  // longer be `(now)` alone. The claim is unchanged: ONE call, its result in
+  // `useState`, and reset restoring that same frozen object.
+  assert.match(
+    shell,
+    /const \[defaults\] = useState\(\(\) =>\s*defaultScheduleFilters\(now, rangeEnd\),?\s*\)/,
+    'the defaults are frozen at mount, from the clock AND the range end',
+  );
   assert.match(shell, /const \[filters, setFilters\] = useState\(defaults\)/);
   assert.match(shell, /setFilters\(defaults\)/, 'ล้างตัวกรอง restores that same object');
   assert.equal(
     countOf(CLIENT.code, /defaultScheduleFilters\(/g),
     1,
-    'the rolling window is computed once, not once per consumer',
+    'the range is computed once, not once per consumer',
   );
   assert.equal(countOf(CLIENT.code, /new Date\(\)/g), 1, 'and the clock is read once per mount');
+});
+
+test('the range END comes from the server and is clamped, never recomputed here', () => {
+  /**
+   * The rule ("December, or next December when an eligible round reaches past
+   * it") is about the DATA, and the client is handed only the rows it renders —
+   * so the end must arrive as a prop. Two things are pinned:
+   *
+   *   · the prop is consumed, not ignored — otherwise the data-driven rule is
+   *     dead code and the page silently falls back to its own year-end;
+   *   · `scheduleWindowEnd` is NOT called here. A second evaluation of the rule
+   *     against a partial view of the rounds is how the dropdown and the table
+   *     come to disagree about how far the range reaches.
+   */
+  const shell = functionSlice(CLIENT.code, 'ScheduleClient');
+  assert.match(shell, /monthRangeEnd/, 'the server answer is read');
+  assert.match(shell, /decemberOf\(rangeStart, 0\)/, 'and floored at the client year end');
+  assert.equal(
+    countOf(CLIENT.code, /scheduleWindowEnd\(/g),
+    0,
+    'the rule itself belongs to the server; this file must not re-run it',
+  );
+  // The start is the Bangkok month, off the same single clock read.
+  assert.match(shell, /const rangeStart = useMemo\(\(\) => siteMonthKey\(now\)/);
+  // And both ends feed ONE option list, so the default view and the dropdown
+  // cannot diverge.
+  assert.match(shell, /windowBetween\(rangeStart, rangeEnd\)/, 'one range, both consumers');
 });
 
 test('the sheet follows the drawer precedent: portal, scroll lock, z-[9999]', () => {
@@ -404,11 +439,28 @@ test('no hand-written element id survives in a doubled subtree', () => {
   assert.equal(countOf(CLIENT.code, /useId\(\)/g), 2, 'the card list and the dialog title');
 });
 
-test('the collapse threshold is derived from the default window, not guessed', () => {
+test('the collapse threshold is its own ROUND count, not the month window', () => {
+  /**
+   * It used to read `PUBLIC_SCHEDULE_DEFAULT_MONTHS`, and this test asserted
+   * that derivation on the reasoning that a course running one round a month
+   * fills exactly a default window's worth of rows — sound while the default
+   * window WAS six months. The window is a calendar range now and can be 24
+   * months, so deriving from it would let a card list two dozen rounds before
+   * offering the toggle: the scroll the collapse exists to prevent.
+   *
+   * The two numbers are therefore separated, and the claim inverts — what is
+   * pinned is that the threshold is NOT month-derived. The value is unchanged
+   * at six (pinned by value in test/pure/scheduleMonthWindow).
+   */
   assert.match(
     CLIENT.code,
-    /const ROUND_COLLAPSE_THRESHOLD = PUBLIC_SCHEDULE_DEFAULT_MONTHS;/,
-    'so the untouched page never shows a toggle',
+    /const ROUND_COLLAPSE_THRESHOLD = MOBILE_ROUND_COLLAPSE_THRESHOLD;/,
+    'a round count, named as one',
+  );
+  assert.equal(
+    /ROUND_COLLAPSE_THRESHOLD\s*=\s*PUBLIC_SCHEDULE_DEFAULT_MONTHS/.test(CLIENT.code),
+    false,
+    'it must not be re-coupled to a month count',
   );
 });
 

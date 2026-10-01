@@ -41,7 +41,7 @@
  *   · src/lib/schedule/editorCalendarRange.js — the admin editor's date-picker
  *     range; it decides what a user may PICK when editing a round.
  *
- * This one is a DISPLAY default over data that was already fetched unbounded.
+ * This one is a DISPLAY range over data that was already fetched unbounded.
  * All three answer different questions, they are tuned by different people for
  * different reasons, and one of them changing must not move the others. Do not
  * import across.
@@ -50,49 +50,139 @@
  * because its window was derived from the wrong source, which left 15 of 90
  * live rounds impossible to edit; the fix was to derive it from the data being
  * edited rather than to borrow a horizon from elsewhere.
+ *
+ * ── THE RANGE IS NOT A COUNT OF MONTHS ANY MORE ─────────────────────────────
+ * It was two numbers — a rolling 6 for the default view, a rolling 12 for the
+ * dropdowns — and both are gone. The range now runs from the CURRENT MONTH IN
+ * BANGKOK to DECEMBER of this year, or to December of NEXT year when an
+ * eligible round reaches past this one; `scheduleWindowEnd` below holds that
+ * rule and the full argument for it. The dropdowns and the default view share
+ * it, so "what the page opens on" and "what the filter can reach" are one
+ * range rather than two that can disagree.
+ *
+ * Three consequences worth knowing before editing anything here:
+ *
+ *   · THE RANGE IS DATA-DERIVED, so it is computed on the SERVER (see
+ *     schedule/page.jsx) from the same joined rows the page renders, and
+ *     arrives at the client as one `YYYY-MM` prop. It is not a constant any
+ *     caller can read; there is nothing left in this module to tune.
+ *   · ITS LENGTH VARIES from 1 (December, no next-year rounds) to 24 (January,
+ *     with them). Anything sized off the window must handle both — the table's
+ *     `tableMinWidth` already does, and the mobile card's collapse threshold
+ *     was cut loose from the window for exactly this reason.
+ *   · EVERY MONTH IN RANGE IS A COLUMN, empty ones included. That is unchanged
+ *     and deliberate: a missing column is indistinguishable from a month with
+ *     no rounds, and the range is now long enough that gaps are normal.
  */
 
 /**
- * How many months the table shows before the user touches the filter.
+ * December of `key`'s year — the natural end of a schedule year.
  *
- * Six, rolling from the current month inclusive. Named rather than inlined so
- * the constant and the behaviour cannot drift — a pure test asserts the window
- * this produces is actually six long.
+ * Separate from `scheduleWindowEnd` below because BOTH ends of that rule are
+ * this expression (this year's December, or next year's) and because the client
+ * needs it on its own to clamp a cached answer. One spelling, three readers.
  */
-export const PUBLIC_SCHEDULE_DEFAULT_MONTHS = 6;
+export function decemberOf(key, yearsAhead = 0) {
+  const parsed = parseMonthKey(key);
+  if (!parsed) return null;
+  return monthKey(new Date(parsed.year + yearsAhead, 11, 1));
+}
 
 /**
- * How far ahead the two filter dropdowns let a visitor look. TWELVE months,
- * i.e. offsets 0..11 from the current month inclusive.
+ * THE END OF THE MONTH RANGE — the one answer the dropdowns and the default
+ * view both use.
  *
- * ── WHAT THE 18 WAS, AND WHY THAT ARGUMENT NO LONGER APPLIES ────────────────
- * It was 18, derived as `12 + 6`, and the 12 term was justified by a specific
- * property: "the SAME MONTH NEXT YEAR is always selectable, no matter which
- * month you visit in". THAT PROPERTY IS GONE at a horizon of 12, and it is
- * important to say so rather than quietly keep the sentence: reaching the same
- * month next year needs THIRTEEN options (offsets 0..12), not twelve. From
- * August, the last option is now next July.
+ * ── THE RULE ────────────────────────────────────────────────────────────────
+ * December of the CURRENT year, unless at least one eligible round has any day
+ * after that December — then December of NEXT year. Never further, however far
+ * out a round sits.
  *
- * It was given up deliberately, because it was buying nothing. Measured against
- * the live feed on 2026-08-12: of 104 future rounds, ZERO sat at offset >= 12,
- * and the furthest was at +5 — the data does not reach even halfway to the old
- * horizon. Twelve months of options is already more than upstream publishes,
- * and a dropdown of 18 mostly-empty months is a longer list to scroll for
- * months that cannot contain anything. If upstream ever starts publishing
- * further out, this number is the one place to change.
+ * ── WHY A YEAR-END AND NOT A ROLLING COUNT ──────────────────────────────────
+ * The window this replaces was two independent numbers: a rolling 6 for the
+ * default view and a rolling 12 for the dropdown. That had three costs the
+ * owner decided were not worth paying.
  *
- * ── THE PROPERTY THAT SURVIVES, AND IS STILL LOAD-BEARING ───────────────────
- * 12 > PUBLIC_SCHEDULE_DEFAULT_MONTHS (6), so the DEFAULT WINDOW'S LAST COLUMN
- * IS NEVER ALSO THE LAST OPTION: a visitor who opens the page and wants to look
- * further always has somewhere to go. That is what would break if this were
- * ever set to 6 or below, and it is what the test pins.
+ * First, the DEFAULT VIEW HID DATA THAT WAS ALREADY ON THE PAGE. Six columns
+ * from October reaches March; measured against the live feed on 2026-10-01, 37
+ * of 144 future rounds sat beyond it — fetched, joined, rendered by nobody,
+ * and reachable only by a visitor who thought to widen a filter. The default
+ * and the dropdown are now the SAME range, so "what the filter can reach" and
+ * "what the page opens on" cannot diverge at all.
  *
- * It remains a UI horizon, not a fetch bound. `getAllSchedules()` is unbounded
- * and stays that way; a round beyond 12 months is still FETCHED and still
- * rendered if the window reaches it — it is merely unreachable through the
- * dropdown until this number moves.
+ * Second, a ROLLING count answers a question nobody asks. A visitor planning
+ * training thinks in calendar years — "what is left this year", "is there
+ * anything in the new year yet" — not in "twelve months from today". A rolling
+ * horizon also means the LAST option is a different month every month, so a
+ * page bookmarked in March and reopened in April silently offers a different
+ * end.
+ *
+ * Third, the old horizon was a GUESS ABOUT THE DATA and it had already gone
+ * stale. The 12 was justified by a measurement (2026-08-12: zero rounds at
+ * offset >= 12, furthest +5) that stopped being true: on 2026-10-01 the feed
+ * carried rounds at +14. Deriving the end from the rounds themselves is the
+ * same correction the admin editor's picker got in August 2026, and for the
+ * same reason — see the warning at the top of this file about borrowing a
+ * horizon from elsewhere instead of asking the data.
+ *
+ * ── WHY THE CAP IS DECEMBER NEXT YEAR AND NOT max(dates) ────────────────────
+ * Unbounded would let ONE far-future row stretch the dropdown across empty
+ * months. On 2026-10-01 exactly two rounds sat at +14 (2027-12), one of them
+ * `zztest-canva-01`, and both were orphans upstream had left with `course:
+ * null` — so a naive `max(dates)` would have drawn fifteen columns' worth of
+ * options on the strength of two rows that cannot render at all. The cap makes
+ * the worst case 24 options (January, with next-year rounds) and the typical
+ * case far fewer, and it is a bound on the OUTPUT rather than a filter on the
+ * input, so it holds no matter what upstream publishes.
+ *
+ * ELIGIBILITY IS THE CALLER'S JOB, and must be: "a round that actually reaches
+ * the page" means after `excludeStartedRounds` and after `joinCourseSchedules`
+ * has dropped the rows with no course ref, plus the ZZTEST- exclusion. None of
+ * those three live here, and importing them would drag db-shaped concerns into
+ * the one module the `pure` tier can run without a DOM. So this takes DATE
+ * SPANS, nothing else — see schedule/page.jsx for the one place that decides
+ * what is eligible.
+ *
+ * @param {string} startKey `YYYY-MM`, the current month (Bangkok — see
+ *   siteMonthKey). Only its YEAR is read; the month is irrelevant to the end.
+ * @param {Array<Array<string|Date>>} spans one entry per ELIGIBLE round, each
+ *   that round's list of dates. Unusable dates and empty spans are ignored.
+ * @returns {string|null} `YYYY-MM` for December of this year or next, or null
+ *   for an unparseable `startKey`
  */
-export const PUBLIC_SCHEDULE_FILTER_HORIZON = 12;
+export function scheduleWindowEnd(startKey, spans) {
+  const thisDecember = decemberOf(startKey, 0);
+  if (!thisDecember) return null;
+  const nextDecember = decemberOf(startKey, 1);
+
+  // A plain string `>` on `YYYY-MM`, the module's load-bearing property: any
+  // month key above this year's December is in a later year, so the test is
+  // "does any eligible day fall past the end of this year".
+  for (const span of Array.isArray(spans) ? spans : []) {
+    for (const date of Array.isArray(span) ? span : []) {
+      const key = date instanceof Date ? monthKey(date) : monthKey(new Date(date));
+      if (key && key > thisDecember) return nextDecember;
+    }
+  }
+  return thisDecember;
+}
+
+/**
+ * How many rounds a mobile course card lists before collapsing.
+ *
+ * SIX, as a literal. It used to read `PUBLIC_SCHEDULE_DEFAULT_MONTHS` on the
+ * reasoning that a course running one round a month fills exactly a default
+ * window's worth of rows — which was true while the default window was six
+ * months long. It is not a month window any more (the default view is now a
+ * calendar range that can be 24 months wide), and a card that showed 24 rounds
+ * before collapsing would be the scroll the collapse exists to prevent.
+ *
+ * So it is its own number now, and it lives here rather than in ScheduleClient
+ * because this is where the retired constant it replaces lived — a reader
+ * looking for the old name finds the explanation, not an absence. It is a ROUND
+ * COUNT, not a month count; nothing about the window may be derived from it and
+ * it must not be derived from the window.
+ */
+export const MOBILE_ROUND_COLLAPSE_THRESHOLD = 6;
 
 /**
  * `YYYY-MM` for a Date, in LOCAL time.

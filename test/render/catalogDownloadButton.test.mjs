@@ -10,9 +10,9 @@ import { ProgramPageClient } from '@/app/(public)/program/[slug]/_components/Pro
 import { SkillPageClient } from '@/app/(public)/skill/[slug]/_components/SkillPageClient';
 import { CATALOG_DOWNLOAD_LABEL } from '@/lib/pageCatalog';
 import { ScheduleBoard } from '@/app/(public)/schedule/_components/ScheduleClient';
-import { PUBLIC_SCHEDULE_FILTER_HORIZON, rollingWindow } from '@/lib/schedule/monthWindow';
+import { decemberOf, windowBetween } from '@/lib/schedule/monthWindow';
 import { defaultScheduleFilters } from '@/lib/schedule/scheduleFilters';
-import { siteDateParts } from '@/lib/articlePublishTime';
+import { siteDateParts, siteMonthKey } from '@/lib/articlePublishTime';
 
 /**
  * The hero PDF button, on its FOUR surfaces: the three catalog buttons
@@ -97,11 +97,14 @@ test('/schedule: the timetable download renders the same row — label unchanged
   // component test/render/scheduleFilterSheet drives, with an empty board:
   // the hero and its PDF link do not depend on rows.
   const now = new Date();
-  const defaults = defaultScheduleFilters(now);
+  // The range end the server would pass as `monthRangeEnd`; next December so
+  // the option list is never one month long (see scheduleFilterSheet's note).
+  const rangeEnd = decemberOf(siteMonthKey(now), 1);
+  const defaults = defaultScheduleFilters(now, rangeEnd);
   const html = renderToStaticMarkup(createElement(ScheduleBoard, {
     courses: [], programs: [], schedulePDF: { url: 'https://example.com/schedule.pdf' }, earlyBirdMap: {},
     filters: defaults, defaults, currentYear: siteDateParts(now).year,
-    monthOptions: rollingWindow(now, PUBLIC_SCHEDULE_FILTER_HORIZON),
+    monthOptions: windowBetween(siteMonthKey(now), rangeEnd),
     onFilterChange() {}, onReset() {}, sheetOpen: false, onSheetOpenChange() {},
   }));
   const doc = dom(html);

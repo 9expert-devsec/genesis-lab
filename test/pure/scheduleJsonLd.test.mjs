@@ -22,7 +22,20 @@ import { siteConfig } from '@/config/site';
 const OTHER = 'https://control.example.invalid';
 
 /** A fixed instant, mid-month, so the six-month window is unambiguous. */
-const NOW = new Date(2026, 9, 15); // 2026-10-15 local → window 2026-10 .. 2027-03
+const NOW = new Date(2026, 9, 15); // 2026-10-15 local
+/**
+ * The RANGE END the page would pass in, pinned here as the server's answer.
+ *
+ * The window used to be a rolling six months derived inside the builder, so
+ * NOW alone fixed it at 2026-10 .. 2027-03. The range is data-driven now and
+ * arrives as `endKey`, so this file states it: 2026-10 .. 2027-12, i.e. the
+ * rule's longer branch (an eligible round reaches past this year).
+ *
+ * Next December rather than this one so the range is 15 months and the
+ * in-range / out-of-range cases below still have room on both sides of the
+ * boundary — with a 3-month range there is barely an inside to test.
+ */
+const RANGE_END = '2027-12';
 
 const nodesOf = (graph) => graph['@graph'];
 const nodeOfType = (graph, type) => nodesOf(graph).find((n) => n['@type'] === type);
@@ -52,7 +65,7 @@ const course = (i, schedules, over = {}) => ({
 });
 
 const build = (courses, opts = {}) =>
-  buildScheduleJsonLd(courses, { now: NOW, ...opts });
+  buildScheduleJsonLd(courses, { now: NOW, endKey: RANGE_END, ...opts });
 
 // ── 1. the shared Course node is ONE node across both pages ─────────────────
 
@@ -420,44 +433,82 @@ test('a course whose every in-window round has no dates is omitted entirely', ()
   assert.equal(itemsOf(graph)[0].item.name, 'หลักสูตรที่ 2');
 });
 
-// ── 8. the month window is the page's default, and it is borrowed ──────────
+// ── 8. the month range is the page's default, and it is borrowed ───────────
+//
+// The section's claims are unchanged — a round past the end is excluded, one in
+// the last month is included, the range follows `now`. What moved is the range
+// itself: it was a rolling six months the builder derived, and it is now the
+// current month through `endKey`. The month literals below follow it.
 
 /**
- * NOW is 2026-10-15, so the rolling six-month window is 2026-10 .. 2027-03.
- * A round in April 2027 is one month past the end and must not be listed.
+ * NOW is 2026-10-15 and RANGE_END is 2027-12, so the range is 2026-10 .. 2027-12.
+ * A round in January 2028 is one month past the end and must not be listed.
  */
-test('a round beyond the six-month window is excluded', () => {
+test('a round beyond the range is excluded', () => {
   const graph = build([
-    course(1, [round([day(2026, 10, 20)]), round([day(2027, 4, 5)])]),
+    course(1, [round([day(2026, 10, 20)]), round([day(2028, 1, 5)])]),
   ]);
   assert.equal(itemsOf(graph)[0].item.hasCourseInstance.length, 1);
   assert.equal(datesOf(graph)[0], '2026-10-20');
 });
 
-test('a round in the LAST month of the window is included', () => {
-  const graph = build([course(1, [round([day(2027, 3, 28)])])]);
-  assert.deepEqual(datesOf(graph), ['2027-03-28', '2027-03-28']);
+test('a round in the LAST month of the range is included', () => {
+  // December 2027 — the cap, and the month a six-month window could not reach.
+  const graph = build([course(1, [round([day(2027, 12, 28)])])]);
+  assert.deepEqual(datesOf(graph), ['2027-12-28', '2027-12-28']);
 });
 
-test('a course whose only round is outside the window is omitted', () => {
-  assert.equal(build([course(1, [round([day(2027, 4, 5)])])]), null);
+test('a round that the RETIRED six-month window would have hidden is now listed', () => {
+  /**
+   * The gap the change exists to close, in the one place that proves the graph
+   * moved with the page. April 2027 is outside a six-month window opened in
+   * October 2026 (which ended 2027-03) and inside the range — so this exact
+   * round used to be fetched, joined, rendered, and described to nobody.
+   */
+  const graph = build([course(1, [round([day(2027, 4, 5)])])]);
+  assert.ok(graph, 'the course is in the graph at all');
+  assert.deepEqual(datesOf(graph), ['2027-04-05', '2027-04-05']);
+});
+
+test('a course whose only round is outside the range is omitted', () => {
+  assert.equal(build([course(1, [round([day(2028, 1, 5)])])]), null);
 });
 
 /**
  * The cross-month rule roundInWindow exists for: a round starting BEFORE the
- * window but ending inside it is visible. With NOW mid-October the window opens
+ * range but ending inside it is visible. With NOW mid-October the range opens
  * at 2026-10, so a 30 ก.ย. – 1 ต.ค. round must still be listed.
  */
-test('a round starting before the window but ending inside it is included', () => {
+test('a round starting before the range but ending inside it is included', () => {
   const graph = build([course(1, [round([day(2026, 9, 30), day(2026, 10, 1)])])]);
   assert.deepEqual(datesOf(graph), ['2026-09-30', '2026-10-01']);
 });
 
-test('the window FOLLOWS `now` — it is rolling, not pinned', () => {
-  const rounds = [round([day(2027, 4, 5)])];
-  assert.equal(build([course(1, rounds)]), null, 'April is outside a window opened in October');
-  const later = buildScheduleJsonLd([course(1, rounds)], { now: new Date(2027, 0, 15) });
-  assert.ok(later, 'the same round IS inside a window opened in January 2027');
+test('the range START follows `now` — it is not pinned', () => {
+  /**
+   * The same claim as before, re-anchored. The END is an argument now, so what
+   * `now` still decides is where the range OPENS — and a round before that
+   * month is out of it. Held at one fixed `endKey` so only the start varies.
+   */
+  const rounds = [round([day(2026, 11, 5)])];
+  assert.ok(build([course(1, rounds)]), 'November is inside a range opened in October');
+  const later = buildScheduleJsonLd([course(1, rounds)], {
+    now: new Date(2027, 0, 15),
+    endKey: RANGE_END,
+  });
+  assert.equal(later, null, 'the same round is BEFORE a range opened in January 2027');
+});
+
+test('with NO endKey the range falls back to December of the start year', () => {
+  /**
+   * The floor, which is what a failed fetch renders. Not a bare one-month
+   * range: with `now` in October the fallback still reaches 2026-12, so a
+   * November round is described and a 2027 one is not.
+   */
+  const nov = buildScheduleJsonLd([course(1, [round([day(2026, 11, 5)])])], { now: NOW });
+  assert.ok(nov, 'November is inside the fallback range');
+  const next = buildScheduleJsonLd([course(1, [round([day(2027, 2, 5)])])], { now: NOW });
+  assert.equal(next, null, 'February 2027 is past December 2026');
 });
 
 // ── 9. ordering, counts, and the empty cases ──────────────────────────────
@@ -477,9 +528,12 @@ test('courses keep the order they were handed in', () => {
 });
 
 test('numberOfItems equals the number of courses actually listed', () => {
+  // Course 2 is deliberately OUT of range so the count cannot pass by simply
+  // echoing the input length. Its round moved from 2027-04 to 2028-01 when the
+  // range stopped being six months — April is inside the range now.
   const graph = build([
     course(1, [round([day(2026, 10, 20)])]),
-    course(2, [round([day(2027, 4, 5)])]),
+    course(2, [round([day(2028, 1, 5)])]),
     course(3, [round([day(2026, 11, 3)])]),
   ]);
   const list = nodeOfType(graph, 'ItemList');

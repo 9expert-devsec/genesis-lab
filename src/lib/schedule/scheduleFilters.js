@@ -14,11 +14,24 @@
  *   3. the "N filters active" badge on the ตัวกรอง button, which is the
  *      DIFFERENCE between the current state and (1).
  *
- * A constant cannot serve any of them, because the month window is ROLLING —
- * it starts at the current month, so it is a function of the instant the page
- * mounted. That is not a detail: the defect monthWindow.js exists to remove was
- * a "default" that silently meant "the rest of this calendar year", so a reset
- * that restored มกราคม–ธันวาคม would be that same bug wearing a button.
+ * A constant cannot serve any of them, because the window STARTS at the current
+ * month — so it is a function of the instant the page mounted. That is not a
+ * detail: the defect monthWindow.js exists to remove was a "default" that
+ * silently meant "the rest of this calendar year" whichever month you arrived
+ * in, so a reset that restored มกราคม–ธันวาคม would be that same bug wearing a
+ * button.
+ *
+ * ── THE END IS NOW AN ARGUMENT, AND THAT IS THE POINT ───────────────────────
+ * It used to be `rollingWindow(now, PUBLIC_SCHEDULE_DEFAULT_MONTHS)` — six
+ * months, computed here. The range is data-derived now (December of this year,
+ * or of next year when an eligible round reaches past it — see
+ * monthWindow's `scheduleWindowEnd`), and the data lives on the server. This
+ * module cannot see it and must not guess at it, so the end key is PASSED IN.
+ *
+ * The default view is therefore the WHOLE option range rather than a shorter
+ * window inside it. "What the page opens on" and "what the filter can reach"
+ * are one answer; there is no longer a narrower default that can hide rounds
+ * the dropdown would have reached.
  *
  * `now` is a parameter rather than a `new Date()` read inside, so the caller
  * reads the clock ONCE per mount and the three answers above cannot disagree
@@ -36,10 +49,7 @@
  */
 
 import { siteMonthKey } from '@/lib/articlePublishTime';
-import {
-  PUBLIC_SCHEDULE_DEFAULT_MONTHS,
-  rollingWindow,
-} from './monthWindow';
+import { decemberOf, parseMonthKey } from './monthWindow';
 
 /**
  * The "no opinion" value shared by the program / type / status selects.
@@ -51,24 +61,34 @@ import {
 export const SCHEDULE_FILTER_ALL = 'all';
 
 /**
- * The state the page opens with: everything unfiltered, and the ROLLING window
- * from `now`.
+ * The state the page opens with: everything unfiltered, and the FULL month
+ * range — the current Bangkok month through `endKey`.
+ *
+ * `endKey` is the range end the server computed (monthWindow's
+ * `scheduleWindowEnd`). A missing or unparseable one falls back to December of
+ * the start's own year — the rule's own floor, never a bare `start`: a
+ * one-column default would look like a broken page, and this is the branch a
+ * failed fetch lands in.
  *
  * @param {Date} [now]
+ * @param {string} [endKey] `YYYY-MM`, the last month the range reaches
  * @returns {{program: string, type: string, status: string, monthFrom: string, monthTo: string}}
  */
-export function defaultScheduleFilters(now = new Date()) {
-  // The Bangkok month key, NOT the Date — `rollingWindow` would otherwise run
-  // the instant through `monthKey`'s runtime-local getters. See above.
+export function defaultScheduleFilters(now = new Date(), endKey = null) {
+  // The Bangkok month key, NOT the Date — a Date would be run through
+  // `monthKey`'s runtime-local getters. See above.
   const start = siteMonthKey(now);
-  const window = rollingWindow(start, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
-  const first = window[0] ?? start;
+  const floor = decemberOf(start, 0) ?? start;
+  const end = parseMonthKey(endKey) ? String(endKey) : floor;
   return {
     program: SCHEDULE_FILTER_ALL,
     type: SCHEDULE_FILTER_ALL,
     status: SCHEDULE_FILTER_ALL,
-    monthFrom: first,
-    monthTo: window[window.length - 1] ?? first,
+    monthFrom: start,
+    // Never before the start. The server's end and the client's clock are read
+    // at different instants, so a page cached in December and served in January
+    // would otherwise hand back a reversed range.
+    monthTo: end < start ? start : end,
   };
 }
 

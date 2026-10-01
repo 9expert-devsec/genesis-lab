@@ -4,14 +4,13 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ScheduleBoard } from '@/app/(public)/schedule/_components/ScheduleClient';
 import {
-  PUBLIC_SCHEDULE_DEFAULT_MONTHS,
-  PUBLIC_SCHEDULE_FILTER_HORIZON,
+  decemberOf,
   monthLabel,
   monthLabelWithYear,
-  rollingWindow,
+  windowBetween,
 } from '@/lib/schedule/monthWindow';
 import { defaultScheduleFilters } from '@/lib/schedule/scheduleFilters';
-import { siteDateParts } from '@/lib/articlePublishTime';
+import { siteDateParts, siteMonthKey } from '@/lib/articlePublishTime';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import {
   FROZEN_COLUMNS,
@@ -44,9 +43,22 @@ import {
  */
 
 const now = new Date();
-const WINDOW = rollingWindow(now, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
-const OPTIONS = rollingWindow(now, PUBLIC_SCHEDULE_FILTER_HORIZON);
-const DEFAULTS = defaultScheduleFilters(now);
+/**
+ * The month range the page opens on: this month through December of NEXT year —
+ * the rule's longer branch, i.e. an eligible round reaches past this year.
+ *
+ * Pinned to next December rather than left to whatever the live clock implies,
+ * because a range derived from `now` alone is ONE month long every December;
+ * this fixture would assert almost nothing for a twelfth of the year. Next
+ * December keeps it 13-24 months wide whenever the suite runs.
+ *
+ * `RANGE_END` is exactly what schedule/page.jsx passes down as `monthRangeEnd`.
+ */
+const RANGE_START = siteMonthKey(now);
+const RANGE_END = decemberOf(RANGE_START, 1);
+const WINDOW = windowBetween(RANGE_START, RANGE_END);
+const OPTIONS = WINDOW;
+const DEFAULTS = defaultScheduleFilters(now, RANGE_END);
 
 // The year the card measures `showYear: 'auto'` against, in Asia/Bangkok — the
 // same derivation the page itself does, off the same instant WINDOW came from.

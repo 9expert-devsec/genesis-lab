@@ -4,11 +4,12 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ScheduleClient } from '@/app/(public)/schedule/_components/ScheduleClient';
 import {
-  PUBLIC_SCHEDULE_DEFAULT_MONTHS,
+  addMonths,
+  decemberOf,
   monthColumns,
-  monthKey,
-  rollingWindow,
+  windowBetween,
 } from '@/lib/schedule/monthWindow';
+import { siteMonthKey } from '@/lib/articlePublishTime';
 import { FROZEN_TOTAL, MONTH_MIN_WIDTH, tableMinWidth } from '@/lib/schedule/scheduleTableLayout';
 
 /**
@@ -22,7 +23,7 @@ import { FROZEN_TOTAL, MONTH_MIN_WIDTH, tableMinWidth } from '@/lib/schedule/sch
  * behaviour that changed with the calendar:
  *
  *     old: columns rendered = 12 - today.getMonth()   (12 in Jan → 1 in Dec)
- *     new: columns rendered = PUBLIC_SCHEDULE_DEFAULT_MONTHS, always
+ *     new: columns rendered = every month of the range, always
  *
  * The year-crossing arithmetic itself is pinned on FIXED dates in
  * test/pure/scheduleMonthWindow.test.mjs. What this tier adds is that
@@ -31,9 +32,19 @@ import { FROZEN_TOTAL, MONTH_MIN_WIDTH, tableMinWidth } from '@/lib/schedule/sch
  */
 
 const now = new Date();
-const WINDOW = rollingWindow(now, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
+/**
+ * The month range the page opens on: this month through December of NEXT year —
+ * the rule's longer branch, i.e. an eligible round reaches past this year.
+ *
+ * Pinned to next December rather than left to whatever the live clock implies,
+ * because a range derived from `now` alone is ONE month long every December and
+ * a one-column table cannot demonstrate anything this file claims.
+ */
+const RANGE_START = siteMonthKey(now);
+const RANGE_END = decemberOf(RANGE_START, 1);
+const WINDOW = windowBetween(RANGE_START, RANGE_END);
 
-/** A `YYYY-MM-15` date inside the Nth month of the default window. */
+/** A `YYYY-MM-15` date inside the Nth month of the default range. */
 const dayIn = (key) => `${key}-15`;
 
 const courseWithSchedulesIn = (keys) => ({
@@ -51,13 +62,21 @@ const courseWithSchedulesIn = (keys) => ({
   })),
 });
 
-const render = (keys) =>
+/**
+ * `monthRangeEnd` is passed because the SHELL is what is under test here, and
+ * the shell takes the range end as a prop — the server computes it (see
+ * schedule/page.jsx). Omitting it would let the component fall back to its own
+ * year-end floor, and every assertion about a month past this December would
+ * then be measuring the fallback rather than the range.
+ */
+const render = (keys, monthRangeEnd = RANGE_END) =>
   renderToStaticMarkup(
     createElement(ScheduleClient, {
       courses: [courseWithSchedulesIn(keys)],
       programs: [{ _id: 'p1', program_name: 'AI' }],
       schedulePDF: null,
       earlyBirdMap: {},
+      monthRangeEnd,
     }),
   );
 
@@ -84,10 +103,13 @@ test('EVERY month of the default window renders a cell, including across a year'
 });
 
 test('the window really does span the months it claims to', () => {
-  // Fixture guard. If `WINDOW` ever degenerated to one entry the test above
-  // would pass while asserting almost nothing.
-  assert.equal(WINDOW.length, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
-  assert.equal(WINDOW[0], monthKey(now), 'starts at the current month, inclusive');
+  // Fixture guard, unchanged in role. The length was `=== DEFAULT_MONTHS` while
+  // the window was a fixed six; the range is variable now, so the guard pins
+  // what it was always guarding against — a WINDOW degenerated to one entry,
+  // which would make the test above pass while asserting almost nothing.
+  assert.ok(WINDOW.length >= 13, 'the pinned range spans at least to next December');
+  assert.equal(WINDOW[0], siteMonthKey(now), 'starts at the current month, inclusive');
+  assert.equal(WINDOW.at(-1), RANGE_END, 'and ends at the range end, inclusive');
   assert.equal(new Set(WINDOW).size, WINDOW.length, 'no duplicates');
 });
 
@@ -106,16 +128,27 @@ test('CONTROL: the OLD year-blind rule DOES drop the crossing months', () => {
     for (let m = startMonth; m <= 11; m++) arr.push(m);
     return arr;
   };
-  const oldDrops = (startMonth) =>
-    rollingWindow(`2026-${String(startMonth + 1).padStart(2, '0')}`, PUBLIC_SCHEDULE_DEFAULT_MONTHS)
+  const oldDrops = (startMonth) => {
+    const start = `2026-${String(startMonth + 1).padStart(2, '0')}`;
+    // The range as the rule now computes it, on a FIXED start, taking the
+    // longer branch — the one a year-blind loop cannot express at all.
+    return windowBetween(start, decemberOf(start, 1))
       .filter((key) => !oldVisible(startMonth).includes(Number(key.slice(5)) - 1));
+  };
 
   assert.deepEqual(oldDrops(0), [], 'January: the old rule happened to be right');
-  assert.deepEqual(oldDrops(7), ['2027-01'], 'August: one month lost');
+  assert.deepEqual(
+    oldDrops(7),
+    ['2027-01', '2027-02', '2027-03', '2027-04', '2027-05', '2027-06', '2027-07'],
+    'August: everything up to next July is unreachable',
+  );
   assert.deepEqual(
     oldDrops(11),
-    ['2027-01', '2027-02', '2027-03', '2027-04', '2027-05'],
-    'December: five of six lost, and the ถึง select could not reach them either',
+    [
+      '2027-01', '2027-02', '2027-03', '2027-04', '2027-05', '2027-06',
+      '2027-07', '2027-08', '2027-09', '2027-10', '2027-11',
+    ],
+    'December: eleven of thirteen lost, and the ถึง select could not reach them either',
   );
 });
 
@@ -135,11 +168,59 @@ test('a course whose ONLY session is in the last window month still appears', ()
 const monthHeaderCells = (html) =>
   (html.match(/<th class="px-2 py-3[^"]*">[\s\S]*?<\/th>/g) ?? []);
 
-test('the header renders exactly PUBLIC_SCHEDULE_DEFAULT_MONTHS month columns', () => {
+test('a STALE server range end is clamped up to the client\'s own year end', () => {
+  /**
+   * THE NEW-YEAR CASE. `monthRangeEnd` is computed when the HTML is built and
+   * this page is ISR-cached for 30 minutes (page.jsx `revalidate = 1800`), so a
+   * page built on 31 December can be served to a visitor whose calendar has
+   * already rolled over. Its end would then be LAST December — behind the
+   * visitor's own month — and an unclamped range would collapse to a single
+   * column with every later round dropped from a page that is otherwise fine.
+   *
+   * So the client floors the end at December of ITS current Bangkok year. Here
+   * the server end is deliberately two years stale; what must render is the
+   * client's own December, not the stale one and not a one-month range.
+   */
+  const clientDecember = decemberOf(RANGE_START, 0);
+  const stale = decemberOf(addMonths(RANGE_START, -24), 0);
+  const html = render([RANGE_START], stale);
+
+  const headers = monthHeaderCells(html);
+  assert.equal(
+    headers.length,
+    windowBetween(RANGE_START, clientDecember).length,
+    'the range runs to the CLIENT\'s December, whatever the server said',
+  );
+  assert.ok(headers.length >= 1);
+  // The stale end is in the past, so its own months must not appear at all.
+  assert.equal(html.includes(`&amp;class=s-${stale}`), false, 'no column from the stale year');
+});
+
+test('CONTROL: an end the server pushes FURTHER than the client floor is honoured', () => {
+  /**
+   * The clamp is one-directional ON PURPOSE — up, never down. Without this
+   * control the test above would also pass against a component that ignored
+   * `monthRangeEnd` entirely and always used its own December, which would
+   * discard the whole data-driven rule while looking correct.
+   */
+  const toNextDecember = render([RANGE_START], RANGE_END);
+  const toThisDecember = render([RANGE_START], decemberOf(RANGE_START, 0));
+  assert.equal(monthHeaderCells(toNextDecember).length, WINDOW.length, 'the server extended it');
+  assert.ok(
+    monthHeaderCells(toNextDecember).length > monthHeaderCells(toThisDecember).length,
+    'and the two ends really do render different numbers of columns',
+  );
+});
+
+test('the header renders exactly one month column per month of the range', () => {
+  // Was `=== PUBLIC_SCHEDULE_DEFAULT_MONTHS` on both sides, which pinned the
+  // count to a constant. The range has no constant now, so the claim is stated
+  // as the identity it always really was: one column per month IN RANGE, empty
+  // months included. That is also the stronger form — it holds at any length.
   const html = render(WINDOW);
   const headers = monthColumns(WINDOW);
-  assert.equal(headers.length, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
-  assert.equal(monthHeaderCells(html).length, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
+  assert.equal(headers.length, WINDOW.length);
+  assert.equal(monthHeaderCells(html).length, WINDOW.length);
 });
 
 test('EVERY month header emits both lines — month, then year', () => {
@@ -266,8 +347,12 @@ test('CONTROL: the sizing probes DO discriminate between month counts', () => {
   // Without this, `min-width:…px` could be absent entirely and both sizing
   // assertions above would be matching a substring that never varies.
   const wide = render(WINDOW);
-  assert.ok(wide.includes(`min-width:${tableMinWidth(6)}px`));
-  assert.equal(wide.includes(`min-width:${tableMinWidth(2)}px`), false, 'not a fixed string');
+  assert.ok(wide.includes(`min-width:${tableMinWidth(WINDOW.length)}px`));
+  assert.equal(
+    wide.includes(`min-width:${tableMinWidth(2)}px`),
+    false,
+    'not a fixed string',
+  );
   assert.equal(tableMinWidth(6) - tableMinWidth(2), MONTH_MIN_WIDTH * 4);
 });
 

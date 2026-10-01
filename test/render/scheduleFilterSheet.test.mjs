@@ -7,16 +7,14 @@ import {
   ScheduleFilterPanel,
 } from '@/app/(public)/schedule/_components/ScheduleClient';
 import {
-  PUBLIC_SCHEDULE_DEFAULT_MONTHS,
-  PUBLIC_SCHEDULE_FILTER_HORIZON,
-  monthKey,
-  rollingWindow,
+  decemberOf,
+  windowBetween,
 } from '@/lib/schedule/monthWindow';
 import {
   activeScheduleFilterCount,
   defaultScheduleFilters,
 } from '@/lib/schedule/scheduleFilters';
-import { siteDateParts } from '@/lib/articlePublishTime';
+import { siteDateParts, siteMonthKey } from '@/lib/articlePublishTime';
 
 /**
  * The mobile filter sheet, rendered.
@@ -41,9 +39,26 @@ import { siteDateParts } from '@/lib/articlePublishTime';
  */
 
 const now = new Date();
-const WINDOW = rollingWindow(now, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
-const OPTIONS = rollingWindow(now, PUBLIC_SCHEDULE_FILTER_HORIZON);
-const DEFAULTS = defaultScheduleFilters(now);
+/**
+ * The month range the page opens on: this month through December of NEXT year —
+ * the rule's longer branch, i.e. an eligible round reaches past this year.
+ *
+ * Pinned to next December rather than left to whatever the live clock implies,
+ * because a range derived from `now` alone is ONE month long every December and
+ * the select-rendering assertions below would then have a single option to
+ * inspect. Next December keeps it 13-24 months wide whenever the suite runs.
+ *
+ * `RANGE_END` is exactly what schedule/page.jsx passes down as `monthRangeEnd`.
+ *
+ * WINDOW and OPTIONS are now THE SAME LIST, and that is the change: the default
+ * view used to be a six-month window INSIDE a twelve-month option list, so the
+ * page opened on less than the filter could reach. One range serves both.
+ */
+const RANGE_START = siteMonthKey(now);
+const RANGE_END = decemberOf(RANGE_START, 1);
+const WINDOW = windowBetween(RANGE_START, RANGE_END);
+const OPTIONS = WINDOW;
+const DEFAULTS = defaultScheduleFilters(now, RANGE_END);
 
 // The year the card measures `showYear: 'auto'` against, in Asia/Bangkok — the
 // same derivation the page itself does, off the same instant WINDOW came from.
@@ -279,14 +294,43 @@ test('the reset target is the rolling window, not January–December', () => {
    * มกราคม–ธันวาคม would be that same bug wearing a button — and it would look
    * right in January and only in January.
    */
-  const year = now.getFullYear();
-  assert.equal(DEFAULTS.monthFrom, monthKey(now), 'starts at the current month');
-  assert.equal(DEFAULTS.monthTo, WINDOW[WINDOW.length - 1], 'and runs the default window');
-  assert.equal(WINDOW.length, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
+  const year = siteDateParts(now).year;
+  assert.equal(DEFAULTS.monthFrom, RANGE_START, 'starts at the current month');
+  assert.equal(DEFAULTS.monthTo, WINDOW[WINDOW.length - 1], 'and runs the whole range');
+  // The claim is unchanged — "not มกราคม–ธันวาคม whatever month you arrive in".
+  // What moved is the length: the range is variable now, so instead of pinning
+  // it to a constant this pins that it STARTS at the current month, which is
+  // the half the old defect got wrong. A January visitor would legitimately see
+  // `${year}-01` as the start, so the notDeepEqual below is kept as the
+  // whole-pair check it always was rather than split into two.
+  assert.ok(WINDOW.length >= 13, 'the pinned range spans at least to next December');
   assert.notDeepEqual(
     [DEFAULTS.monthFrom, DEFAULTS.monthTo],
     [`${year}-01`, `${year}-12`],
     'the reset target must not be the calendar year',
+  );
+});
+
+test('the default view is EXACTLY the option range — nothing the filter reaches is hidden', () => {
+  /**
+   * THE POINT OF THE CHANGE, as a property rather than as two numbers.
+   *
+   * The default view used to be a six-month window inside a twelve-month option
+   * list. Measured against the live feed on 2026-10-01, 37 of 144 future rounds
+   * fell outside those six months — fetched, joined, and shown to nobody who
+   * did not think to widen a filter.
+   *
+   * Opening on the full range is what removes that gap, and it is asserted as
+   * an identity between the two ends rather than as "6 < 12", because an
+   * identity cannot drift back into two numbers that merely happen to be
+   * ordered.
+   */
+  assert.equal(DEFAULTS.monthFrom, OPTIONS[0], 'the view opens on the FIRST option');
+  assert.equal(DEFAULTS.monthTo, OPTIONS.at(-1), 'and runs to the LAST option');
+  assert.deepEqual(
+    windowBetween(DEFAULTS.monthFrom, DEFAULTS.monthTo),
+    OPTIONS,
+    'the months rendered by default ARE the months the dropdowns offer',
   );
 });
 
