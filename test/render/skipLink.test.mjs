@@ -69,18 +69,29 @@ test('SkipLink is one anchor to #main with the Thai label', () => {
   assert.match(html, /^<a href="#main" class="[^"]*">ข้ามไปยังเนื้อหา<\/a>$/);
 });
 
-test('SkipLink is visually hidden until focused, then a pinned 9e-action button above the header', () => {
+test('SkipLink is visually hidden until focus-visible, then a pinned 9e-action button above the header', () => {
   const html = renderToStaticMarkup(createElement(SkipLink));
   const cls = html.match(/class="([^"]*)"/)[1].split(/\s+/);
   for (const c of [
-    'sr-only', 'focus:not-sr-only', 'focus:fixed', 'focus:left-4', 'focus:top-4',
-    'focus:z-80', 'focus:bg-9e-action', 'focus:text-white', 'focus:rounded-9e-sm',
-    'focus:ring-2',
+    'sr-only', 'focus-visible:not-sr-only', 'focus-visible:fixed', 'focus-visible:left-4',
+    'focus-visible:top-4', 'focus-visible:z-80', 'focus-visible:bg-9e-action',
+    'focus-visible:text-white', 'focus-visible:rounded-9e-sm', 'focus-visible:ring-2',
   ]) {
     assert.ok(cls.includes(c), `missing ${c}`);
   }
-  // Nothing visible unless focused: every class but sr-only is a focus: variant.
-  assert.deepEqual(cls.filter((c) => !c.startsWith('focus:')), ['sr-only']);
+  // Nothing visible unless focus-visible: every class but sr-only is a
+  // focus-visible: variant.
+  assert.deepEqual(cls.filter((c) => !c.startsWith('focus-visible:')), ['sr-only']);
+});
+
+test('no plain focus: class reveals it — a mouse-click navigation must not show it', () => {
+  // Next focuses this link (the new segment's first node) after a client-side
+  // navigation. Measured with `focus:` reveal classes: a mouse click on the logo
+  // left it focused with :focus true and :focus-visible false — and VISIBLE.
+  // Only :focus-visible separates keyboard focus from that programmatic one.
+  const html = renderToStaticMarkup(createElement(SkipLink));
+  const cls = html.match(/class="([^"]*)"/)[1].split(/\s+/);
+  assert.deepEqual(cls.filter((c) => c.startsWith('focus:')), []);
 });
 
 test('SkipLink classes are one complete string literal (Tailwind scans text)', () => {

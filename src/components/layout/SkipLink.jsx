@@ -15,8 +15,18 @@
  * (Safari only scrolls to a fragment otherwise, leaving focus on the link), and
  * those mains suppress their own focus ring so the whole page is not outlined.
  *
+ * ── REVEALED ON :focus-visible, NEVER ON PLAIN :focus ───────────────────────
+ * After a client-side navigation into a new segment, Next moves focus to that
+ * segment's first node — which, in Home and the (public) layout, is this link.
+ * With `focus:` reveal classes that showed the button after a MOUSE click on
+ * the logo (measured: activeElement = this link, :focus true, :focus-visible
+ * false, visible at 16,16). The focus itself is right — it is how a screen
+ * reader learns the page changed — so it is not blurred; only the paint is
+ * keyed to :focus-visible, which the browser grants for keyboard focus (first
+ * Tab, or a navigation the keyboard started) and withholds after a click.
+ *
  * ── LOOKS ───────────────────────────────────────────────────────────────────
- * `sr-only` until focused, then a solid 9e-action button pinned top-left. Its
+ * `sr-only` until focus-visible, then a solid 9e-action button pinned top-left. Its
  * own background makes it readable over the transparent Home header too; white
  * on #005CFF is 5.3:1. The ring is navy with a white offset so one of the two
  * bands contrasts with whatever is behind it — the white header, the navy hero,
@@ -32,7 +42,7 @@ export function SkipLink() {
   return (
     <a
       href="#main"
-      className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-80 focus:whitespace-nowrap focus:rounded-9e-sm focus:bg-9e-action focus:px-5 focus:py-2.5 focus:font-thai focus:text-base focus:font-medium focus:text-white focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-9e-navy focus:ring-offset-2 focus:ring-offset-white"
+      className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-4 focus-visible:top-4 focus-visible:z-80 focus-visible:whitespace-nowrap focus-visible:rounded-9e-sm focus-visible:bg-9e-action focus-visible:px-5 focus-visible:py-2.5 focus-visible:font-thai focus-visible:text-base focus-visible:font-medium focus-visible:text-white focus-visible:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-9e-navy focus-visible:ring-offset-2 focus-visible:ring-offset-white"
     >
       ข้ามไปยังเนื้อหา
     </a>
