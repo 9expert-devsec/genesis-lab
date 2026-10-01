@@ -23,11 +23,21 @@
  * `now` is a parameter rather than a `new Date()` read inside, so the caller
  * reads the clock ONCE per mount and the three answers above cannot disagree
  * with each other by a month boundary crossed mid-session.
+ *
+ * ── AND THE MONTH IS BANGKOK'S, NOT THE RUNTIME'S ───────────────────────────
+ * The window STARTS at "this month", and which month that is now goes through
+ * `siteMonthKey` (lib/articlePublishTime) rather than through `monthKey`'s
+ * runtime-local getters. Vercel runs in UTC, so between 17:00 and 24:00 Bangkok
+ * on the last day of a month the two answers differ by a whole month: the
+ * server rendered a window opening on October while the visitor's browser
+ * recomputed one opening on November, for the same page. The round DATES are
+ * still bucketed by `monthKey` — see siteMonthKey's docstring for why only the
+ * clock read moved.
  */
 
+import { siteMonthKey } from '@/lib/articlePublishTime';
 import {
   PUBLIC_SCHEDULE_DEFAULT_MONTHS,
-  monthKey,
   rollingWindow,
 } from './monthWindow';
 
@@ -48,8 +58,11 @@ export const SCHEDULE_FILTER_ALL = 'all';
  * @returns {{program: string, type: string, status: string, monthFrom: string, monthTo: string}}
  */
 export function defaultScheduleFilters(now = new Date()) {
-  const window = rollingWindow(now, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
-  const first = window[0] ?? monthKey(now);
+  // The Bangkok month key, NOT the Date — `rollingWindow` would otherwise run
+  // the instant through `monthKey`'s runtime-local getters. See above.
+  const start = siteMonthKey(now);
+  const window = rollingWindow(start, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
+  const first = window[0] ?? start;
   return {
     program: SCHEDULE_FILTER_ALL,
     type: SCHEDULE_FILTER_ALL,
