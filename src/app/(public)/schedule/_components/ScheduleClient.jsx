@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { HeroPdfButton } from "@/components/ui/HeroPdfButton";
 import { courseLinkHref } from "@/lib/courses/courseLinkHref";
-import { siteDateParts } from "@/lib/articlePublishTime";
+import { siteDateParts, siteMonthKey } from "@/lib/articlePublishTime";
 import {
   INHOUSE_ONLY_LABEL,
   coursePriceLabel,
@@ -278,8 +278,15 @@ export function ScheduleClient({
 
   // What the two month dropdowns offer. A rolling horizon from the same
   // instant, so it never shrinks as the year goes on — the defect this replaced.
+  //
+  // The START is `siteMonthKey(now)`, i.e. the month in BANGKOK — not
+  // `rollingWindow(now, …)`, which would run the instant through `monthKey`'s
+  // runtime-local getters. Vercel is UTC, so for the last seven hours of a
+  // Bangkok month those are different months and the server-rendered option
+  // list would not match the one hydration recomputes. Same instant, same
+  // reasoning as `currentYear` above.
   const monthOptions = useMemo(
-    () => rollingWindow(now, PUBLIC_SCHEDULE_FILTER_HORIZON),
+    () => rollingWindow(siteMonthKey(now), PUBLIC_SCHEDULE_FILTER_HORIZON),
     [now],
   );
 

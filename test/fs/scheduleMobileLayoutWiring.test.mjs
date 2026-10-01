@@ -203,9 +203,15 @@ test('the card year comes from the page\'s ONE clock read, in Asia/Bangkok', () 
    *     between server and browser, so every card holding a next-year round
    *     would hydrate to a different string than it rendered.
    */
+  // Matched on MEMBERSHIP of the named list, not as one exact brace string —
+  // the same shape this file already uses for resolveScheduleBadge below. The
+  // list stopped being a single name when `siteMonthKey` joined it (the month
+  // the dropdowns open on moved to Bangkok for this test's own reason #2), and
+  // a probe that spells the whole list has to be rewritten for every sibling
+  // while asserting nothing more than this does.
   assert.match(
     CLIENT.withImports,
-    /import\s*\{\s*siteDateParts\s*\}\s*from\s*"@\/lib\/articlePublishTime"/,
+    /import\s*\{[\s\S]*?siteDateParts[\s\S]*?\}\s*from\s*"@\/lib\/articlePublishTime"/,
     'the zone must come from the module that owns it',
   );
   assert.match(

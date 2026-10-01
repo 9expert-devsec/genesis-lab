@@ -129,10 +129,12 @@ export function siteDateParts(iso) {
  * fixed when the HTML was built, which is what makes server and client agree by
  * construction rather than by luck.
  *
- * It is one of only TWO functions in this module that read the clock — see
- * `siteTodayKey` below — which is why they are the only two a test cannot pin to
- * a fixture. Every consumer takes the answer as an argument precisely so the
- * test can supply its own.
+ * It is one of only THREE functions in this module that read the clock — see
+ * `siteTodayKey` and `siteMonthKey` below — which is why those are the only
+ * places a default `new Date()` appears at all. This one takes no parameter, so
+ * it is the only one of the three a test cannot pin; the other two accept an
+ * injectable instant for exactly that reason. Every consumer takes the answer
+ * as an argument precisely so the test can supply its own.
  *
  * @returns {number}
  */
@@ -174,6 +176,51 @@ export function siteCurrentYear() {
 export function siteTodayKey(now = new Date()) {
   const { year, month, day } = siteDateParts(now);
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * The CURRENT MONTH as seen in Bangkok, as `'YYYY-MM'`.
+ *
+ * ── WHAT THIS IS FOR, AND WHAT IT IS NOT FOR ────────────────────────────────
+ * It answers "which month is it NOW" — and only that. The public /schedule page
+ * needs that answer in three places that must not disagree: the first option of
+ * the month dropdowns, the opening filter window, and the JSON-LD window the
+ * server emits for the same page. All three go through here.
+ *
+ * It is NOT the bucket key for a round's dates. `lib/schedule/monthWindow`'s
+ * `monthKey` keeps doing that in the RUNTIME's zone, deliberately: a round's
+ * dates arrive from upstream as UTC midnights, every other surface buckets them
+ * locally (see adminScheduleMonthCols), and moving that would shift columns on
+ * a page where nothing is currently wrong. The two readers answer different
+ * questions and only one of them is a clock read — this one.
+ *
+ * ── WHY IT IS A SLICE OF `siteTodayKey` AND NOT A THIRD FORMATTER ───────────
+ * `'YYYY-MM-DD'.slice(0, 7)` is exact for this shape: both fields are
+ * fixed-width and zero-padded, so the first seven characters ARE the month key,
+ * and the result is byte-identical to `monthKey`'s
+ * `${year}-${String(month).padStart(2, '0')}`. Re-deriving it from
+ * `siteDateParts` would mean a second padding expression for the same two
+ * numbers, which is the duplication `SITE_TIME_ZONE` exists to prevent — the
+ * same argument `siteTodayKey` makes above for not formatting directly.
+ *
+ * The returned string compares with `<` / `>` against any other `YYYY-MM` key
+ * in chronological order, which is the property `windowBetween` is built on.
+ *
+ * ── THE SEAM IT CLOSES ──────────────────────────────────────────────────────
+ * Vercel runs in UTC. Between 17:00 and 24:00 Bangkok on the last day of a
+ * month, UTC is still in the PREVIOUS month — so a dropdown built from
+ * `new Date()` offered a first option of October to a visitor for whom it was
+ * already November, and the server-rendered options disagreed with the
+ * client-rendered ones for those seven hours. Same seam, same reasoning, as
+ * `siteCurrentYear` above; that one guards a year label, this one guards a
+ * month window.
+ *
+ * @param {Date} [now] injectable ONLY so the timezone behaviour itself can be
+ *   tested at a pinned instant. Production callers pass nothing.
+ * @returns {string} e.g. `'2026-08'`
+ */
+export function siteMonthKey(now = new Date()) {
+  return siteTodayKey(now).slice(0, 7);
 }
 
 /**
