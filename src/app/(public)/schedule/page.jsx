@@ -1,10 +1,11 @@
+import { Suspense } from 'react';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { PUBLIC_SCHEDULE_STATUSES, getAllSchedules } from '@/lib/api/schedules';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getSchedulePDF } from '@/lib/actions/schedule-pdf';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
-import { joinCourseSchedules } from '@/lib/schedule/joinCourseSchedules';
+import { joinCourseSchedules, scheduleListRows } from '@/lib/schedule/joinCourseSchedules';
 import { scheduleWindowEnd } from '@/lib/schedule/monthWindow';
 import { siteMonthKey } from '@/lib/articlePublishTime';
 import { SITE_URL } from '@/lib/seo/siteUrl';
@@ -13,7 +14,7 @@ import {
   buildScheduleJsonLd,
   scheduleGraphRows,
 } from '@/lib/seo/scheduleJsonLd';
-import { ScheduleClient } from './_components/ScheduleClient';
+import { ScheduleClient, ScheduleClientRouted } from './_components/ScheduleClient';
 
 /**
  * The canonical URL of this page. ONE expression of the origin, shared with the
@@ -97,6 +98,11 @@ export default async function SchedulePage() {
     );
   }
 
+  // What the page LISTS: every public course, rounds or not (scheduleListRows).
+  // The month range and the JSON-LD below stay on the joined rows on purpose —
+  // both are about rounds, and a course with none adds nothing to either.
+  const scheduleRows = scheduleListRows(courses, coursesWithSchedules);
+
   /**
    * THE END OF THE MONTH RANGE, decided here and nowhere else.
    *
@@ -164,6 +170,14 @@ export default async function SchedulePage() {
     { endKey: monthRangeEnd }
   );
 
+  const clientProps = {
+    courses: scheduleRows,
+    programs: programsLite,
+    schedulePDF,
+    earlyBirdMap,
+    monthRangeEnd,
+  };
+
   return (
     <>
       {/* Same pattern and placement as /training-course: a plain ld+json script
@@ -178,13 +192,14 @@ export default async function SchedulePage() {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(scheduleJsonLd) }}
         />
       )}
-      <ScheduleClient
-        courses={coursesWithSchedules}
-        programs={programsLite}
-        schedulePDF={schedulePDF}
-        earlyBirdMap={earlyBirdMap}
-        monthRangeEnd={monthRangeEnd}
-      />
+      {/* ?view=list is read with useSearchParams, which on this ISR page bails
+          out to client rendering up to the nearest Suspense boundary. The
+          fallback is the ordinary TABLE view rather than null, so the server
+          HTML still carries the whole schedule; a ?view=list visit swaps to
+          the list once the client renders. */}
+      <Suspense fallback={<ScheduleClient {...clientProps} />}>
+        <ScheduleClientRouted {...clientProps} />
+      </Suspense>
     </>
   );
 }

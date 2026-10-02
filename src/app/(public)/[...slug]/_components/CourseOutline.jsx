@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isTopicBodyEmpty } from '@/lib/courses/topicBodyEmpty';
 import { ContentSection } from './ContentSection';
 
 /**
@@ -94,11 +95,26 @@ export function CourseOutline({ course, richHtml = null }) {
 
   if (!topics.length) return null;
 
-  const allOpen = topics.every((_, i) => openMap[i]);
+  /**
+   * Which rows have a body to reveal. A row whose body is empty (see
+   * lib/courses/topicBodyEmpty) renders as a static heading, and the
+   * ซ่อน/แสดงทั้งหมด toggle counts only the rows that can actually open — so it
+   * disappears when none can.
+   */
+  const expandable = topics.map((topic, i) => {
+    const rich = Array.isArray(richHtml) ? (richHtml[i] || '') : '';
+    return !isTopicBodyEmpty(rich || topic?.bullets);
+  });
+  const expandableIdx = topics.map((_, i) => i).filter((i) => expandable[i]);
+
+  const allOpen = expandableIdx.every((i) => openMap[i]);
 
   const toggleAll = () => {
     const next = !allOpen;
-    setOpenMap(Object.fromEntries(topics.map((_, i) => [i, next])));
+    setOpenMap((prev) => ({
+      ...prev,
+      ...Object.fromEntries(expandableIdx.map((i) => [i, next])),
+    }));
   };
 
   const toggle = (i) => setOpenMap((prev) => ({ ...prev, [i]: !prev[i] }));
@@ -108,13 +124,15 @@ export function CourseOutline({ course, richHtml = null }) {
       id="outline"
       title="หัวข้อการฝึกอบรม"
       action={
-        <button
-          type="button"
-          onClick={toggleAll}
-          className="text-sm font-medium text-9e-action hover:underline"
-        >
-          {allOpen ? 'ซ่อนทั้งหมด' : 'แสดงทั้งหมด'}
-        </button>
+        expandableIdx.length > 0 ? (
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="text-sm font-medium text-9e-action hover:underline"
+          >
+            {allOpen ? 'ซ่อนทั้งหมด' : 'แสดงทั้งหมด'}
+          </button>
+        ) : null
       }
     >
       <div className="space-y-2">
@@ -131,6 +149,26 @@ export function CourseOutline({ course, richHtml = null }) {
            * plain path, which for a bullet-less row renders nothing either way.
            */
           const rich = Array.isArray(richHtml) ? (richHtml[i] || '') : '';
+          if (!expandable[i]) {
+            /* EMPTY BODY — a static heading, not a control. Same box as a
+               collapsed row (padding, background, number, alignment) so the
+               list stays even, but no chevron, no handler, no aria-expanded,
+               not focusable, no hover. Its row height is set by the title's
+               line box, which is taller than the 16px chevron it lacks. */
+            return (
+              <div
+                key={i}
+                data-topic-empty=""
+                className="overflow-hidden rounded-xl border border-[var(--surface-border)]"
+              >
+                <div className="flex w-full items-center justify-between gap-3 bg-[var(--surface-raised)] px-5 py-3 text-left">
+                  <span className="text-base font-semibold text-[var(--text-primary)]">
+                    {i + 1}. {title}
+                  </span>
+                </div>
+              </div>
+            );
+          }
           return (
             <div
               key={i}

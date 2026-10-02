@@ -319,7 +319,10 @@ export const careerPaths = [
  * Three item types:
  *  - `type: 'mega'`   → header renders a full-width mega menu
  *                        (pulls `programs` + `skills` directly)
- *  - `children: [...]` → flat dropdown panel
+ *  - `children: [...]` → flat dropdown panel. `href` is OPTIONAL here: with
+ *                        one the trigger is a link (ติดต่อเรา); without one
+ *                        it is a button that only opens the panel
+ *                        (สิทธิประโยชน์).
  *  - neither           → plain link
  *
  * Structure mirrors the live site at 9experttraining.com.
@@ -333,6 +336,16 @@ export const mainNav = [
   // Career Path, TNHS, and หลักสูตรออนไลน์ are NOT top-level items —
   // they live only inside the หลักสูตร mega menu panel.
   { label: 'ตารางฝึกอบรม', href: '/schedule' },
+  // No `href`: the parent only opens its panel. The four pages are Advanced
+  // HTML custom pages authored in /admin/pages; until each exists its link 404s.
+  {
+    label: 'สิทธิประโยชน์',
+    children: [
+      { label: 'ค่าอบรม ลดหย่อนภาษีได้ 200%', href: '/tax-200' },
+      { label: 'สิทธิพิเศษสำหรับศิษย์เก่า',   href: '/alumni' },
+      { label: 'ข้อมูลการชำระเงิน',           href: '/payment' },
+    ],
+  },
   { label: 'โปรโมชัน',     href: '/promotions' },
   { label: 'บทความ',       href: '/articles' },
   { label: 'ผลงานของเรา',  href: '/portfolio' },

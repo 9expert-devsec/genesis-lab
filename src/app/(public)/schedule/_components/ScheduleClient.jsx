@@ -15,9 +15,15 @@ import {
   ChevronDown,
   ChevronRight,
   HelpCircle,
+  List,
   SlidersHorizontal,
+  Table2,
   X,
 } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ViewToggle } from "@/app/(public)/training-course/_components/ViewToggle";
+import { parseScheduleView, scheduleViewQuery } from "@/lib/schedule/scheduleView";
+import { TRAINING_TYPE_LABEL } from "@/lib/schedule/trainingTypeLabel";
 import { HeroPdfButton } from "@/components/ui/HeroPdfButton";
 import { courseLinkHref } from "@/lib/courses/courseLinkHref";
 import { siteDateParts, siteMonthKey } from "@/lib/articlePublishTime";
@@ -256,6 +262,8 @@ export function ScheduleClient({
   schedulePDF,
   earlyBirdMap = {},
   monthRangeEnd = null,
+  view = "table",
+  onViewChange = null,
 }) {
   const [now] = useState(() => new Date());
 
@@ -363,9 +371,57 @@ export function ScheduleClient({
       onReset={resetFilters}
       sheetOpen={sheetOpen}
       onSheetOpenChange={setSheetOpen}
+      view={view}
+      onViewChange={onViewChange}
     />
   );
 }
+
+/**
+ * The shell, with `?view=` wired to the URL.
+ *
+ * ── THE URL IS THE VIEW. NOTHING HERE MIRRORS IT INTO STATE. ────────────────
+ * Same shape as /training-course's CourseListClient, which is the conformance
+ * target: `view` is DERIVED from `searchParams` on every render and handed down
+ * as a prop; the toggle writes the URL (`router.replace`, so no back-button
+ * spam) and the next render reads it back. Every other parameter is carried
+ * through by scheduleViewQuery, and choosing the default (table) DELETES the
+ * key, so the default keeps the one canonical /schedule URL.
+ *
+ * The filters are NOT in the URL here — they never have been on /schedule;
+ * they are ScheduleClient's own state — and that state survives a toggle,
+ * because a same-route `replace` keeps this component instance.
+ *
+ * Separate from ScheduleClient so the page can give it a Suspense boundary
+ * whose fallback is the plain table-view ScheduleClient: `useSearchParams`
+ * on this ISR page bails out to client rendering up to the nearest boundary,
+ * and a `null` fallback (what /training-course uses) would take the whole
+ * schedule out of the server HTML. See schedule/page.jsx.
+ */
+export function ScheduleClientRouted(props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // DERIVED EVERY RENDER — never copied into state.
+  const view = parseScheduleView(searchParams.get("view"));
+
+  const changeView = useCallback(
+    (next) => {
+      const qs = scheduleViewQuery(searchParams.toString(), next);
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  return <ScheduleClient {...props} view={view} onViewChange={changeView} />;
+}
+
+/** /schedule's pair for the shared ViewToggle. Order = default first. */
+const SCHEDULE_VIEW_OPTIONS = [
+  { value: "table", label: "มุมมองตาราง", Icon: Table2 },
+  { value: "list", label: "มุมมองรายการ", Icon: List },
+];
 
 /**
  * Everything the page renders, as a pure function of `filters`.
@@ -399,8 +455,20 @@ export function ScheduleBoard({
   onReset,
   sheetOpen,
   onSheetOpenChange,
+  view = "table",
+  onViewChange = null,
 }) {
   const filterButtonRef = useRef(null);
+
+  // Desktop layouts only — see ProgramGroup. The toggle is drawn wherever the
+  // desktop layout is (`sm` and up); below that the cards render regardless.
+  const viewToggle = (
+    <ViewToggle
+      view={view}
+      onChange={(v) => onViewChange?.(v)}
+      options={SCHEDULE_VIEW_OPTIONS}
+    />
+  );
 
   // Keep `to` from falling below `from` after a change. A plain string
   // comparison: `YYYY-MM` is fixed-width and zero-padded, so lexicographic
@@ -455,14 +523,34 @@ export function ScheduleBoard({
       ) {
         return false;
       }
-      // Course is visible if at least one matching round has ANY month of its
-      // span inside the window — not merely its first date's month, which is
-      // what dropped whole course rows out of a single-month view.
+      // THE COURSE LIST IS FIXED; THE MONTH RANGE ONLY PICKS WHICH ROUND CELLS
+      // SHOW. Every public course is listed — rounds or not — so a course whose
+      // last round closed, or whose rounds fall outside the chosen months, keeps
+      // its row with empty months rather than reading as "no longer offered".
+      // See scheduleListRows (lib/schedule/joinCourseSchedules).
+      //
+      // The type and status filters are questions about ROUNDS, so while one is
+      // set the row still needs a matching round with ANY month of its span in
+      // the window — exactly the rule this replaced, unchanged for that case.
+      if (
+        filters.type === SCHEDULE_FILTER_ALL &&
+        filters.status === SCHEDULE_FILTER_ALL
+      ) {
+        return true;
+      }
       return (roundsByCourse[c._id] ?? []).some(
         (s) => sessionMatches(s) && roundInWindow(s?.dates, visibleMonths),
       );
     });
-  }, [courses, roundsByCourse, visibleMonths, filters.program, sessionMatches]);
+  }, [
+    courses,
+    roundsByCourse,
+    visibleMonths,
+    filters.program,
+    filters.type,
+    filters.status,
+    sessionMatches,
+  ]);
 
   const activeCount = activeScheduleFilterCount(filters, defaults);
 
@@ -642,15 +730,19 @@ export function ScheduleBoard({
               </span>
             ) : null}
           </button>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-3">
+            {/* sm–lg: the desktop table already shows here, so its toggle
+                does too. Below sm the cards render whatever `view` says. */}
+            <div className="hidden sm:block">{viewToggle}</div>
             <ResultCount count={filteredCourses.length} />
           </div>
         </div>
       </section>
 
       {/* Result count (desktop; the mobile bar carries its own, above) */}
-      <div className="mx-auto hidden max-w-[1200px] pt-6 lg:block">
+      <div className="mx-auto hidden max-w-[1200px] items-center justify-between gap-4 pt-6 lg:flex">
         <ResultCount count={filteredCourses.length} />
+        {viewToggle}
       </div>
 
       {/* Schedule tables / cards */}
@@ -672,6 +764,7 @@ export function ScheduleBoard({
             sessionMatches={sessionMatches}
             earlyBirdMap={earlyBirdMap}
             currentYear={currentYear}
+            view={view}
           />
         ))}
       </div>
@@ -1223,6 +1316,7 @@ function ProgramGroup({
   sessionMatches,
   earlyBirdMap = {},
   currentYear,
+  view = "table",
 }) {
   return (
     <div>
@@ -1246,14 +1340,24 @@ function ProgramGroup({
       </div>
 
       <div className="hidden sm:block">
-        <ProgramTable
-          courses={courses}
-          monthHeaders={monthHeaders}
-          visibleMonths={visibleMonths}
-          roundsByCourse={roundsByCourse}
-          sessionMatches={sessionMatches}
-          earlyBirdMap={earlyBirdMap}
-        />
+        {view === "list" ? (
+          <ProgramList
+            courses={courses}
+            visibleMonths={visibleMonths}
+            roundsByCourse={roundsByCourse}
+            sessionMatches={sessionMatches}
+            earlyBirdMap={earlyBirdMap}
+          />
+        ) : (
+          <ProgramTable
+            courses={courses}
+            monthHeaders={monthHeaders}
+            visibleMonths={visibleMonths}
+            roundsByCourse={roundsByCourse}
+            sessionMatches={sessionMatches}
+            earlyBirdMap={earlyBirdMap}
+          />
+        )}
       </div>
 
       <div className="flex flex-col gap-4 sm:hidden">
@@ -1621,11 +1725,11 @@ function ProgramTable({
                 So the row becomes lanes and the frozen columns rowSpan across
                 them. See lib/schedule/monthLanes for the packing.
 
-                `|| [[]]` is defensive only: `filteredCourses` guarantees every
-                course here has at least one visible round, so an empty result
-                is not reachable — but a course rendering NO <tr> at all would
-                silently drop its frozen columns too, which is worth one line to
-                make impossible.
+                `|| [[]]` is how a course with no visible round renders: one
+                lane of "—" cells under its frozen columns. Every public course
+                is listed now (see filteredCourses), so this is a real path, not
+                a defensive one — a course rendering NO <tr> at all would drop
+                its frozen columns too.
               */
               const rounds = (roundsByCourse[c._id] ?? []).filter(sessionMatches);
               const packed = laneLayout(rounds, visibleMonths).lanes;
@@ -1709,6 +1813,219 @@ function ProgramTable({
   );
 }
 
+// ── The desktop LIST layout (?view=list) ────────────────────────────────────
+
+/**
+ * The legacy /register-public layout, as a second desktop view of the SAME
+ * board: one block per course, one line per round, for readers who find a
+ * month grid hard to scan.
+ *
+ * Nothing here selects or formats on its own. The rounds come from
+ * `courseRounds` — the card's selector, which is the table's window and matcher
+ * — so all three layouts list the same rounds in the same (date) order. The
+ * date is `formatRoundDays` exactly as the mobile row calls it (with the month,
+ * since there is no month column to supply it); the status pill is the
+ * `resolveScheduleBadge(...).soft` treatment with its `state` word (see
+ * ListRound for why not `action`); the type is the TYPE_COLOR dot the
+ * table and legends use, with the legend's own label; the link is
+ * `scheduleRegistrationHref`, and when that returns null (a full round) there
+ * is no link at all.
+ */
+function ProgramList({
+  courses,
+  visibleMonths,
+  roundsByCourse,
+  sessionMatches,
+  earlyBirdMap = {},
+}) {
+  return (
+    // ONE course per row at every width, full container width. The rounds
+    // inside each block are a fixed-track grid (see ListRound), so a single
+    // column is what lets every row on the page line up under every other.
+    <ul className="grid grid-cols-1 gap-4">
+      {courses.map((c) => (
+        <CourseListBlock
+          key={c._id ?? c.course_id}
+          course={c}
+          rounds={courseRounds(roundsByCourse[c._id] ?? [], visibleMonths, sessionMatches)}
+          ebScheduleId={earlyBirdIdFor(earlyBirdMap, c)}
+        />
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * One course: an INFO panel and a ROUNDS panel, side by side from `lg`.
+ *
+ * ── WHY TWO PANELS ──────────────────────────────────────────────────────────
+ * A single-column card is ~1200px wide and a round row's content ~450px, so a
+ * full-width row was mostly an empty gap between the date and ลงทะเบียน. The
+ * course identity takes the left track; the rounds take the rest.
+ *
+ * ── THE LEFT TRACK IS 18rem (288px), MEASURED ───────────────────────────────
+ * Every public course name in the live feed (45, 2026-10-02) was rendered at
+ * this title's style — Google Sans 16px bold, leading-snug — in headless Chrome:
+ * all of them fit in 3 lines from 176px and in 2 lines from 208px. 288px keeps
+ * every current name to 2 lines with room for a name ~1.4× the longest before
+ * it reaches 3, and still leaves the rounds panel ~650px at `lg` against a
+ * round row's ~530px need (ListRound's fixed tracks + register + Early Bird).
+ * Names wrap; nothing truncates.
+ *
+ * ── BELOW lg ────────────────────────────────────────────────────────────────
+ * The panels stack: info on top (days·price and the detail link share a line),
+ * the divider turns horizontal, the rounds follow. The divider is the card's
+ * own border token in both themes.
+ */
+function CourseListBlock({ course, rounds, ebScheduleId }) {
+  const href = courseLinkHref(course);
+  // Only what the row already carries, and only when it is really there: no
+  // "-" for missing days, and no "Inhouse Only" label inside a PUBLIC listing.
+  const facts = [
+    course.course_trainingdays != null && course.course_trainingdays !== ""
+      ? formatTrainingDays(course, { withUnit: true })
+      : null,
+    isInhouseOnlyPrice(course.course_price)
+      ? null
+      : formatCoursePrice(course, { withUnit: true }),
+  ].filter(Boolean);
+
+  return (
+    <li className="grid grid-cols-1 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <div className="flex min-w-0 flex-col items-start gap-1 border-b border-gray-200 pb-3 dark:border-[#1e3a5f] lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6">
+        <Link
+          href={href}
+          className="text-base font-bold leading-snug text-9e-navy transition-colors hover:text-9e-action dark:text-white dark:hover:text-9e-air"
+        >
+          {course.course_name}
+        </Link>
+        <span className="text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          {course.course_id ?? "-"}
+        </span>
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 lg:flex-col lg:items-start">
+          {facts.length > 0 ? (
+            <span className="text-sm text-9e-navy dark:text-white">
+              {facts.join(" · ")}
+            </span>
+          ) : null}
+          <Link
+            href={href}
+            className="rounded-sm text-sm font-medium text-9e-action transition-colors duration-9e-micro ease-9e hover:underline dark:text-9e-air"
+          >
+            ดูรายละเอียดหลักสูตร →
+          </Link>
+        </div>
+      </div>
+      <div className="min-w-0 pt-3 lg:pl-6 lg:pt-0">
+        {rounds.length === 0 ? (
+          <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+            ยังไม่มีรอบอบรมที่เปิดรับ
+          </p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-gray-100 dark:divide-[#1e3a5f]">
+            {rounds.map((s) => (
+              <ListRound
+                key={s._id}
+                schedule={s}
+                course={course}
+                isEarlyBird={isEarlyBirdSchedule(ebScheduleId, s)}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function ListRound({ schedule, course, isEarlyBird = false }) {
+  const statusStyle = resolveScheduleBadge(schedule.status);
+  const color = TYPE_COLOR[schedule.type] ?? TYPE_COLOR.classroom;
+  // The legend's own wording, up to its dash: "Classroom", "Hybrid", "Online".
+  const typeLabel = String(TRAINING_TYPE_LABEL[schedule.type] ?? schedule.type ?? "").split(" — ")[0];
+  // `showYear: true`, not the card's 'auto': in this list EVERY round carries
+  // its year (`8-9 ต.ค. 69` beside `27-28 ม.ค. 70`), so a reader scanning one
+  // column of dates never has to infer which year an unmarked one is in. The
+  // formatter's neighbour rule still prints both years on a range that crosses
+  // one. Same setting /search and the admin schedules screen already use.
+  const dateLabel = formatRoundDays(schedule.dates, {
+    showMonth: true,
+    showYear: true,
+  });
+  const href = scheduleRegistrationHref(schedule, course.course_id);
+
+  /*
+    A FIXED-TRACK GRID, so every round row in every block reads as one table:
+      date | format | status | (Early Bird, flexible) | ลงทะเบียน
+    The track widths are measured, not guessed — Google Sans (spans are forced
+    to it in globals.css) in headless Chrome, 2026-10-02:
+      · date, 14px medium — longest in the live feed `29-30 เม.ย. 70` 91px;
+        `30 ก.ย. - 1 ต.ค. 69` 110px; across the year `30 ธ.ค. 69 - 2 ม.ค. 70`
+        130px; worst plausible shape `28, 30 พ.ย., 2, 4 ธ.ค. 69` 144px
+        → 9.5rem (152px);
+      · format, 12px + 8px dot + 6px gap — `Classroom` 72px → 5rem (80px);
+      · status pill, 11px bold + 16px padding — `ใกล้เต็ม` 51px → 4rem (64px).
+    Every cell is rendered even when empty, so a row without a type or a status
+    still keeps its columns. The hover tint is the round-row surface
+    (ROUND_ROW_SURFACE's bg-9e-ice / #0f1e30), only on rows with a link — a full
+    round's row gets no hover and no link.
+  */
+  return (
+    <li
+      className={
+        "-mx-2 grid grid-cols-[9.5rem_5rem_4rem_minmax(0,1fr)_auto] items-center gap-x-4 px-2 py-2" +
+        (href
+          ? " transition-colors duration-9e-micro ease-9e hover:bg-9e-ice dark:hover:bg-[#0f1e30]"
+          : "")
+      }
+    >
+      <span className="whitespace-nowrap text-sm font-medium text-9e-navy dark:text-white">
+        {dateLabel}
+      </span>
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+        {typeLabel ? (
+          <>
+            <span
+              className="h-2 w-2 flex-none rounded-full"
+              style={{ backgroundColor: color }}
+              aria-hidden
+            />
+            {typeLabel}
+          </>
+        ) : null}
+      </span>
+      {/* `state`, not `action`: lib/scheduleStatus reserves `action` for a
+          badge INSIDE a row that is itself the registration link. This row is
+          not; its link is the separate ลงทะเบียน below, so an open round's
+          pill reads เปิดรับ rather than repeating ลงทะเบียน beside it. */}
+      {/* The pill sits INSIDE its cell: as a grid item itself it would
+          stretch to the whole 4rem track. */}
+      <span className="flex">
+        {statusStyle && (
+          <span
+            className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${statusStyle.soft}`}
+          >
+            {statusStyle.state}
+          </span>
+        )}
+      </span>
+      <span className="flex min-w-0">{isEarlyBird ? <EarlyBirdTag /> : null}</span>
+      <span className="flex justify-end">
+        {href ? (
+          <a
+            href={href}
+            aria-label={`ลงทะเบียน ${course.course_name} ${dateLabel}`}
+            className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-bold text-9e-action transition-colors duration-9e-micro ease-9e hover:underline dark:text-9e-air"
+          >
+            ลงทะเบียน
+            <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+          </a>
+        ) : null}
+      </span>
+    </li>
+  );
+}
+
 // ── The mobile card layout ──────────────────────────────────────────────────
 
 /**
@@ -1766,6 +2083,13 @@ function CourseCard({ course, rounds, ebScheduleId, currentYear }) {
         </p>
         {/* Gapped, not flush: each row is its own object now, so the separator
             is space rather than a hairline between two lines of text. */}
+        {rounds.length === 0 ? (
+          // A listed course with no round in the visible months. The detail
+          // link below stays — it is where the course still lives.
+          <p className="mt-2 px-4 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+            ยังไม่มีรอบอบรมที่เปิดรับ
+          </p>
+        ) : (
         <ul id={listId} className="mt-2 flex flex-col gap-2 px-4">
           {shown.map((s) => (
             <RoundRow
@@ -1777,6 +2101,7 @@ function CourseCard({ course, rounds, ebScheduleId, currentYear }) {
             />
           ))}
         </ul>
+        )}
         {collapsible ? (
           <button
             type="button"
