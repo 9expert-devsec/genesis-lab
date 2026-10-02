@@ -344,7 +344,6 @@ export const mainNav = [
       { label: 'ค่าอบรม ลดหย่อนภาษีได้ 200%', href: '/tax-200' },
       { label: 'สิทธิพิเศษสำหรับศิษย์เก่า',   href: '/alumni' },
       { label: 'ข้อมูลการชำระเงิน',           href: '/payment' },
-      { label: 'วิธีการสมัครอบรม',             href: '/how-to-register' },
     ],
   },
   { label: 'โปรโมชัน',     href: '/promotions' },
