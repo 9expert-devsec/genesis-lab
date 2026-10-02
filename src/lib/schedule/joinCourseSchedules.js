@@ -8,9 +8,13 @@
  * rows survive.
  *
  * Why it reports what it DROPS: the join is lossy by design — a course with no
- * upcoming schedule is removed from the table entirely, because showing a course
- * with no bookable session is worse than hiding it. That is correct, and it is
- * also silent: in the PYTHON-L1 incident 45 of 77 courses vanished per render
+ * upcoming schedule gets no joined row. That used to be the end of it, on the
+ * view that a course with no bookable session was better hidden. RULED OTHERWISE
+ * 2026-10-02: a public course that vanished when its last round closed read to
+ * visitors as "no longer offered" (SQL-BI-ETL). So the page now lists every
+ * public course through `scheduleListRows` below, and the joined rows remain the
+ * input for the things that are about ROUNDS — the month range and the JSON-LD.
+ * The silence was a separate problem: in the PYTHON-L1 incident 45 of 77 courses vanished per render
  * with no signal anywhere, so a row missing because upstream filtered it out
  * (empty `signup_url` → excluded from /schedules responses) looked identical to
  * a row correctly absent. `dropped` and `orphans` exist so the caller can say
@@ -34,6 +38,59 @@ function courseRefOf(schedule) {
   return typeof schedule?.course === 'string'
     ? schedule.course
     : schedule?.course?._id;
+}
+
+/**
+ * One course as the /schedule table renders it: the fields the row shows, and
+ * its rounds. Shared by the joined rows and by the no-round rows of
+ * `scheduleListRows`, so the two cannot drift into different shapes.
+ */
+function scheduleRow(c, list) {
+  return {
+    _id: c._id,
+    course_id: c.course_id,
+    course_name: c.course_name,
+    /**
+     * THE ADMIN'S CUSTOM PATH, AND WHY IT WAS MISSING.
+     *
+     * `courseCanonicalPath` answers "what is this course's canonical URL?" from
+     * the alias FIRST and the `course_id` only as a fallback. This projection
+     * did not carry the alias, so every consumer of a row from here fell
+     * through to the derived path — and two of them did so silently:
+     *
+     *   · ScheduleClient's CourseCard calls `courseLinkHref(course)` under a
+     *     comment reading "the row carries urlAlias". It did not. Measured on a
+     *     production build 2026-09-29: all 44 course links on /schedule pointed
+     *     at `/<code>-training-course` (e.g. /claude-ai-training-course) while
+     *     the course's canonical is its alias (/claude-cowork-training-course),
+     *     so every one of them took a 308 through courseRedirectTarget before
+     *     landing. A working link with an extra hop is the quietest possible
+     *     version of this bug.
+     *   · lib/seo/scheduleJsonLd emits each course's `@id` from the same rule.
+     *     Without the alias, /schedule and /training-course named the SAME
+     *     course with two different URLs — 44 of 44 — which is two entities to
+     *     a crawler and defeats the point of a shared Course node.
+     *
+     * `listPublicCourses` attaches `urlAlias` to every course it returns (see
+     * attachAliases in lib/courses/hiddenCourses), so the value was always
+     * present on the input and only this projection dropped it. `?? null`
+     * matches the sibling fields and is what `normaliseAlias` reads as "no
+     * alias", falling through to the derived path exactly as before for the
+     * courses that genuinely have none.
+     */
+    urlAlias: c.urlAlias ?? null,
+    course_trainingdays: c.course_trainingdays ?? null,
+    course_price: c.course_price ?? null,
+    program: c.program
+      ? {
+          _id: c.program._id,
+          program_id: c.program.program_id,
+          program_name: c.program.program_name,
+          programiconurl: c.program.programiconurl ?? null,
+        }
+      : null,
+    schedules: list,
+  };
 }
 
 /**
@@ -83,51 +140,7 @@ export function joinCourseSchedules(courses, schedules) {
       continue;
     }
     matchedRefs.add(key);
-    rows.push({
-      _id: c._id,
-      course_id: c.course_id,
-      course_name: c.course_name,
-      /**
-       * THE ADMIN'S CUSTOM PATH, AND WHY IT WAS MISSING.
-       *
-       * `courseCanonicalPath` answers "what is this course's canonical URL?" from
-       * the alias FIRST and the `course_id` only as a fallback. This projection
-       * did not carry the alias, so every consumer of a row from here fell
-       * through to the derived path — and two of them did so silently:
-       *
-       *   · ScheduleClient's CourseCard calls `courseLinkHref(course)` under a
-       *     comment reading "the row carries urlAlias". It did not. Measured on a
-       *     production build 2026-09-29: all 44 course links on /schedule pointed
-       *     at `/<code>-training-course` (e.g. /claude-ai-training-course) while
-       *     the course's canonical is its alias (/claude-cowork-training-course),
-       *     so every one of them took a 308 through courseRedirectTarget before
-       *     landing. A working link with an extra hop is the quietest possible
-       *     version of this bug.
-       *   · lib/seo/scheduleJsonLd emits each course's `@id` from the same rule.
-       *     Without the alias, /schedule and /training-course named the SAME
-       *     course with two different URLs — 44 of 44 — which is two entities to
-       *     a crawler and defeats the point of a shared Course node.
-       *
-       * `listPublicCourses` attaches `urlAlias` to every course it returns (see
-       * attachAliases in lib/courses/hiddenCourses), so the value was always
-       * present on the input and only this projection dropped it. `?? null`
-       * matches the sibling fields and is what `normaliseAlias` reads as "no
-       * alias", falling through to the derived path exactly as before for the
-       * courses that genuinely have none.
-       */
-      urlAlias: c.urlAlias ?? null,
-      course_trainingdays: c.course_trainingdays ?? null,
-      course_price: c.course_price ?? null,
-      program: c.program
-        ? {
-            _id: c.program._id,
-            program_id: c.program.program_id,
-            program_name: c.program.program_name,
-            programiconurl: c.program.programiconurl ?? null,
-          }
-        : null,
-      schedules: list,
-    });
+    rows.push(scheduleRow(c, list));
   }
 
   // Anything bucketed but never claimed by a course is an orphan: a schedule
@@ -139,4 +152,35 @@ export function joinCourseSchedules(courses, schedules) {
   }
 
   return { rows, dropped, orphans };
+}
+
+/**
+ * The /schedule course list: every course the page should show, with or
+ * without rounds, in `courses` order.
+ *
+ *   · a course with a joined row → that row, unchanged;
+ *   · a PUBLIC course (`course_type_public === true`) with no rounds → the same
+ *     row shape with `schedules: []`, which renders as a row of empty months;
+ *   · any other course with no rounds → nothing. That is the in-house-only
+ *     course (`course_type_public: false`), and also a row missing the flag:
+ *     only an explicit `true` earns an empty row.
+ *
+ * Hidden courses (CourseExtension.isPublished === false) never reach here —
+ * `listPublicCourses` removes them before the page sees the list.
+ *
+ * @param {object[]} courses    /public-course items, as passed to joinCourseSchedules
+ * @param {object[]} joinedRows `rows` from joinCourseSchedules(courses, …)
+ * @returns {object[]}
+ */
+export function scheduleListRows(courses, joinedRows) {
+  const joined = new Map(
+    (Array.isArray(joinedRows) ? joinedRows : []).map((r) => [String(r._id), r]),
+  );
+  const out = [];
+  for (const c of Array.isArray(courses) ? courses : []) {
+    const row = joined.get(String(c?._id));
+    if (row) out.push(row);
+    else if (c?.course_type_public === true) out.push(scheduleRow(c, []));
+  }
+  return out;
 }

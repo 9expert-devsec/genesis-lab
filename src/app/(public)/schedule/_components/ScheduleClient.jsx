@@ -455,14 +455,34 @@ export function ScheduleBoard({
       ) {
         return false;
       }
-      // Course is visible if at least one matching round has ANY month of its
-      // span inside the window — not merely its first date's month, which is
-      // what dropped whole course rows out of a single-month view.
+      // THE COURSE LIST IS FIXED; THE MONTH RANGE ONLY PICKS WHICH ROUND CELLS
+      // SHOW. Every public course is listed — rounds or not — so a course whose
+      // last round closed, or whose rounds fall outside the chosen months, keeps
+      // its row with empty months rather than reading as "no longer offered".
+      // See scheduleListRows (lib/schedule/joinCourseSchedules).
+      //
+      // The type and status filters are questions about ROUNDS, so while one is
+      // set the row still needs a matching round with ANY month of its span in
+      // the window — exactly the rule this replaced, unchanged for that case.
+      if (
+        filters.type === SCHEDULE_FILTER_ALL &&
+        filters.status === SCHEDULE_FILTER_ALL
+      ) {
+        return true;
+      }
       return (roundsByCourse[c._id] ?? []).some(
         (s) => sessionMatches(s) && roundInWindow(s?.dates, visibleMonths),
       );
     });
-  }, [courses, roundsByCourse, visibleMonths, filters.program, sessionMatches]);
+  }, [
+    courses,
+    roundsByCourse,
+    visibleMonths,
+    filters.program,
+    filters.type,
+    filters.status,
+    sessionMatches,
+  ]);
 
   const activeCount = activeScheduleFilterCount(filters, defaults);
 
@@ -1621,11 +1641,11 @@ function ProgramTable({
                 So the row becomes lanes and the frozen columns rowSpan across
                 them. See lib/schedule/monthLanes for the packing.
 
-                `|| [[]]` is defensive only: `filteredCourses` guarantees every
-                course here has at least one visible round, so an empty result
-                is not reachable — but a course rendering NO <tr> at all would
-                silently drop its frozen columns too, which is worth one line to
-                make impossible.
+                `|| [[]]` is how a course with no visible round renders: one
+                lane of "—" cells under its frozen columns. Every public course
+                is listed now (see filteredCourses), so this is a real path, not
+                a defensive one — a course rendering NO <tr> at all would drop
+                its frozen columns too.
               */
               const rounds = (roundsByCourse[c._id] ?? []).filter(sessionMatches);
               const packed = laneLayout(rounds, visibleMonths).lanes;
@@ -1766,6 +1786,13 @@ function CourseCard({ course, rounds, ebScheduleId, currentYear }) {
         </p>
         {/* Gapped, not flush: each row is its own object now, so the separator
             is space rather than a hairline between two lines of text. */}
+        {rounds.length === 0 ? (
+          // A listed course with no round in the visible months. The detail
+          // link below stays — it is where the course still lives.
+          <p className="mt-2 px-4 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+            ยังไม่มีรอบอบรมที่เปิดรับ
+          </p>
+        ) : (
         <ul id={listId} className="mt-2 flex flex-col gap-2 px-4">
           {shown.map((s) => (
             <RoundRow
@@ -1777,6 +1804,7 @@ function CourseCard({ course, rounds, ebScheduleId, currentYear }) {
             />
           ))}
         </ul>
+        )}
         {collapsible ? (
           <button
             type="button"

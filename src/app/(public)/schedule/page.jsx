@@ -4,7 +4,7 @@ import { PUBLIC_SCHEDULE_STATUSES, getAllSchedules } from '@/lib/api/schedules';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getSchedulePDF } from '@/lib/actions/schedule-pdf';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
-import { joinCourseSchedules } from '@/lib/schedule/joinCourseSchedules';
+import { joinCourseSchedules, scheduleListRows } from '@/lib/schedule/joinCourseSchedules';
 import { scheduleWindowEnd } from '@/lib/schedule/monthWindow';
 import { siteMonthKey } from '@/lib/articlePublishTime';
 import { SITE_URL } from '@/lib/seo/siteUrl';
@@ -97,6 +97,11 @@ export default async function SchedulePage() {
     );
   }
 
+  // What the page LISTS: every public course, rounds or not (scheduleListRows).
+  // The month range and the JSON-LD below stay on the joined rows on purpose —
+  // both are about rounds, and a course with none adds nothing to either.
+  const scheduleRows = scheduleListRows(courses, coursesWithSchedules);
+
   /**
    * THE END OF THE MONTH RANGE, decided here and nowhere else.
    *
@@ -179,7 +184,7 @@ export default async function SchedulePage() {
         />
       )}
       <ScheduleClient
-        courses={coursesWithSchedules}
+        courses={scheduleRows}
         programs={programsLite}
         schedulePDF={schedulePDF}
         earlyBirdMap={earlyBirdMap}

@@ -234,7 +234,6 @@ test('every control moves the list with no apply step', () => {
     [{ type: 'hybrid' }, ['Excel']],
     [{ status: 'nearly_full' }, ['Excel']],
     [{ program: 'Design' }, ['Photoshop']],
-    [{ monthFrom: WINDOW[0], monthTo: WINDOW[0] }, ['Power BI']],
   ];
   for (const [patch, expected] of cases) {
     const html = renderBoard({ filters: { ...DEFAULTS, ...patch } });
@@ -244,6 +243,22 @@ test('every control moves the list with no apply step', () => {
       `changing ${JSON.stringify(patch)} did not move the list`,
     );
   }
+});
+
+test('the month control moves the ROUNDS live, and leaves the course list fixed', () => {
+  /**
+   * Ruled 2026-10-02: /schedule lists every public course, and the month range
+   * only decides which round cells show. This case used to expect the list to
+   * shrink to ['Power BI']; now the other two keep their cards and say they have
+   * no round in the chosen months.
+   */
+  const NO_ROUND = 'ยังไม่มีรอบอบรมที่เปิดรับ';
+  const narrowed = pageRegion(renderBoard({
+    filters: { ...DEFAULTS, monthFrom: WINDOW[0], monthTo: WINDOW[0] },
+  }));
+  assert.deepEqual(cardNames(narrowed), ['Power BI', 'Excel', 'Photoshop']);
+  assert.equal(narrowed.split(NO_ROUND).length - 1, 2, 'Excel and Photoshop should show no round');
+  assert.equal(pageRegion(renderBoard()).includes(NO_ROUND), false, 'CONTROL: the default view shows rounds on every card');
 });
 
 test('CONTROL: the default filters DO show every course', () => {
