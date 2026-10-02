@@ -489,7 +489,11 @@ function DesktopDropdown({ item, overlay = false, onPanelOpenChange = () => {} }
           // pointer click has already opened the panel on hover, so it keeps
           // it open rather than toggling it shut under the cursor.
           onClick={(e) => setIsOpen((v) => (e.detail === 0 ? !v : true))}
-          className={triggerClass}
+          // `font-thai` restated, not inherited: the base layer gives every
+          // <button> `font-en` (globals.css, the "Detail / body text" rule), so
+          // without it this trigger alone painted in Google Sans Medium while
+          // the link triggers inherit LINE Seed Sans TH from the <nav>.
+          className={cn(triggerClass, 'font-thai')}
         >
           {item.label}
           {chevron}

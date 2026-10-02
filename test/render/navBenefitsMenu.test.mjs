@@ -80,6 +80,28 @@ for (const overlay of [false, true]) {
   });
 }
 
+test('desktop: the button trigger has the link triggers\' typography', () => {
+  /**
+   * The links inherit their family from `font-thai` on the <nav>; a <button>
+   * does not, because globals.css's base layer gives every button `font-en`.
+   * Measured before the fix: สิทธิประโยชน์ painted in Google Sans Medium while
+   * its neighbours painted in LINE Seed Sans TH. So the button must carry
+   * `font-thai` itself, and its size/weight/line-height/tracking tokens must
+   * be the link's.
+   */
+  const doc = docOf(renderToStaticMarkup(createElement(PublicHeaderClient, PROPS)));
+  const nav = doc.querySelector('nav[aria-label="Primary"]');
+  const triggers = [...nav.children].map((w) => w.querySelector('a, button') ?? w);
+  const btn = triggers.find((t) => text(t) === LABEL);
+  const link = triggers.find((t) => text(t) === 'ติดต่อเรา');
+  const TYPO = /^(?:font-|text-\[|text-(?:xs|sm|base|lg|xl)$|leading-|tracking-)/;
+  const typo = (el) => el.className.split(/\s+/).filter((c) => TYPO.test(c)).sort();
+
+  assert.ok(nav.className.split(/\s+/).includes('font-thai'), 'CONTROL: the links\' family source moved');
+  assert.deepEqual(typo(btn), [...typo(link), 'font-thai'].sort(),
+    'the button\'s typography differs from the link trigger\'s');
+});
+
 test('mobile: the drawer renders the parent as an expander, not a link', () => {
   const doc = docOf(renderToStaticMarkup(createElement(MobileDrawer, { ...PROPS, open: true, onClose() {} })));
   const nav = doc.querySelector('nav[aria-label="Mobile primary"]');
