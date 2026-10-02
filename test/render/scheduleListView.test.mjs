@@ -71,7 +71,10 @@ const desktop = (doc) =>
   [...doc.querySelectorAll('div.hidden.sm\\:block')].filter((d) => !d.querySelector('[role="tablist"]'));
 const blockFor = (doc, code) =>
   desktop(doc).flatMap((d) => [...d.querySelectorAll(':scope > ul > li')]).find((li) => text(li).includes(code));
-const dateOf = (s) => formatRoundDays(s.dates, { showMonth: true, showYear: 'auto', currentYear: CURRENT_YEAR });
+/** The list prints EVERY round's year — `showYear: true`, not the card's 'auto'. */
+const dateOf = (s) => formatRoundDays(s.dates, { showMonth: true, showYear: true });
+/** What the mobile card prints for the same round: no year in the current year. */
+const cardDateOf = (s) => formatRoundDays(s.dates, { showMonth: true, showYear: 'auto', currentYear: CURRENT_YEAR });
 
 test('a course with rounds: title link, code, and one <li> per round in date order', () => {
   const block = blockFor(LIST, 'SQL-WITH');
@@ -81,6 +84,13 @@ test('a course with rounds: title link, code, and one <li> per round in date ord
   assert.equal(rounds.length, 2);
   assert.ok(text(rounds[0]).startsWith(dateOf(EARLIER)), 'rounds are not in date order / date format differs');
   assert.ok(text(rounds[1]).startsWith(dateOf(LATER)));
+  // The fixture rounds are in the current month, so the card would drop the
+  // year; the list must not. The year is the one extra token the list adds.
+  assert.notEqual(dateOf(EARLIER), cardDateOf(EARLIER), 'CONTROL: the fixture is a current-year round');
+  assert.ok(
+    text(rounds[0]).startsWith(`${cardDateOf(EARLIER)} `) && /\s\d{2}$/.test(dateOf(EARLIER)),
+    'a current-year round in the list is missing its year',
+  );
   assert.ok(text(rounds[1]).includes('ใกล้เต็ม'), 'the status label is missing');
   // The pill says what the round IS (state); the separate link is the action.
   const pill = (li) => [...li.querySelectorAll('span.rounded-full')].map(text).find(Boolean);

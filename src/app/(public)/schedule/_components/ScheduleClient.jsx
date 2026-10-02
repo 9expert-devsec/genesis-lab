@@ -1347,7 +1347,6 @@ function ProgramGroup({
             roundsByCourse={roundsByCourse}
             sessionMatches={sessionMatches}
             earlyBirdMap={earlyBirdMap}
-            currentYear={currentYear}
           />
         ) : (
           <ProgramTable
@@ -1838,7 +1837,6 @@ function ProgramList({
   roundsByCourse,
   sessionMatches,
   earlyBirdMap = {},
-  currentYear,
 }) {
   return (
     <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -1848,14 +1846,13 @@ function ProgramList({
           course={c}
           rounds={courseRounds(roundsByCourse[c._id] ?? [], visibleMonths, sessionMatches)}
           ebScheduleId={earlyBirdIdFor(earlyBirdMap, c)}
-          currentYear={currentYear}
         />
       ))}
     </ul>
   );
 }
 
-function CourseListBlock({ course, rounds, ebScheduleId, currentYear }) {
+function CourseListBlock({ course, rounds, ebScheduleId }) {
   return (
     <li className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
       <Link
@@ -1879,7 +1876,6 @@ function CourseListBlock({ course, rounds, ebScheduleId, currentYear }) {
               schedule={s}
               course={course}
               isEarlyBird={isEarlyBirdSchedule(ebScheduleId, s)}
-              currentYear={currentYear}
             />
           ))}
         </ul>
@@ -1888,15 +1884,19 @@ function CourseListBlock({ course, rounds, ebScheduleId, currentYear }) {
   );
 }
 
-function ListRound({ schedule, course, isEarlyBird = false, currentYear }) {
+function ListRound({ schedule, course, isEarlyBird = false }) {
   const statusStyle = resolveScheduleBadge(schedule.status);
   const color = TYPE_COLOR[schedule.type] ?? TYPE_COLOR.classroom;
   // The legend's own wording, up to its dash: "Classroom", "Hybrid", "Online".
   const typeLabel = String(TRAINING_TYPE_LABEL[schedule.type] ?? schedule.type ?? "").split(" — ")[0];
+  // `showYear: true`, not the card's 'auto': in this list EVERY round carries
+  // its year (`8-9 ต.ค. 69` beside `27-28 ม.ค. 70`), so a reader scanning one
+  // column of dates never has to infer which year an unmarked one is in. The
+  // formatter's neighbour rule still prints both years on a range that crosses
+  // one. Same setting /search and the admin schedules screen already use.
   const dateLabel = formatRoundDays(schedule.dates, {
     showMonth: true,
-    showYear: "auto",
-    currentYear,
+    showYear: true,
   });
   const href = scheduleRegistrationHref(schedule, course.course_id);
 

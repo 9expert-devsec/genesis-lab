@@ -190,6 +190,49 @@ test('showYear: true still puts a year on an interior year boundary', () => {
   );
 });
 
+// ── showYear: true across EVERY fixture — the /schedule?view=list setting ────
+//
+// The list view prints the year on every round, current year included. The
+// expectation is DERIVED from each fixture's existing `card` string rather than
+// typed again: `true` and `'auto'` share the neighbour rule and the month rule,
+// and differ only on the last token — `'auto'` drops the year there when it is
+// the current year, `true` never does. So the `true` label is the `card` label,
+// plus the last token's year exactly where `card` left it off.
+
+const ALWAYS = { showMonth: true, showYear: true };
+// Read from `Intl` HERE, independently of the formatter: deriving the year from
+// formatRoundDays would let a formatter that drops it also drop it from the
+// expectation, and the two would agree on the wrong answer.
+const BE_YEAR = new Intl.DateTimeFormat('th-TH', { year: '2-digit' });
+const yearOf = (date) =>
+  BE_YEAR.formatToParts(new Date(date)).find((p) => p.type === 'year')?.value ?? '';
+
+for (const [name, row] of Object.entries(ROUNDS)) {
+  test(`${name}: showYear: true is the card label with the last year always present`, () => {
+    if (row.card === '-') {
+      assert.equal(formatRoundDays(row.dates, ALWAYS), '-');
+      return;
+    }
+    const lastYear = yearOf(row.dates[row.dates.length - 1]);
+    const expected = row.card.endsWith(` ${lastYear}`) ? row.card : `${row.card} ${lastYear}`;
+    assert.equal(formatRoundDays(row.dates, ALWAYS), expected);
+  });
+}
+
+test('showYear: true covers current year, next year and a crossing range', () => {
+  // The three cases the list view is judged on, stated as relations rather
+  // than literals: a current-year round now ends in its year, a next-year round
+  // is unchanged from the card (it already had one), and a range crossing the
+  // year keeps BOTH years.
+  const cur = formatRoundDays(ROUNDS.consecutiveOneMonth.dates, ALWAYS);
+  assert.notEqual(cur, ROUNDS.consecutiveOneMonth.card, 'the current year is still being dropped');
+  assert.ok(cur.startsWith(ROUNDS.consecutiveOneMonth.card));
+  assert.equal(formatRoundDays(ROUNDS.nextYear.dates, ALWAYS), ROUNDS.nextYear.card);
+  const crossing = formatRoundDays(ROUNDS.crossingTheYear.dates, ALWAYS);
+  assert.equal(crossing, ROUNDS.crossingTheYear.card);
+  assert.equal(new Set(crossing.match(/\d{2}(?=,|$)/g)).size, 2, 'a crossing range must show two years');
+});
+
 // ── roundMonthSpan ──────────────────────────────────────────────────────────
 
 test('roundMonthSpan is the first and last month, as YYYY-MM', () => {
