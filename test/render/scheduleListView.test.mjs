@@ -119,7 +119,10 @@ test('the list keeps the program group, its badge and the grid', () => {
   const heading = [...LIST.querySelectorAll('h2')].find((h) => text(h) === 'Microsoft SQL Server');
   assert.equal(text(heading.nextElementSibling), '3');
   const grid = desktop(LIST)[0].querySelector(':scope > ul');
-  assert.ok(grid.className.includes('xl:grid-cols-2'), 'not a 1/2-column grid');
+  // One course per row at every width (was 1 → 2 columns at xl).
+  const cls = grid.className.split(/\s+/);
+  assert.ok(cls.includes('grid') && cls.includes('grid-cols-1'), 'not a one-column grid');
+  assert.equal(cls.some((c) => /(^|:)grid-cols-(?!1$)/.test(c)), false, 'a breakpoint adds a second column');
 });
 
 test('CONTROL: the default view is still the table, with no list blocks', () => {

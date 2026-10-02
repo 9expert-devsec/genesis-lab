@@ -1839,7 +1839,10 @@ function ProgramList({
   earlyBirdMap = {},
 }) {
   return (
-    <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+    // ONE course per row at every width, full container width. The rounds
+    // inside each block are a fixed-track grid (see ListRound), so a single
+    // column is what lets every row on the page line up under every other.
+    <ul className="grid grid-cols-1 gap-4">
       {courses.map((c) => (
         <CourseListBlock
           key={c._id ?? c.course_id}
@@ -1861,8 +1864,15 @@ function CourseListBlock({ course, rounds, ebScheduleId }) {
       >
         {course.course_name}
       </Link>{" "}
+      {/* Code, days and price — all three are already on the row (the table's
+          frozen columns read the same fields through the same formatters), so
+          this costs no fetch. */}
       <span className="text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]">
         {course.course_id ?? "-"}
+        {" · "}
+        {formatTrainingDays(course, { withUnit: true })}
+        {" · "}
+        {formatCoursePrice(course, { withUnit: true })}
       </span>
       {rounds.length === 0 ? (
         <p className="mt-3 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
@@ -1900,43 +1910,74 @@ function ListRound({ schedule, course, isEarlyBird = false }) {
   });
   const href = scheduleRegistrationHref(schedule, course.course_id);
 
+  /*
+    A FIXED-TRACK GRID, so every round row in every block reads as one table:
+      date | format | status | (Early Bird, flexible) | ลงทะเบียน
+    The track widths are measured, not guessed — Google Sans (spans are forced
+    to it in globals.css) in headless Chrome, 2026-10-02:
+      · date, 14px medium — longest in the live feed `29-30 เม.ย. 70` 91px;
+        `30 ก.ย. - 1 ต.ค. 69` 110px; across the year `30 ธ.ค. 69 - 2 ม.ค. 70`
+        130px; worst plausible shape `28, 30 พ.ย., 2, 4 ธ.ค. 69` 144px
+        → 9.5rem (152px);
+      · format, 12px + 8px dot + 6px gap — `Classroom` 72px → 5rem (80px);
+      · status pill, 11px bold + 16px padding — `ใกล้เต็ม` 51px → 4rem (64px).
+    Every cell is rendered even when empty, so a row without a type or a status
+    still keeps its columns. The hover tint is the round-row surface
+    (ROUND_ROW_SURFACE's bg-9e-ice / #0f1e30), only on rows with a link — a full
+    round's row gets no hover and no link.
+  */
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-      <span className="min-w-[9rem] text-sm font-medium text-9e-navy dark:text-white">
+    <li
+      className={
+        "-mx-2 grid grid-cols-[9.5rem_5rem_4rem_minmax(0,1fr)_auto] items-center gap-x-4 px-2 py-2" +
+        (href
+          ? " transition-colors duration-9e-micro ease-9e hover:bg-9e-ice dark:hover:bg-[#0f1e30]"
+          : "")
+      }
+    >
+      <span className="whitespace-nowrap text-sm font-medium text-9e-navy dark:text-white">
         {dateLabel}
       </span>
-      {typeLabel ? (
-        <span className="inline-flex items-center gap-1.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-          <span
-            className="h-2 w-2 flex-none rounded-full"
-            style={{ backgroundColor: color }}
-            aria-hidden
-          />
-          {typeLabel}
-        </span>
-      ) : null}
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+        {typeLabel ? (
+          <>
+            <span
+              className="h-2 w-2 flex-none rounded-full"
+              style={{ backgroundColor: color }}
+              aria-hidden
+            />
+            {typeLabel}
+          </>
+        ) : null}
+      </span>
       {/* `state`, not `action`: lib/scheduleStatus reserves `action` for a
           badge INSIDE a row that is itself the registration link. This row is
           not; its link is the separate ลงทะเบียน below, so an open round's
           pill reads เปิดรับ rather than repeating ลงทะเบียน beside it. */}
-      {statusStyle && (
-        <span
-          className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${statusStyle.soft}`}
-        >
-          {statusStyle.state}
-        </span>
-      )}
-      {isEarlyBird ? <EarlyBirdTag /> : null}
-      {href ? (
-        <a
-          href={href}
-          aria-label={`ลงทะเบียน ${course.course_name} ${dateLabel}`}
-          className="ml-auto inline-flex items-center gap-1 text-sm font-bold text-9e-action transition-colors duration-9e-micro ease-9e hover:underline dark:text-9e-air"
-        >
-          ลงทะเบียน
-          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
-        </a>
-      ) : null}
+      {/* The pill sits INSIDE its cell: as a grid item itself it would
+          stretch to the whole 4rem track. */}
+      <span className="flex">
+        {statusStyle && (
+          <span
+            className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${statusStyle.soft}`}
+          >
+            {statusStyle.state}
+          </span>
+        )}
+      </span>
+      <span className="flex min-w-0">{isEarlyBird ? <EarlyBirdTag /> : null}</span>
+      <span className="flex justify-end">
+        {href ? (
+          <a
+            href={href}
+            aria-label={`ลงทะเบียน ${course.course_name} ${dateLabel}`}
+            className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-bold text-9e-action transition-colors duration-9e-micro ease-9e hover:underline dark:text-9e-air"
+          >
+            ลงทะเบียน
+            <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+          </a>
+        ) : null}
+      </span>
     </li>
   );
 }
