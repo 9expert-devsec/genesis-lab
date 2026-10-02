@@ -1855,41 +1855,85 @@ function ProgramList({
   );
 }
 
+/**
+ * One course: an INFO panel and a ROUNDS panel, side by side from `lg`.
+ *
+ * ── WHY TWO PANELS ──────────────────────────────────────────────────────────
+ * A single-column card is ~1200px wide and a round row's content ~450px, so a
+ * full-width row was mostly an empty gap between the date and ลงทะเบียน. The
+ * course identity takes the left track; the rounds take the rest.
+ *
+ * ── THE LEFT TRACK IS 18rem (288px), MEASURED ───────────────────────────────
+ * Every public course name in the live feed (45, 2026-10-02) was rendered at
+ * this title's style — Google Sans 16px bold, leading-snug — in headless Chrome:
+ * all of them fit in 3 lines from 176px and in 2 lines from 208px. 288px keeps
+ * every current name to 2 lines with room for a name ~1.4× the longest before
+ * it reaches 3, and still leaves the rounds panel ~650px at `lg` against a
+ * round row's ~530px need (ListRound's fixed tracks + register + Early Bird).
+ * Names wrap; nothing truncates.
+ *
+ * ── BELOW lg ────────────────────────────────────────────────────────────────
+ * The panels stack: info on top (days·price and the detail link share a line),
+ * the divider turns horizontal, the rounds follow. The divider is the card's
+ * own border token in both themes.
+ */
 function CourseListBlock({ course, rounds, ebScheduleId }) {
+  const href = courseLinkHref(course);
+  // Only what the row already carries, and only when it is really there: no
+  // "-" for missing days, and no "Inhouse Only" label inside a PUBLIC listing.
+  const facts = [
+    course.course_trainingdays != null && course.course_trainingdays !== ""
+      ? formatTrainingDays(course, { withUnit: true })
+      : null,
+    isInhouseOnlyPrice(course.course_price)
+      ? null
+      : formatCoursePrice(course, { withUnit: true }),
+  ].filter(Boolean);
+
   return (
-    <li className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
-      <Link
-        href={courseLinkHref(course)}
-        className="text-base font-bold leading-snug text-9e-navy transition-colors hover:text-9e-action dark:text-white dark:hover:text-9e-air"
-      >
-        {course.course_name}
-      </Link>{" "}
-      {/* Code, days and price — all three are already on the row (the table's
-          frozen columns read the same fields through the same formatters), so
-          this costs no fetch. */}
-      <span className="text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]">
-        {course.course_id ?? "-"}
-        {" · "}
-        {formatTrainingDays(course, { withUnit: true })}
-        {" · "}
-        {formatCoursePrice(course, { withUnit: true })}
-      </span>
-      {rounds.length === 0 ? (
-        <p className="mt-3 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-          ยังไม่มีรอบอบรมที่เปิดรับ
-        </p>
-      ) : (
-        <ul className="mt-3 flex flex-col divide-y divide-gray-100 dark:divide-[#1e3a5f]">
-          {rounds.map((s) => (
-            <ListRound
-              key={s._id}
-              schedule={s}
-              course={course}
-              isEarlyBird={isEarlyBirdSchedule(ebScheduleId, s)}
-            />
-          ))}
-        </ul>
-      )}
+    <li className="grid grid-cols-1 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <div className="flex min-w-0 flex-col items-start gap-1 border-b border-gray-200 pb-3 dark:border-[#1e3a5f] lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6">
+        <Link
+          href={href}
+          className="text-base font-bold leading-snug text-9e-navy transition-colors hover:text-9e-action dark:text-white dark:hover:text-9e-air"
+        >
+          {course.course_name}
+        </Link>
+        <span className="text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          {course.course_id ?? "-"}
+        </span>
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 lg:flex-col lg:items-start">
+          {facts.length > 0 ? (
+            <span className="text-sm text-9e-navy dark:text-white">
+              {facts.join(" · ")}
+            </span>
+          ) : null}
+          <Link
+            href={href}
+            className="rounded-sm text-sm font-medium text-9e-action transition-colors duration-9e-micro ease-9e hover:underline dark:text-9e-air"
+          >
+            ดูรายละเอียดหลักสูตร →
+          </Link>
+        </div>
+      </div>
+      <div className="min-w-0 pt-3 lg:pl-6 lg:pt-0">
+        {rounds.length === 0 ? (
+          <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+            ยังไม่มีรอบอบรมที่เปิดรับ
+          </p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-gray-100 dark:divide-[#1e3a5f]">
+            {rounds.map((s) => (
+              <ListRound
+                key={s._id}
+                schedule={s}
+                course={course}
+                isEarlyBird={isEarlyBirdSchedule(ebScheduleId, s)}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
     </li>
   );
 }
