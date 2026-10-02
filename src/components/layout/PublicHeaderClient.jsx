@@ -407,7 +407,7 @@ function DesktopLink({ item, overlay = false }) {
       target={item.external ? '_blank' : undefined}
       rel={item.external ? 'noopener noreferrer' : undefined}
       className={cn(
-        'rounded-9e-sm px-3 py-2 text-[15px] font-medium',
+        'rounded-9e-sm px-2.5 py-2 text-[15px] font-medium',
         overlay
           ? 'text-white transition-colors duration-9e-micro ease-9e hover:text-9e-air'
           : 'text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e hover:text-9e-action dark:hover:text-9e-air'
@@ -434,33 +434,75 @@ function DesktopDropdown({ item, overlay = false, onPanelOpenChange = () => {} }
     setIsOpen(false);
   }, [pathname]);
 
+  // A parent WITHOUT an href (สิทธิประโยชน์) has nowhere to go, so its trigger
+  // is a button that only opens the panel. With an href (ติดต่อเรา) the trigger
+  // stays the link it always was, and none of the handlers below attach to it.
+  const isButton = !item.href;
+  const triggerRef = useRef(null);
+  // Stable across renders and roots (useId is not: two roots number it
+  // differently, which breaks the header's byte-parity drive).
+  const panelId = `nav-panel-${mainNav.indexOf(item)}`;
+
+  const triggerClass = cn(
+    'inline-flex items-center gap-1 rounded-9e-sm px-2.5 py-2 text-[15px] font-medium',
+    'transition-colors duration-9e-micro ease-9e',
+    overlay
+      ? (isOpen ? 'text-9e-air' : 'text-white')
+      : (isOpen ? 'text-9e-action dark:text-9e-brand' : 'text-[var(--text-secondary)]')
+  );
+  const chevron = (
+    <ChevronDown
+      className={cn(
+        'h-3.5 w-3.5 transition-transform duration-9e-micro ease-9e',
+        isOpen ? 'rotate-180' : ''
+      )}
+      strokeWidth={2}
+    />
+  );
+
   return (
     <div
       className="relative"
       onMouseEnter={() => setIsOpen(true)}
       onMouseLeave={() => setIsOpen(false)}
+      // Button variant only. Escape is also handled window-wide by
+      // useDismissOnScrollOrEscape; this half returns focus to the trigger.
+      // Tabbing out of the open panel closes it.
+      onKeyDown={isButton ? (e) => {
+        if (e.key === 'Escape' && isOpen) {
+          setIsOpen(false);
+          triggerRef.current?.focus();
+        }
+      } : undefined}
+      onBlur={isButton ? (e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setIsOpen(false);
+      } : undefined}
     >
-      <Link
-        href={item.href}
-        className={cn(
-          'inline-flex items-center gap-1 rounded-9e-sm px-3 py-2 text-[15px] font-medium',
-          'transition-colors duration-9e-micro ease-9e',
-          overlay
-            ? (isOpen ? 'text-9e-air' : 'text-white')
-            : (isOpen ? 'text-9e-action dark:text-9e-brand' : 'text-[var(--text-secondary)]')
-        )}
-      >
-        {item.label}
-        <ChevronDown
-          className={cn(
-            'h-3.5 w-3.5 transition-transform duration-9e-micro ease-9e',
-            isOpen ? 'rotate-180' : ''
-          )}
-          strokeWidth={2}
-        />
-      </Link>
+      {isButton ? (
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-expanded={isOpen}
+          aria-haspopup="true"
+          aria-controls={panelId}
+          // Enter/Space arrive as a click with `detail === 0` and toggle. A
+          // pointer click has already opened the panel on hover, so it keeps
+          // it open rather than toggling it shut under the cursor.
+          onClick={(e) => setIsOpen((v) => (e.detail === 0 ? !v : true))}
+          className={triggerClass}
+        >
+          {item.label}
+          {chevron}
+        </button>
+      ) : (
+        <Link href={item.href} className={triggerClass}>
+          {item.label}
+          {chevron}
+        </Link>
+      )}
 
       <div
+        id={isButton ? panelId : undefined}
         className={cn(
           'absolute left-0 top-full z-60 pt-2',
           'transition-opacity duration-9e-micro ease-9e',
@@ -820,7 +862,7 @@ function DesktopMega({
         href={item.href}
         onClick={() => setIsOpen(false)}
         className={cn(
-          'inline-flex h-full items-center gap-1 rounded-9e-sm px-3 text-[15px] font-medium',
+          'inline-flex h-full items-center gap-1 rounded-9e-sm px-2.5 text-[15px] font-medium',
           'transition-colors duration-9e-micro ease-9e',
           overlay
             ? (isOpen ? 'text-9e-air' : 'text-white')
@@ -1363,7 +1405,7 @@ function Col4Skeleton() {
 
 // ── Mobile drawer ───────────────────────────────────────────────
 
-function MobileDrawer({
+export function MobileDrawer({
   open,
   programs,
   orderedSkills = [],
@@ -1459,8 +1501,10 @@ function MobileDrawer({
   );
 }
 
-function MobileAccordion({ item, onNavigate }) {
-  const [open, setOpen] = useState(false);
+// `defaultOpen` exists for the nav guard test, which cannot click; the drawer
+// never passes it, so every accordion still starts closed.
+export function MobileAccordion({ item, onNavigate, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div>
