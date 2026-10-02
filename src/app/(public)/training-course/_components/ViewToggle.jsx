@@ -3,23 +3,29 @@
 import { LayoutGrid, Rows3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export function ViewToggle({ view, onChange }) {
+/**
+ * /training-course's pair, and the default — so that page's markup is exactly
+ * what it was before `options` existed. /schedule passes its own pair
+ * (table / list); see ScheduleClient.
+ */
+const CARD_TABLE = [
+  { value: 'card', label: 'มุมมองการ์ด', Icon: LayoutGrid },
+  { value: 'table', label: 'มุมมองตาราง', Icon: Rows3 },
+];
+
+export function ViewToggle({ view, onChange, options = CARD_TABLE }) {
   return (
     <div className="inline-flex items-center gap-2" role="tablist" aria-label="มุมมอง">
-      <ToggleButton
-        active={view === 'card'}
-        onClick={() => onChange('card')}
-        label="มุมมองการ์ด"
-      >
-        <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
-      </ToggleButton>
-      <ToggleButton
-        active={view === 'table'}
-        onClick={() => onChange('table')}
-        label="มุมมองตาราง"
-      >
-        <Rows3 className="h-4 w-4" strokeWidth={1.75} />
-      </ToggleButton>
+      {options.map(({ value, label, Icon }) => (
+        <ToggleButton
+          key={value}
+          active={view === value}
+          onClick={() => onChange(value)}
+          label={label}
+        >
+          <Icon className="h-4 w-4" strokeWidth={1.75} />
+        </ToggleButton>
+      ))}
     </div>
   );
 }

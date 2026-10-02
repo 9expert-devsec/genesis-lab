@@ -265,7 +265,8 @@ test('resolveScheduleBadge is imported, never redefined, and used by both', () =
     CLIENT.withImports,
     /import\s*\{[\s\S]*?resolveScheduleBadge[\s\S]*?\}\s*from\s*"@\/lib\/scheduleStatus"/,
   );
-  for (const component of ['ScheduleCell', 'RoundRow']) {
+  // ListRound is the ?view=list round line — a third reader of the same policy.
+  for (const component of ['ScheduleCell', 'RoundRow', 'ListRound']) {
     assert.match(
       functionSlice(CLIENT.code, component),
       /resolveScheduleBadge\(schedule\.status\)/,
@@ -289,8 +290,8 @@ test('the early-bird condition and lookup are each written once', () => {
   assert.equal(countOf(CLIENT.code, /function earlyBirdIdFor\(/g), 1);
   assert.equal(
     countOf(CLIENT.code, /isEarlyBirdSchedule\(/g),
-    3,
-    'declared once, called by the table and by the card',
+    4,
+    'declared once, called by the table, the card and the ?view=list block',
   );
 });
 

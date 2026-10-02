@@ -15,9 +15,15 @@ import {
   ChevronDown,
   ChevronRight,
   HelpCircle,
+  List,
   SlidersHorizontal,
+  Table2,
   X,
 } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ViewToggle } from "@/app/(public)/training-course/_components/ViewToggle";
+import { parseScheduleView, scheduleViewQuery } from "@/lib/schedule/scheduleView";
+import { TRAINING_TYPE_LABEL } from "@/lib/schedule/trainingTypeLabel";
 import { HeroPdfButton } from "@/components/ui/HeroPdfButton";
 import { courseLinkHref } from "@/lib/courses/courseLinkHref";
 import { siteDateParts, siteMonthKey } from "@/lib/articlePublishTime";
@@ -256,6 +262,8 @@ export function ScheduleClient({
   schedulePDF,
   earlyBirdMap = {},
   monthRangeEnd = null,
+  view = "table",
+  onViewChange = null,
 }) {
   const [now] = useState(() => new Date());
 
@@ -363,9 +371,57 @@ export function ScheduleClient({
       onReset={resetFilters}
       sheetOpen={sheetOpen}
       onSheetOpenChange={setSheetOpen}
+      view={view}
+      onViewChange={onViewChange}
     />
   );
 }
+
+/**
+ * The shell, with `?view=` wired to the URL.
+ *
+ * ── THE URL IS THE VIEW. NOTHING HERE MIRRORS IT INTO STATE. ────────────────
+ * Same shape as /training-course's CourseListClient, which is the conformance
+ * target: `view` is DERIVED from `searchParams` on every render and handed down
+ * as a prop; the toggle writes the URL (`router.replace`, so no back-button
+ * spam) and the next render reads it back. Every other parameter is carried
+ * through by scheduleViewQuery, and choosing the default (table) DELETES the
+ * key, so the default keeps the one canonical /schedule URL.
+ *
+ * The filters are NOT in the URL here — they never have been on /schedule;
+ * they are ScheduleClient's own state — and that state survives a toggle,
+ * because a same-route `replace` keeps this component instance.
+ *
+ * Separate from ScheduleClient so the page can give it a Suspense boundary
+ * whose fallback is the plain table-view ScheduleClient: `useSearchParams`
+ * on this ISR page bails out to client rendering up to the nearest boundary,
+ * and a `null` fallback (what /training-course uses) would take the whole
+ * schedule out of the server HTML. See schedule/page.jsx.
+ */
+export function ScheduleClientRouted(props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // DERIVED EVERY RENDER — never copied into state.
+  const view = parseScheduleView(searchParams.get("view"));
+
+  const changeView = useCallback(
+    (next) => {
+      const qs = scheduleViewQuery(searchParams.toString(), next);
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  return <ScheduleClient {...props} view={view} onViewChange={changeView} />;
+}
+
+/** /schedule's pair for the shared ViewToggle. Order = default first. */
+const SCHEDULE_VIEW_OPTIONS = [
+  { value: "table", label: "มุมมองตาราง", Icon: Table2 },
+  { value: "list", label: "มุมมองรายการ", Icon: List },
+];
 
 /**
  * Everything the page renders, as a pure function of `filters`.
@@ -399,8 +455,20 @@ export function ScheduleBoard({
   onReset,
   sheetOpen,
   onSheetOpenChange,
+  view = "table",
+  onViewChange = null,
 }) {
   const filterButtonRef = useRef(null);
+
+  // Desktop layouts only — see ProgramGroup. The toggle is drawn wherever the
+  // desktop layout is (`sm` and up); below that the cards render regardless.
+  const viewToggle = (
+    <ViewToggle
+      view={view}
+      onChange={(v) => onViewChange?.(v)}
+      options={SCHEDULE_VIEW_OPTIONS}
+    />
+  );
 
   // Keep `to` from falling below `from` after a change. A plain string
   // comparison: `YYYY-MM` is fixed-width and zero-padded, so lexicographic
@@ -662,15 +730,19 @@ export function ScheduleBoard({
               </span>
             ) : null}
           </button>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-3">
+            {/* sm–lg: the desktop table already shows here, so its toggle
+                does too. Below sm the cards render whatever `view` says. */}
+            <div className="hidden sm:block">{viewToggle}</div>
             <ResultCount count={filteredCourses.length} />
           </div>
         </div>
       </section>
 
       {/* Result count (desktop; the mobile bar carries its own, above) */}
-      <div className="mx-auto hidden max-w-[1200px] pt-6 lg:block">
+      <div className="mx-auto hidden max-w-[1200px] items-center justify-between gap-4 pt-6 lg:flex">
         <ResultCount count={filteredCourses.length} />
+        {viewToggle}
       </div>
 
       {/* Schedule tables / cards */}
@@ -692,6 +764,7 @@ export function ScheduleBoard({
             sessionMatches={sessionMatches}
             earlyBirdMap={earlyBirdMap}
             currentYear={currentYear}
+            view={view}
           />
         ))}
       </div>
@@ -1243,6 +1316,7 @@ function ProgramGroup({
   sessionMatches,
   earlyBirdMap = {},
   currentYear,
+  view = "table",
 }) {
   return (
     <div>
@@ -1266,14 +1340,25 @@ function ProgramGroup({
       </div>
 
       <div className="hidden sm:block">
-        <ProgramTable
-          courses={courses}
-          monthHeaders={monthHeaders}
-          visibleMonths={visibleMonths}
-          roundsByCourse={roundsByCourse}
-          sessionMatches={sessionMatches}
-          earlyBirdMap={earlyBirdMap}
-        />
+        {view === "list" ? (
+          <ProgramList
+            courses={courses}
+            visibleMonths={visibleMonths}
+            roundsByCourse={roundsByCourse}
+            sessionMatches={sessionMatches}
+            earlyBirdMap={earlyBirdMap}
+            currentYear={currentYear}
+          />
+        ) : (
+          <ProgramTable
+            courses={courses}
+            monthHeaders={monthHeaders}
+            visibleMonths={visibleMonths}
+            roundsByCourse={roundsByCourse}
+            sessionMatches={sessionMatches}
+            earlyBirdMap={earlyBirdMap}
+          />
+        )}
       </div>
 
       <div className="flex flex-col gap-4 sm:hidden">
@@ -1726,6 +1811,133 @@ function ProgramTable({
         </div>
       )}
     </div>
+  );
+}
+
+// ── The desktop LIST layout (?view=list) ────────────────────────────────────
+
+/**
+ * The legacy /register-public layout, as a second desktop view of the SAME
+ * board: one block per course, one line per round, for readers who find a
+ * month grid hard to scan.
+ *
+ * Nothing here selects or formats on its own. The rounds come from
+ * `courseRounds` — the card's selector, which is the table's window and matcher
+ * — so all three layouts list the same rounds in the same (date) order. The
+ * date is `formatRoundDays` exactly as the mobile row calls it (with the month,
+ * since there is no month column to supply it); the status pill is the
+ * `resolveScheduleBadge(...).soft` treatment with its `state` word (see
+ * ListRound for why not `action`); the type is the TYPE_COLOR dot the
+ * table and legends use, with the legend's own label; the link is
+ * `scheduleRegistrationHref`, and when that returns null (a full round) there
+ * is no link at all.
+ */
+function ProgramList({
+  courses,
+  visibleMonths,
+  roundsByCourse,
+  sessionMatches,
+  earlyBirdMap = {},
+  currentYear,
+}) {
+  return (
+    <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      {courses.map((c) => (
+        <CourseListBlock
+          key={c._id ?? c.course_id}
+          course={c}
+          rounds={courseRounds(roundsByCourse[c._id] ?? [], visibleMonths, sessionMatches)}
+          ebScheduleId={earlyBirdIdFor(earlyBirdMap, c)}
+          currentYear={currentYear}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function CourseListBlock({ course, rounds, ebScheduleId, currentYear }) {
+  return (
+    <li className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
+      <Link
+        href={courseLinkHref(course)}
+        className="text-base font-bold leading-snug text-9e-navy transition-colors hover:text-9e-action dark:text-white dark:hover:text-9e-air"
+      >
+        {course.course_name}
+      </Link>{" "}
+      <span className="text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]">
+        {course.course_id ?? "-"}
+      </span>
+      {rounds.length === 0 ? (
+        <p className="mt-3 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          ยังไม่มีรอบอบรมที่เปิดรับ
+        </p>
+      ) : (
+        <ul className="mt-3 flex flex-col divide-y divide-gray-100 dark:divide-[#1e3a5f]">
+          {rounds.map((s) => (
+            <ListRound
+              key={s._id}
+              schedule={s}
+              course={course}
+              isEarlyBird={isEarlyBirdSchedule(ebScheduleId, s)}
+              currentYear={currentYear}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function ListRound({ schedule, course, isEarlyBird = false, currentYear }) {
+  const statusStyle = resolveScheduleBadge(schedule.status);
+  const color = TYPE_COLOR[schedule.type] ?? TYPE_COLOR.classroom;
+  // The legend's own wording, up to its dash: "Classroom", "Hybrid", "Online".
+  const typeLabel = String(TRAINING_TYPE_LABEL[schedule.type] ?? schedule.type ?? "").split(" — ")[0];
+  const dateLabel = formatRoundDays(schedule.dates, {
+    showMonth: true,
+    showYear: "auto",
+    currentYear,
+  });
+  const href = scheduleRegistrationHref(schedule, course.course_id);
+
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+      <span className="min-w-[9rem] text-sm font-medium text-9e-navy dark:text-white">
+        {dateLabel}
+      </span>
+      {typeLabel ? (
+        <span className="inline-flex items-center gap-1.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          <span
+            className="h-2 w-2 flex-none rounded-full"
+            style={{ backgroundColor: color }}
+            aria-hidden
+          />
+          {typeLabel}
+        </span>
+      ) : null}
+      {/* `state`, not `action`: lib/scheduleStatus reserves `action` for a
+          badge INSIDE a row that is itself the registration link. This row is
+          not; its link is the separate ลงทะเบียน below, so an open round's
+          pill reads เปิดรับ rather than repeating ลงทะเบียน beside it. */}
+      {statusStyle && (
+        <span
+          className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${statusStyle.soft}`}
+        >
+          {statusStyle.state}
+        </span>
+      )}
+      {isEarlyBird ? <EarlyBirdTag /> : null}
+      {href ? (
+        <a
+          href={href}
+          aria-label={`ลงทะเบียน ${course.course_name} ${dateLabel}`}
+          className="ml-auto inline-flex items-center gap-1 text-sm font-bold text-9e-action transition-colors duration-9e-micro ease-9e hover:underline dark:text-9e-air"
+        >
+          ลงทะเบียน
+          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+        </a>
+      ) : null}
+    </li>
   );
 }
 
