@@ -20,6 +20,7 @@ import { siteConfig } from '@/config/site';
 import { OG_DEFAULT_IMAGE } from '@/lib/seo/ogImage';
 import { buildArticleBreadcrumbJsonLd } from '@/lib/articles/articleBreadcrumbJsonLd';
 import { articleMetaTitle } from '@/lib/articles/articleTitle';
+import { lazyLoadArticleImages } from '@/lib/articles/lazyLoadArticleImages';
 import { ArticleDetailClient } from './_components/ArticleDetailClient';
 
 export const revalidate = 3600;
@@ -209,7 +210,14 @@ export default async function ArticleDetailPage({ params }) {
           // bytes first, then letting the two render-only passes add their
           // own markup on top of already-clean content, is the only order
           // that does not silently break the colour dark-mode fix.
-          content: wrapArticleTables(normalizeAuthoredColors(sanitizeRichHtml(article.content))),
+          //
+          // Image lazy-loading is last: it only adds attributes to <img>, so it
+          // is indifferent to the wrappers and colour properties before it, and
+          // running it after them means it never re-serialises a body that
+          // neither of them touched.
+          content: lazyLoadArticleImages(
+            wrapArticleTables(normalizeAuthoredColors(sanitizeRichHtml(article.content)))
+          ),
         }}
         related={related}
         relatedCoursesData={relatedCoursesData}

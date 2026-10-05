@@ -9,6 +9,7 @@ import { coursePriceLabel } from '@/lib/coursePriceLabel';
 import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import { articleCanonicalUrl } from '@/lib/articles/articleUrl';
 import { ArticleBackLink } from './ArticleBackLink';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 
 /**
  * Article detail page — client component, owns most of the rendering
@@ -788,9 +789,10 @@ function BrandGlyph({ brand }) {
 // ── Related cards ────────────────────────────────────────────────
 
 function RelatedCourseCard({ course }) {
-  const href = Array.isArray(course.website_urls) && course.website_urls[0]
-    ? course.website_urls[0]
-    : '#';
+  // Through the repo's one function for internal course links (alias-aware,
+  // never a double slash) rather than upstream's website_urls[0], which sent
+  // some cards off-site and fell back to a dead `#`.
+  const href = courseLinkHref(course);
   const price = Number(course.course_price ?? 0);
   const days  = Number(course.course_trainingdays ?? 0);
   const hours = Number(course.course_traininghours ?? 0) || (days ? days * 6 : 0);
@@ -799,13 +801,10 @@ function RelatedCourseCard({ course }) {
   const levelKey   = course.course_levels != null ? Number(course.course_levels) : null;
   const levelLabel = levelKey ? LEVEL_LABEL[levelKey] : null;
 
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md dark:border-none dark:bg-9e-navy"
-    >
+  const cardCls = 'group flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md dark:border-none dark:bg-9e-navy';
+
+  const body = (
+    <>
       {/* Thumbnail */}
       <div className="relative aspect-video w-full overflow-hidden bg-9e-ice">
         {course.course_cover_url ? (
@@ -856,7 +855,16 @@ function RelatedCourseCard({ course }) {
           </div>
         )}
       </div>
+    </>
+  );
+
+  // Never a `#` link: with no resolvable href the card renders unlinked.
+  return href ? (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={cardCls}>
+      {body}
     </a>
+  ) : (
+    <div className={cardCls}>{body}</div>
   );
 }
 

@@ -32,7 +32,9 @@ function assertSanitizedAt(path, anchor, fnName) {
 
 test('site 1 — ArticleDetailClient renders sanitizeRichHtml(article.content) via the [slug] page', () => {
   const { code } = readSource('src/app/(public)/articles/[slug]/page.jsx');
-  assert.match(code, /content:\s*wrapArticleTables\(normalizeAuthoredColors\(sanitizeRichHtml\(article\.content\)\)\)/);
+  // lazyLoadArticleImages is the outermost render pass (SITE-13); sanitising
+  // still runs first, on the stored bytes.
+  assert.match(code, /content:\s*lazyLoadArticleImages\(\s*wrapArticleTables\(normalizeAuthoredColors\(sanitizeRichHtml\(article\.content\)\)\)\s*\)/);
 });
 
 test('site 2 — ArticleForm preview calls sanitizeRichHtml(previewData.content)', () => {
