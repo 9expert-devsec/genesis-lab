@@ -16,6 +16,9 @@ import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 // this route per-request; this one records the 404 with the canonical host,
 // after the response, and only when a render actually happens (a MISS).
 import { recordStaticNotFound } from '@/lib/redirects/recordStaticNotFound';
+import { siteConfig } from '@/config/site';
+import { OG_DEFAULT_IMAGE } from '@/lib/seo/ogImage';
+import { buildArticleBreadcrumbJsonLd } from '@/lib/articles/articleBreadcrumbJsonLd';
 import { ArticleDetailClient } from './_components/ArticleDetailClient';
 
 export const revalidate = 3600;
@@ -60,6 +63,11 @@ export async function generateMetadata({ params }) {
     article.title
   );
   const pageUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${slug}`;
+  // A child's `openGraph` / `twitter` REPLACE the root layout's objects
+  // wholesale (no deep merge), so everything the article still wants from the
+  // site-wide card — site name, locale, the default image when there is no
+  // cover — has to be restated here or it silently disappears.
+  const ogImage = article.coverUrl ? { url: article.coverUrl } : OG_DEFAULT_IMAGE;
   return {
     title:       article.seoTitle || article.title,
     description,
@@ -68,8 +76,16 @@ export async function generateMetadata({ params }) {
       title:       article.seoTitle || article.title,
       description,
       url: pageUrl,
-      images: article.coverUrl ? [{ url: article.coverUrl }] : [],
+      siteName: siteConfig.name,
+      locale: 'th_TH',
+      images: [ogImage],
       type: 'article',
+    },
+    twitter: {
+      card:        'summary_large_image',
+      title:       article.seoTitle || article.title,
+      description,
+      images: [ogImage.url],
     },
   };
 }
@@ -144,6 +160,9 @@ export default async function ArticleDetailPage({ params }) {
   // disabled, or rawOverride is on with invalid JSON — in any of those
   // cases we simply omit the script tag.
   const jsonLdData = buildJsonLd(article);
+  // Independent of the Article block above: the trail says where the page sits
+  // in the site, which does not depend on the article's JSON-LD settings.
+  const breadcrumbJsonLd = buildArticleBreadcrumbJsonLd(article);
 
   return (
     <>
@@ -154,6 +173,12 @@ export default async function ArticleDetailPage({ params }) {
           // part of the page output — search engines pick it up the
           // same as a hand-written <head> include.
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdData) }}
+        />
+      )}
+      {breadcrumbJsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
         />
       )}
       <ArticleDetailClient
