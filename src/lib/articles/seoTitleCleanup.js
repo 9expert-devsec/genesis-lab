@@ -10,18 +10,24 @@
  *
  * Categories, in the order they are tested:
  *   empty        — no seoTitle; nothing proposed (the page uses `title`).
- *   brand-suffix — a trailing `<sep> <brand>` stripped, repeatedly.
- *   cut-prefix   — ≥55 graphemes and a STRICT prefix of `title`: it was cut
- *                  from the full title, so it is emptied and the page falls
- *                  back to `title`. A shorter title is never invented.
+ *   brand-suffix — a trailing `<sep> <brand>` (brand: `9` … `9Expert
+ *                  Training`, any prefix) or a bare trailing `<sep>` stripped,
+ *                  repeatedly (R2b rules A and B).
+ *   cut-prefix   — the stored value is exactly 60 UTF-16 units (the old
+ *                  form's `.slice(0, 60)` signature) and, after stripping, a
+ *                  STRICT prefix of `title`: it was cut from the full title,
+ *                  so it is emptied and the page falls back to `title`. A
+ *                  shorter title is never invented (R2b rule C).
  *   brand-suffix+cut-prefix — both; proposed value ''.
  *   needs-human  — stripping left nothing, or ≥58 graphemes, not a prefix of
  *                  `title`, and ending in what looks like a mid-word cut.
  *   ok           — none of the above.
  *
- * LENGTHS ARE GRAPHEMES (Intl.Segmenter), not UTF-16 units: Thai combining
- * vowels and tone marks are separate code units but not separate characters,
- * so `.length` would overcount every Thai title.
+ * REPORTED LENGTHS ARE GRAPHEMES (Intl.Segmenter), not UTF-16 units: Thai
+ * combining vowels and tone marks are separate code units but not separate
+ * characters, so `.length` would overcount every Thai title. The one place
+ * UTF-16 `.length` is used is rule C's 60-unit test, because that is the unit
+ * the old form cut in.
  */
 
 const segmenter = new Intl.Segmenter('th', { granularity: 'grapheme' });
@@ -44,24 +50,31 @@ function prefixPattern(word, min) {
 
 /** Separators seen in the corpus: ASCII pipe, box-drawing │, full-width ｜, dashes, colon. */
 const SEPARATORS = '[|\\u2502\\uFF5C\\-\\u2013\\u2014:]';
-// Brand: `9E` … `9Expert`, then optionally ` Training` or any prefix of it.
-const BRAND = `${prefixPattern('9Expert', 2)}(?:\\s+${prefixPattern('Training', 1)})?`;
+// Brand: `9` … `9Expert` (rule A: a lone `9` counts — the old 60-unit cut left
+// titles ending `| 9`), then optionally ` Training` or any prefix of it. Always
+// behind a separator, so `… Windows 9` is not a brand tail.
+const BRAND = `${prefixPattern('9Expert', 1)}(?:\\s+${prefixPattern('Training', 1)})?`;
 const BRAND_SUFFIX_RE = new RegExp(`\\s*${SEPARATORS}\\s*${BRAND}\\s*$`, 'iu');
+// Rule B: a separator with nothing after it — the brand was cut off entirely.
+const BARE_SEPARATOR_RE = new RegExp(`\\s*${SEPARATORS}+\\s*$`, 'u');
 
-/** Strip trailing `<sep> <brand>` until nothing more matches. */
+/**
+ * Strip trailing `<sep> <brand>` and bare trailing separators until nothing
+ * more matches. `removed` is the exact text taken off the (trimmed) input.
+ */
 export function stripBrandSuffix(value) {
-  let s = String(value ?? '').trim();
-  let stripped = false;
+  const input = String(value ?? '').trim();
+  let s = input;
   for (;;) {
-    const next = s.replace(BRAND_SUFFIX_RE, '').trim();
+    const next = s.replace(BRAND_SUFFIX_RE, '').replace(BARE_SEPARATOR_RE, '').trim();
     if (next === s) break;
     s = next;
-    stripped = true;
   }
-  return { value: s, stripped };
+  return { value: s, stripped: s !== input, removed: input.slice(s.length) };
 }
 
-export const CUT_PREFIX_MIN = 55;
+/** Rule C: the old admin form's `.slice(0, 60)` — measured in UTF-16 units. */
+export const OLD_FORM_CUT_UNITS = 60;
 export const NEEDS_HUMAN_MIN = 58;
 
 /** Ends in whitespace or punctuation — i.e. not obviously cut inside a word. */
@@ -91,31 +104,39 @@ export function looksCutMidWord(value, title, excerpt) {
  *   category: 'empty'|'brand-suffix'|'cut-prefix'|'brand-suffix+cut-prefix'|'needs-human'|'ok',
  *   current: string,
  *   proposed: string|null,   // null = no change proposed
- *   lengthBefore: number,
- *   lengthAfter: number,
+ *   lengthBefore: number,    // graphemes
+ *   lengthAfter: number,     // graphemes
+ *   utf16LengthBefore: number,
+ *   stripped: string,        // exact text removed by rules A/B, '' if none
  * }}
  */
 export function classifySeoTitle(article) {
   const current = String(article?.seoTitle ?? '').trim();
   const title = String(article?.title ?? '').trim();
   const lengthBefore = graphemeLength(current);
+  // UTF-16 units of the value AS STORED — used only for rule C's cut signature.
+  const utf16LengthBefore = String(article?.seoTitle ?? '').length;
+  const { value, stripped, removed } = stripBrandSuffix(current);
   const result = (category, proposed) => ({
     category,
     current,
     proposed,
     lengthBefore,
     lengthAfter: graphemeLength(proposed ?? current),
+    utf16LengthBefore,
+    stripped: removed,
   });
 
   if (!current) return result('empty', null);
-
-  const { value, stripped } = stripBrandSuffix(current);
   if (stripped && !value) return result('needs-human', null);
 
   const len = graphemeLength(value);
-  const isStrictPrefix = value !== title && title.startsWith(value);
+  const isStrictPrefix = value.length < title.length && title.startsWith(value);
 
-  if (len >= CUT_PREFIX_MIN && isStrictPrefix) {
+  // Rule C: exactly 60 stored units AND a strict prefix of the title is the
+  // old form's cut. A prefix of any other length may be a deliberately short
+  // SEO title and is left alone.
+  if (utf16LengthBefore === OLD_FORM_CUT_UNITS && isStrictPrefix) {
     return result(stripped ? 'brand-suffix+cut-prefix' : 'cut-prefix', '');
   }
   if (stripped) return result('brand-suffix', value);

@@ -72,13 +72,14 @@ const targets = rows.filter((r) => r.proposed !== null);
 
 // -- CSV of every non-ok row -------------------------------------------------
 mkdirSync(OUT_DIR, { recursive: true });
-const header = ['_id', 'slug', 'active', 'category', 'current_seoTitle', 'proposed_seoTitle', 'title', 'length_before', 'length_after'];
+const header = ['_id', 'slug', 'active', 'category', 'current_seoTitle', 'proposed_seoTitle', 'title', 'length_before', 'length_after', 'utf16_len_before', 'stripped'];
 const lines = [header.join(',')];
 for (const r of rows) {
   if (r.category === 'ok') continue;
   lines.push([
     String(r.doc._id), r.doc.slug, r.doc.active === true, r.category,
     r.doc.seoTitle ?? '', r.proposed ?? '', r.doc.title ?? '', r.lengthBefore, r.lengthAfter,
+    r.utf16LengthBefore, r.stripped,
   ].map(csvCell).join(','));
 }
 const csvPath = path.join(OUT_DIR, `dry-run-${STAMP}.csv`);

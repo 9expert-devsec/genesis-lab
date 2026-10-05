@@ -31,9 +31,21 @@ test('X | 9Expert Training → X; other separators and truncated Training', () =
   assert.equal(stripBrandSuffix('Macro คืออะไร: 9Expert').value, 'Macro คืออะไร');
 });
 
-test('a single "9" is not a brand prefix, and a brand without a separator is kept', () => {
-  assert.equal(stripBrandSuffix('Excel | 9').stripped, false);
+test('rule A: X | 9 → X; a lone 9 with no separator (Windows 9) is kept', () => {
+  const r = stripBrandSuffix('Migrate ฐานข้อมูลจาก SQL Server ไปยัง Azure SQL Database | 9');
+  assert.equal(r.value, 'Migrate ฐานข้อมูลจาก SQL Server ไปยัง Azure SQL Database');
+  assert.equal(r.removed, ' | 9');
+  assert.equal(stripBrandSuffix('ติดตั้ง Windows 9').stripped, false);
   assert.equal(stripBrandSuffix('Excel ของ 9Expert').stripped, false);
+});
+
+test('rule B: bare trailing separator stripped — X | → X, X | 9Expert | → X', () => {
+  const bare = classifySeoTitle({ seoTitle: 'Socket Class ใน .NET Core 2 และ C# 7 |', title: 'อื่น' });
+  assert.equal(bare.category, 'brand-suffix');
+  assert.equal(bare.proposed, 'Socket Class ใน .NET Core 2 และ C# 7');
+  assert.equal(bare.stripped, ' |');
+  assert.equal(stripBrandSuffix('Power BI คืออะไร | 9Expert |').value, 'Power BI คืออะไร');
+  assert.equal(stripBrandSuffix('Power BI คืออะไร | 9Expert |').removed, ' | 9Expert |');
 });
 
 test('a value that is all brand → needs-human, nothing proposed', () => {
@@ -42,31 +54,46 @@ test('a value that is all brand → needs-human, nothing proposed', () => {
   assert.equal(r.proposed, null);
 });
 
-test('≥55-grapheme strict prefix of the title → cut-prefix, proposed ""', () => {
+test('rule C: 60-unit strict prefix of the title → cut-prefix, proposed ""', () => {
   const title = 'Gemini 4 Argon is the new frontier model from Google and the next step for AI';
-  const seoTitle = title.slice(0, 60);
-  assert.ok(graphemeLength(seoTitle) >= 55);
-  const r = classifySeoTitle({ seoTitle, title });
+  const r = classifySeoTitle({ seoTitle: title.slice(0, 60), title });
   assert.equal(r.category, 'cut-prefix');
   assert.equal(r.proposed, '');
+  assert.equal(r.utf16LengthBefore, 60);
 });
 
-test('KNOWN GAP: a Thai cut at 60 UTF-16 units can be < 55 graphemes and stays ok', () => {
-  // The pre-R1 form sliced at 60 code units; Thai vowels/tone marks make that
-  // 54 graphemes here, below the 55-grapheme threshold the work order set.
+test('rule C: the R1 Gemini Thai cut — 60 units, 54 graphemes — is now cut-prefix', () => {
+  // Replaces R2's KNOWN GAP test: the 55-grapheme threshold missed this value;
+  // the 60-unit signature catches it.
   const title = 'Gemini 4 Argon โมเดลตัวใหม่จาก Google ก้าวถัดไปของปัญญาประดิษฐ์ระดับ Frontier';
   const seoTitle = 'Gemini 4 Argon โมเดลตัวใหม่จาก Google ก้าวถัดไปของปัญญาประดิ';
   assert.equal(seoTitle.length, 60);
   assert.equal(graphemeLength(seoTitle), 54);
-  assert.equal(classifySeoTitle({ seoTitle, title }).category, 'ok');
+  const r = classifySeoTitle({ seoTitle, title });
+  assert.equal(r.category, 'cut-prefix');
+  assert.equal(r.proposed, '');
+  assert.equal(r.lengthBefore, 54);
 });
 
-test('brand stripped, then a ≥55 strict prefix → brand-suffix+cut-prefix, proposed ""', () => {
+test('rule C: a 50-unit prefix, or a 60-unit value equal to the title, is unchanged', () => {
   const title = 'Microsoft Excel Advanced Formulas and Functions for Business Analysts in 2026';
-  const cut = title.slice(0, 58);
-  const r = classifySeoTitle({ seoTitle: `${cut} | 9Exp`, title });
+  assert.equal(classifySeoTitle({ seoTitle: title.slice(0, 50), title }).category, 'ok');
+  const sixty = title.slice(0, 60);
+  assert.equal(classifySeoTitle({ seoTitle: sixty, title: sixty }).category, 'ok');
+});
+
+test('rule C after stripping: 60 stored units → brand-suffix+cut-prefix, proposed ""', () => {
+  const title = 'Microsoft Excel Advanced Formulas and Functions for Business Analysts in 2026';
+  const seoTitle = `${title.slice(0, 54)} | 9Ex`;
+  assert.equal(seoTitle.length, 60);
+  const r = classifySeoTitle({ seoTitle, title });
   assert.equal(r.category, 'brand-suffix+cut-prefix');
   assert.equal(r.proposed, '');
+  assert.equal(r.stripped, ' | 9Ex');
+  // Same cut + brand, but not 60 stored units → only the brand goes.
+  const longer = classifySeoTitle({ seoTitle: `${title.slice(0, 58)} | 9Exp`, title });
+  assert.equal(longer.category, 'brand-suffix');
+  assert.equal(longer.proposed, title.slice(0, 58));
 });
 
 test('a short prefix of the title is not a cut — ok', () => {
