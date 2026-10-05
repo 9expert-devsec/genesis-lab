@@ -26,6 +26,7 @@ import { nextSortKeyForNew } from '@/lib/articleSortKey';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { requireAdmin } from '@/lib/actions/auth';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
+import { isUnsetKeyword, normalizeForMatch, parseFocusKeywords } from '@/lib/seo/articleSeoChecks';
 
 const ADMIN_PATH  = '/admin/articles';
 const PUBLIC_PATH = '/articles';
@@ -347,6 +348,39 @@ export async function searchArticles(q) {
     .limit(20)
     .lean();
   return serialize(docs);
+}
+
+/**
+ * The SEO checklist's `keyword-unique` check: up to 3 OTHER articles whose
+ * focus keyword matches this one. READ-ONLY.
+ *
+ * Compared on the FIRST keyword of each field (the one the checklist scores),
+ * through the checklist's own normaliser — NFC, lower-case, whitespace removed
+ * — so `สูตร VLOOKUP` and `สูตรvlookup` count as the same keyword. Mongo cannot
+ * express that normalisation, so the (small: one short string per article)
+ * focusKeyword column is read and compared here. The shared import default is
+ * excluded on both sides: 213 articles carry it, and it says nothing.
+ *
+ * Called on form load and on the keyword field's blur — never per keystroke.
+ */
+export async function findArticlesSharingFocusKeyword(focusKeyword, excludeId) {
+  await requireAdmin('articles');
+  if (isUnsetKeyword(focusKeyword)) return [];
+  const target = normalizeForMatch(parseFocusKeywords(focusKeyword)[0]);
+  if (!target) return [];
+  await dbConnect();
+  const docs = await Article.find({ focusKeyword: { $nin: ['', null] } })
+    .select('_id title focusKeyword')
+    .lean();
+  const out = [];
+  for (const d of docs) {
+    if (excludeId && String(d._id) === String(excludeId)) continue;
+    if (isUnsetKeyword(d.focusKeyword)) continue;
+    if (normalizeForMatch(parseFocusKeywords(d.focusKeyword)[0]) !== target) continue;
+    out.push({ _id: String(d._id), title: d.title });
+    if (out.length >= 3) break;
+  }
+  return out;
 }
 
 // ── mutations ────────────────────────────────────────────────────
