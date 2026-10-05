@@ -1117,11 +1117,24 @@ export function ArticleForm({
 
           {/* 9. SEO */}
           <Section title="SEO">
-            <Label text={`SEO Title (${seoTitle.length}/60)`}>
+            {/* Not cut at 60: slicing the input broke titles mid-word. 60 is
+                the guideline, so the counter turns amber past it; the schema
+                accepts up to 120 and the public page drops the brand suffix
+                for long titles (lib/articles/articleTitle.js). */}
+            <Label
+              text={
+                <>
+                  SEO Title{' '}
+                  <span className={seoTitle.length > 60 ? 'text-amber-600 dark:text-amber-400' : undefined}>
+                    ({seoTitle.length}/60)
+                  </span>
+                </>
+              }
+            >
               <input
                 type="text"
                 value={seoTitle}
-                onChange={(e) => setSeoTitle(e.target.value.slice(0, 60))}
+                onChange={(e) => setSeoTitle(e.target.value)}
                 className={inputCls}
               />
             </Label>

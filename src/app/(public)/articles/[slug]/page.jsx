@@ -16,6 +16,11 @@ import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 // this route per-request; this one records the 404 with the canonical host,
 // after the response, and only when a render actually happens (a MISS).
 import { recordStaticNotFound } from '@/lib/redirects/recordStaticNotFound';
+import { siteConfig } from '@/config/site';
+import { OG_DEFAULT_IMAGE } from '@/lib/seo/ogImage';
+import { buildArticleBreadcrumbJsonLd } from '@/lib/articles/articleBreadcrumbJsonLd';
+import { articleMetaTitle } from '@/lib/articles/articleTitle';
+import { lazyLoadArticleImages } from '@/lib/articles/lazyLoadArticleImages';
 import { ArticleDetailClient } from './_components/ArticleDetailClient';
 
 export const revalidate = 3600;
@@ -60,16 +65,33 @@ export async function generateMetadata({ params }) {
     article.title
   );
   const pageUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${slug}`;
+  // Brand-aware: `title` may be `{ absolute }` so the root template does not
+  // append the brand twice or push a long title past the SERP cut. `base` is
+  // the bare title for the share cards. See lib/articles/articleTitle.js.
+  const { base, title } = articleMetaTitle(article);
+  // A child's `openGraph` / `twitter` REPLACE the root layout's objects
+  // wholesale (no deep merge), so everything the article still wants from the
+  // site-wide card — site name, locale, the default image when there is no
+  // cover — has to be restated here or it silently disappears.
+  const ogImage = article.coverUrl ? { url: article.coverUrl } : OG_DEFAULT_IMAGE;
   return {
-    title:       article.seoTitle || article.title,
+    title,
     description,
     alternates: { canonical: pageUrl },
     openGraph: {
-      title:       article.seoTitle || article.title,
+      title:       base,
       description,
       url: pageUrl,
-      images: article.coverUrl ? [{ url: article.coverUrl }] : [],
+      siteName: siteConfig.name,
+      locale: 'th_TH',
+      images: [ogImage],
       type: 'article',
+    },
+    twitter: {
+      card:        'summary_large_image',
+      title:       base,
+      description,
+      images: [ogImage.url],
     },
   };
 }
@@ -144,6 +166,9 @@ export default async function ArticleDetailPage({ params }) {
   // disabled, or rawOverride is on with invalid JSON — in any of those
   // cases we simply omit the script tag.
   const jsonLdData = buildJsonLd(article);
+  // Independent of the Article block above: the trail says where the page sits
+  // in the site, which does not depend on the article's JSON-LD settings.
+  const breadcrumbJsonLd = buildArticleBreadcrumbJsonLd(article);
 
   return (
     <>
@@ -154,6 +179,12 @@ export default async function ArticleDetailPage({ params }) {
           // part of the page output — search engines pick it up the
           // same as a hand-written <head> include.
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdData) }}
+        />
+      )}
+      {breadcrumbJsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
         />
       )}
       <ArticleDetailClient
@@ -179,7 +210,14 @@ export default async function ArticleDetailPage({ params }) {
           // bytes first, then letting the two render-only passes add their
           // own markup on top of already-clean content, is the only order
           // that does not silently break the colour dark-mode fix.
-          content: wrapArticleTables(normalizeAuthoredColors(sanitizeRichHtml(article.content))),
+          //
+          // Image lazy-loading is last: it only adds attributes to <img>, so it
+          // is indifferent to the wrappers and colour properties before it, and
+          // running it after them means it never re-serialises a body that
+          // neither of them touched.
+          content: lazyLoadArticleImages(
+            wrapArticleTables(normalizeAuthoredColors(sanitizeRichHtml(article.content)))
+          ),
         }}
         related={related}
         relatedCoursesData={relatedCoursesData}

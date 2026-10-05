@@ -39,7 +39,10 @@ export function buildJsonLd(article, siteUrl = SITE_URL) {
   // lib/articles/articleUrl.js.
   const canonicalUrl = articleCanonicalUrl(article.slug, siteUrl);
   const publisherName = '9Expert Training';
-  const publisherLogo = `${siteUrl}/logo.png`;
+  // The square 400×400 brand mark — the same file the root layout uses for its
+  // icons. `/logo.png` was named here for months and never existed in public/,
+  // so every article's publisher.logo was a 404.
+  const publisherLogo = `${siteUrl}/logo/9exp-stand.png`;
 
   return {
     '@context': 'https://schema.org',
