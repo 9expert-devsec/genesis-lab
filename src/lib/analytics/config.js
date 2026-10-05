@@ -3,7 +3,8 @@
 // they are safe to hardcode here. If a NEXT_PUBLIC_* convention is later adopted,
 // read from process.env with these as fallback defaults.
 
-export const GA4_ID = 'G-6043WVS74D';
+// GA4: the www stream of property "9Expert Tag"; G-6043WVS74D was the inherited masterclass ID, replaced 2026-10-05.
+export const GA4_ID = 'G-ZBWWCS7B6D';
 export const ADS_ID = 'AW-1060453366';
 
 /**

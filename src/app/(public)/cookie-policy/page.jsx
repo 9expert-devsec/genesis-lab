@@ -156,7 +156,7 @@ const COOKIE_TYPES = [
  *                      youtube.com, NOT youtube-nocookie.com, so they do set
  *                      cookies.
  *   Google Analytics   IN USE. Analytics.jsx loads gtag.js and configures
- *                      G-6043WVS74D; it is rendered site-wide from
+ *                      G-ZBWWCS7B6D; it is rendered site-wide from
  *                      src/app/layout.jsx. Confirmed, not pending — an
  *                      earlier pass here missed this loader entirely.
  *   Google Ads         IN USE. The same Analytics.jsx call also configures
