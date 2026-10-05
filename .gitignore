@@ -68,3 +68,4 @@ scratchpad/
 # legacy-courses.json, course-match-report.tsv and course-match-map.json are
 # course titles, ids and submission COUNTS — no personal data in any of them.
 docs/legacy/*.b64
+tmp/
