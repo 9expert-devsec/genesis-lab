@@ -72,7 +72,9 @@ export const articleSchema = z.object({
   relatedCourses:  z.array(z.string().trim()).default([]),
   articleType:     z.enum(['article', 'video']).default('article'),
   seoTitle:        z.string().trim().max(120).default(''),
-  seoDescription:  z.string().trim().max(160).default(''),
+  // A sanity cap, not the guideline: 160 is a warning in the form (SEO-1), and
+  // the public <meta> is truncated at render by lib/seo/metaDescription.js.
+  seoDescription:  z.string().trim().max(320).default(''),
   focusKeyword:    z.string().trim().default(''),
   author:          z.string().trim().max(100).default(''),
   publishedAt:     z.string().datetime().optional().or(z.literal('')),

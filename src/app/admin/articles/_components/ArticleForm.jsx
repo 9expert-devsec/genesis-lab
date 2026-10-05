@@ -55,6 +55,13 @@ import {
   fromLocalInput,
   toLocalInput,
 } from '@/lib/articlePublishTime';
+import {
+  seoLengthState,
+  SEO_TITLE_GUIDE,
+  SEO_DESCRIPTION_GUIDE,
+  SEO_TITLE_OVER_HINT,
+  SEO_DESCRIPTION_OVER_HINT,
+} from '@/lib/seo/seoLengths';
 
 const MAX_TAGS = 20;
 
@@ -611,6 +618,8 @@ export function ArticleForm({
   const seoScore = calcSeoScore({
     title, seoTitle, seoDescription, focusKeyword, articleType,
   });
+  const seoTitleLen       = seoLengthState(seoTitle, SEO_TITLE_GUIDE);
+  const seoDescriptionLen = seoLengthState(seoDescription, SEO_DESCRIPTION_GUIDE);
   const isPublished = Boolean(
     active &&
     publishedAt &&
@@ -1117,16 +1126,18 @@ export function ArticleForm({
 
           {/* 9. SEO */}
           <Section title="SEO">
-            {/* Not cut at 60: slicing the input broke titles mid-word. 60 is
-                the guideline, so the counter turns amber past it; the schema
-                accepts up to 120 and the public page drops the brand suffix
-                for long titles (lib/articles/articleTitle.js). */}
+            {/* Neither field is cut while typing (SEO-1): 60 / 160 are
+                guidelines, counted in graphemes, and going past one turns the
+                counter amber with a hint — the value still saves. The schema
+                keeps only sanity caps (120 / 320); the public page drops the
+                brand suffix for long titles (lib/articles/articleTitle.js) and
+                truncates the <meta> description at render. */}
             <Label
               text={
                 <>
                   SEO Title{' '}
-                  <span className={seoTitle.length > 60 ? 'text-amber-600 dark:text-amber-400' : undefined}>
-                    ({seoTitle.length}/60)
+                  <span className={seoTitleLen.over ? 'text-amber-600 dark:text-amber-400' : undefined}>
+                    ({seoTitleLen.length}/{SEO_TITLE_GUIDE})
                   </span>
                 </>
               }
@@ -1138,14 +1149,34 @@ export function ArticleForm({
                 className={inputCls}
               />
             </Label>
-            <Label text={`SEO Description (${seoDescription.length}/160)`} className="mt-3">
+            {seoTitleLen.over && (
+              <p className="mt-1 text-[10px] leading-tight text-amber-600 dark:text-amber-400">
+                {SEO_TITLE_OVER_HINT}
+              </p>
+            )}
+            <Label
+              text={
+                <>
+                  SEO Description{' '}
+                  <span className={seoDescriptionLen.over ? 'text-amber-600 dark:text-amber-400' : undefined}>
+                    ({seoDescriptionLen.length}/{SEO_DESCRIPTION_GUIDE})
+                  </span>
+                </>
+              }
+              className="mt-3"
+            >
               <textarea
                 value={seoDescription}
-                onChange={(e) => setSeoDescription(e.target.value.slice(0, 160))}
+                onChange={(e) => setSeoDescription(e.target.value)}
                 rows={3}
                 className={inputCls}
               />
             </Label>
+            {seoDescriptionLen.over && (
+              <p className="mt-1 text-[10px] leading-tight text-amber-600 dark:text-amber-400">
+                {SEO_DESCRIPTION_OVER_HINT}
+              </p>
+            )}
             <Label text="Focus Keyword" className="mt-3">
               <input
                 type="text"
