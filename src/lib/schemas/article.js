@@ -71,7 +71,7 @@ export const articleSchema = z.object({
   relatedArticles: z.array(z.string()).default([]),   // ObjectId strings
   relatedCourses:  z.array(z.string().trim()).default([]),
   articleType:     z.enum(['article', 'video']).default('article'),
-  seoTitle:        z.string().trim().max(60).default(''),
+  seoTitle:        z.string().trim().max(120).default(''),
   seoDescription:  z.string().trim().max(160).default(''),
   focusKeyword:    z.string().trim().default(''),
   author:          z.string().trim().max(100).default(''),

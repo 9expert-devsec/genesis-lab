@@ -19,6 +19,7 @@ import { recordStaticNotFound } from '@/lib/redirects/recordStaticNotFound';
 import { siteConfig } from '@/config/site';
 import { OG_DEFAULT_IMAGE } from '@/lib/seo/ogImage';
 import { buildArticleBreadcrumbJsonLd } from '@/lib/articles/articleBreadcrumbJsonLd';
+import { articleMetaTitle } from '@/lib/articles/articleTitle';
 import { ArticleDetailClient } from './_components/ArticleDetailClient';
 
 export const revalidate = 3600;
@@ -63,17 +64,21 @@ export async function generateMetadata({ params }) {
     article.title
   );
   const pageUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${slug}`;
+  // Brand-aware: `title` may be `{ absolute }` so the root template does not
+  // append the brand twice or push a long title past the SERP cut. `base` is
+  // the bare title for the share cards. See lib/articles/articleTitle.js.
+  const { base, title } = articleMetaTitle(article);
   // A child's `openGraph` / `twitter` REPLACE the root layout's objects
   // wholesale (no deep merge), so everything the article still wants from the
   // site-wide card — site name, locale, the default image when there is no
   // cover — has to be restated here or it silently disappears.
   const ogImage = article.coverUrl ? { url: article.coverUrl } : OG_DEFAULT_IMAGE;
   return {
-    title:       article.seoTitle || article.title,
+    title,
     description,
     alternates: { canonical: pageUrl },
     openGraph: {
-      title:       article.seoTitle || article.title,
+      title:       base,
       description,
       url: pageUrl,
       siteName: siteConfig.name,
@@ -83,7 +88,7 @@ export async function generateMetadata({ params }) {
     },
     twitter: {
       card:        'summary_large_image',
-      title:       article.seoTitle || article.title,
+      title:       base,
       description,
       images: [ogImage.url],
     },
