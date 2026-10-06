@@ -39,8 +39,8 @@ export { OPTIONAL_CATEGORIES };
 
 /** Shared chrome for the two equal buttons: min-height 46, radius 12, 15px bold. */
 const BIG_BUTTON = cn(
-  "flex min-h-[46px] w-full items-center justify-center rounded-[12px] px-4",
-  "text-[15px] font-bold leading-tight",
+  "flex min-h-[40px] w-full items-center justify-center rounded-[12px] px-4",
+  "text-[14px] font-bold leading-tight",
   "transition-colors duration-9e-micro ease-9e",
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-9e-action",
 );
@@ -59,7 +59,7 @@ export function CookieBanner({ className, onAcceptAll, onRejectAll, onOpenSettin
       role="region"
       aria-labelledby="cookie-banner-title"
       className={cn(
-        "flex w-full flex-col rounded-[20px] p-[22px]",
+        "flex w-full flex-col rounded-[20px] px-[24px] py-[20px]",
         "bg-white text-9e-navy dark:bg-[var(--surface-raised)] dark:text-[var(--text-primary)]",
         "border border-9e-slate-lt-300 dark:border-9e-border",
         "shadow-[0_12px_32px_rgba(15,23,42,0.18)]",
@@ -68,13 +68,13 @@ export function CookieBanner({ className, onAcceptAll, onRejectAll, onOpenSettin
     >
       <h2
         id="cookie-banner-title"
-        className="text-[18px] font-bold leading-snug text-[var(--text-primary)]"
+        className="text-[16px] font-bold leading-snug text-[var(--text-primary)]"
       >
         {COOKIE_BANNER_TITLE}
       </h2>
 
-      <p className="mt-2 text-[14px] leading-[1.65] text-[var(--text-secondary)]">
-        คุกกี้วิเคราะห์ช่วยให้เรารู้ว่าคอร์สและบทความไหนมีประโยชน์ ส่วนคุกกี้การตลาดใช้แสดงโปรโมชันที่เกี่ยวข้อง
+      <p className="mt-1 text-[14px] leading-[1.5] text-[var(--text-secondary)]">
+        คุกกี้วิเคราะห์ช่วยให้เรารู้ว่าหลักสูตรและบทความไหนมีประโยชน์ ส่วนคุกกี้การตลาดใช้แสดงโปรโมชันที่เกี่ยวข้อง
         เปลี่ยนใจได้ทุกเมื่อที่ &quot;ตั้งค่าคุกกี้&quot; ท้ายเว็บ{" "}
         <Link
           href="/cookie-policy"
@@ -84,7 +84,7 @@ export function CookieBanner({ className, onAcceptAll, onRejectAll, onOpenSettin
         </Link>
       </p>
 
-      <div className="mt-4 flex flex-col gap-2">
+      <div className="mt-2 flex flex-col gap-2">
         <button
           type="button"
           onClick={onAcceptAll}
@@ -110,7 +110,7 @@ export function CookieBanner({ className, onAcceptAll, onRejectAll, onOpenSettin
         data-cookie-layer1-settings=""
         onClick={onOpenSettings}
         className={cn(
-          "mx-auto mt-1 min-h-[44px] px-3 text-[14px] font-semibold",
+          "mx-auto mt-1 px-3 text-[14px] font-semibold",
           "text-[#005CFF] underline underline-offset-2 hover:no-underline dark:text-9e-air",
         )}
       >
