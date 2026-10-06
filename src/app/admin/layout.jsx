@@ -76,6 +76,9 @@ export default async function AdminLayout({ children }) {
   // h-screen + overflow-hidden on the outer row pins the chrome to the
   // viewport; <main> owns its own overflow-y-auto so the content area
   // scrolls independently and the document/body never grow a scrollbar.
+  // <main> is also `relative` so absolute descendants with no positioned
+  // ancestor (e.g. an `sr-only` span) anchor inside the scroll container;
+  // otherwise they escape it, land below the fold, and grow a body scrollbar.
   // The sidebar is full-height with its own internal scroll (handled
   // inside <AdminSidebar />).
   return (
@@ -95,7 +98,7 @@ export default async function AdminLayout({ children }) {
         userEmail={user?.email ?? null}
         userImagePublicId={userImagePublicId}
       />
-      <main className="h-screen flex-1 overflow-y-auto bg-[var(--page-bg)]">
+      <main className="relative h-screen flex-1 overflow-y-auto bg-[var(--page-bg)]">
         <AdminContentWrapper>{children}</AdminContentWrapper>
       </main>
     </div>
