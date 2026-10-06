@@ -17,6 +17,8 @@ import { publishConsentDecision } from '@/lib/consentBroadcast';
 import { subscribeOpenCookieSettings } from '@/lib/consentBroadcast';
 import { CookieSettingsDialog } from './CookieSettingsDialog';
 import { applyAll } from '@/lib/consentChoices';
+import { choiceKind } from '@/lib/consentChoices';
+import { reportConsentChoice } from '@/lib/consentStatsClient';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -253,10 +255,28 @@ export function CookieConsentBanner() {
     });
   }, [settingsOpen]);
 
-  /** Layer 2's three buttons. `action` is reported to the counters (CB-C §4). */
-  const decideFromSettings = useCallback((categories) => {
+  /**
+   * Every button lands here: the decision first (handleDecision, unchanged in
+   * content and order), THEN the aggregate counter (CB-C §4). The report is
+   * fire-and-forget and comes last, so a slow or failed POST cannot delay the
+   * banner closing or lose the decision. `action` is which button; `layer`
+   * is 1 (the card) or 2 (the settings panel).
+   */
+  const decide = useCallback((categories, action, layer) => {
     handleDecision(categories);
+    reportConsentChoice({
+      choice: choiceKind(action),
+      analytics: categories.analytics === true,
+      marketing: categories.marketing === true,
+      layer,
+    });
   }, [handleDecision]);
+
+  /** Layer 2's three buttons. */
+  const decideFromSettings = useCallback(
+    (categories, action) => decide(categories, action, 2),
+    [decide],
+  );
 
   /* ── THE CONFIRMATION ───────────────────────────────────────────────────
    * A small role="status" note after every decision, auto-dismissed after
@@ -401,8 +421,8 @@ export function CookieConsentBanner() {
       */}
       <div className="pointer-events-auto" ref={cardRef}>
         <CookieBanner
-          onAcceptAll={() => handleDecision(applyAll(true))}
-          onRejectAll={() => handleDecision(applyAll(false))}
+          onAcceptAll={() => decide(applyAll(true), 'accept_all', 1)}
+          onRejectAll={() => decide(applyAll(false), 'reject_all', 1)}
           onOpenSettings={openSettings}
         />
       </div>

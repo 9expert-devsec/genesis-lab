@@ -253,6 +253,7 @@ const NAV_GROUPS = [
     label: 'ภาพรวม',
     items: [
       { label: 'แดชบอร์ด', href: '/admin', icon: 'LayoutDashboard', exact: true, pageKey: 'dashboard' },
+      { label: 'สถิติความยินยอมคุกกี้', href: '/admin/consent-stats', icon: 'BarChart3', pageKey: 'consent_stats' },
     ],
   },
   {
