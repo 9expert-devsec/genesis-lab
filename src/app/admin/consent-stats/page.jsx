@@ -51,7 +51,9 @@ export default async function ConsentStatsPage({ searchParams }) {
   const all = totals.accept_all + totals.reject_all + totals.custom;
 
   return (
-    <div className="mx-auto max-w-[1100px] space-y-6 p-6">
+    // Full content width, like the dashboard: AdminContentWrapper already pads
+    // every admin page with p-6, so the root adds only its vertical rhythm.
+    <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-9e-navy dark:text-white">สถิติความยินยอมคุกกี้</h1>
         <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
