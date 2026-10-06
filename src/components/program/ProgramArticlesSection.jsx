@@ -39,12 +39,15 @@ import { toBlogCardModel } from '@/lib/articleCardModel';
  * of the online section's distribution, which is absent on 14.
  *
  * @param {Array}  articles     already filtered, ordered and capped by the route
+ * @param {number} total        every matching article (getArticles' `total`), for
+ *                              the badge; never below the shown count
  * @param {object} program      for the heading icon and the see-all href
  * @param {object} programNames program_id -> name, for the card's overlay
  * @param {object} skillNames   skill_id  -> name, for the card's chips
  */
 export function ProgramArticlesSection({
   articles = [],
+  total = 0,
   program,
   programNames = {},
   skillNames = {},
@@ -79,14 +82,14 @@ export function ProgramArticlesSection({
         )}
         <h2 className="text-lg font-bold text-9e-navy dark:text-white">{title}</h2>
         <span className="rounded-full bg-9e-air/20 px-2 py-0.5 text-xs font-bold text-9e-action dark:bg-[#111d2c] dark:text-9e-air">
-          {articles.length}
+          {Math.max(total, articles.length)}
         </span>
 
         {/*
           THE SEE-ALL LINK IS IN THE HEADING ROW, not under the grid, and
           `ml-auto` puts it hard right. The count pill beside the title says how
-          many are SHOWN (at most 6); this is how a reader reaches the rest,
-          which for POWER-BI is another 35.
+          many MATCH in total, while the grid shows at most
+          PROGRAM_ARTICLE_LIMIT of them; this is how a reader reaches the rest.
         */}
         <Link
           href={seeAllHref}

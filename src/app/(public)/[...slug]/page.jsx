@@ -263,7 +263,7 @@ async function loadProgram(slug) {
    * empty, it does not arrive at all, and the pin badge silently vanishes. See
    * PROGRAM_ARTICLE_CARD_FIELDS for which two fields that catches.
    */
-  const [onlineCourses, articles, skillsRes] = await Promise.all([
+  const [onlineCourses, articlesRes, skillsRes] = await Promise.all([
     getOnlineCourses({ program: programCode })
       .then((r) => r.items ?? [])
       .catch(() => []),
@@ -272,16 +272,15 @@ async function loadProgram(slug) {
       active: true,
       limit: PROGRAM_ARTICLE_LIMIT,
       select: PROGRAM_ARTICLE_CARD_FIELDS,
-    })
-      .then((r) => r.items ?? [])
-      .catch(() => []),
+    }).catch(() => ({ items: [], total: 0 })),
     listSkills().catch(() => ({ items: [] })),
   ]);
   return {
     program, config, courses, earlyBirdMap, faqs,
     skillSlugs: linkability.skillSlugs,
     onlineCourses,
-    articles,
+    articles: articlesRes.items ?? [],
+    articlesTotal: articlesRes.total ?? 0,
     programNames: buildProgramNames(programsRes.items ?? []),
     skillNames: buildSkillNames(skillsRes.items ?? []),
   };
@@ -615,6 +614,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           skillSlugs={programData.skillSlugs}
           onlineCourses={programData.onlineCourses}
           articles={programData.articles}
+          articlesTotal={programData.articlesTotal}
           programNames={programData.programNames}
           skillNames={programData.skillNames}
         />

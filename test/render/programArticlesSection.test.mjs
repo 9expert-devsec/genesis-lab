@@ -90,10 +90,10 @@ test('the empty guard is the FaqAccordionSection shape, in code', () => {
   assert.match(scrubbed(), /if \(!articles\?\.length\) return null;/);
 });
 
-// ── the cap is exactly 6 ───────────────────────────────────────────────────
+// ── the cap is exactly 8 ───────────────────────────────────────────────────
 
-test('the shared cap constant is exactly 6 — an exact equality, never a floor', () => {
-  assert.equal(PROGRAM_ARTICLE_LIMIT, 6);
+test('the shared cap constant is exactly 8 — an exact equality, never a floor', () => {
+  assert.equal(PROGRAM_ARTICLE_LIMIT, 8);
 });
 
 test('both route mounts pass the SAME cap constant, so the two pages cannot disagree', () => {

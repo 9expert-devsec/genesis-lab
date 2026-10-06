@@ -106,6 +106,7 @@ export default async function ProgramPage({ params }) {
       skillSlugs={linkability.skillSlugs}
       onlineCourses={onlineRes.items ?? []}
       articles={articlesRes.items ?? []}
+      articlesTotal={articlesRes.total ?? 0}
       programNames={buildProgramNames(programs)}
       skillNames={buildSkillNames(skillsRes.items ?? [])}
     />
