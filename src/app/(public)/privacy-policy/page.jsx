@@ -109,12 +109,12 @@ const DATA_CATEGORIES = [
  * withdraw through is a promise the page cannot keep, and under PDPA a consent
  * basis whose withdrawal is impractical is worse than no claim at all.
  *
- * So the row names the channels that DO exist — browser settings, and the DPO
- * address in §14, both of which are real today.
+ * So the row named the channels that did exist — browser settings, and the DPO
+ * address in §14.
  *
- * TODO(cookie-banner): when a consent banner ships, restore the document's
- * original wording — "ท่านสามารถถอนความยินยอมได้ทุกเมื่อ" — and point it at the
- * banner. Same sentence, same row. It comes back the day the UI exists.
+ * RESTORED in CB-C: the footer now carries "ตั้งค่าคุกกี้" on every page, which
+ * re-opens the consent settings with the stored choice. The withdrawal promise
+ * is keepable, so the document's original wording is back and points at it.
  */
 const PROCESSING_PURPOSES = [
   {
@@ -135,7 +135,7 @@ const PROCESSING_PURPOSES = [
   {
     purpose: 'การตลาดและโฆษณาตามความสนใจ',
     detail: 'นำเสนอคอร์สเรียนใหม่ และโฆษณาตามความสนใจ (Interest-based advertising)',
-    basis: 'ความยินยอม (Consent) — ท่านสามารถจัดการคุกกี้เพื่อการโฆษณาได้ผ่านการตั้งค่าเบราว์เซอร์ หรือติดต่อ DPO ตามข้อ 14',
+    basis: 'ความยินยอม (Consent) — ท่านสามารถถอนความยินยอมได้ทุกเมื่อ ผ่าน "ตั้งค่าคุกกี้" ที่ท้ายทุกหน้าของเว็บไซต์',
   },
   {
     purpose: 'ความปลอดภัยและการปฏิบัติตามกฎหมาย',
