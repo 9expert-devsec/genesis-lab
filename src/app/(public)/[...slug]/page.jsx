@@ -328,10 +328,28 @@ async function loadSkill(slug) {
     }))
     .filter((g) => g.courses.length > 0);
 
-  const faqs = await getLocalFaqsForCourse('skill', skillRefId(skill)).catch(() => []);
+  /**
+   * Related articles: loadProgram's getArticles call, filtered by the skill
+   * SHORT CODE (`skill_id`, what Article.skills stores — the FAQ ref above
+   * uses the same one) instead of the program's. Same cap constant, same
+   * explicit select, same fail-closed shape.
+   */
+  const [faqs, articlesRes] = await Promise.all([
+    getLocalFaqsForCourse('skill', skillRefId(skill)).catch(() => []),
+    getArticles({
+      skill: skillRefId(skill),
+      active: true,
+      limit: PROGRAM_ARTICLE_LIMIT,
+      select: PROGRAM_ARTICLE_CARD_FIELDS,
+    }).catch(() => ({ items: [], total: 0 })),
+  ]);
   return {
     skill, config, coursesByProgram, totalCourses: skillCourses.length, faqs,
     skillSlugs: linkability.skillSlugs,
+    articles: articlesRes.items ?? [],
+    articlesTotal: articlesRes.total ?? 0,
+    programNames: buildProgramNames(programsRes.items ?? []),
+    skillNames: buildSkillNames(skillsRes.items ?? []),
   };
 }
 
@@ -632,6 +650,10 @@ export default async function CatchAllPage({ params, searchParams }) {
           faqs={skillData.faqs}
           currentYear={siteCurrentYear()}
           skillSlugs={skillData.skillSlugs}
+          articles={skillData.articles}
+          articlesTotal={skillData.articlesTotal}
+          programNames={skillData.programNames}
+          skillNames={skillData.skillNames}
         />
       );
     }

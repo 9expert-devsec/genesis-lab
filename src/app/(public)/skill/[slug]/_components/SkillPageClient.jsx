@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
 import { toKebab } from '@/lib/slug';
 import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
+import { ProgramArticlesSection } from '@/components/program/ProgramArticlesSection';
 import { PageCatalogButton } from '@/components/ui/PageCatalogButton';
 
 /**
@@ -27,6 +28,14 @@ export function SkillPageClient({
   faqs = [],
   currentYear,
   skillSlugs = {},
+  /**
+   * Related articles for this skill, capped and ordered by the route — the
+   * program page's section and props, filtered by Article.skills instead.
+   */
+  articles = [],
+  articlesTotal = 0,
+  programNames = {},
+  skillNames = {},
 }) {
   const description =
     skill?.skill_description || skill?.skill_teaser || '';
@@ -143,6 +152,16 @@ export function SkillPageClient({
 
       {/* ── FAQ ───────────────────────────────────────────────────── */}
       <FaqAccordionSection faqs={faqs} />
+
+      {/* ── Related articles ──────────────────────────────────────── */}
+      <ProgramArticlesSection
+        articles={articles}
+        total={articlesTotal}
+        skill={skill}
+        programNames={programNames}
+        skillNames={skillNames}
+        title="บทความเกี่ยวกับ Skill นี้"
+      />
     </main>
   );
 }

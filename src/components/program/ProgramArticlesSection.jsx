@@ -42,6 +42,8 @@ import { toBlogCardModel } from '@/lib/articleCardModel';
  * @param {number} total        every matching article (getArticles' `total`), for
  *                              the badge; never below the shown count
  * @param {object} program      for the heading icon and the see-all href
+ * @param {object} skill        INSTEAD of `program`, on the skill page: same
+ *                              section, filtered by the article's skills
  * @param {object} programNames program_id -> name, for the card's overlay
  * @param {object} skillNames   skill_id  -> name, for the card's chips
  */
@@ -49,6 +51,7 @@ export function ProgramArticlesSection({
   articles = [],
   total = 0,
   program,
+  skill,
   programNames = {},
   skillNames = {},
   title = 'บทความเกี่ยวกับโปรแกรมนี้',
@@ -57,22 +60,26 @@ export function ProgramArticlesSection({
   if (!articles?.length) return null;
 
   /**
-   * THE SHORT CODE, matching Article.programs and ProgramPageConfig.programId.
-   * `/articles?program=<code>` already resolves server-side — page.jsx reads
-   * `searchParams.program` straight into `getArticles` — so this needs no new
-   * route and no new filter.
+   * THE SHORT CODE, matching Article.programs / ProgramPageConfig.programId —
+   * or, on a skill page, Article.skills / SkillPageConfig.skillId (`skill_id`,
+   * the same `skillRefId` the route filtered by). `/articles?program=<code>`
+   * and `/articles?skill=<code>` both already resolve server-side — page.jsx
+   * reads them straight into `getArticles` — so this needs no new route and
+   * no new filter.
    */
-  const code = program?.program_id ?? program?._id ?? '';
+  const [param, code, iconUrl] = skill
+    ? ['skill', skill.skill_id ?? skill._id ?? '', skill.skilliconurl]
+    : ['program', program?.program_id ?? program?._id ?? '', program?.programiconurl];
   const seeAllHref = code
-    ? `/articles?program=${encodeURIComponent(String(code))}`
+    ? `/articles?${param}=${encodeURIComponent(String(code))}`
     : '/articles';
 
   return (
     <section id={id} className="mx-auto max-w-[1200px] pt-10 lg:pt-14">
       <div className="mb-6 flex items-center gap-3">
-        {program?.programiconurl && (
+        {iconUrl && (
           <Image
-            src={program.programiconurl}
+            src={iconUrl}
             alt=""
             width={28}
             height={28}
