@@ -43,6 +43,8 @@ export function ProgramPageClient({
    * same class guard — REQUIRED_PROPS carries both names.
    */
   articles = [],
+  // getArticles' `total` — every matching article, for the section's badge.
+  articlesTotal = 0,
   programNames = {},
   skillNames = {},
 }) {
@@ -239,6 +241,7 @@ export function ProgramPageClient({
       {/* ── Related articles ──────────────────────────────────────── */}
       <ProgramArticlesSection
         articles={articles}
+        total={articlesTotal}
         program={program}
         programNames={programNames}
         skillNames={skillNames}

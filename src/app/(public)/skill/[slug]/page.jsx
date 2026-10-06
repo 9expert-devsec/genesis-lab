@@ -6,6 +6,9 @@ import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { resolveSkillBySlug, getPageLinkability } from '@/lib/resolvePageSlug';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
+import { getArticles } from '@/lib/actions/articles';
+import { PROGRAM_ARTICLE_CARD_FIELDS, PROGRAM_ARTICLE_LIMIT } from '@/lib/articleListFields';
+import { buildProgramNames, buildSkillNames } from '@/lib/articleTaxonomy';
 import { SkillPageClient } from './_components/SkillPageClient';
 import { siteCurrentYear } from '@/lib/articlePublishTime';
 
@@ -49,13 +52,21 @@ export default async function SkillPage({ params }) {
   // No custom slug — render inline under /skill/<slug>.
   const { skill, config } = resolved;
   const skillId = String(skill._id);
-  const [programsRes, coursesRes, faqs, linkability] = await Promise.all([
+  const [programsRes, coursesRes, faqs, linkability, articlesRes] = await Promise.all([
     listPrograms().catch(() => ({ items: [] })),
     listPublicCourses().catch(() => ({ items: [] })),
     getLocalFaqsForCourse('skill', skillRefId(skill)).catch(() => []),
     // Server-side, once per render, for the cards' skill capsules. Fails
     // closed to empty maps — a capsule then renders unlinked, never dead.
     getPageLinkability(),
+    // Related articles, by the skill SHORT CODE that Article.skills stores.
+    // The program route's call with `skill` in place of `program`.
+    getArticles({
+      skill: skillRefId(skill),
+      active: true,
+      limit: PROGRAM_ARTICLE_LIMIT,
+      select: PROGRAM_ARTICLE_CARD_FIELDS,
+    }).catch(() => ({ items: [], total: 0 })),
   ]);
 
   const enriched = await enrichCoursesWithDetails(coursesRes.items ?? []);
@@ -82,6 +93,10 @@ export default async function SkillPage({ params }) {
       faqs={faqs}
       currentYear={siteCurrentYear()}
       skillSlugs={linkability.skillSlugs}
+      articles={articlesRes.items ?? []}
+      articlesTotal={articlesRes.total ?? 0}
+      programNames={buildProgramNames(programsRes.items ?? [])}
+      skillNames={buildSkillNames(skills)}
     />
   );
 }

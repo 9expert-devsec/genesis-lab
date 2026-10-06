@@ -9,7 +9,6 @@ import {
   Check,
   Clock,
   Code,
-  FileText,
   Laptop,
   Users,
 } from "lucide-react";
@@ -124,9 +123,9 @@ function Hero() {
 
 // ─── Intro ─────────────────────────────────────────────────────────────────
 const INTRO_PARAGRAPHS = [
-  "Masterclass คือ หลักสูตรระดับพรีเมียมที่ออกแบบมาสำหรับผู้ที่ต้องการเรียนรู้เทคโนโลยีใหม่และทักษะเฉพาะทางอย่างเข้มข้น ผ่านกระบวนการเรียนรู้แบบ Workshop เน้นการลงมือปฏิบัติจริง พร้อมถ่ายทอดประสบการณ์จากผู้เชี่ยวชาญที่มีประสบการณ์ตรงในสาขาอาชีพ เพื่อให้สามารถนำความรู้ไปประยุกต์ใช้ในการทำงานได้ทันที",
-  "แตกต่างจาก Public Training ทั่วไป ซึ่งโปรแกรม Masterclass จะคัดเลือกหัวข้อที่เป็นเทคโนโลยีใหม่ และเป็นที่ต้องการของอุตสาหกรรม และเครื่องมือที่องค์กรชั้นนำนำไปใช้งานจริง พร้อมกรณีศึกษา (Case Study) และ Workshop ที่ออกแบบมาให้ผู้เข้าอบรมได้สร้างผลงานจริงภายในวันอบรม",
-  "โปรแกรม Masterclass เปิดอบรมเฉพาะ วันเสาร์ เพื่ออำนวยความสะดวกแก่ผู้บริหาร บุคลากร และผู้ที่ต้องการพัฒนาทักษะเพิ่มเติม โดยทุกหลักสูตรได้รับการออกแบบมาให้ อบรมจบภายใน 1 วัน เพื่อให้สามารถนำความรู้ไปต่อยอดและใช้งานได้อย่างรวดเร็ว โดยไม่กระทบต่อเวลาการทำงานในวันธรรมดา",
+  "Masterclass คือหลักสูตรที่ถูกออกแบบมาเพื่อทักษะเฉพาะทาง สำหรับผู้ที่ต้องการเรียนรู้เทคโนโลยีใหม่ๆ เพื่อนำมาประยุกต์กับการทำงานในโลกปัจจุบันที่เต็มไปด้วยเทคโนโลยีที่เปลี่ยนแปลงตลอดเวลา",
+  "ภายในหลักสูตร Masterclass จะเป็นการสอนพร้อมกับลงมือทำด้วย Case Study และเครื่องมือจริงๆ เพื่อให้ผู้เรียนได้เห็นภาพชัดเจน ตามสไตล์ของ 9Expert Training ที่เรายึดถือมาโดยตลอดคือ \"สอนสไตล์ใช้งานจริง\"",
+  "เพียง 1 วัน หลักสูตร Masterclass จะทำให้คุณพร้อมนำไปใช้งานจริงในที่ทำงานได้อย่างมืออาชีพ",
 ];
 
 function IntroSection() {
@@ -177,35 +176,14 @@ const WHY_STUDY = [
     title: "Workshop ตลอดหลักสูตร",
     desc: "พร้อมกรณีศึกษาที่ทันสมัยจากโลกธุรกิจ",
   },
-  {
-    Icon: Award,
-    title: "วิทยากรผู้เชี่ยวชาญ",
-    desc: "ถ่ายทอดตรงจากประสบการณ์การทำงาน",
-  },
   { Icon: Clock, title: "อบรมจบใน 1 วัน", desc: "พร้อมนำไปใช้งานจริงได้ทันที" },
-  {
-    Icon: Calendar,
-    title: "เรียนเฉพาะวันเสาร์",
-    desc: "เหมาะสำหรับผู้ไม่สะดวกเรียนในวันทำงาน",
-  },
-  {
-    Icon: Users,
-    title: "จำกัดจำนวนผู้เรียน",
-    desc: "ดูแลและให้คำปรึกษาได้อย่างทั่วถึง",
-  },
-  {
-    Icon: FileText,
-    title: "ได้รับ e-Certificate",
-    desc: "พร้อม Workshop Files ประกอบการเรียน",
-  },
 ];
 
 /**
  * ROUND M-C addendum: card is w-[282px] instead of a flexible grid cell, so
- * both rows share one width. At the 1200px container: row 1 is 4 × 282px +
- * 3 × 24px gap = 1128 + 72 = 1200px exactly, no cramming. Row 2 is 3 × 282px
- * + 2 × 24px gap = 894px, centered in the 1200px row rather than stretched
- * or left-aligned.
+ * every card shares one width. Three cards are one centred row at the 1200px
+ * container: 3 × 282px + 2 × 24px gap = 894px. Below that width the row
+ * wraps to a single centred column.
  */
 function WhyStudyCard({ Icon, title, desc, index }) {
   return (
@@ -277,9 +255,6 @@ function WhyStudyCard({ Icon, title, desc, index }) {
 }
 
 function WhyStudySection() {
-  const row1 = WHY_STUDY.slice(0, 4);
-  const row2 = WHY_STUDY.slice(4);
-
   return (
     <section className="bg-[#f8fafc] px-4 py-16 lg:px-20">
       <div className="mx-auto flex w-full max-w-[1200px] flex-col items-center gap-12">
@@ -288,30 +263,14 @@ function WhyStudySection() {
           ทำไมต้องเรียน Masterclass
         </h2>
 
-        <div className="flex w-full flex-col items-center gap-6">
-
-          {/* Row 1: 01–04 */}
-          <div className="flex w-full flex-wrap justify-center gap-6">
-            {row1.map((item, index) => (
-              <WhyStudyCard
-                key={item.title}
-                {...item}
-                index={index}
-              />
-            ))}
-          </div>
-
-          {/* Row 2: 05–07 */}
-          <div className="flex w-full flex-wrap justify-center gap-6">
-            {row2.map((item, index) => (
-              <WhyStudyCard
-                key={item.title}
-                {...item}
-                index={index + row1.length}
-              />
-            ))}
-          </div>
-
+        <div className="flex w-full flex-wrap justify-center gap-6">
+          {WHY_STUDY.map((item, index) => (
+            <WhyStudyCard
+              key={item.title}
+              {...item}
+              index={index}
+            />
+          ))}
         </div>
       </div>
     </section>

@@ -158,4 +158,9 @@ export function toFieldList(spec) {
 export const PROGRAM_ARTICLE_CARD_FIELDS =
   '_id slug title excerpt coverUrl programs skills';
 
-export const PROGRAM_ARTICLE_LIMIT = 6;
+/**
+ * How many related articles a program page shows: 8, two full rows of the
+ * section's xl:grid-cols-4 grid. The badge shows the TOTAL match count
+ * (getArticles' `total`), not this number, so ดูบทความทั้งหมด stays meaningful.
+ */
+export const PROGRAM_ARTICLE_LIMIT = 8;

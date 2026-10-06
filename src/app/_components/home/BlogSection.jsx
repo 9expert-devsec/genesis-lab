@@ -260,7 +260,7 @@ export function BlogCard({ blog, programNames = {}, skillNames = {} }) {
   return (
     <Link
       href={blog.slug}
-      className="group block overflow-hidden rounded-2xl bg-9e-ice shadow-sm transition-shadow ring-1 ring-9e-slate-lt-300 hover:shadow-md dark:bg-9e-card dark:ring-1 dark:ring-[#1e3a5f]"
+      className="group flex h-full flex-col overflow-hidden rounded-2xl bg-9e-ice shadow-sm transition-shadow ring-1 ring-9e-slate-lt-300 hover:shadow-md dark:bg-9e-card dark:ring-1 dark:ring-[#1e3a5f]"
     >
       <div className="relative aspect-video w-full overflow-hidden bg-9e-ice dark:bg-9e-navy">
         <Image
@@ -281,11 +281,17 @@ export function BlogCard({ blog, programNames = {}, skillNames = {} }) {
         <ProgramOverlay ids={blog.programs} names={programNames} cap={2} />
       </div>
 
-      <div className="flex flex-col gap-2 p-4">
-        <h3 className="line-clamp-3 text-base font-bold leading-snug text-9e-navy dark:text-white">
+      {/* EQUAL HEIGHTS, BY ArticleCard's RULES (/articles is the reference):
+          the card fills its slot (h-full — slider slides and grid cells already
+          stretch to the row), the body takes the rest (flex-1), the title is
+          clamped to 2 lines like ArticleCard's, and the skill row is pushed to
+          the bottom edge (mb-auto on the excerpt — SkillChips renders nothing
+          when there are no names, so no empty wrapper is needed). */}
+      <div className="flex flex-1 flex-col gap-2 p-4">
+        <h3 className="line-clamp-2 text-base font-bold leading-snug text-9e-navy dark:text-white">
           {blog.title}
         </h3>
-        <p className="line-clamp-3 text-sm leading-relaxed text-9e-slate-dp-50 dark:text-[#94a3b8]">
+        <p className="mb-auto line-clamp-3 text-sm leading-relaxed text-9e-slate-dp-50 dark:text-[#94a3b8]">
           {blog.excerpt}
         </p>
 

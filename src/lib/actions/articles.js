@@ -26,6 +26,7 @@ import { nextSortKeyForNew } from '@/lib/articleSortKey';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { requireAdmin } from '@/lib/actions/auth';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
+import { CONTENT_FIELDS, contentChanged } from '@/lib/articles/contentChanged';
 import { isUnsetKeyword, normalizeForMatch, parseFocusKeywords } from '@/lib/seo/articleSeoChecks';
 
 const ADMIN_PATH  = '/admin/articles';
@@ -454,8 +455,17 @@ export async function createArticle(formData) {
   // declare.
   const sortKey = nextSortKeyForNew(await readSortKeyContext());
 
+  // ONE instant for both: Mongoose's timestamps only fill `createdAt` when it is
+  // absent, so passing it makes contentUpdatedAt === createdAt exactly.
+  const now = new Date();
+
   try {
-    const doc = await Article.create({ ...buildModelData(parsed.data), sortKey });
+    const doc = await Article.create({
+      ...buildModelData(parsed.data),
+      sortKey,
+      createdAt: now,
+      contentUpdatedAt: now,
+    });
     bustCaches(doc.slug);
 
     // `recordId` is the id the create RETURNED — the same string this action
@@ -496,13 +506,21 @@ export async function updateArticle(id, formData) {
   try {
     const data = buildModelData(parsed.data);
 
+    // contentUpdatedAt moves only when title/excerpt/content/coverUrl actually
+    // differ (src/lib/articles/contentChanged.js). That needs the stored values
+    // BEFORE the write, so it is one extra read of four fields — the pre-image
+    // below arrives too late to put into the same $set.
+    const stored = await Article.findById(id).select(CONTENT_FIELDS.join(' ')).lean();
+    if (!stored) return { ok: false, error: 'ไม่พบบทความ' };
+    const $set = contentChanged(stored, data) ? { ...data, contentUpdatedAt: new Date() } : data;
+
     // `new: false` — the PRE-IMAGE, so `before` costs no extra query. The house
     // pattern from round 2, and safe here because nothing consumed the returned
     // document except its slug, which is `data.slug` and therefore already known.
     // (ArticleForm ignores the returned slug entirely; it pushes to the list.)
     const previous = await Article.findByIdAndUpdate(
       id,
-      { $set: data },
+      { $set },
       { new: false, runValidators: true }
     );
     if (!previous) return { ok: false, error: 'ไม่พบบทความ' };

@@ -39,13 +39,19 @@ import { toBlogCardModel } from '@/lib/articleCardModel';
  * of the online section's distribution, which is absent on 14.
  *
  * @param {Array}  articles     already filtered, ordered and capped by the route
+ * @param {number} total        every matching article (getArticles' `total`), for
+ *                              the badge; never below the shown count
  * @param {object} program      for the heading icon and the see-all href
+ * @param {object} skill        INSTEAD of `program`, on the skill page: same
+ *                              section, filtered by the article's skills
  * @param {object} programNames program_id -> name, for the card's overlay
  * @param {object} skillNames   skill_id  -> name, for the card's chips
  */
 export function ProgramArticlesSection({
   articles = [],
+  total = 0,
   program,
+  skill,
   programNames = {},
   skillNames = {},
   title = 'บทความเกี่ยวกับโปรแกรมนี้',
@@ -54,22 +60,26 @@ export function ProgramArticlesSection({
   if (!articles?.length) return null;
 
   /**
-   * THE SHORT CODE, matching Article.programs and ProgramPageConfig.programId.
-   * `/articles?program=<code>` already resolves server-side — page.jsx reads
-   * `searchParams.program` straight into `getArticles` — so this needs no new
-   * route and no new filter.
+   * THE SHORT CODE, matching Article.programs / ProgramPageConfig.programId —
+   * or, on a skill page, Article.skills / SkillPageConfig.skillId (`skill_id`,
+   * the same `skillRefId` the route filtered by). `/articles?program=<code>`
+   * and `/articles?skill=<code>` both already resolve server-side — page.jsx
+   * reads them straight into `getArticles` — so this needs no new route and
+   * no new filter.
    */
-  const code = program?.program_id ?? program?._id ?? '';
+  const [param, code, iconUrl] = skill
+    ? ['skill', skill.skill_id ?? skill._id ?? '', skill.skilliconurl]
+    : ['program', program?.program_id ?? program?._id ?? '', program?.programiconurl];
   const seeAllHref = code
-    ? `/articles?program=${encodeURIComponent(String(code))}`
+    ? `/articles?${param}=${encodeURIComponent(String(code))}`
     : '/articles';
 
   return (
     <section id={id} className="mx-auto max-w-[1200px] pt-10 lg:pt-14">
       <div className="mb-6 flex items-center gap-3">
-        {program?.programiconurl && (
+        {iconUrl && (
           <Image
-            src={program.programiconurl}
+            src={iconUrl}
             alt=""
             width={28}
             height={28}
@@ -79,14 +89,14 @@ export function ProgramArticlesSection({
         )}
         <h2 className="text-lg font-bold text-9e-navy dark:text-white">{title}</h2>
         <span className="rounded-full bg-9e-air/20 px-2 py-0.5 text-xs font-bold text-9e-action dark:bg-[#111d2c] dark:text-9e-air">
-          {articles.length}
+          {Math.max(total, articles.length)}
         </span>
 
         {/*
           THE SEE-ALL LINK IS IN THE HEADING ROW, not under the grid, and
           `ml-auto` puts it hard right. The count pill beside the title says how
-          many are SHOWN (at most 6); this is how a reader reaches the rest,
-          which for POWER-BI is another 35.
+          many MATCH in total, while the grid shows at most
+          PROGRAM_ARTICLE_LIMIT of them; this is how a reader reaches the rest.
         */}
         <Link
           href={seeAllHref}

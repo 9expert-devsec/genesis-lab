@@ -9,6 +9,7 @@ import { coursePriceLabel } from '@/lib/coursePriceLabel';
 import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import { articleCanonicalUrl } from '@/lib/articles/articleUrl';
 import { ArticleBackLink } from './ArticleBackLink';
+import { ArticleViewBeacon } from './ArticleViewBeacon';
 import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 
 /**
@@ -404,6 +405,9 @@ export function ArticleDetailClient({
       {/* Portalled to <body> from inside the component, so it escapes every
           stacking context on the way down — see the component's docstring. */}
       <ImageLightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
+
+      {/* Anonymous daily view count — renders nothing, posts after mount. */}
+      <ArticleViewBeacon article={article} />
 
       {/* Top thin gradient progress bar — content-relative, hidden
           until the reader has actually started reading the body. */}
