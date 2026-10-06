@@ -93,6 +93,22 @@ const ArticleSchema = new mongoose.Schema(
     // Show this article in the Landing page BlogSection
     featuredOnLanding:     { type: Boolean, default: false },
 
+    // WHEN THE CONTENT LAST CHANGED — title, excerpt, content or coverUrl, as
+    // decided by src/lib/articles/contentChanged.js. NOT `updatedAt`: pinning,
+    // reordering (sortKey/pinOrder bulkWrites), toggling active or
+    // featuredOnLanding, and the course-rename cascade all bump that through
+    // Mongoose timestamps without the reader-visible article changing.
+    // Server-set only: createArticle stamps it with createdAt's instant and
+    // updateArticle moves it only when a content field differs. Absent from
+    // articleFormPayload and the zod schema on purpose; no other write path
+    // touches it (test/fs/articleContentUpdatedAtWrites pins that).
+    //
+    // NO DEFAULT, for sortKey's reason above: under `.lean()` a default would
+    // reach new documents only and read back absent on every older one. ABSENT
+    // MEANS "not changed since this field shipped" — readers fall back to
+    // `publishedAt`.
+    contentUpdatedAt:      { type: Date },
+
     // Schema.org JSON-LD configuration. `overrides` lets the admin
     // pin specific JSON-LD fields without having to touch raw JSON;
     // `rawOverride` (gated by `rawOverrideEnabled`) lets a superadmin
