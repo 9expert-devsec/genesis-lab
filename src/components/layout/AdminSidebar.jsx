@@ -42,6 +42,7 @@ import {
   BarChart3,
   MessagesSquare,
   ChevronDown,
+  Cookie,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logoutAction } from '@/lib/actions/auth';
@@ -225,6 +226,7 @@ const ICONS = {
   // the two-bubble mark rather than the single MessageSquare that รีวิวแนะนำ
   // already uses, so the two rows read as different things at a glance.
   BarChart3,
+  Cookie,
   MessagesSquare,
 };
 
@@ -253,7 +255,7 @@ const NAV_GROUPS = [
     label: 'ภาพรวม',
     items: [
       { label: 'แดชบอร์ด', href: '/admin', icon: 'LayoutDashboard', exact: true, pageKey: 'dashboard' },
-      { label: 'สถิติความยินยอมคุกกี้', href: '/admin/consent-stats', icon: 'BarChart3', pageKey: 'consent_stats' },
+      { label: 'สถิติความยินยอมคุกกี้', href: '/admin/consent-stats', icon: 'Cookie', pageKey: 'consent_stats' },
     ],
   },
   {
