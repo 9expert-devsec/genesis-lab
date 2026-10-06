@@ -240,11 +240,11 @@ module.exports = {
       //       — the dock is the ONE fixed box holding back-to-top and the chat
       //         launcher; neither child carries a z-index of its own.
       //   60  PublicHeader                 (above the hero cover slider)
-      //   70  CookieBannerPreview          (TEMPORARY — round CB-A2)
-      //       — bottom-edge consent chrome, above the dock and the header so
-      //         page chrome cannot cover it, below the whole overlay tier so
-      //         anything the user opened deliberately still wins. Frees this
-      //         rung again when the preview wrapper is deleted.
+      //   70  CookieConsentBanner          (consent chrome, since CB-A2)
+      //       — layer 1 (bottom-left card / bottom sheet), the layer-2 settings
+      //         dialog and its confirmation (round CB-C). Above the dock and
+      //         the header so page chrome cannot cover consent, below the whole
+      //         overlay tier so anything the user opened deliberately still wins.
       //   80  SkipLink, while focused  (above the header it is drawn over and
       //       the consent banner; below the overlay tier, so an open modal
       //       still wins)

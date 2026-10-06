@@ -1,11 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  OPTIONAL_CATEGORIES,
-  INITIAL_CONSENT,
-  applyAll,
-  toggleCategory,
-} from '@/components/consent/CookieBanner';
+import { OPTIONAL_CATEGORIES } from '@/components/consent/CookieBanner';
+// CB-C: the transitions moved to a pure module shared by both layers.
+import { INITIAL_CONSENT, applyAll, toggleCategory, choiceKind } from '@/lib/consentChoices';
 
 /**
  * The cookie banner's THREE BUTTON BEHAVIOURS, asserted directly.
@@ -135,4 +132,11 @@ test('no consent-mode signal names leak into this round', () => {
       `${signal} must not appear until consent is genuinely wired`,
     );
   }
+});
+
+test('CB-C: choiceKind — the one-click buttons are themselves; "บันทึกตัวเลือก" is custom', () => {
+  assert.equal(choiceKind('accept_all'), 'accept_all');
+  assert.equal(choiceKind('reject_all'), 'reject_all');
+  assert.equal(choiceKind('save'), 'custom');
+  assert.equal(choiceKind(undefined), 'custom');
 });

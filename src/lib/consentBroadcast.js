@@ -40,7 +40,7 @@ export const CONSENT_DECISION_EVENT = '9e:consent-decision';
 
 /**
  * Announce a decision. `categories` is the SAME object shape the cookie stores
- * and parseConsent returns — `{analytics, functional, marketing}` — so a
+ * and parseConsent returns — `{analytics, marketing}` since CB-C — so a
  * subscriber applies one rule to both sources rather than two.
  *
  * Silent no-op without a window (SSR) and silent on a failed dispatch: this is
@@ -77,4 +77,38 @@ export function subscribeConsentDecision(handler) {
   const listener = (event) => handler(event?.detail ?? null);
   window.addEventListener(CONSENT_DECISION_EVENT, listener);
   return () => window.removeEventListener(CONSENT_DECISION_EVENT, listener);
+}
+
+// ── "ตั้งค่าคุกกี้" — A REQUEST, IN THE OTHER DIRECTION (CB-C) ──────────────
+// The footer's re-open control has to open the settings panel that the banner
+// mount owns. Same reasoning as the decision event above: the footer is a
+// server component with a tiny client island, the mount lives in the root
+// layout, and neither is an ancestor of the other — so a window event, not a
+// context and not a global.
+//
+// It carries no payload. The mount answers it by opening layer 2 with the
+// STORED choice it already holds; the requester has nothing to say beyond
+// "open", and passing state through here would make two sources of truth.
+
+/** Event name for "open the cookie settings panel". */
+export const CONSENT_OPEN_SETTINGS_EVENT = '9e:consent-open-settings';
+
+/** Ask the banner mount to open the settings panel. Silent no-op on the server. */
+export function requestOpenCookieSettings() {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  try {
+    window.dispatchEvent(new window.CustomEvent(CONSENT_OPEN_SETTINGS_EVENT));
+  } catch {
+    /* No CustomEvent: nothing opens, nothing breaks. */
+  }
+}
+
+/** Subscribe to open requests. Returns an unsubscribe function. */
+export function subscribeOpenCookieSettings(handler) {
+  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+    return () => {};
+  }
+  const listener = () => handler();
+  window.addEventListener(CONSENT_OPEN_SETTINGS_EVENT, listener);
+  return () => window.removeEventListener(CONSENT_OPEN_SETTINGS_EVENT, listener);
 }

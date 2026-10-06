@@ -118,11 +118,14 @@ test('NO PREVIEW WORDING SURVIVES anywhere in the consent components', () => {
 });
 
 test('the reject button is still there — accept-only is not consent', () => {
-  const src = read('src/components/consent/CookieBanner.jsx');
   // Element-text boundary, NOT a bare substring: `ไม่ได้ยินยอม` contains
   // `ยินยอม`, so substring matching on Thai negations reads backwards.
-  assert.match(src, />\s*ปฏิเสธคุกกี้ที่ไม่จำเป็น\s*</);
-  assert.match(src, />\s*ยอมรับทั้งหมด\s*</);
+  // CB-C: BOTH layers carry an equal reject — layer 1 and the settings panel.
+  for (const f of ['src/components/consent/CookieBanner.jsx', 'src/components/consent/CookieSettingsDialog.jsx']) {
+    const src = read(f);
+    assert.match(src, />\s*ปฏิเสธทั้งหมด\s*</, `${f} has no reject`);
+    assert.match(src, />\s*ยอมรับทั้งหมด\s*</, `${f} has no accept`);
+  }
 });
 
 // ── CONTROLS ────────────────────────────────────────────────────────────────
@@ -142,5 +145,5 @@ test('CONTROL: the preview-wording probe fires on the old string', () => {
 
 test('CONTROL: the Thai reject matcher does not fire on a bare substring', () => {
   // If this ever passes, the matcher has loosened into the negation trap.
-  assert.equal(/>\s*ปฏิเสธคุกกี้ที่ไม่จำเป็น\s*</.test('<p>ยินยอมทั้งหมด</p>'), false);
+  assert.equal(/>\s*ปฏิเสธทั้งหมด\s*</.test('<p>ยินยอมทั้งหมด</p>'), false);
 });
