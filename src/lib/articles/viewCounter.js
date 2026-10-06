@@ -84,6 +84,16 @@ export function isCountableArticle(article) {
   return Boolean(article?._id && article.active && article.publishedAt);
 }
 
+/**
+ * Count only on the production deployment. Dev, preview and production share
+ * one database, and only production traffic is real readership.
+ *
+ * @param {object} env  process.env (server-side; VERCEL_ENV is set by Vercel)
+ */
+export function isCountingEnabled(env) {
+  return env?.VERCEL_ENV === 'production';
+}
+
 /** The per-tab dedupe key the beacon keeps in sessionStorage. */
 export function viewSessionKey(id, day) {
   return `av:${id}:${day}`;

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { dbConnect } from '@/lib/db/connect';
 import ArticleView from '@/models/ArticleView';
-import { isBotUserAgent, parseViewBody, viewDay } from '@/lib/articles/viewCounter';
+import { isBotUserAgent, isCountingEnabled, parseViewBody, viewDay } from '@/lib/articles/viewCounter';
 
 /**
  * POST /api/articles/view — count one anonymous article view. Collect only.
@@ -31,6 +31,8 @@ export const dynamic = 'force-dynamic';
 const noContent = () => new NextResponse(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
 
 export async function POST(request) {
+  // Dev, preview and production share one database; only production traffic is real readership.
+  if (!isCountingEnabled(process.env)) return noContent();
   if (isBotUserAgent(request.headers.get('user-agent'))) return noContent();
 
   const declared = Number(request.headers.get('content-length'));

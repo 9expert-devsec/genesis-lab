@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   isBotUserAgent,
   isCountableArticle,
+  isCountingEnabled,
   parseViewBody,
   viewDay,
   viewSessionKey,
@@ -76,6 +77,13 @@ test('drafts never count: inactive, or no publishedAt', () => {
   assert.equal(isCountableArticle({ ...live, publishedAt: null }), false);
   assert.equal(isCountableArticle({ ...live, _id: undefined }), false);
   assert.equal(isCountableArticle(null), false);
+});
+
+test('counting is enabled on the production deployment only (shared DB)', () => {
+  assert.equal(isCountingEnabled({ VERCEL_ENV: 'production' }), true);
+  for (const env of [{ VERCEL_ENV: 'preview' }, { VERCEL_ENV: 'development' }, { VERCEL_ENV: undefined }, {}, undefined]) {
+    assert.equal(isCountingEnabled(env), false, `enabled for ${JSON.stringify(env)}`);
+  }
 });
 
 test('the session key is av:<id>:<day>', () => {

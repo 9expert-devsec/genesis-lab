@@ -28,6 +28,12 @@ test('the view endpoint never imports the Article model, never writes articles, 
   }
   assert.doesNotMatch(code, /\brequest\.ip\b|\.cookies\b|cookies\(\)|headers\(\)/, 'reads an ip or a cookie');
 
+  // Production-only: the env gate runs before the first DB call.
+  const gate = code.indexOf('isCountingEnabled(process.env)');
+  const firstDb = code.indexOf('dbConnect()');
+  assert.ok(gate !== -1, 'the route must call isCountingEnabled(process.env)');
+  assert.ok(firstDb !== -1 && gate < firstDb, 'isCountingEnabled must run before dbConnect()');
+
   // CONTROL: the scan is reading the real file — it does increment the view row.
   assert.match(code, /ArticleView\.updateOne\(/);
   assert.match(code, /\$inc:\s*\{\s*count:\s*1\s*\}/);
