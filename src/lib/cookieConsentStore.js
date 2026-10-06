@@ -38,6 +38,8 @@
 // on purpose: this one can be reviewed for correctness of the RECORD without
 // also having to be right about the tag.
 
+import { LEGACY_V1_CATEGORY_KEYS } from '@/lib/consentCategories';
+
 /**
  * Cookie name. Prefixed like the rest of this origin's first-party cookies so
  * it is obvious in devtools which are ours.
@@ -56,8 +58,15 @@ export const CONSENT_COOKIE = '9e_cookie_consent';
  * unreadable and the banner asks again. That is the safe direction: asking a
  * user twice is a minor annoyance, silently inferring consent for a category
  * they were never shown is not.
+ *
+ * v2 (CB-C): `{v:2, categories:{analytics, marketing}, ts}` — "ด้านฟังก์ชัน"
+ * stopped being a choice. A valid v1 record is MIGRATED on read (see
+ * parseConsent), not discarded.
  */
-export const CONSENT_SCHEMA_VERSION = 1;
+export const CONSENT_SCHEMA_VERSION = 2;
+
+/** The one earlier schema that is still readable — by migration only. */
+export const LEGACY_CONSENT_SCHEMA_VERSION = 1;
 
 /**
  * Six months. Long enough not to nag, short enough that a choice made under a
@@ -99,7 +108,7 @@ export function serialiseConsent(categories, nowIso) {
  * receive (hand-edited, truncated, written by an older build) and must not be
  * able to break rendering.
  */
-export function parseConsent(raw, expectedKeys) {
+export function parseConsent(raw, expectedKeys, legacyKeys = LEGACY_V1_CATEGORY_KEYS) {
   if (typeof raw !== 'string' || raw === '') return null;
 
   let parsed;
@@ -110,7 +119,6 @@ export function parseConsent(raw, expectedKeys) {
   }
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  if (parsed.v !== CONSENT_SCHEMA_VERSION) return null;
 
   const { categories } = parsed;
   if (!categories || typeof categories !== 'object' || Array.isArray(categories)) return null;
@@ -121,16 +129,43 @@ export function parseConsent(raw, expectedKeys) {
   // after a category was removed would carry a key nothing consumes. Both are
   // silent; both mean the user never actually answered the question we are now
   // asking.
-  const storedKeys = Object.keys(categories).sort();
-  const wantKeys = [...expectedKeys].sort();
-  if (storedKeys.length !== wantKeys.length) return null;
-  if (storedKeys.some((k, i) => k !== wantKeys[i])) return null;
-
+  //
   // Values must be real booleans. `"false"` is a string and is truthy, which is
   // the classic way a "denied" record turns into a granted one.
-  if (Object.values(categories).some((v) => typeof v !== 'boolean')) return null;
+  const exactBooleans = (keys) => {
+    const storedKeys = Object.keys(categories).sort();
+    const wantKeys = [...keys].sort();
+    if (storedKeys.length !== wantKeys.length) return false;
+    if (storedKeys.some((k, i) => k !== wantKeys[i])) return false;
+    return Object.values(categories).every((v) => typeof v === 'boolean');
+  };
 
-  return { ...categories };
+  if (parsed.v === CONSENT_SCHEMA_VERSION) {
+    return exactBooleans(expectedKeys) ? { ...categories } : null;
+  }
+
+  // ── v1 → v2 MIGRATION (CB-C) ────────────────────────────────────────────
+  // A v1 record that passes every v1 rule is a real answer to the questions we
+  // still ask — `analytics` and `marketing` meant then exactly what they mean
+  // now — so it is kept, minus `functional`, which is no longer a choice.
+  // Discarding it would re-prompt everyone who already chose and drop every
+  // accepting visitor out of GA4 until they answered again.
+  //
+  // READ-ONLY: nothing is rewritten here. The cookie becomes v2 the next time
+  // the visitor makes a decision, through writeConsentCookie, and not before.
+  //
+  // MIRRORED in the inline bootstrap (src/lib/analytics/consentMode.js); the
+  // two are held together by test/pure/consentMigrationParity.test.mjs.
+  if (parsed.v === LEGACY_CONSENT_SCHEMA_VERSION && exactBooleans(legacyKeys)) {
+    const out = {};
+    for (const key of expectedKeys) {
+      if (typeof categories[key] !== 'boolean') return null;
+      out[key] = categories[key];
+    }
+    return out;
+  }
+
+  return null;
 }
 
 // ── Browser I/O ─────────────────────────────────────────────────────────────

@@ -31,7 +31,7 @@ const checkboxes = (d) => [...d.querySelectorAll('input[type="checkbox"]')];
 
 test('all four categories are REAL form controls, not styled divs', () => {
   const boxes = checkboxes(doc());
-  assert.equal(boxes.length, 4, 'necessary + three optional');
+  assert.equal(boxes.length, 3, 'necessary + two optional (CB-C)');
   // A div with role="checkbox" would satisfy a screen reader only if someone
   // also hand-wired keyboard handling, focus, and aria-checked. Native inputs
   // get all three for free and cannot silently lose them.
@@ -42,7 +42,7 @@ test('all four categories are REAL form controls, not styled divs', () => {
 
 test('the three optional categories start UNCHECKED', () => {
   const optional = checkboxes(doc()).filter((b) => !b.disabled);
-  assert.equal(optional.length, 3);
+  assert.equal(optional.length, 2);
   for (const box of optional) {
     assert.equal(
       box.hasAttribute('checked'),
@@ -66,7 +66,7 @@ test('the necessary category is checked AND genuinely non-toggleable', () => {
 test('exactly one control is non-interactive — the other three are operable', () => {
   const boxes = checkboxes(doc());
   assert.equal(boxes.filter((b) => b.disabled).length, 1);
-  assert.equal(boxes.filter((b) => !b.disabled).length, 3);
+  assert.equal(boxes.filter((b) => !b.disabled).length, 2);
 });
 
 test('the always-on state is spelled out for assistive tech, not just drawn', () => {
@@ -92,7 +92,7 @@ test('the three optional labels are the Figma three, in order', () => {
   const labels = checkboxes(doc())
     .filter((b) => !b.disabled)
     .map((b) => b.closest('label').textContent.trim());
-  assert.deepEqual(labels, ['คุกกี้วิเคราะห์', 'คุกกี้ด้านฟังก์ชัน', 'คุกกี้การตลาด']);
+  assert.deepEqual(labels, ['คุกกี้วิเคราะห์', 'คุกกี้การตลาด']);
 });
 
 /**
@@ -130,12 +130,12 @@ test('CB-A3 layout: the four toggles live in the BOTTOM row, not a row of their 
   // The pill band above the divider is gone; the toggles moved down.
   assert.equal(
     bottom.querySelectorAll('input[type="checkbox"]').length,
-    4,
+    3,
     'all four category toggles are inside the last row',
   );
   assert.equal(
     card.querySelectorAll('input[type="checkbox"]').length,
-    4,
+    3,
     'and there are no toggles anywhere else in the card',
   );
   assert.equal(
@@ -168,7 +168,7 @@ test('CB-A3 layout: the bottom row reads toggles → buttons', () => {
   assert.equal(groups.length, 2, 'two groups now: the link left this row');
   assert.equal(
     groups[0].querySelectorAll('input[type="checkbox"]').length,
-    4,
+    3,
     'the toggles come first, and wrap as one unit',
   );
   assert.equal(groups[0].querySelectorAll('button').length, 0, 'no button among them');

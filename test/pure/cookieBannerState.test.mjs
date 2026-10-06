@@ -31,11 +31,11 @@ import {
 
 const KEYS = OPTIONAL_CATEGORIES.map((c) => c.key);
 
-test('there are exactly three optional categories, and they are the Figma three', () => {
-  assert.deepEqual(KEYS, ['analytics', 'functional', 'marketing']);
+test('there are exactly two optional categories (CB-C: ด้านฟังก์ชัน moved under จำเป็น)', () => {
+  assert.deepEqual(KEYS, ['analytics', 'marketing']);
   assert.deepEqual(
     OPTIONAL_CATEGORIES.map((c) => c.label),
-    ['คุกกี้วิเคราะห์', 'คุกกี้ด้านฟังก์ชัน', 'คุกกี้การตลาด'],
+    ['คุกกี้วิเคราะห์', 'คุกกี้การตลาด'],
     'the Thai labels are the consent record users read — they are not decorative',
   );
 });
@@ -88,8 +88,7 @@ test('applyAll covers every optional key, not a hardcoded three', () => {
 test('toggling one category leaves the other two alone', () => {
   const next = toggleCategory(INITIAL_CONSENT, 'analytics');
   assert.equal(next.analytics, true, 'the toggled one flips');
-  assert.equal(next.functional, false, 'and the others do not');
-  assert.equal(next.marketing, false);
+  assert.equal(next.marketing, false, 'and the other does not');
 });
 
 test('toggle is its own inverse', () => {

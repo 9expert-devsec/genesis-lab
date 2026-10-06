@@ -78,11 +78,12 @@ test('all four Consent Mode v2 signals are present, plus the three others', () =
 
 test('each category grants exactly the signals it owns, and no others', () => {
   const cases = [
-    [{ analytics: true, functional: false, marketing: false }, ['analytics_storage']],
-    [{ analytics: false, functional: true, marketing: false },
-      ['functionality_storage', 'personalization_storage']],
-    [{ analytics: false, functional: false, marketing: true },
+    [{ analytics: true, marketing: false }, ['analytics_storage']],
+    [{ analytics: false, marketing: true },
       ['ad_storage', 'ad_user_data', 'ad_personalization']],
+    // CB-C: no category owns these any more — a stray v1 `functional: true`
+    // passed straight to the mapper must not resurrect them.
+    [{ analytics: false, functional: true, marketing: false }, []],
   ];
   for (const [categories, expected] of cases) {
     const out = consentSignalsFor(categories);
@@ -93,11 +94,16 @@ test('each category grants exactly the signals it owns, and no others', () => {
   }
 });
 
-test('accepting everything grants every signal; rejecting grants only security', () => {
-  const all = consentSignalsFor({ analytics: true, functional: true, marketing: true });
-  assert.equal(Object.values(all).every((v) => v === 'granted'), true);
+test('accepting everything grants analytics + the three ad signals; rejecting grants only security', () => {
+  const all = consentSignalsFor({ analytics: true, marketing: true });
+  assert.deepEqual(all, {
+    ad_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted',
+    analytics_storage: 'granted',
+    functionality_storage: 'denied', personalization_storage: 'denied',
+    security_storage: 'granted',
+  });
 
-  const none = consentSignalsFor({ analytics: false, functional: false, marketing: false });
+  const none = consentSignalsFor({ analytics: false, marketing: false });
   assert.deepEqual(none, { ...DENIED_DEFAULTS });
 });
 
@@ -146,7 +152,7 @@ test('window.gtag is installed, so the update helper has something to call', () 
 });
 
 test('A STORED CHOICE BECOMES THE DEFAULT — no denied-then-flip for returning visitors', () => {
-  const { commands } = runBootstrap(cookieFor({ analytics: true, functional: false, marketing: true }));
+  const { commands } = runBootstrap(cookieFor({ analytics: true, marketing: true }));
   assert.deepEqual(defaultSignals(commands), {
     ad_storage: 'granted',
     ad_user_data: 'granted',
@@ -162,18 +168,16 @@ test('A STORED CHOICE BECOMES THE DEFAULT — no denied-then-flip for returning 
 });
 
 test('the bootstrap agrees with consentSignalsFor for every combination', () => {
-  // Eight combinations, both implementations, same answer. This is the drift
+  // Every combination, both implementations, same answer. This is the drift
   // check the two-languages problem actually needs.
   for (const analytics of [false, true]) {
-    for (const functional of [false, true]) {
-      for (const marketing of [false, true]) {
-        const categories = { analytics, functional, marketing };
-        assert.deepEqual(
-          defaultSignals(runBootstrap(cookieFor(categories)).commands),
-          consentSignalsFor(categories),
-          JSON.stringify(categories),
-        );
-      }
+    for (const marketing of [false, true]) {
+      const categories = { analytics, marketing };
+      assert.deepEqual(
+        defaultSignals(runBootstrap(cookieFor(categories)).commands),
+        consentSignalsFor(categories),
+        JSON.stringify(categories),
+      );
     }
   }
 });
@@ -184,17 +188,17 @@ test('every untrustworthy cookie falls back to denied', () => {
   const bad = {
     'not json': `${CONSENT_COOKIE}=%7Bnope`,
     'wrong schema version': `${CONSENT_COOKIE}=${encodeURIComponent(
-      JSON.stringify({ v: CONSENT_SCHEMA_VERSION + 1, categories: { analytics: true, functional: true, marketing: true } }))}`,
+      JSON.stringify({ v: CONSENT_SCHEMA_VERSION + 1, categories: { analytics: true, marketing: true } }))}`,
     'categories is an array': `${CONSENT_COOKIE}=${encodeURIComponent(
       JSON.stringify({ v: CONSENT_SCHEMA_VERSION, categories: [] }))}`,
     'missing a key': `${CONSENT_COOKIE}=${encodeURIComponent(
-      JSON.stringify({ v: CONSENT_SCHEMA_VERSION, categories: { analytics: true, functional: true } }))}`,
+      JSON.stringify({ v: CONSENT_SCHEMA_VERSION, categories: { analytics: true } }))}`,
     'an extra key': `${CONSENT_COOKIE}=${encodeURIComponent(
-      JSON.stringify({ v: CONSENT_SCHEMA_VERSION, categories: { analytics: true, functional: true, marketing: true, ads: true } }))}`,
+      JSON.stringify({ v: CONSENT_SCHEMA_VERSION, categories: { analytics: true, marketing: true, ads: true } }))}`,
     'string "false" instead of boolean': `${CONSENT_COOKIE}=${encodeURIComponent(
-      JSON.stringify({ v: CONSENT_SCHEMA_VERSION, categories: { analytics: 'false', functional: 'false', marketing: 'false' } }))}`,
+      JSON.stringify({ v: CONSENT_SCHEMA_VERSION, categories: { analytics: 'false', marketing: 'false' } }))}`,
     'string "true" instead of boolean': `${CONSENT_COOKIE}=${encodeURIComponent(
-      JSON.stringify({ v: CONSENT_SCHEMA_VERSION, categories: { analytics: 'true', functional: 'true', marketing: 'true' } }))}`,
+      JSON.stringify({ v: CONSENT_SCHEMA_VERSION, categories: { analytics: 'true', marketing: 'true' } }))}`,
     'a different cookie entirely': 'some_other=1',
     'empty': '',
   };
@@ -204,7 +208,7 @@ test('every untrustworthy cookie falls back to denied', () => {
 });
 
 test('the record is found even when it is not the first cookie in the header', () => {
-  const real = cookieFor({ analytics: true, functional: true, marketing: true });
+  const real = cookieFor({ analytics: true, marketing: true });
   const { commands } = runBootstrap(`other=1; ${real}; another=2`);
   assert.equal(defaultSignals(commands).analytics_storage, 'granted');
 });
@@ -212,7 +216,7 @@ test('the record is found even when it is not the first cookie in the header', (
 test('a cookie whose NAME merely ends with ours is not mistaken for it', () => {
   // `x9e_cookie_consent=` must not match. The regex anchors on start-or-"; ".
   const granted = encodeURIComponent(
-    serialiseConsent({ analytics: true, functional: true, marketing: true }, new Date().toISOString()));
+    serialiseConsent({ analytics: true, marketing: true }, new Date().toISOString()));
   const { commands } = runBootstrap(`x${CONSENT_COOKIE}=${granted}`);
   assert.deepEqual(defaultSignals(commands), { ...DENIED_DEFAULTS });
 });
@@ -239,7 +243,7 @@ test('the key set it validates against is the one the store parses against', () 
 
 test('CONTROL: the executed-default probe reports granted when it IS granted', () => {
   const all = defaultSignals(runBootstrap(
-    cookieFor({ analytics: true, functional: true, marketing: true })).commands);
+    cookieFor({ analytics: true, marketing: true })).commands);
   assert.equal(all.analytics_storage, 'granted');
   assert.notDeepEqual(all, { ...DENIED_DEFAULTS });
 });
@@ -254,6 +258,6 @@ test('CONTROL: the ordering probe would catch a consent command queued late', ()
 test('CONTROL: runBootstrap really does observe the cookie it is given', () => {
   const a = defaultSignals(runBootstrap('').commands);
   const b = defaultSignals(runBootstrap(
-    cookieFor({ analytics: true, functional: false, marketing: false })).commands);
+    cookieFor({ analytics: true, marketing: false })).commands);
   assert.notDeepEqual(a, b, 'the harness ignores its cookie argument — every case above is vacuous');
 });
