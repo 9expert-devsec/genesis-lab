@@ -87,15 +87,17 @@ test('the limit is declared once, in the helper', () => {
     .map((f) => f.rel);
   assert.deepEqual(declarers, [HELPER]);
 
-  // And it agrees with the schema cap it was taken from. If seoDescription's
-  // max is ever retuned, the fallback must move with it or the two disagree
-  // about what a description is.
+  // RE-JUSTIFIED in SEO-1. This used to require the helper's limit to EQUAL
+  // seoDescription's schema max, because 160 was both. The owner's ruling split
+  // them: 160 is now a WARNING in the admin form (lib/seo/seoLengths.js, counted
+  // in graphemes) and the schema keeps only a sanity cap above it. So the
+  // render limit must equal the form's guideline — what the editor is told is
+  // the useful length — and the schema cap must not be BELOW it, or a value the
+  // form calls fine could be refused on save.
   const schema = readSource('src/lib/schemas/article.js').code;
-  const seoMax = schema.match(/seoDescription:\s*z\.string\(\)\.trim\(\)\.max\((\d+)\)/)?.[1];
-  const helperMax = readSource(HELPER).code.match(/META_DESCRIPTION_MAX\s*=\s*(\d+)/)?.[1];
-  assert.equal(
-    helperMax,
-    seoMax,
-    'the fallback limit must equal seoDescription\'s declared max, or be re-justified'
-  );
+  const seoMax = Number(schema.match(/seoDescription:\s*z\.string\(\)\.trim\(\)\.max\((\d+)\)/)?.[1]);
+  const helperMax = Number(readSource(HELPER).code.match(/META_DESCRIPTION_MAX\s*=\s*(\d+)/)?.[1]);
+  const guide = Number(readSource('src/lib/seo/seoLengths.js').code.match(/SEO_DESCRIPTION_GUIDE\s*=\s*(\d+)/)?.[1]);
+  assert.equal(helperMax, guide, 'the render limit must equal the form\'s SEO Description guideline');
+  assert.ok(seoMax >= helperMax, 'the schema sanity cap must be at least the render limit');
 });

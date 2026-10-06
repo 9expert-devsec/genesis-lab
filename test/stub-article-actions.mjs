@@ -42,3 +42,5 @@ export async function getFeaturedArticlesForLanding() { return []; }
 export async function listUsedArticleSkillIds() { return []; }
 export async function getArticleBySlug()        { return null; }
 export async function getPinCapacity()          { return null; }
+/** SEO-1: read-only lookup for the checklist's keyword-unique check. */
+export async function findArticlesSharingFocusKeyword() { return []; }

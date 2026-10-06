@@ -23,8 +23,8 @@ import { OPTIONAL_CATEGORIES } from '@/components/consent/CookieBanner';
 
 const KEYS = OPTIONAL_CATEGORIES.map((c) => c.key);
 const parse = (raw) => parseConsent(raw, KEYS);
-const ALL_OFF = { analytics: false, functional: false, marketing: false };
-const ALL_ON = { analytics: true, functional: true, marketing: true };
+const ALL_OFF = { analytics: false, marketing: false };
+const ALL_ON = { analytics: true, marketing: true };
 
 test('a record round-trips', () => {
   const out = parse(serialiseConsent(ALL_ON, '2026-08-25T00:00:00.000Z'));
@@ -72,6 +72,8 @@ test('malformed JSON does not throw — it is just "no decision"', () => {
 test('a record from a DIFFERENT schema version is rejected', () => {
   const stale = JSON.stringify({ v: CONSENT_SCHEMA_VERSION + 1, categories: ALL_ON, ts: 'x' });
   assert.equal(parse(stale), null);
+  // v1 is readable ONLY with the full v1 key set (see consentMigrationParity);
+  // a v1 record carrying the v2 keys is not a valid v1 record.
   const older = JSON.stringify({ v: CONSENT_SCHEMA_VERSION - 1, categories: ALL_ON, ts: 'x' });
   assert.equal(parse(older), null);
 });
@@ -83,7 +85,7 @@ test('a record MISSING a current category is rejected, not defaulted', () => {
   // there is no answer to honour.
   const raw = JSON.stringify({
     v: CONSENT_SCHEMA_VERSION,
-    categories: { analytics: true, functional: true },
+    categories: { analytics: true },
     ts: 'x',
   });
   assert.equal(parse(raw), null);
@@ -101,10 +103,10 @@ test('a record naming a category we no longer have is rejected', () => {
 test('the key check is order-independent', () => {
   const raw = JSON.stringify({
     v: CONSENT_SCHEMA_VERSION,
-    categories: { marketing: true, analytics: false, functional: true },
+    categories: { marketing: true, analytics: false },
     ts: 'x',
   });
-  assert.deepEqual(parse(raw), { analytics: false, functional: true, marketing: true });
+  assert.deepEqual(parse(raw), { analytics: false, marketing: true });
 });
 
 test('STRING "false" is rejected rather than read as truthy', () => {
@@ -112,7 +114,7 @@ test('STRING "false" is rejected rather than read as truthy', () => {
   // "false", which is truthy, and a lazier check would grant marketing.
   const raw = JSON.stringify({
     v: CONSENT_SCHEMA_VERSION,
-    categories: { analytics: 'false', functional: false, marketing: false },
+    categories: { analytics: 'false', marketing: false },
     ts: 'x',
   });
   assert.equal(parse(raw), null);

@@ -49,10 +49,10 @@ export const metadata = {
  *    centre, no toggle. The clause is cut to the browser route, which is the
  *    only one that works today.
  *
- *    TODO(cookie-banner): when a consent banner ships, restore the first half
- *    of that sentence — management "ผ่านแบนเนอร์ตั้งค่าคุกกี้ในครั้งแรกที่เข้า
- *    ใช้งาน" — to §3 below. The same edit is owed to the privacy page's §4
- *    marketing row; both are marked with this tag.
+ *    RESTORED in CB-C: the banner and the footer's "ตั้งค่าคุกกี้" exist, so the
+ *    "วิธีจัดการคุกกี้" section names the site's own control first and the
+ *    browser route second. The privacy page's §4 marketing row got the same
+ *    edit in the same round.
  *
  * 3. THE PROVIDER AND RETENTION CELLS THAT WERE BRACKETED. See COOKIE_TYPES.
  *
@@ -89,7 +89,15 @@ const COOKIE_TYPES = [
     icon: 'shield',
     name: 'จำเป็นต่อการทำงาน',
     nameEn: 'Strictly Necessary',
-    purpose: 'ทำให้เว็บไซต์ทำงานได้ปกติ เช่น การเข้าสู่ระบบ ตะกร้าสินค้า โดยจัดเก็บเฉพาะช่วงที่ใช้งาน (Session)',
+    /*
+     * CB-C: "ฟังก์ชันการใช้งาน" merged in here (owner's ruling). Its contents —
+     * next-themes' localStorage['theme'], the dismissed-popup/topbar keys —
+     * remember a choice the visitor made themselves, which is what this
+     * category is for. The old "โดยจัดเก็บเฉพาะช่วงที่ใช้งาน (Session)" was
+     * dropped with it: the consent cookie (180 days) and the theme key outlive
+     * a session, so the clause would now be untrue.
+     */
+    purpose: 'ทำให้เว็บไซต์ทำงานได้ปกติ เช่น การเข้าสู่ระบบ ตะกร้าสินค้า และจดจำสิ่งที่ท่านเลือกเอง เช่น การตั้งค่าคุกกี้ และโหมดการแสดงผลสว่าง/มืดที่ท่านเลือกไว้',
     provider: 'ระบบของ 9Expert เอง',
   },
   {
@@ -99,27 +107,11 @@ const COOKIE_TYPES = [
     purpose: 'วิเคราะห์พฤติกรรมผู้เข้าชมเพื่อปรับปรุงเว็บไซต์',
     provider: 'Google Analytics',
   },
-  {
-    icon: 'settings',
-    name: 'ฟังก์ชันการใช้งาน',
-    nameEn: 'Functional',
-    purpose: 'จดจำการตั้งค่าที่ท่านเลือกไว้ เช่น โหมดสีสว่าง/มืด',
-    /*
-     * ── FILLED IN CB-B FROM A MEASUREMENT, NOT A GUESS ────────────────────
-     * This sat as `null` → "ยังไม่ระบุ" because nobody had established whether
-     * the site sets a functional cookie at all. It does: the dark-mode toggle
-     * persists through next-themes, which writes localStorage['theme']
-     * (storageKey defaults to "theme" and is not overridden in
-     * src/components/layout/ThemeProvider.jsx). Also ours: the dismissed-popup
-     * and dismissed-topbar keys.
-     *
-     * Every one of those is first-party, so the provider is us. The ruling
-     * that produced this line was: if the category had turned out to be empty,
-     * DELETE the card — never fill it with a plausible-sounding third party.
-     * It is not empty, so the card stays and names the real owner.
-     */
-    provider: 'ระบบของ 9Expert เอง',
-  },
+  // The "ฟังก์ชันการใช้งาน" (Functional) card was here until CB-C. CB-B had
+  // measured its contents — next-themes' localStorage['theme'] and the
+  // dismissed-popup/topbar keys, all first-party — and CB-C's ruling moved
+  // them under จำเป็นต่อการทำงาน above, because each remembers a choice the
+  // visitor made themselves. It is no longer a consent choice in the banner.
   {
     icon: 'cookie',
     name: 'การตลาด/โฆษณา',
@@ -156,7 +148,7 @@ const COOKIE_TYPES = [
  *                      youtube.com, NOT youtube-nocookie.com, so they do set
  *                      cookies.
  *   Google Analytics   IN USE. Analytics.jsx loads gtag.js and configures
- *                      G-6043WVS74D; it is rendered site-wide from
+ *                      G-ZBWWCS7B6D; it is rendered site-wide from
  *                      src/app/layout.jsx. Confirmed, not pending — an
  *                      earlier pass here missed this loader entirely.
  *   Google Ads         IN USE. The same Analytics.jsx call also configures
@@ -395,14 +387,16 @@ export default function CookiePolicyPage() {
               defaultOpen: true,
               /*
                 The document offered two routes — a first-visit cookie banner
-                and browser settings. Only the second exists. See the file
-                header's TODO(cookie-banner).
+                and browser settings. Until CB-C only the second existed. The
+                banner and the footer's "ตั้งค่าคุกกี้" now do, so both routes
+                are stated, the site's own first.
               */
               body: (
                 <>
                   <p>
-                    ท่านสามารถจัดการ
-                    หรือปฏิเสธคุกกี้ที่ไม่จำเป็นได้ผ่านการตั้งค่าเบราว์เซอร์ของท่าน
+                    ท่านสามารถเลือก เปลี่ยน หรือถอนความยินยอมสำหรับคุกกี้วิเคราะห์และคุกกี้การตลาดได้ทุกเมื่อ
+                    ผ่าน &quot;ตั้งค่าคุกกี้&quot; ที่ท้ายทุกหน้าของเว็บไซต์
+                    หรือจัดการและปฏิเสธคุกกี้ผ่านการตั้งค่าเบราว์เซอร์ของท่าน
                     ทั้งนี้
                     การปิดใช้งานคุกกี้บางประเภทอาจส่งผลกระทบต่อการใช้งานฟังก์ชันบางส่วนของเว็บไซต์
                   </p>

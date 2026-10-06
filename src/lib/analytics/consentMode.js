@@ -50,6 +50,8 @@
  */
 
 import { OPTIONAL_CATEGORY_KEYS } from '@/lib/consentCategories';
+import { LEGACY_V1_CATEGORY_KEYS } from '@/lib/consentCategories';
+import { LEGACY_CONSENT_SCHEMA_VERSION } from '@/lib/cookieConsentStore';
 
 /**
  * The four signals the banner's optional categories control, plus the three
@@ -57,6 +59,11 @@ import { OPTIONAL_CATEGORY_KEYS } from '@/lib/consentCategories';
  *
  * `security_storage` is granted here and everywhere. Everything else starts
  * denied, and this object IS the state a first-time visitor is in.
+ *
+ * `functionality_storage` and `personalization_storage` are DENIED ALWAYS since
+ * CB-C: "ด้านฟังก์ชัน" is no longer a choice (see consentCategories.js), and no
+ * Google tag on this site needs either signal. Theme storage is first-party
+ * and never consulted Consent Mode in the first place.
  */
 export const DENIED_DEFAULTS = Object.freeze({
   ad_storage: 'denied',
@@ -75,10 +82,10 @@ export const DENIED_DEFAULTS = Object.freeze({
  *
  *   จำเป็น       → security_storage        (always granted, no toggle)
  *   วิเคราะห์     → analytics_storage
- *   ด้านฟังก์ชัน  → functionality_storage + personalization_storage
  *   การตลาด      → ad_storage + ad_user_data + ad_personalization
+ *   (no category) → functionality_storage + personalization_storage, always denied
  *
- * @param {{analytics?: boolean, functional?: boolean, marketing?: boolean}|null} categories
+ * @param {{analytics?: boolean, marketing?: boolean}|null} categories
  *        A parsed consent record, or null for "no decision yet".
  */
 export function consentSignalsFor(categories) {
@@ -89,8 +96,8 @@ export function consentSignalsFor(categories) {
     ad_user_data: g(categories.marketing),
     ad_personalization: g(categories.marketing),
     analytics_storage: g(categories.analytics),
-    functionality_storage: g(categories.functional),
-    personalization_storage: g(categories.functional),
+    functionality_storage: 'denied',
+    personalization_storage: 'denied',
     security_storage: 'granted',
   };
 }
@@ -148,12 +155,27 @@ export function consentSignalsFor(categories) {
  * while denied. Both only do anything in the denied state, which is exactly the
  * state a first-time visitor is now in.
  *
- * @param {{ga4Id: string, adsId: string, cookieName: string, schemaVersion: number}} opts
+ * ── v1 → v2 MIGRATION (CB-C), MIRRORING parseConsent ──────────────────────
+ * A record is honoured when it is EITHER a valid current-version record (exact
+ * current key set, real booleans) OR a valid v1 record (exact v1 key set, real
+ * booleans), and in both cases only `analytics` and `marketing` are read. That
+ * is the same rule parseConsent applies, and test/pure/
+ * consentMigrationParity.test.mjs feeds both the same table of inputs. Nothing
+ * here rewrites the cookie — the record becomes v2 on the next decision.
+ *
+ * @param {{ga4Id: string, adsId: string, cookieName: string, schemaVersion: number, legacySchemaVersion?: number}} opts
  * @returns {string} JavaScript source, for a <script> tag's inner HTML.
  */
-export function consentBootstrapScript({ ga4Id, adsId, cookieName, schemaVersion }) {
+export function consentBootstrapScript({
+  ga4Id,
+  adsId,
+  cookieName,
+  schemaVersion,
+  legacySchemaVersion = LEGACY_CONSENT_SCHEMA_VERSION,
+}) {
   const denied = JSON.stringify(DENIED_DEFAULTS);
   const keys = JSON.stringify([...OPTIONAL_CATEGORY_KEYS].sort());
+  const legacyKeys = JSON.stringify([...LEGACY_V1_CATEGORY_KEYS].sort());
   return `
 window.dataLayer = window.dataLayer || [];
 function gtag(){window.dataLayer.push(arguments);}
@@ -164,11 +186,14 @@ try {
   if (m) {
     var p = JSON.parse(decodeURIComponent(m[1]));
     var k = p && p.categories;
-    if (p && p.v === ${schemaVersion} && k && typeof k === 'object' && !Array.isArray(k)) {
+    if (p && k && typeof k === 'object' && !Array.isArray(k)) {
       var got = Object.keys(k).sort();
-      var want = ${keys};
-      var ok = got.length === want.length && got.every(function (x, i) { return x === want[i]; })
-        && got.every(function (x) { return typeof k[x] === 'boolean'; });
+      var exact = function (want) {
+        return got.length === want.length && got.every(function (x, i) { return x === want[i]; })
+          && got.every(function (x) { return typeof k[x] === 'boolean'; });
+      };
+      var ok = (p.v === ${schemaVersion} && exact(${keys}))
+        || (p.v === ${legacySchemaVersion} && exact(${legacyKeys}));
       if (ok) {
         var y = 'granted', n = 'denied';
         c = {
@@ -176,8 +201,8 @@ try {
           ad_user_data: k.marketing ? y : n,
           ad_personalization: k.marketing ? y : n,
           analytics_storage: k.analytics ? y : n,
-          functionality_storage: k.functional ? y : n,
-          personalization_storage: k.functional ? y : n,
+          functionality_storage: n,
+          personalization_storage: n,
           security_storage: y
         };
       }

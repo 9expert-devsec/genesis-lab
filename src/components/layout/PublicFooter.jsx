@@ -12,6 +12,7 @@ import {
 import { TbBrandShopee } from "react-icons/tb";
 import { Logo } from "@/components/brand/Logo";
 import { siteConfig, footerNav, policyNav } from "@/config/site";
+import { CookieSettingsButton } from "@/components/consent/CookieSettingsButton";
 
 const SOCIALS = [
   {
@@ -230,6 +231,14 @@ export function PublicFooter() {
                   </Link>
                 </li>
               ))}
+              {/* CB-C: the way back into the cookie settings after a decision.
+                  A client island — this footer stays a server component. */}
+              <li className="flex items-center gap-2">
+                <span aria-hidden="true" className="text-9e-slate-dp-300 dark:text-[#475569]">
+                  ·
+                </span>
+                <CookieSettingsButton className="transition-colors hover:text-9e-action dark:hover:text-[#48B0FF]" />
+              </li>
             </ul>
           </nav>
         </div>

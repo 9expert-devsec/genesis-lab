@@ -55,6 +55,16 @@ import {
   fromLocalInput,
   toLocalInput,
 } from '@/lib/articlePublishTime';
+import {
+  seoLengthState,
+  SEO_TITLE_GUIDE,
+  SEO_DESCRIPTION_GUIDE,
+  SEO_TITLE_OVER_HINT,
+  SEO_DESCRIPTION_OVER_HINT,
+} from '@/lib/seo/seoLengths';
+import { runSeoChecks, normalizeForMatch, parseFocusKeywords } from '@/lib/seo/articleSeoChecks';
+import { findArticlesSharingFocusKeyword } from '@/lib/actions/articles';
+import { SeoChecklist } from './SeoChecklist';
 
 const MAX_TAGS = 20;
 
@@ -134,20 +144,12 @@ function formatHTML(html) {
     .join('\n');
 }
 
-/**
- * SEO score — same heuristic as the design artifact. Each criterion
- * contributes independently so the bar nudges up as the admin fills
- * each field.
- */
-function calcSeoScore({ title, seoTitle, seoDescription, focusKeyword, articleType }) {
-  let s = 0;
-  if (String(title).length > 10) s += 20;
-  if (seoTitle.length >= 30 && seoTitle.length <= 60) s += 25;
-  if (seoDescription.length >= 80 && seoDescription.length <= 160) s += 25;
-  if (focusKeyword.length > 2) s += 15;
-  if (articleType) s += 15;
-  return s;
-}
+// The SEO score is the checklist's (lib/seo/articleSeoChecks.js, SEO-1). The old
+// `calcSeoScore` here scored field lengths and `focusKeyword.length > 2` only —
+// it never looked at where the keyword appears.
+
+/** How long the body must sit still before the checklist re-reads it. */
+const SEO_BODY_DEBOUNCE_MS = 500;
 
 // ── main component ───────────────────────────────────────────────
 
@@ -423,6 +425,57 @@ export function ArticleForm({
   /** The server's message, but only when the server blamed THIS field. */
   const excerptFieldError = fieldError?.field === 'excerpt' ? fieldError.message : null;
 
+  /**
+   * THE BODY AS THE SEO CHECKLIST SEES IT — debounced.
+   *
+   * Read exactly as `submit` reads it (`sourceMode ? sourceHtml :
+   * editor.getHTML()`), but only once the body has been still for
+   * SEO_BODY_DEBOUNCE_MS. The editor subscription below only arms a timer; the
+   * one setState it causes re-renders the FORM after the pause, never the
+   * editor's content, so typing in the body is not slowed by the checklist.
+   */
+  const [seoContentHtml, setSeoContentHtml] = useState(article?.content ?? '');
+  useEffect(() => {
+    if (!editor) return undefined;
+    let timer = null;
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => setSeoContentHtml(editor.getHTML()), SEO_BODY_DEBOUNCE_MS);
+    };
+    editor.on('update', schedule);
+    return () => {
+      clearTimeout(timer);
+      editor.off('update', schedule);
+    };
+  }, [editor]);
+  useEffect(() => {
+    if (!sourceMode) return undefined;
+    const timer = setTimeout(() => setSeoContentHtml(sourceHtml), SEO_BODY_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [sourceMode, sourceHtml]);
+
+  /**
+   * Other articles sharing this focus keyword (the checklist's keyword-unique
+   * check). Fetched on load and on the keyword field's blur — never per
+   * keystroke. `forKey` records which keyword the answer belongs to.
+   */
+  const [keywordPeers, setKeywordPeers] = useState(null);
+  const checkKeywordPeers = useCallback(async (value) => {
+    const forKey = normalizeForMatch(parseFocusKeywords(value)[0]);
+    if (!forKey) { setKeywordPeers(null); return; }
+    try {
+      const items = await findArticlesSharingFocusKeyword(value, article?._id ?? null);
+      setKeywordPeers({ forKey, items: Array.isArray(items) ? items : [] });
+    } catch {
+      setKeywordPeers(null); // the check stays "not checked"; nothing else depends on it
+    }
+  }, [article?._id]);
+  useEffect(() => {
+    if (article?.focusKeyword) checkKeywordPeers(article.focusKeyword);
+    // On load only: later checks run on blur.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auto-grow the title / excerpt textareas as their content grows.
   const titleRef = useRef(null);
   const excerptRef = useRef(null);
@@ -608,9 +661,19 @@ export function ArticleForm({
 
   // ── Derived UI bits ───────────────────────────────────────────
 
-  const seoScore = calcSeoScore({
-    title, seoTitle, seoDescription, focusKeyword, articleType,
+  // `keywordPeers` is only valid for the keyword it was fetched for; while the
+  // admin is typing a different one the unique-check shows "checked on blur".
+  const keywordPeersCurrent =
+    keywordPeers && keywordPeers.forKey === normalizeForMatch(parseFocusKeywords(focusKeyword)[0])
+      ? keywordPeers.items
+      : null;
+  const seo = runSeoChecks({
+    focusKeyword, seoTitle, title, seoDescription, excerpt, slug,
+    contentHtml: seoContentHtml,
+    otherArticles: keywordPeersCurrent,
   });
+  const seoTitleLen       = seoLengthState(seoTitle, SEO_TITLE_GUIDE);
+  const seoDescriptionLen = seoLengthState(seoDescription, SEO_DESCRIPTION_GUIDE);
   const isPublished = Boolean(
     active &&
     publishedAt &&
@@ -1117,16 +1180,18 @@ export function ArticleForm({
 
           {/* 9. SEO */}
           <Section title="SEO">
-            {/* Not cut at 60: slicing the input broke titles mid-word. 60 is
-                the guideline, so the counter turns amber past it; the schema
-                accepts up to 120 and the public page drops the brand suffix
-                for long titles (lib/articles/articleTitle.js). */}
+            {/* Neither field is cut while typing (SEO-1): 60 / 160 are
+                guidelines, counted in graphemes, and going past one turns the
+                counter amber with a hint — the value still saves. The schema
+                keeps only sanity caps (120 / 320); the public page drops the
+                brand suffix for long titles (lib/articles/articleTitle.js) and
+                truncates the <meta> description at render. */}
             <Label
               text={
                 <>
                   SEO Title{' '}
-                  <span className={seoTitle.length > 60 ? 'text-amber-600 dark:text-amber-400' : undefined}>
-                    ({seoTitle.length}/60)
+                  <span className={seoTitleLen.over ? 'text-amber-600 dark:text-amber-400' : undefined}>
+                    ({seoTitleLen.length}/{SEO_TITLE_GUIDE})
                   </span>
                 </>
               }
@@ -1138,37 +1203,48 @@ export function ArticleForm({
                 className={inputCls}
               />
             </Label>
-            <Label text={`SEO Description (${seoDescription.length}/160)`} className="mt-3">
+            {seoTitleLen.over && (
+              <p className="mt-1 text-[10px] leading-tight text-amber-600 dark:text-amber-400">
+                {SEO_TITLE_OVER_HINT}
+              </p>
+            )}
+            <Label
+              text={
+                <>
+                  SEO Description{' '}
+                  <span className={seoDescriptionLen.over ? 'text-amber-600 dark:text-amber-400' : undefined}>
+                    ({seoDescriptionLen.length}/{SEO_DESCRIPTION_GUIDE})
+                  </span>
+                </>
+              }
+              className="mt-3"
+            >
               <textarea
                 value={seoDescription}
-                onChange={(e) => setSeoDescription(e.target.value.slice(0, 160))}
+                onChange={(e) => setSeoDescription(e.target.value)}
                 rows={3}
                 className={inputCls}
               />
             </Label>
+            {seoDescriptionLen.over && (
+              <p className="mt-1 text-[10px] leading-tight text-amber-600 dark:text-amber-400">
+                {SEO_DESCRIPTION_OVER_HINT}
+              </p>
+            )}
             <Label text="Focus Keyword" className="mt-3">
               <input
                 type="text"
                 value={focusKeyword}
                 onChange={(e) => setFocusKeyword(e.target.value)}
+                onBlur={(e) => checkKeywordPeers(e.target.value)}
+                aria-describedby="focus-keyword-help"
                 className={inputCls}
               />
             </Label>
-            <div className="mt-3">
-              <div className="mb-1 flex items-center justify-between text-[11px] text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                <span>คะแนน SEO</span>
-                <span className="font-semibold text-9e-navy dark:text-white">{seoScore}/100</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-9e-ice dark:bg-[#0D1B2A]">
-                <div
-                  className={
-                    'h-full transition-all ' +
-                    (seoScore >= 80 ? 'bg-green-500' : seoScore >= 50 ? 'bg-amber-500' : 'bg-red-500')
-                  }
-                  style={{ width: `${seoScore}%` }}
-                />
-              </div>
-            </div>
+            <p id="focus-keyword-help" className="mt-1 text-[10px] leading-tight text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              คำหรือวลีเดียวที่อยากให้บทความนี้ติดอันดับใน Google ระบบใช้ตรวจรายการด้านล่าง ไม่ได้แสดงบนหน้าเว็บ
+            </p>
+            <SeoChecklist score={seo.score} checks={seo.checks} />
           </Section>
 
           {/* ── JSON-LD / Schema ──────────────────────────── */}

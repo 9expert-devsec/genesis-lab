@@ -72,6 +72,10 @@ export const ADMIN_PAGES = [
       // key that goes quiet must fail the suite unless somebody wrote down why.
       { key: 'dashboard_registrations', label: 'แดชบอร์ด — การลงทะเบียน', href: null, match: 'none' },
       { key: 'dashboard_system',        label: 'แดชบอร์ด — ภาพรวมระบบ',   href: null, match: 'none' },
+      // CB-C — aggregate cookie-consent counters (acceptance rate after the
+      // banner redesign). Read-only, counts only; nothing on it identifies a
+      // visitor. Mirrored in AdminSidebar's NAV_GROUPS, ภาพรวม group.
+      { key: 'consent_stats', label: 'สถิติความยินยอมคุกกี้', href: '/admin/consent-stats', match: 'prefix' },
     ],
   },
   {

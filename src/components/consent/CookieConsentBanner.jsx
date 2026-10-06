@@ -14,6 +14,11 @@ import {
 import { gtagConsentUpdate } from '@/lib/analytics/gtag';
 import { consentSignalsFor } from '@/lib/analytics/consentMode';
 import { publishConsentDecision } from '@/lib/consentBroadcast';
+import { subscribeOpenCookieSettings } from '@/lib/consentBroadcast';
+import { CookieSettingsDialog } from './CookieSettingsDialog';
+import { applyAll } from '@/lib/consentChoices';
+import { choiceKind } from '@/lib/consentChoices';
+import { reportConsentChoice } from '@/lib/consentStatsClient';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -29,7 +34,16 @@ import { publishConsentDecision } from '@/lib/consentBroadcast';
  *   1. gtag('consent','update', …) with the categories mapped onto Consent
  *      Mode v2 signals — see src/lib/analytics/consentMode.js
  *   2. write the first-party cookie (src/lib/cookieConsentStore.js)
- *   3. hide the banner
+ *   3. broadcast it (src/lib/consentBroadcast.js), then hide the banner
+ *
+ * ── TWO LAYERS SINCE CB-C ───────────────────────────────────────────────────
+ *   layer 1  CookieBanner — a non-modal region, bottom-left card on desktop,
+ *            bottom sheet on a phone: ยอมรับทั้งหมด / ปฏิเสธทั้งหมด / ตั้งค่าเพิ่มเติม
+ *   layer 2  CookieSettingsDialog — the modal with the per-category switches,
+ *            also opened from the footer's "ตั้งค่าคุกกี้" (consentBroadcast's
+ *            open-settings event) showing the STORED choice
+ * Every decision, from either layer, goes through handleDecision below. Closing
+ * layer 2 without pressing one of its three buttons is not a decision.
  *
  * Why that order is in handleDecision below, not here.
  *
@@ -202,16 +216,92 @@ export function CookieConsentBanner() {
      */
     publishConsentDecision(categories);
     setDecision(categories);
+    setSettingsOpen(false);
+    setToastKey((n) => n + 1);
   }, []);
 
-  const visible = mounted && shouldRenderCookieConsentBanner(pathname) && !dismissed;
+  /* ── LAYER 2: OPEN / CLOSE, AND WHERE FOCUS GOES BACK TO ────────────────
+   *
+   * The opener is remembered so focus returns to it on close. Layer 1 is
+   * hidden while the dialog is open (one consent surface at a time), so when
+   * the opener was layer 1's own "ตั้งค่าเพิ่มเติม" it has been unmounted by the
+   * time the dialog closes; the re-rendered button is found by its data
+   * attribute instead. The footer's control stays mounted and is focused
+   * directly.
+   */
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const openerRef = useRef(null);
+  const openSettings = useCallback((event) => {
+    const fromEvent = event?.currentTarget;
+    openerRef.current = fromEvent
+      ?? (typeof document !== 'undefined' ? document.activeElement : null);
+    setSettingsOpen(true);
+  }, []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+
+  useEffect(() => subscribeOpenCookieSettings(() => openSettings()), [openSettings]);
+
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (settingsOpen) { wasOpen.current = true; return; }
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    const target = openerRef.current;
+    openerRef.current = null;
+    // After the commit that re-shows layer 1, so its button exists to receive focus.
+    requestAnimationFrame(() => {
+      if (target && target.isConnected) { target.focus(); return; }
+      document.querySelector('[data-cookie-layer1-settings]')?.focus();
+    });
+  }, [settingsOpen]);
+
+  /**
+   * Every button lands here: the decision first (handleDecision, unchanged in
+   * content and order), THEN the aggregate counter (CB-C §4). The report is
+   * fire-and-forget and comes last, so a slow or failed POST cannot delay the
+   * banner closing or lose the decision. `action` is which button; `layer`
+   * is 1 (the card) or 2 (the settings panel).
+   */
+  const decide = useCallback((categories, action, layer) => {
+    handleDecision(categories);
+    reportConsentChoice({
+      choice: choiceKind(action),
+      analytics: categories.analytics === true,
+      marketing: categories.marketing === true,
+      layer,
+    });
+  }, [handleDecision]);
+
+  /** Layer 2's three buttons. */
+  const decideFromSettings = useCallback(
+    (categories, action) => decide(categories, action, 2),
+    [decide],
+  );
+
+  /* ── THE CONFIRMATION ───────────────────────────────────────────────────
+   * A small role="status" note after every decision, auto-dismissed after
+   * ~4s. Keyed by a counter so a second decision restarts the timer. */
+  const [toastKey, setToastKey] = useState(0);
+  const [toastVisible, setToastVisible] = useState(false);
+  useEffect(() => {
+    if (toastKey === 0) return undefined;
+    setToastVisible(true);
+    const t = setTimeout(() => setToastVisible(false), 4000);
+    return () => clearTimeout(t);
+  }, [toastKey]);
+
+  const allowedHere = mounted && shouldRenderCookieConsentBanner(pathname);
+  const visible = allowedHere && !dismissed && !settingsOpen;
 
   /**
    * ── THE COLLISION, AND HOW IT IS RESOLVED ─────────────────────────────────
    * FloatingActionDock is `fixed … bottom-8 right-4` at z-50 and holds the
-   * back-to-top button and the chat launcher. This banner spans the full width
-   * of the bottom edge, so on every viewport — not just mobile — the dock
-   * would sit on top of it.
+   * back-to-top button and the chat launcher. Since CB-C the banner is a
+   * 420px card at the bottom-LEFT on ≥768px — a different column from the dock,
+   * so the dock does not move — and a full-width bottom sheet on a phone, where
+   * the dock WOULD sit on top of it. z-70 keeps the banner above the dock in
+   * either case; the published box below lifts the dock clear of the sheet so
+   * the launcher never covers the buttons.
    *
    * It is NOT resolved by hardcoding a bottom offset into the dock or by a
    * breakpoint. src/lib/viewportBottomInset.js exists precisely for this: the
@@ -281,9 +371,27 @@ export function CookieConsentBanner() {
   // would strand the dock floating above furniture that is gone.
   useEffect(() => () => clearOccupiedBox(OCCUPANCY_KEY), []);
 
-  if (!visible) return null;
+  if (!allowedHere) return null;
 
   return (
+    <>
+      <CookieSettingsDialog
+        open={settingsOpen}
+        initial={decision}
+        onClose={closeSettings}
+        onDecision={decideFromSettings}
+      />
+      {toastVisible && (
+        <div
+          role="status"
+          className="pointer-events-none fixed bottom-3 left-3 right-3 z-70 md:bottom-8 md:left-8 md:right-auto md:max-w-[420px]"
+        >
+          <p className="pointer-events-auto rounded-[12px] bg-9e-navy px-4 py-3 text-[13px] leading-snug text-white shadow-lg dark:bg-[var(--surface-raised)] dark:text-[var(--text-primary)]">
+            บันทึกการตั้งค่าคุกกี้แล้ว · เปลี่ยนได้ที่ &quot;ตั้งค่าคุกกี้&quot; ท้ายเว็บ
+          </p>
+        </div>
+      )}
+      {visible && (
     /*
      * FIXED, so there is no layout shift. The banner is out of normal flow
      * entirely: it never occupies space in <main>, so content below it does not
@@ -299,38 +407,27 @@ export function CookieConsentBanner() {
      * (9999) all still win, which is correct — each of those is something the
      * user opened deliberately.
      *
-     * pointer-events-none on the wrapper with auto on the card keeps the
-     * padding gutter click-through, so the banner does not create a dead strip
-     * across the bottom of every page.
+     * pointer-events-none on the wrapper with auto on the card keeps any gutter
+     * click-through.
      */
     <div
       data-cookie-consent-banner=""
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-70 p-3 sm:p-4"
+      className="pointer-events-none fixed bottom-3 left-3 right-3 z-70 md:bottom-8 md:left-8 md:right-auto md:w-[420px]"
     >
       {/*
-        ── WHY 960px AND NOT THE SITE'S max-w-[1200px] ─────────────────────
-        1200 is the SITE CONTENT container (103 uses in src/). This is a
-        floating card, not page content, and at 1200 the copy ran to a single
-        very long measure that read as a banner-shaped strip rather than a
-        card.
-
-        960 was chosen against the measured content, not by multiplying:
-        the bottom row's three groups measure 128 (link) + 531 (toggles) +
-        416 (buttons) = 1075, plus 40 of column gap and 48 of card padding =
-        1163px to hold all three on ONE line. Every real narrowing therefore
-        wraps that row, so the question is not "does it wrap" but "where".
-        At 960 the usable width is 912, and link + gap + toggles = 679 sits
-        comfortably on the first line with the buttons wrapping beneath,
-        right-aligned by `ml-auto` — which is the reading order the row was
-        built for. 1080 (an existing repo value) wraps identically but leaves
-        353px of slack stranded on the first line; 900 (also existing) works
-        but crowds the toggles toward the link.
+        Desktop (md, ≥768px): a 420px card 32px in from the bottom-left —
+        left: 32px; bottom: 32px; width: 420px. Phone: a bottom sheet 12px from
+        each edge. Both fixed, so neither shifts layout.
       */}
-      <div className="pointer-events-auto mx-auto max-w-[960px]" ref={cardRef}>
+      <div className="pointer-events-auto" ref={cardRef}>
         <CookieBanner
-          onDecision={handleDecision}
+          onAcceptAll={() => decide(applyAll(true), 'accept_all', 1)}
+          onRejectAll={() => decide(applyAll(false), 'reject_all', 1)}
+          onOpenSettings={openSettings}
         />
       </div>
     </div>
+      )}
+    </>
   );
 }

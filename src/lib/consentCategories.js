@@ -26,13 +26,27 @@
  * `parseConsent` compares the stored key set against this list EXACTLY. Change
  * this array and every consent record already in the wild becomes unreadable,
  * which makes the banner ask again — the safe direction, and the reason
- * CONSENT_SCHEMA_VERSION exists alongside it. Bump that too.
+ * CONSENT_SCHEMA_VERSION exists alongside it. Bump that too, and decide
+ * whether the previous version can be MIGRATED rather than discarded.
+ *
+ * ── CB-C: "ด้านฟังก์ชัน" IS NO LONGER A CHOICE ─────────────────────────────
+ * The owner's ruling. Its only occupant was next-themes' `localStorage.theme`,
+ * which stores a setting the visitor picks themselves — that is "remembering
+ * what you chose", i.e. คุกกี้ที่จำเป็น, not something to consent to. The v1
+ * records that carried `functional` are migrated, not discarded: see
+ * LEGACY_V1_CATEGORY_KEYS and parseConsent in src/lib/cookieConsentStore.js.
  */
 export const OPTIONAL_CATEGORIES = [
   { key: 'analytics', label: 'คุกกี้วิเคราะห์' },
-  { key: 'functional', label: 'คุกกี้ด้านฟังก์ชัน' },
   { key: 'marketing', label: 'คุกกี้การตลาด' },
 ];
+
+/**
+ * The schema-v1 key set (CB-A3 … CB-B). Only the migration reads it: a valid v1
+ * record keeps `analytics` and `marketing` and drops `functional`, so a visitor
+ * who already answered is not asked again.
+ */
+export const LEGACY_V1_CATEGORY_KEYS = Object.freeze(['analytics', 'functional', 'marketing']);
 
 /** Just the keys — what parseConsent and the bootstrap validator compare against. */
 export const OPTIONAL_CATEGORY_KEYS = Object.freeze(

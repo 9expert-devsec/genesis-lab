@@ -1,11 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  OPTIONAL_CATEGORIES,
-  INITIAL_CONSENT,
-  applyAll,
-  toggleCategory,
-} from '@/components/consent/CookieBanner';
+import { OPTIONAL_CATEGORIES } from '@/components/consent/CookieBanner';
+// CB-C: the transitions moved to a pure module shared by both layers.
+import { INITIAL_CONSENT, applyAll, toggleCategory, choiceKind } from '@/lib/consentChoices';
 
 /**
  * The cookie banner's THREE BUTTON BEHAVIOURS, asserted directly.
@@ -31,11 +28,11 @@ import {
 
 const KEYS = OPTIONAL_CATEGORIES.map((c) => c.key);
 
-test('there are exactly three optional categories, and they are the Figma three', () => {
-  assert.deepEqual(KEYS, ['analytics', 'functional', 'marketing']);
+test('there are exactly two optional categories (CB-C: ด้านฟังก์ชัน moved under จำเป็น)', () => {
+  assert.deepEqual(KEYS, ['analytics', 'marketing']);
   assert.deepEqual(
     OPTIONAL_CATEGORIES.map((c) => c.label),
-    ['คุกกี้วิเคราะห์', 'คุกกี้ด้านฟังก์ชัน', 'คุกกี้การตลาด'],
+    ['คุกกี้วิเคราะห์', 'คุกกี้การตลาด'],
     'the Thai labels are the consent record users read — they are not decorative',
   );
 });
@@ -88,8 +85,7 @@ test('applyAll covers every optional key, not a hardcoded three', () => {
 test('toggling one category leaves the other two alone', () => {
   const next = toggleCategory(INITIAL_CONSENT, 'analytics');
   assert.equal(next.analytics, true, 'the toggled one flips');
-  assert.equal(next.functional, false, 'and the others do not');
-  assert.equal(next.marketing, false);
+  assert.equal(next.marketing, false, 'and the other does not');
 });
 
 test('toggle is its own inverse', () => {
@@ -136,4 +132,11 @@ test('no consent-mode signal names leak into this round', () => {
       `${signal} must not appear until consent is genuinely wired`,
     );
   }
+});
+
+test('CB-C: choiceKind — the one-click buttons are themselves; "บันทึกตัวเลือก" is custom', () => {
+  assert.equal(choiceKind('accept_all'), 'accept_all');
+  assert.equal(choiceKind('reject_all'), 'reject_all');
+  assert.equal(choiceKind('save'), 'custom');
+  assert.equal(choiceKind(undefined), 'custom');
 });
