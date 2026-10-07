@@ -6,7 +6,7 @@ import { bangkokDate } from '@/lib/consentStats';
  * (ArticleViewBeacon). No imports beyond a date helper: the beacon ships this
  * module to the browser.
  *
- * Collect only. Nothing reads `article_views` yet.
+ * `article_views` is read by /admin/article-views (lib/articleViews/queries.js).
  */
 
 /** A real body is `{"id":"<24 hex>"}` — 33 bytes. 1 KB is generous and cheap to check. */
