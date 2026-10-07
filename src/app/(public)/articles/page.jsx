@@ -27,7 +27,7 @@ export default async function ArticlesIndexPage({ searchParams }) {
   const search = (sp?.q ?? '').toString();
   const tag = (sp?.tag ?? '').toString();
   const program = (sp?.program ?? '').toString();
-  const skill = (sp?.skill ?? '').toString();
+  const requestedSkill = (sp?.skill ?? '').toString();
   // `?type=` IS NOW URL-ONLY, AND THAT IS DELIBERATE RATHER THAN AN OVERSIGHT.
   // Nothing on this page offers it any more: the toolbar's ประเภท dropdown was
   // replaced by the skill filter, and the card's type badge was removed the
@@ -44,7 +44,7 @@ export default async function ArticlesIndexPage({ searchParams }) {
   // decision to take on purpose — not a line to drop while doing something else.
   const articleType = (sp?.type ?? '').toString(); // '', 'article', 'video'
 
-  const [{ items, total }, programsRes, skillsRes, usedSkillIds] = await Promise.all([
+  const listArticles = (skill) =>
     getArticles({
       active: true,
       limit: PAGE_SIZE,
@@ -54,7 +54,10 @@ export default async function ArticlesIndexPage({ searchParams }) {
       program,
       skill,
       articleType: articleType === 'all' ? '' : articleType,
-    }),
+    });
+
+  const [requestedList, programsRes, skillsRes, usedSkillIds] = await Promise.all([
+    listArticles(requestedSkill),
     listPrograms().catch(() => ({ items: [] })),
     // Same `.catch` shape as listPrograms and for the same reason: upstream is
     // a separate service, and an article list that 500s because a skill lookup
@@ -64,32 +67,6 @@ export default async function ArticlesIndexPage({ searchParams }) {
     // filter's option list for a reason nobody could see.
     listUsedArticleSkillIds(),
   ]);
-
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-  /**
-   * THE LIST'S URL STATE, as one string, for every link that leaves this page.
-   * Read from the same `sp` as the props above — so a card's link and the
-   * filters the grid is showing cannot disagree — and serialised ONCE here
-   * rather than in the client, which does not read the URL.
-   */
-  const listQuery = articlePublicListQuery(sp);
-
-  /**
-   * A PAGE PAST THE END IS CLAMPED TO THE LAST PAGE THAT HAS ROWS, by redirect.
-   * The reader who came back to ?page=29 after the last article on it was
-   * unpublished — or who followed a stale link — lands on the last real page
-   * with every other param intact, and the address bar says so. Page 1 and any
-   * in-range page pass through untouched. See pageClampTarget for the rule;
-   * the redirect is outside the fetch's error handling because redirect()
-   * works by throwing.
-   */
-  const clampTo = pageClampTarget({ path: '/articles', query: listQuery, pageKey: 'page', page, pageCount: totalPages });
-  if (clampTo) redirect(clampTo);
-  const programs = (programsRes.items ?? []).map((p) => ({
-    program_id:   p.program_id,
-    program_name: p.program_name,
-  }));
 
   // program_id → program_name and skill_id → skill_name, for the card's overlay
   // and chips. Both built by the SHARED builders in src/lib/articleTaxonomy.js —
@@ -119,6 +96,45 @@ export default async function ArticlesIndexPage({ searchParams }) {
     .map((id) => ({ skill_id: id, skill_name: skillNames[id] }))
     .filter((s) => s.skill_name)
     .sort((a, b) => a.skill_name.localeCompare(b.skill_name, 'th'));
+
+  /**
+   * AN UNKNOWN `?skill=` IS "ทุก Skill", NOT AN EMPTY LIST. The card chips link
+   * here with a skill_id, and a stale or hand-typed one would otherwise show
+   * the dropdown on ทุก Skill (no option matches) over "ไม่พบบทความ" — the
+   * control and the list disagreeing. Valid means OFFERED by the dropdown, so
+   * the two always agree. The second read happens only on that rare path; the
+   * common case is still one parallel round.
+   */
+  const skill = skillOptions.some((s) => s.skill_id === requestedSkill) ? requestedSkill : '';
+  const { items, total } =
+    skill === requestedSkill ? requestedList : await listArticles(skill);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  /**
+   * THE LIST'S URL STATE, as one string, for every link that leaves this page.
+   * Read from the same `sp` as the props above — so a card's link and the
+   * filters the grid is showing cannot disagree — and serialised ONCE here
+   * rather than in the client, which does not read the URL. `skill` is the
+   * EFFECTIVE one, so an ignored unknown value is not carried onward.
+   */
+  const listQuery = articlePublicListQuery({ ...sp, skill });
+
+  /**
+   * A PAGE PAST THE END IS CLAMPED TO THE LAST PAGE THAT HAS ROWS, by redirect.
+   * The reader who came back to ?page=29 after the last article on it was
+   * unpublished — or who followed a stale link — lands on the last real page
+   * with every other param intact, and the address bar says so. Page 1 and any
+   * in-range page pass through untouched. See pageClampTarget for the rule;
+   * the redirect is outside the fetch's error handling because redirect()
+   * works by throwing.
+   */
+  const clampTo = pageClampTarget({ path: '/articles', query: listQuery, pageKey: 'page', page, pageCount: totalPages });
+  if (clampTo) redirect(clampTo);
+  const programs = (programsRes.items ?? []).map((p) => ({
+    program_id:   p.program_id,
+    program_name: p.program_name,
+  }));
 
   // The set THIS request returned, described for readers that never run the
   // page's JavaScript. Server-side and unconditional on the body markup — see

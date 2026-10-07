@@ -9,7 +9,8 @@ import mongoose from 'mongoose';
  * cache keyed on it; here a view touches nothing a page renders from.
  *
  * Nothing identifies a visitor: no IP, no user agent, no cookie, no session id,
- * nothing finer than the day. Collect only — nothing reads this yet.
+ * nothing finer than the day. Read by /admin/article-views
+ * (src/lib/articleViews/queries.js).
  */
 const ArticleViewSchema = new mongoose.Schema(
   {
@@ -21,6 +22,12 @@ const ArticleViewSchema = new mongoose.Schema(
 );
 
 ArticleViewSchema.index({ articleId: 1, day: 1 }, { unique: true });
+// /admin/article-views reads by day range across all articles (range totals,
+// the daily series, and the collection start — the earliest `day`), which the
+// compound index above cannot serve because `day` is not its prefix. Built by
+// Mongoose autoIndex on first model use (dbConnect leaves autoIndex at its
+// default); the collection is small, so the build is cheap.
+ArticleViewSchema.index({ day: 1 });
 
 export default mongoose.models.ArticleView ||
   mongoose.model('ArticleView', ArticleViewSchema);

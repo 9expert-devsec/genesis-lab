@@ -69,7 +69,9 @@ test('ArticleDetailClient itself does not read useSearchParams — only the boun
 
 test('/articles: the list serialises its state once, clamps an over-range page, and hands the query to the grid', () => {
   const { code } = readSource(ARTICLES_LIST);
-  assert.match(code, /const listQuery = articlePublicListQuery\(sp\);/);
+  // `skill` overridden with the EFFECTIVE value — an unknown ?skill= is dropped
+  // by page.jsx, so it must not be carried into the card links either.
+  assert.match(code, /const listQuery = articlePublicListQuery\(\{ \.\.\.sp, skill \}\);/);
   assert.match(code, /pageClampTarget\(\{ path: '\/articles', query: listQuery, pageKey: 'page', page, pageCount: totalPages \}\)/);
   assert.match(code, /if \(clampTo\) redirect\(clampTo\);/);
   assert.match(code, /listQuery=\{listQuery\}/, 'the grid does not receive the query');

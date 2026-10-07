@@ -76,6 +76,10 @@ export const ADMIN_PAGES = [
       // banner redesign). Read-only, counts only; nothing on it identifies a
       // visitor. Mirrored in AdminSidebar's NAV_GROUPS, ภาพรวม group.
       { key: 'consent_stats', label: 'สถิติความยินยอมคุกกี้', href: '/admin/consent-stats', match: 'prefix' },
+      // Anonymous daily article-view totals (article_views). Read-only, counts
+      // only; same shape of gate as consent_stats and seeded to nobody — who
+      // sees it is decided in /admin/roles. Mirrored in AdminSidebar, ภาพรวม.
+      { key: 'article_views', label: 'สถิติยอดวิวบทความ', href: '/admin/article-views', match: 'prefix' },
     ],
   },
   {

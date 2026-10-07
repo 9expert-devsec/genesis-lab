@@ -124,9 +124,10 @@ const sorted = (a) => [...a].sort();
 test('nav shape: the NAV_GROUPS literal was extracted, populated and well-formed', () => {
   assert.ok(Array.isArray(NAV_GROUPS), 'NAV_GROUPS did not evaluate to an array');
   // 7 groups / 40 items since the 'AI Chat' group (two rows) joined after ภาพรวม;
-  // 41 since CB-C added สถิติความยินยอมคุกกี้ to ภาพรวม.
+  // 41 since CB-C added สถิติความยินยอมคุกกี้ to ภาพรวม; 42 since
+  // สถิติยอดวิวบทความ joined directly under it.
   assert.equal(NAV_GROUPS.length, 7, `expected 7 groups, extracted ${NAV_GROUPS.length}`);
-  assert.equal(NAV_ITEMS.length, 41, `expected 41 nav items, extracted ${NAV_ITEMS.length}`);
+  assert.equal(NAV_ITEMS.length, 42, `expected 42 nav items, extracted ${NAV_ITEMS.length}`);
   for (const group of NAV_GROUPS) {
     assert.equal(typeof group.id, 'string', `a group has no id: ${JSON.stringify(group.label)}`);
     assert.equal(typeof group.label, 'string', `group '${group.id}' has no label`);

@@ -13,16 +13,22 @@ import { scrubSource } from '../sourceScan.mjs';
  * them wrote this field too, it would inherit exactly the defect it exists to
  * avoid.
  *
- * The rule is "no mention", not "no write": nothing outside those two bodies
- * has a reason to name the field yet, so a plain mention is the cheapest
- * matcher that cannot under-fire. Comments are stripped first — the model's
- * doc block and this file's own prose name it.
+ * The rule is "no mention", not "no write": outside those two bodies, only
+ * the READERS below have a reason to name the field, so a plain mention is the
+ * cheapest matcher that cannot under-fire. Comments are stripped first — the
+ * model's doc block and this file's own prose name it.
+ *
+ * READERS are allow-listed BY NAME and must themselves contain no write call
+ * (asserted below), so the allow-list cannot become a way to write the field.
  */
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const WRITER_REL = 'src/lib/actions/articles.js';
 const MODEL_REL = 'src/models/Article.js';
 const FIELD = /\bcontentUpdatedAt\b/;
+// /admin/article-views: the "แก้เนื้อหาล่าสุด" column and the stale-content card.
+const READERS_REL = ['src/lib/articleViews/dashboard.js', 'src/lib/articleViews/queries.js'];
+const WRITE_CALL = /\.(create|insertMany|updateOne|updateMany|findOneAndUpdate|findByIdAndUpdate|replaceOne|bulkWrite|save)\(|\$set\b/;
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -49,7 +55,7 @@ test('only createArticle and updateArticle (and the schema) name contentUpdatedA
   assert.ok(files.length > 100, `walker only found ${files.length} files`);
 
   const outside = files
-    .filter((f) => ![WRITER_REL, MODEL_REL].includes(rel(f)))
+    .filter((f) => ![WRITER_REL, MODEL_REL, ...READERS_REL].includes(rel(f)))
     .filter((f) => FIELD.test(code(f)))
     .map(rel);
   assert.deepEqual(outside, [], `contentUpdatedAt is named outside its writer:\n  ${outside.join('\n  ')}`);
@@ -60,6 +66,16 @@ test('only createArticle and updateArticle (and the schema) name contentUpdatedA
   }
   const touching = [...bodies].filter(([, body]) => FIELD.test(body)).map(([name]) => name).sort();
   assert.deepEqual(touching, ['createArticle', 'updateArticle']);
+});
+
+test('the allow-listed readers of contentUpdatedAt contain no write call', () => {
+  for (const r of READERS_REL) {
+    const src = code(path.join(ROOT, r));
+    assert.ok(FIELD.test(src), `${r} no longer names the field — drop it from READERS_REL`);
+    assert.doesNotMatch(src, WRITE_CALL, `${r} is an allow-listed READER and must not write`);
+  }
+  // CONTROL: the write matcher is live.
+  assert.match('await Article.updateOne({ _id }, { $set: { x: 1 } })', WRITE_CALL);
 });
 
 test('CONTROL: the matcher sees a real write and the body splitter is scoped', () => {
