@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-export const metadata = { title: 'สมัครอบรม - 9Expert Training' };
+export const metadata = { title: 'สมัครอบรม' };
 
 /**
  * Legacy public registration entry point.

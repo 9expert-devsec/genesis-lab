@@ -1,7 +1,7 @@
 import { BundlePageContent } from '../BundlePageContent';
 
 export const metadata = {
-  title: 'ขอใบเสนอราคาแพ็กเกจ - 9Expert Training',
+  title: 'ขอใบเสนอราคาแพ็กเกจ',
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/registration/bundle/step-1` },
 };
 

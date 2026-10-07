@@ -1,7 +1,7 @@
 import { SearchClient } from './_components/SearchClient';
 
 export const metadata = {
-  title: 'ค้นหา | 9Expert Training',
+  title: 'ค้นหา',
   description: 'ค้นหาหลักสูตร บทความ และตารางอบรมที่ 9Expert Training',
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/search` },
 };

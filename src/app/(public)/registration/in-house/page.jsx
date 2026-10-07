@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 
 export const metadata = {
-  title: 'ขอใบเสนอราคาอบรม In-house - 9Expert Training',
+  title: 'ขอใบเสนอราคาอบรม In-house',
   description: 'ส่งคำขออบรมแบบ In-house สำหรับองค์กร ทีมขายจะติดต่อกลับพร้อมใบเสนอราคา',
 };
 

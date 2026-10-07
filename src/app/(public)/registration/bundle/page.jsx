@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-export const metadata = { title: 'ขอใบเสนอราคาแพ็กเกจ - 9Expert Training' };
+export const metadata = { title: 'ขอใบเสนอราคาแพ็กเกจ' };
 
 /**
  * Legacy bundle quotation entry point.

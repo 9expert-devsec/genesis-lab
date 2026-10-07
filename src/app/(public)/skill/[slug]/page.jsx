@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import { siteConfig } from '@/config/site';
 import { listSkills } from '@/lib/api/skills';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
@@ -7,6 +8,7 @@ import { resolveSkillBySlug, getPageLinkability } from '@/lib/resolvePageSlug';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { getArticles } from '@/lib/actions/articles';
+import { getOnlineCourses } from '@/lib/api/online-courses';
 import { PROGRAM_ARTICLE_CARD_FIELDS, PROGRAM_ARTICLE_LIMIT } from '@/lib/articleListFields';
 import { buildProgramNames, buildSkillNames } from '@/lib/articleTaxonomy';
 import { SkillPageClient } from './_components/SkillPageClient';
@@ -52,7 +54,7 @@ export default async function SkillPage({ params }) {
   // No custom slug — render inline under /skill/<slug>.
   const { skill, config } = resolved;
   const skillId = String(skill._id);
-  const [programsRes, coursesRes, faqs, linkability, articlesRes] = await Promise.all([
+  const [programsRes, coursesRes, faqs, linkability, articlesRes, onlineCourses] = await Promise.all([
     listPrograms().catch(() => ({ items: [] })),
     listPublicCourses().catch(() => ({ items: [] })),
     getLocalFaqsForCourse('skill', skillRefId(skill)).catch(() => []),
@@ -67,6 +69,10 @@ export default async function SkillPage({ params }) {
       limit: PROGRAM_ARTICLE_LIMIT,
       select: PROGRAM_ARTICLE_CARD_FIELDS,
     }).catch(() => ({ items: [], total: 0 })),
+    // Online courses, by the same short code — the catch-all's loadSkill call.
+    getOnlineCourses({ skill: skillRefId(skill) })
+      .then((r) => r.items ?? [])
+      .catch(() => []),
   ]);
 
   const enriched = await enrichCoursesWithDetails(coursesRes.items ?? []);
@@ -93,6 +99,7 @@ export default async function SkillPage({ params }) {
       faqs={faqs}
       currentYear={siteCurrentYear()}
       skillSlugs={linkability.skillSlugs}
+      onlineCourses={onlineCourses}
       articles={articlesRes.items ?? []}
       articlesTotal={articlesRes.total ?? 0}
       programNames={buildProgramNames(programsRes.items ?? [])}
@@ -110,7 +117,10 @@ export async function generateMetadata({ params }) {
   const { skill, config } = resolved;
   const title =
     config?.metaTitle?.trim() ||
-    `${skill.skill_name} | 9Expert Training`;
+    `${skill.skill_name}`;
+  // og:title gets no template, so the brand the root template adds to <title>
+  // is restated here, once, from the same input.
+  const shareTitle = `${title} | ${siteConfig.name}`;
   const description =
     config?.metaDescription?.trim() ||
     skill.skill_description ||
@@ -127,7 +137,7 @@ export async function generateMetadata({ params }) {
     description,
     alternates: { canonical },
     openGraph: {
-      title,
+      title: shareTitle,
       description,
       images: ogImage ? [{ url: ogImage }] : [],
     },

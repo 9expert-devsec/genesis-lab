@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { siteConfig } from "@/config/site";
 import { resolvePromotion } from "@/lib/resolvePromotion";
 import { getPageBuilderPageBySlugAny } from "@/lib/actions/pageBuilder";
 import { promotionDetailTarget } from "@/lib/pages/promotionMode";
@@ -153,7 +154,10 @@ export async function generateMetadata({ params }) {
   const { promotion, config } = resolved;
   const title =
     config?.meta_title?.trim() ||
-    `${promotion.title} | โปรโมชัน 9Expert Training`;
+    `${promotion.title} | โปรโมชัน`;
+  // og:title gets no template, so the brand the root template adds to <title>
+  // is restated here, once, from the same input.
+  const shareTitle = `${title} | ${siteConfig.name}`;
   const description =
     config?.meta_description?.trim() ||
     promotion.detail_plain?.slice(0, 160) ||
@@ -168,7 +172,7 @@ export async function generateMetadata({ params }) {
     // layout.
     alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/promotions/${segment}` },
     openGraph: {
-      title,
+      title: shareTitle,
       description,
       images: ogImage ? [{ url: ogImage }] : [],
     },

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getActiveCareerPaths } from "@/lib/career-paths/getCareerPaths";
 
 export const metadata = {
-  title: "เส้นทางอาชีพ | 9Expert Training",
+  title: "เส้นทางอาชีพ",
   description:
     "เส้นทางอาชีพด้านเทคโนโลยี พร้อมหลักสูตรแนะนำเพื่อพัฒนาทักษะที่ตลาดต้องการ",
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/career-path-project` },

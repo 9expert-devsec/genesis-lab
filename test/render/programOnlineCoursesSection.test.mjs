@@ -85,7 +85,7 @@ test('zero courses renders no dashed placeholder box — unlike the course grid 
 test('CONTROL: the same component DOES render when given one course — so the empties above are the guard, not a broken component', () => {
   const html = render();
   assert.notEqual(html, '');
-  assert.match(html, />คอร์สออนไลน์ในโปรแกรม</);
+  assert.match(html, />หลักสูตรออนไลน์ในโปรแกรม</);
 });
 
 test('the empty guard is the FaqAccordionSection shape, in code', () => {
@@ -151,7 +151,7 @@ test('the heading carries the program icon and a count pill, like the course gri
 test('CONTROL: a program with no icon still renders the heading and the pill', () => {
   const doc = dom(render({ program: { ...PROGRAM, programiconurl: undefined } }));
   assert.equal(doc.querySelectorAll('h2 ~ img, h2').length >= 1, true);
-  assert.match(render({ program: {} }), />คอร์สออนไลน์ในโปรแกรม</);
+  assert.match(render({ program: {} }), />หลักสูตรออนไลน์ในโปรแกรม</);
 });
 
 test('the container matches the course grid EXACTLY, including its px', () => {

@@ -1,7 +1,7 @@
 import { InhousePageContent } from '../InhousePageContent';
 
 export const metadata = {
-  title: 'กรอกข้อมูล - ขอใบเสนอราคา In-house | 9Expert Training',
+  title: 'กรอกข้อมูล - ขอใบเสนอราคา In-house',
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/registration/in-house/step-1` },
 };
 
