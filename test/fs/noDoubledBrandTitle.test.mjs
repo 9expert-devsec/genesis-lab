@@ -112,6 +112,55 @@ test('CONTROL: each shape that shipped doubled is caught', () => {
   }
 });
 
+/**
+ * The other half, for the three fallback branches c0cca407 changed: their
+ * `<title>` lost its literal brand (the template appends it), but og:title gets
+ * NO template — so each builds `shareTitle = \`${title} | ${siteConfig.name}\``
+ * and hands THAT to openGraph. The og:title then ends with the brand exactly
+ * once: once from shareTitle, none from `title` (checked by the guard above).
+ */
+const OG_FALLBACKS = [
+  'src/app/(public)/promotions/[slug]/page.jsx',
+  'src/app/(public)/program/[slug]/page.jsx',
+  'src/app/(public)/skill/[slug]/page.jsx',
+];
+
+/** The openGraph / twitter `title:` values in the LAST generateMetadata return. */
+function shareTitleWiring(code) {
+  const gm = code.indexOf('export async function generateMetadata');
+  const next = code.indexOf('\nexport ', gm + 1);
+  const body = code.slice(gm, next < 0 ? code.length : next);
+  const share = body.match(/const shareTitle\s*=\s*(`[^`]*`)\s*;/)?.[1] ?? null;
+  const ret = body.slice(body.lastIndexOf('return {'));
+  const ogTitles = [...ret.matchAll(/\b(openGraph|twitter)\s*:\s*\{[^}]*?\btitle\s*(?::\s*([\w.]+))?\s*,/g)]
+    .map((m) => ({ key: m[1], value: m[2] ?? 'title' }));
+  return { share, ogTitles };
+}
+
+for (const rel of OG_FALLBACKS) {
+  test(`${rel} — fallback og:title ends with the brand exactly once`, () => {
+    const file = FILES.find((f) => f.rel === rel);
+    assert.ok(file, `${rel} not scanned`);
+    const { share, ogTitles } = shareTitleWiring(file.code);
+    assert.equal(share, '`${title} | ${siteConfig.name}`', `shareTitle is not title + brand: ${share}`);
+    assert.ok(ogTitles.length >= 1, 'no openGraph title in the fallback return');
+    for (const { key, value } of ogTitles) {
+      assert.equal(value, 'shareTitle', `${key}.title is \`${value}\`, not shareTitle — og:title would lack the brand`);
+    }
+    // and `title` itself carries no brand, so shareTitle's is the only one
+    assert.deepEqual(offenders(file.code), []);
+    assert.match(file.withImports, /import \{ siteConfig \} from ['"]@\/config\/site['"]/);
+  });
+}
+
+test('CONTROL: the og wiring check notices og:title left on the bare title', () => {
+  const bare = "export async function generateMetadata() { const title = 'X'; " +
+    "const shareTitle = `${title} | ${siteConfig.name}`; return { title, openGraph: { title, description } }; }";
+  assert.deepEqual(shareTitleWiring(bare).ogTitles, [{ key: 'openGraph', value: 'title' }]);
+  const wired = bare.replace('openGraph: { title,', 'openGraph: { title: shareTitle,');
+  assert.deepEqual(shareTitleWiring(wired).ogTitles, [{ key: 'openGraph', value: 'shareTitle' }]);
+});
+
 test('CONTROL: absolute titles, og/twitter titles and brand-inside-the-name are exempt', () => {
   for (const allowed of [
     "export const metadata = { title: { absolute: 'X | 9Expert Training' } };",

@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import { siteConfig } from '@/config/site';
 import { listSkills } from '@/lib/api/skills';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
@@ -117,6 +118,9 @@ export async function generateMetadata({ params }) {
   const title =
     config?.metaTitle?.trim() ||
     `${skill.skill_name}`;
+  // og:title gets no template, so the brand the root template adds to <title>
+  // is restated here, once, from the same input.
+  const shareTitle = `${title} | ${siteConfig.name}`;
   const description =
     config?.metaDescription?.trim() ||
     skill.skill_description ||
@@ -133,7 +137,7 @@ export async function generateMetadata({ params }) {
     description,
     alternates: { canonical },
     openGraph: {
-      title,
+      title: shareTitle,
       description,
       images: ogImage ? [{ url: ogImage }] : [],
     },
