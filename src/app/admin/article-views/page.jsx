@@ -35,6 +35,7 @@ import {
 } from '@/lib/articleViews/queries';
 import { LineChart } from '@/components/admin/charts/LineChart';
 import { Sparkline } from '@/components/admin/charts/Sparkline';
+import { thaiDay, thaiDayTick, thaiDayWithWeekday } from '@/lib/admin/thaiDay';
 import { AutoSubmitSelect, FilterForm } from './_components/FilterForm';
 
 export const metadata = {
@@ -46,8 +47,14 @@ export const dynamic = 'force-dynamic';
 
 const PATH = '/admin/article-views';
 const nf = (n) => Math.round(n).toLocaleString('en-US');
-/** A stored Bangkok day ('YYYY-MM-DD') as a Thai date. Noon keeps it on that day. */
-const thaiDay = (day) => (day ? formatThaiDate(`${day}T12:00:00+07:00`) : null);
+/**
+ * The chart tooltip's "เทียบวันก่อน ±x%" line — omitted when the previous day
+ * has no value or was 0 (no percentage of nothing).
+ */
+const dayOverDay = (value, prev) =>
+  typeof value === 'number' && typeof prev === 'number' && prev > 0
+    ? [{ label: 'เทียบวันก่อน', value: `${value >= prev ? '+' : '−'}${Math.abs(((value - prev) / prev) * 100).toFixed(1)}%` }]
+    : [];
 
 const card = 'rounded-xl border border-[var(--surface-border)] bg-white p-4 dark:bg-[#0D1B2A]';
 const muted = 'text-9e-slate-dp-50 dark:text-[#94a3b8]';
@@ -315,9 +322,14 @@ export default async function ArticleViewsPage({ searchParams }) {
           {/* ── daily chart ─────────────────────────────────────────── */}
           <LineChart
             title="ยอดเปิดอ่านรายวัน"
-            series={data.series.map((p) => ({ label: thaiDay(p.day), value: p.value }))}
+            series={data.series.map((p, i) => ({
+              label: thaiDayWithWeekday(p.day),
+              value: p.value,
+              meta: dayOverDay(p.value, data.series[i - 1]?.value),
+            }))}
             formatValue={(v) => nf(v)}
-            formatTick={(label) => label.replace(/ \d{4}$/, '')}
+            formatTooltipValue={(v) => `${nf(v)} ครั้ง`}
+            formatTick={(_, i) => thaiDayTick(data.series[i].day)}
             emptyText="ยังไม่เริ่มเก็บข้อมูลในช่วงนี้"
             notCollectedBefore={firstCollectedIndex(data.series)}
           />

@@ -12,6 +12,7 @@ import {
   rangeLabel,
 } from '@/lib/consentStatsRange';
 import { LineChart } from '@/components/admin/charts/LineChart';
+import { thaiDayTick, thaiDayWithWeekday } from '@/lib/admin/thaiDay';
 
 export const metadata = {
   title: 'สถิติความยินยอมคุกกี้',
@@ -213,12 +214,22 @@ export default async function ConsentStatsPage({ searchParams }) {
           <LineChart
             title={`อัตราการยอมรับ ราย${unit} (%)`}
             series={periods.map((p) => ({
-              label: p.label,
+              // Tooltip line 1: the Thai date (weekday + day + month + year);
+              // a week reads as its first – last day.
+              label:
+                p.from === p.to
+                  ? thaiDayWithWeekday(p.from)
+                  : `${thaiDayWithWeekday(p.from)} – ${thaiDayWithWeekday(p.to)}`,
               value: p.rate === null ? null : Math.round(p.rate * 1000) / 10,
+              meta: [
+                { label: 'ทั้งหมด', value: (p.totals.accept_all + p.totals.reject_all + p.totals.custom).toLocaleString('en-US') },
+                { label: 'ยอมรับ', value: p.totals.accept_all.toLocaleString('en-US') },
+                { label: 'ปฏิเสธ', value: p.totals.reject_all.toLocaleString('en-US') },
+              ],
             }))}
             yMax={100}
             formatValue={(v) => `${v}%`}
-            formatTick={(label) => label.slice(5, 10)}
+            formatTick={(_, i) => thaiDayTick(periods[i].from)}
           />
 
           <div className="overflow-x-auto rounded-xl border border-[var(--surface-border)]">

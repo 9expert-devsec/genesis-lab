@@ -24,9 +24,23 @@ test('a point with no neighbours is drawn as a dot, since it has no line', () =>
   assert.equal((html.match(/data-dot="isolated"/g) ?? []).length, 1);
 });
 
-test('each point carries a tooltip with its label and formatted value', () => {
-  const html = render({ series: [pt('2026-10-01', 42.5)], yMax: 100, formatValue: (v) => `${v}%` });
-  assert.match(html, /<title>2026-10-01: 42.5%<\/title>/);
+test('the tooltip is the client wrapper, not native <title>s; the SVG stays server HTML', () => {
+  const html = render({ series: [pt('อ. 1 ต.ค. 2569', 42.5), pt('พ. 2 ต.ค. 2569', 50)], yMax: 100, formatValue: (v) => `${v}%`, title: 'อัตรา' });
+  assert.doesNotMatch(html, /<title>/, 'no native SVG tooltip');
+  assert.match(html, /<div[^>]*tabindex="0"[^>]*role="group"[^>]*aria-label="อัตรา — ใช้ปุ่มลูกศรซ้าย\/ขวาเพื่อดูทีละจุด"/);
+  assert.match(html, /aria-live="polite"/, 'an aria-live region exists');
+  assert.match(html, /<svg[^>]*data-chart="line"/, 'the chart SVG is in the server markup');
+  assert.doesNotMatch(html, /data-chart-card/, 'no card until a point is active');
+  const { code } = readSource('src/components/admin/charts/ChartInteraction.jsx');
+  assert.match(code, /'use client'/);
+  for (const k of ['ArrowLeft', 'ArrowRight', 'Home', 'End']) assert.match(code, new RegExp(k));
+});
+
+test('consent-stats x labels are Thai dates, not MM-DD slices, and pass ทั้งหมด/ยอมรับ/ปฏิเสธ', () => {
+  const { code } = readSource('src/app/admin/consent-stats/page.jsx');
+  assert.doesNotMatch(code, /label\.slice\(5, 10\)/);
+  assert.match(code, /formatTick=\{\(_, i\) => thaiDayTick\(periods\[i\]\.from\)\}/);
+  for (const l of ['ทั้งหมด', 'ยอมรับ', 'ปฏิเสธ']) assert.match(code, new RegExp(`label: '${l}'`));
 });
 
 test('all-empty series renders the empty text, no svg', () => {
