@@ -14,12 +14,13 @@ import {
   computeKpis,
   firstCollectedIndex,
   isPreviousAvailable,
-  lastContentDate,
+  contentUpdatedDate,
   mergeArticleViews,
   paginate,
   parseDashboardQuery,
   previousPeriod,
   skillTotals,
+  sparklineFrom,
   sortRows,
   staleArticles,
   staleExplanation,
@@ -149,6 +150,10 @@ export default async function ArticleViewsPage({ searchParams }) {
 
   const now = new Date();
   const pageMax = data ? Math.max(1, ...data.pageData.pageRows.map((r) => r.views)) : 1;
+  const sparkFrom = sparklineFrom(from, data?.collectionStart);
+  // "แก้เนื้อหาล่าสุด" shows contentUpdatedAt only; the field is recorded from
+  // the same day view collection started, so a blank means no content edit since.
+  const noEditText = `ยังไม่มีการแก้เนื้อหาตั้งแต่เริ่มเก็บ (${thaiDay(data?.collectionStart) ?? '—'})`;
   const skillMax = data ? Math.max(1, ...data.skillBars.map((s) => s.value)) : 1;
 
   const sortHeader = (key, label) => {
@@ -347,13 +352,13 @@ export default async function ArticleViewsPage({ searchParams }) {
                 )}
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[860px] text-sm">
+                <table className="w-full min-w-[720px] text-sm">
                   <thead className={`bg-9e-ice text-left text-xs dark:bg-[#111d2c] ${muted}`}>
                     <tr>
-                      <th scope="col" className="px-3 py-2 font-semibold">#</th>
+                      <th scope="col" className="whitespace-nowrap px-3 py-2 font-semibold">#</th>
                       <th scope="col" className="px-3 py-2 font-semibold">บทความ</th>
                       {sortHeader('views', 'ยอดเปิดอ่าน')}
-                      <th scope="col" className="px-3 py-2 font-semibold">แนวโน้ม</th>
+                      <th scope="col" className="whitespace-nowrap px-3 py-2 font-semibold">แนวโน้ม</th>
                       {sortHeader('published', 'เผยแพร่')}
                       {sortHeader('updated', 'แก้เนื้อหาล่าสุด')}
                     </tr>
@@ -368,12 +373,13 @@ export default async function ArticleViewsPage({ searchParams }) {
                     ) : (
                       data.pageData.pageRows.map((r, i) => {
                         const daily = data.spark.get(r.id);
-                        const values = buildDailySeries({ from, to, collectionStart: data.collectionStart, dayTotals: daily ?? new Map() }).map((p) => p.value);
+                        // Domain starts at max(range start, collection start) — see sparklineFrom.
+                        const values = buildDailySeries({ from: sparkFrom, to, collectionStart: data.collectionStart, dayTotals: daily ?? new Map() }).map((p) => p.value);
                         const skills = (r.skills ?? []).map((id) => data.skillNames[id]).filter(Boolean);
                         return (
                           <tr key={r.id} className="border-t border-[var(--surface-border)] align-top text-9e-navy dark:text-white">
                             <td className={`px-3 py-2 tabular-nums ${muted}`}>{data.pageData.a + i}</td>
-                            <td className="max-w-[360px] px-3 py-2">
+                            <td className="min-w-[220px] px-3 py-2">
                               <Link href={`/admin/articles/${r.id}/edit`} className="font-medium hover:text-9e-action hover:underline">
                                 {r.title}
                               </Link>
@@ -398,7 +404,16 @@ export default async function ArticleViewsPage({ searchParams }) {
                               <Sparkline values={values} label={`แนวโน้มยอดเปิดอ่าน ${r.title}`} />
                             </td>
                             <td className="whitespace-nowrap px-3 py-2 text-xs">{formatThaiDate(r.publishedAt) ?? '—'}</td>
-                            <td className="whitespace-nowrap px-3 py-2 text-xs">{formatThaiDate(lastContentDate(r)) ?? '—'}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-xs">
+                              {contentUpdatedDate(r) ? (
+                                formatThaiDate(contentUpdatedDate(r))
+                              ) : (
+                                <span title={noEditText} data-no-content-edit="">
+                                  <span aria-hidden="true">—</span>
+                                  <span className="sr-only">{noEditText}</span>
+                                </span>
+                              )}
+                            </td>
                           </tr>
                         );
                       })

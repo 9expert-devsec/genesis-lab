@@ -78,6 +78,23 @@ test('sparkline data is fetched for the current page rows only', () => {
   assert.match(code, /getDailyByArticle\(pageData\.pageRows\.map\(\(r\) => r\.id\), from, to\)/);
 });
 
+test('"แก้เนื้อหาล่าสุด" shows contentUpdatedAt only, else an explained dash', () => {
+  const { code } = readSource('src/app/admin/article-views/page.jsx');
+  assert.doesNotMatch(code, /lastContentDate/, 'no publishedAt fallback in the table');
+  assert.match(code, /contentUpdatedDate\(r\) \?/);
+  assert.match(code, /ยังไม่มีการแก้เนื้อหาตั้งแต่เริ่มเก็บ \(\$\{thaiDay\(data\?\.collectionStart\)/);
+  assert.match(code, /<span title=\{noEditText\} data-no-content-edit="">/);
+  assert.match(code, /<span className="sr-only">\{noEditText\}<\/span>/);
+});
+
+test('sparklines use the collection-start domain; the table scrolls in its own container', () => {
+  const { code } = readSource('src/app/admin/article-views/page.jsx');
+  assert.match(code, /const sparkFrom = sparklineFrom\(from, data\?\.collectionStart\);/);
+  assert.match(code, /buildDailySeries\(\{ from: sparkFrom, to,/);
+  assert.match(code, /<div className="overflow-x-auto">\s*<table className="w-full min-w-\[720px\] text-sm">/);
+  assert.doesNotMatch(code, /max-w-\[360px\]/);
+});
+
 test('the stale explanation on the page is the generated one', () => {
   const { code } = readSource('src/app/admin/article-views/page.jsx');
   assert.match(code, /\{staleExplanation\(\)\}/);

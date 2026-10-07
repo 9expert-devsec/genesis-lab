@@ -8,7 +8,10 @@ import {
   articleViewsHref,
   buildDailySeries,
   computeKpis,
+  contentUpdatedDate,
   firstCollectedIndex,
+  lastContentDate,
+  sparklineFrom,
   isPreviousAvailable,
   mergeArticleViews,
   paginate,
@@ -214,6 +217,34 @@ test('sortRows: views desc default, missing dates last either way', () => {
   assert.deepEqual(sortRows(rows).map((r) => r.title), ['b', 'c', 'a']);
   assert.deepEqual(sortRows(rows, 'published', 'desc').map((r) => r.title), ['a', 'c', 'b']);
   assert.deepEqual(sortRows(rows, 'published', 'asc').map((r) => r.title), ['c', 'a', 'b']);
+});
+
+test('"แก้เนื้อหาล่าสุด" sort uses contentUpdatedAt ONLY — no publishedAt fallback, blanks last both ways', () => {
+  const rows = [
+    { title: 'a', contentUpdatedAt: '2026-10-06T10:00:00Z', publishedAt: '2026-06-12' },
+    { title: 'b', publishedAt: '2026-10-07' }, // newer publishedAt, but never content-edited
+    { title: 'c', contentUpdatedAt: '2026-10-07T10:00:00Z', publishedAt: '2026-06-09' },
+    { title: 'd', publishedAt: null },
+  ];
+  assert.deepEqual(sortRows(rows, 'updated', 'desc').map((r) => r.title), ['c', 'a', 'b', 'd']);
+  assert.deepEqual(sortRows(rows, 'updated', 'asc').map((r) => r.title), ['a', 'c', 'b', 'd']);
+  assert.equal(contentUpdatedDate(rows[1]), null, 'publishedAt is not used');
+  assert.equal(contentUpdatedDate(rows[0]).toISOString(), '2026-10-06T10:00:00.000Z');
+  // …while the stale criterion keeps its fallback (a separate, pending decision).
+  assert.equal(lastContentDate(rows[1]).toISOString().slice(0, 10), '2026-10-07');
+});
+
+test('sparkline domain starts at max(range start, collection start)', () => {
+  assert.equal(sparklineFrom('2026-09-08', '2026-10-06'), '2026-10-06');
+  assert.equal(sparklineFrom('2026-10-07', '2026-10-06'), '2026-10-07');
+  assert.equal(sparklineFrom('2026-09-08', null), '2026-09-08', 'nothing collected: the range as given');
+  const values = buildDailySeries({
+    from: sparklineFrom('2026-09-08', '2026-10-06'),
+    to: '2026-10-07',
+    collectionStart: '2026-10-06',
+    dayTotals: { '2026-10-06': 3, '2026-10-07': 5 },
+  }).map((p) => p.value);
+  assert.deepEqual(values, [3, 5], 'two days of data fill the sparkline, not a 30-day sliver');
 });
 
 test('paginate clamps and reports a–b of N', () => {

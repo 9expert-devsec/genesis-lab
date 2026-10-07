@@ -46,6 +46,16 @@ export function buildDailySeries({ from, to, collectionStart, dayTotals }) {
   }));
 }
 
+/**
+ * The x-domain start for a per-row sparkline: the later of the range start
+ * and the collection start, so days that were never counted do not squash
+ * the real data into a sliver at the right edge. Returns `from` when nothing
+ * was ever collected; a start after `to` yields an empty domain.
+ */
+export function sparklineFrom(from, collectionStart) {
+  return collectionStart && collectionStart > from ? collectionStart : from;
+}
+
 /** Index of the first collected day in a series from buildDailySeries (-1: none). */
 export function firstCollectedIndex(series) {
   return series.findIndex((p) => p.value !== null);
@@ -148,7 +158,24 @@ export function skillTotals(rows, names = {}) {
   return items;
 }
 
-/** The date the article's content last changed: contentUpdatedAt, else publishedAt. */
+/**
+ * contentUpdatedAt ONLY — no fallback. For the table's "แก้เนื้อหาล่าสุด"
+ * column and its sort: the field has only been written since 2026-10-06, so an
+ * article without it has not had a content edit SINCE THEN, which is a
+ * different fact from "last edited on its publish date".
+ */
+export function contentUpdatedDate(article) {
+  const v = article?.contentUpdatedAt;
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * The date the article's content last changed: contentUpdatedAt, else
+ * publishedAt. Used ONLY by the "popular but stale" criterion — the fallback
+ * there is a separate decision, kept as-is pending the publishedAt survey.
+ */
 export function lastContentDate(article) {
   const v = article?.contentUpdatedAt ?? article?.publishedAt;
   if (!v) return null;
@@ -269,7 +296,7 @@ export function sortRows(rows, sort = 'views', dir = 'desc') {
   const key = {
     views: (r) => r.views,
     published: (r) => (r.publishedAt ? new Date(r.publishedAt).getTime() : null),
-    updated: (r) => lastContentDate(r)?.getTime() ?? null,
+    updated: (r) => contentUpdatedDate(r)?.getTime() ?? null,
   }[sort] ?? ((r) => r.views);
   const sign = dir === 'asc' ? 1 : -1;
   return [...rows].sort((a, b) => {
