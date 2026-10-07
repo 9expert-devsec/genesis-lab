@@ -52,6 +52,8 @@ const ALL_PAGE_KEYS = [
   'dashboard_registrations', 'dashboard_system',
   // CB-C consent counters — mirrored for the parity guard; seeded to nobody (PAGE_SET).
   'consent_stats',
+  // Article view counters — mirrored for the parity guard; seeded to nobody (PAGE_SET).
+  'article_views',
   // AI Chat — see the PAGE_SET note; mirrored so the registry parity guard
   // (test/fs/rbacRegistryMirror) holds, NOT so any seeded role receives them.
   'chat_stats', 'chat_transcripts',
@@ -101,6 +103,8 @@ const PAGE_SET = {
   // CB-C — GRANTED TO NOBODY BY THIS SCRIPT, like the AI Chat keys: who sees
   // the consent counters is a permissions decision made in /admin/roles.
   consent_stats: 'SUPER',
+  // Same decision as consent_stats: granted in /admin/roles, not by this script.
+  article_views: 'SUPER',
   // AI Chat — GRANTED TO NOBODY BY THIS SCRIPT. 'SUPER' keeps both keys out
   // of every membership set, and ADMIN_EXCLUDED (below) keeps them out of the
   // widened `admin` role too. Superadmin bypasses page checks and needs no
@@ -182,7 +186,7 @@ function assertRegistryCoverage() {
 // intentional admin cap — and the two AI Chat keys, which no seeded role
 // receives (see PAGE_SET). Without this line the `admin` filter below would
 // hand the transcripts to every admin on the next seed run.
-const ADMIN_EXCLUDED = new Set(['accounts', 'roles', 'chat_stats', 'chat_transcripts', 'consent_stats']);
+const ADMIN_EXCLUDED = new Set(['accounts', 'roles', 'chat_stats', 'chat_transcripts', 'consent_stats', 'article_views']);
 function buildSeedRoles() {
   return [
     {

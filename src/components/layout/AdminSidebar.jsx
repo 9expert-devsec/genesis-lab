@@ -43,6 +43,7 @@ import {
   MessagesSquare,
   ChevronDown,
   Cookie,
+  Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logoutAction } from '@/lib/actions/auth';
@@ -227,6 +228,7 @@ const ICONS = {
   // already uses, so the two rows read as different things at a glance.
   BarChart3,
   Cookie,
+  Eye,
   MessagesSquare,
 };
 
@@ -256,6 +258,7 @@ const NAV_GROUPS = [
     items: [
       { label: 'แดชบอร์ด', href: '/admin', icon: 'LayoutDashboard', exact: true, pageKey: 'dashboard' },
       { label: 'สถิติความยินยอมคุกกี้', href: '/admin/consent-stats', icon: 'Cookie', pageKey: 'consent_stats' },
+      { label: 'สถิติยอดวิวบทความ', href: '/admin/article-views', icon: 'Eye', pageKey: 'article_views' },
     ],
   },
   {

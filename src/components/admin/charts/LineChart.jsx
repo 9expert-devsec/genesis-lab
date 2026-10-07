@@ -2,8 +2,8 @@
  * A small single-series line chart for admin pages — plain SVG, no library,
  * no client JavaScript (it renders in server components as well as client ones).
  *
- * Built for /admin/consent-stats and meant to be reused (article views next),
- * so it takes nothing domain-specific:
+ * Used by /admin/consent-stats and /admin/article-views, so it takes nothing
+ * domain-specific:
  *
  *   series  [{ label, value }]  oldest first; `value` null/undefined = NO DATA
  *
@@ -57,6 +57,13 @@ export function LineChart({
   formatValue = (v) => String(v),
   formatTick = (label) => label,
   emptyText = 'ไม่มีข้อมูลในช่วงนี้',
+  // OPTIONAL. Index of the first point that was being collected; everything
+  // before it is drawn as a shaded band carrying `notCollectedLabel`, so a
+  // "before we started counting" stretch reads as different from a gap in
+  // the middle. Omitted (or <= 0) draws no band — the default for callers
+  // whose whole range is collected.
+  notCollectedBefore,
+  notCollectedLabel = 'ยังไม่เริ่มเก็บ',
 }) {
   const values = series.map((p) => p.value).filter(isNum);
   const top = isNum(yMax) && yMax > 0 ? yMax : Math.max(1, ...values);
@@ -82,6 +89,31 @@ export function LineChart({
           aria-label={title}
           data-chart="line"
         >
+          {isNum(notCollectedBefore) && notCollectedBefore > 0 && n > 1 && (() => {
+            // The band ends halfway between the last uncollected point and
+            // the first collected one.
+            const end = Math.min(W - PAD.right, (x(notCollectedBefore - 1) + x(Math.min(notCollectedBefore, n - 1))) / 2);
+            return (
+              <g data-not-collected="">
+                <rect
+                  x={PAD.left}
+                  y={PAD.top}
+                  width={Math.max(0, end - PAD.left)}
+                  height={PLOT_H}
+                  className="fill-9e-ice dark:fill-[#111d2c]"
+                />
+                <text
+                  x={(PAD.left + end) / 2}
+                  y={PAD.top + 14}
+                  textAnchor="middle"
+                  className="fill-9e-slate-dp-50 text-[11px] dark:fill-[#94a3b8]"
+                >
+                  {notCollectedLabel}
+                </text>
+              </g>
+            );
+          })()}
+
           {Array.from({ length: yTicks + 1 }, (_, k) => {
             const v = (top * k) / yTicks;
             return (
