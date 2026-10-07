@@ -122,7 +122,7 @@ export async function generateMetadata({ params }) {
   const { program, config } = resolved;
   const title =
     config?.metaTitle?.trim() ||
-    `${program.program_name} | 9Expert Training`;
+    `${program.program_name}`;
   const description =
     config?.metaDescription?.trim() ||
     program.program_description ||

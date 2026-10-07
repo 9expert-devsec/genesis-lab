@@ -18,7 +18,7 @@ import { dateRangeLabel } from '@/lib/promotions/promotionDateLabel';
 export const revalidate = 3600;
 
 export const metadata = {
-  title: 'โปรโมชัน | 9Expert Training',
+  title: 'โปรโมชัน',
   description:
     'รวมโปรโมชั่นและส่วนลดพิเศษสำหรับหลักสูตรอบรมจาก 9Expert Training',
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/promotions` },

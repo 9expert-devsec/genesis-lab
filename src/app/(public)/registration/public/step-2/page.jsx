@@ -1,7 +1,7 @@
 import { RegisterPageContent } from '../RegisterPageContent';
 
 export const metadata = {
-  title: 'ตรวจสอบข้อมูล - 9Expert Training',
+  title: 'ตรวจสอบข้อมูล',
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/registration/public/step-2` },
 };
 

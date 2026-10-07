@@ -3,7 +3,7 @@ import { Globe2, PlaySquare, Users } from 'lucide-react';
 import SocialCTABanner from './_components/SocialCTABanner';
 
 export const metadata = {
-  title: 'Social Channels | 9Expert Training',
+  title: 'Social Channels',
   description: 'ติดตาม 9Expert Training และ อ.ชไลเวท ได้ทุกช่องทางโซเชียลมีเดีย',
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/social` },
 };

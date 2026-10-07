@@ -1,7 +1,7 @@
 import { InhousePageContent } from '../InhousePageContent';
 
 export const metadata = {
-  title: 'ส่งคำขอเรียบร้อย - 9Expert Training',
+  title: 'ส่งคำขอเรียบร้อย',
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/registration/in-house/step-3` },
 };
 

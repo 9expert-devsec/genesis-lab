@@ -153,7 +153,7 @@ export async function generateMetadata({ params }) {
   const { promotion, config } = resolved;
   const title =
     config?.meta_title?.trim() ||
-    `${promotion.title} | โปรโมชัน 9Expert Training`;
+    `${promotion.title} | โปรโมชัน`;
   const description =
     config?.meta_description?.trim() ||
     promotion.detail_plain?.slice(0, 160) ||

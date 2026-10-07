@@ -116,7 +116,7 @@ export async function generateMetadata({ params }) {
   const { skill, config } = resolved;
   const title =
     config?.metaTitle?.trim() ||
-    `${skill.skill_name} | 9Expert Training`;
+    `${skill.skill_name}`;
   const description =
     config?.metaDescription?.trim() ||
     skill.skill_description ||
