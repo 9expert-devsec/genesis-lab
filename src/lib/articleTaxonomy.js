@@ -73,8 +73,28 @@ export function buildSkillNames(items) {
  * skill ids of which only two resolve upstream at all.
  */
 export function resolveTaxonomyNames(ids, names, cap) {
+  return resolveTaxonomyEntries(ids, names, cap).map((e) => e.name);
+}
+
+/**
+ * ids → `{ id, name }`, capped — the same resolution with the id kept.
+ *
+ * The skill chips are links to `/articles?skill=<id>`, and the id is the value
+ * the /articles filter reads; the name is only the label. Same drop rule and
+ * same cap as resolveTaxonomyNames, which is defined through this so the two
+ * cannot disagree about which entries survive.
+ */
+export function resolveTaxonomyEntries(ids, names, cap) {
   return (ids ?? [])
-    .map((id) => names?.[String(id)])
-    .filter(Boolean)
+    .map((id) => ({ id: String(id), name: names?.[String(id)] }))
+    .filter((e) => e.name)
     .slice(0, cap);
+}
+
+/**
+ * The /articles URL that filters by one skill. `id` is the skill_id the
+ * toolbar's <select> uses as its option value — see articles/page.jsx.
+ */
+export function articleSkillHref(id) {
+  return `/articles?skill=${encodeURIComponent(String(id))}`;
 }

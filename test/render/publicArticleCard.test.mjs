@@ -181,7 +181,11 @@ test('S5-b — an id with no matching name is DROPPED, never printed raw', () =>
     'the unresolved id leaked onto a public card. An opaque code is worse than ' +
     'nothing — it looks like a bug to a reader and like data to a crawler.',
   );
-  assert.equal(/SK-001/.test(c), false, 'and the resolved one shows its NAME, not its id');
+  // The chip is a link to /articles?skill=SK-001, so the id legitimately sits in
+  // its href — the rule is about what is PRINTED, so attributes are stripped.
+  const printed = c.replace(/\s(href|aria-label)="[^"]*"/g, '');
+  assert.equal(/SK-001/.test(printed), false, 'and the resolved one shows its NAME, not its id');
+  assert.match(c, /href="\/articles\?skill=SK-001"/, 'the id is the chip link\'s filter value');
 });
 
 test('S5-c — an article with no resolvable skills renders NO chip row', () => {

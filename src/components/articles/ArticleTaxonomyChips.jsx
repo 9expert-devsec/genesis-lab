@@ -1,4 +1,5 @@
-import { resolveTaxonomyNames } from '@/lib/articleTaxonomy';
+import Link from 'next/link';
+import { articleSkillHref, resolveTaxonomyEntries, resolveTaxonomyNames } from '@/lib/articleTaxonomy';
 
 /**
  * The two chip rows an article card wears, shared by /articles and the
@@ -101,19 +102,37 @@ export function ProgramOverlay({ ids, names, cap }) {
  * cosmetic — #005CFF on #111d2c measures 3.22:1 where WCAG AA needs 4.5:1 for
  * 11px text; #48B0FF measures 7.22:1. See the commit that fixed it.
  */
+/*
+ * ── EACH CHIP IS A LINK TO /articles?skill=<skill_id> ───────────────────────
+ * The value is the skill_id, because that is what the /articles toolbar's
+ * <select> uses as its option value and what page.jsx hands to getArticles.
+ *
+ * THE ROW IS `relative z-10` FOR THE STRETCHED-LINK CARDS. BlogCard's title
+ * link covers the whole card with an `after:absolute after:inset-0` overlay;
+ * these chips sit above that overlay so they stay clickable, and every other
+ * part of the card still opens the article. No card wraps this row in an
+ * anchor, so there is no nesting — a test asserts that for every surface.
+ *
+ * The chip styling stays on the inner <span> (the selectors the chip tests use);
+ * the <a> carries only the focus ring and the accessible name.
+ */
 export function SkillChips({ ids, names, cap }) {
-  const skills = resolveTaxonomyNames(ids, names, cap);
+  const skills = resolveTaxonomyEntries(ids, names, cap);
   if (skills.length === 0) return null;
 
   return (
-    <div className="mt-2 flex flex-wrap gap-1">
-      {skills.map((name) => (
-        <span
-          key={name}
-          className="rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-9e-action dark:bg-[#111d2c] dark:text-9e-air"
+    <div className="relative z-10 mt-2 flex flex-wrap gap-1">
+      {skills.map(({ id, name }) => (
+        <Link
+          key={id}
+          href={articleSkillHref(id)}
+          aria-label={`ดูบทความ skill ${name}`}
+          className="inline-flex rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-9e-action focus-visible:ring-offset-1 dark:focus-visible:ring-9e-air dark:focus-visible:ring-offset-[#0D1B2A]"
         >
-          {name}
-        </span>
+          <span className="rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-9e-action hover:underline dark:bg-[#111d2c] dark:text-9e-air">
+            {name}
+          </span>
+        </Link>
       ))}
     </div>
   );

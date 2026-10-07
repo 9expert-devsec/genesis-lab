@@ -256,11 +256,19 @@ function BlogCarousel({ blogs, programNames, skillNames }) {
   );
 }
 
+/**
+ * STRETCHED LINK, NOT A WHOLE-CARD <Link>. The skill chips are links to
+ * /articles?skill=…, and a chip inside a card-wide anchor would nest an anchor
+ * inside an anchor. So the card is a `relative` <article>, the TITLE link's
+ * `after:absolute after:inset-0` covers the whole card (cover image included —
+ * the overlay comes later in document order than the positioned cover div), and
+ * SkillChips' row is `relative z-10` above it. Clicking anywhere but a chip
+ * still opens the article, as the whole-card link did.
+ */
 export function BlogCard({ blog, programNames = {}, skillNames = {} }) {
   return (
-    <Link
-      href={blog.slug}
-      className="group flex h-full flex-col overflow-hidden rounded-2xl bg-9e-ice shadow-sm transition-shadow ring-1 ring-9e-slate-lt-300 hover:shadow-md dark:bg-9e-card dark:ring-1 dark:ring-[#1e3a5f]"
+    <article
+      className="group relative flex h-full flex-col overflow-hidden rounded-2xl bg-9e-ice shadow-sm transition-shadow ring-1 ring-9e-slate-lt-300 hover:shadow-md dark:bg-9e-card dark:ring-1 dark:ring-[#1e3a5f]"
     >
       <div className="relative aspect-video w-full overflow-hidden bg-9e-ice dark:bg-9e-navy">
         <Image
@@ -289,7 +297,12 @@ export function BlogCard({ blog, programNames = {}, skillNames = {} }) {
           when there are no names, so no empty wrapper is needed). */}
       <div className="flex flex-1 flex-col gap-2 p-4">
         <h3 className="line-clamp-2 text-base font-bold leading-snug text-9e-navy dark:text-white">
-          {blog.title}
+          <Link
+            href={blog.slug}
+            className="after:absolute after:inset-0 after:rounded-2xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-9e-action dark:focus-visible:after:ring-9e-air"
+          >
+            {blog.title}
+          </Link>
         </h3>
         <p className="mb-auto line-clamp-3 text-sm leading-relaxed text-9e-slate-dp-50 dark:text-[#94a3b8]">
           {blog.excerpt}
@@ -301,6 +314,6 @@ export function BlogCard({ blog, programNames = {}, skillNames = {} }) {
             384px there: 25% narrower, and a third chip wraps. */}
         <SkillChips ids={blog.skills} names={skillNames} cap={2} />
       </div>
-    </Link>
+    </article>
   );
 }

@@ -249,11 +249,15 @@ test('it renders the LANDING PAGE card, not the /articles one and not a fork', (
   );
   assert.ok(!/ArticleCard/.test(scrubbed()), 'the /articles card is no longer used here');
   const doc = dom(render());
-  // BlogCard's root is a <Link>; ArticleCard's was an <article> with three
-  // links inside it. Asserting the ROOT distinguishes them without matching
-  // classes that either card could carry.
-  assert.equal(doc.querySelector('section > div:nth-of-type(2) > *').tagName, 'A');
-  assert.equal(doc.querySelectorAll('article').length, 0, 'no <article> root');
+  // BlogCard is a stretched-link card: an <article> whose ONLY article link is
+  // the title's, stretched over the card. ArticleCard links the same article
+  // three times (cover, title, อ่านเพิ่มเติม) — counting distinguishes them
+  // without matching classes either card could carry.
+  const first = doc.querySelector('section > div:nth-of-type(2) > *');
+  assert.equal(first.tagName, 'ARTICLE');
+  const articleLinks = [...first.querySelectorAll('a')].filter((a) =>
+    /^\/articles\/[^?]/.test(a.getAttribute('href') ?? ''));
+  assert.equal(articleLinks.length, 1, 'one article link per card — the stretched title');
 });
 
 test('FOUR columns at xl, the landing grid literal — so a card is the same 288px', () => {
