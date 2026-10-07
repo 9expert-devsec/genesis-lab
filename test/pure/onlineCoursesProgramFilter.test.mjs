@@ -110,6 +110,7 @@ test('CONTROL: the production default really is aiFetch — the seam is for test
   const src = readFileSync('src/lib/api/online-courses.js', 'utf8');
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   assert.match(code, /\{ fetchUpstream = aiFetch \} = \{\}/);
-  assert.match(code, /params:\s*\{\s*program\s*\}/, 'forwarded in code, not only in a comment');
+  // `skill` rides alongside since the skill page's section (onlineCoursesSkillFilter).
+  assert.match(code, /params:\s*\{\s*program\s*(,\s*skill\s*)?\}/, 'forwarded in code, not only in a comment');
   assert.match(code, /tags:\s*\['online-courses'\]/, 'the tag survives comment-scrubbing');
 });

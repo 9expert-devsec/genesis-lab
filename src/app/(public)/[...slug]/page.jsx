@@ -333,8 +333,11 @@ async function loadSkill(slug) {
    * SHORT CODE (`skill_id`, what Article.skills stores — the FAQ ref above
    * uses the same one) instead of the program's. Same cap constant, same
    * explicit select, same fail-closed shape.
+   *
+   * Online courses: loadProgram's getOnlineCourses call, with the skill short
+   * code as `skill` in place of `program` — same adapter, same tag, same cache.
    */
-  const [faqs, articlesRes] = await Promise.all([
+  const [faqs, articlesRes, onlineCourses] = await Promise.all([
     getLocalFaqsForCourse('skill', skillRefId(skill)).catch(() => []),
     getArticles({
       skill: skillRefId(skill),
@@ -342,10 +345,14 @@ async function loadSkill(slug) {
       limit: PROGRAM_ARTICLE_LIMIT,
       select: PROGRAM_ARTICLE_CARD_FIELDS,
     }).catch(() => ({ items: [], total: 0 })),
+    getOnlineCourses({ skill: skillRefId(skill) })
+      .then((r) => r.items ?? [])
+      .catch(() => []),
   ]);
   return {
     skill, config, coursesByProgram, totalCourses: skillCourses.length, faqs,
     skillSlugs: linkability.skillSlugs,
+    onlineCourses,
     articles: articlesRes.items ?? [],
     articlesTotal: articlesRes.total ?? 0,
     programNames: buildProgramNames(programsRes.items ?? []),
@@ -650,6 +657,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           faqs={skillData.faqs}
           currentYear={siteCurrentYear()}
           skillSlugs={skillData.skillSlugs}
+          onlineCourses={skillData.onlineCourses}
           articles={skillData.articles}
           articlesTotal={skillData.articlesTotal}
           programNames={skillData.programNames}

@@ -55,13 +55,27 @@ const PATH = '/online-course';
  * the query string, so `getOnlineCourses()` and `getOnlineCourses({})` both
  * issue the same unfiltered URL the eight existing callers have always issued.
  *
+ * ── `skill`, THE SAME ARGUMENT FOR THE SKILL PAGE ─────────────────────────
+ *
+ * Measured 2026-10-07 with the same controls as `program` above:
+ *
+ *   ?skill=AI               →  7 items
+ *   ?skill=<AI ObjectId>    →  7 items      (both spellings accepted)
+ *   ?skill=ZZZ-BOGUS        →  0 items
+ *   ?zzz_not=AI             → 24 items      ← unknown params are IGNORED
+ *
+ * Same tag, same default revalidate, so the per-skill entries are busted by
+ * the same `online-courses` revalidateTag as the per-program ones.
+ *
  * @param {object} [options]
  * @param {string} [options.program] a program `program_id` short code (e.g.
  *   'MSE') or its ObjectId — upstream accepts either. Omit for the full list.
+ * @param {string} [options.skill] a skill `skill_id` short code (e.g. 'AI')
+ *   or its ObjectId — upstream accepts either. Omit for the full list.
  * @param {object} [deps] see below. Production callers pass nothing.
  */
 export async function getOnlineCourses(
-  { program } = {},
+  { program, skill } = {},
   /**
    * `deps`, for the same reason `listPublicCourses` carries its own: the claim
    * worth testing is "the argument becomes a `program=` on the URL", and that
@@ -78,7 +92,7 @@ export async function getOnlineCourses(
   { fetchUpstream = aiFetch } = {}
 ) {
   const raw = await fetchUpstream(PATH, {
-    params: { program },
+    params: { program, skill },
     tags: ['online-courses'],
   });
   return unwrap(raw);

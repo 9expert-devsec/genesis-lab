@@ -6,6 +6,7 @@ import { CourseCard } from '@/app/(public)/training-course/_components/CourseCar
 import { toKebab } from '@/lib/slug';
 import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 import { ProgramArticlesSection } from '@/components/program/ProgramArticlesSection';
+import { ProgramOnlineCoursesSection } from '@/components/program/ProgramOnlineCoursesSection';
 import { PageCatalogButton } from '@/components/ui/PageCatalogButton';
 
 /**
@@ -28,6 +29,11 @@ export function SkillPageClient({
   faqs = [],
   currentYear,
   skillSlugs = {},
+  /**
+   * Online courses for this skill, filtered upstream by the route — the
+   * program page's section and card, filtered by skill instead.
+   */
+  onlineCourses = [],
   /**
    * Related articles for this skill, capped and ordered by the route — the
    * program page's section and props, filtered by Article.skills instead.
@@ -149,6 +155,15 @@ export function SkillPageClient({
           })
         )}
       </div>
+
+      {/* ── Online courses ────────────────────────────────────────── */}
+      {/* Same slot as the program page: after the course grids, before the
+          FAQ. Renders nothing when the skill has no online courses. */}
+      <ProgramOnlineCoursesSection
+        courses={onlineCourses}
+        skillSlugs={skillSlugs}
+        title="หลักสูตรออนไลน์ใน Skill นี้"
+      />
 
       {/* ── FAQ ───────────────────────────────────────────────────── */}
       <FaqAccordionSection faqs={faqs} />
