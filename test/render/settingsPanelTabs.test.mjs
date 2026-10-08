@@ -52,6 +52,31 @@ import { readSource } from "../sourceScan.mjs";
 
 const SRC = "src/components/pageBuilder/editor/SettingsPanel.jsx";
 
+/**
+ * ── THE SOURCE PATTERNS BELOW ARE QUOTE- AND WHITESPACE-TOLERANT ──────────
+ *
+ * Six of them were not, and all six went red without a single line of
+ * SettingsPanel.jsx's BEHAVIOUR changing: a formatter ran over that file,
+ * turning `'content'` into `"content"` and wrapping `<SelectionHeader … />`
+ * across four lines. Nothing they assert had moved — `git diff` on the file
+ * showed no change at all between the commit where they were written and the
+ * one where they were failing.
+ *
+ * So they now match `['"]` where they used to match one quote character, and
+ * `\s+` where the formatter may break a line. Each still pins the SAME thing:
+ * verified against mutations — a prop dropped, props reordered, an extra prop
+ * wedged between two asserted ones, a key renamed, a clamp inverted, a
+ * fallback changed — and every one of those is still rejected.
+ *
+ * WHAT NOT TO DO HERE. Do not relax a pattern to `[\s\S]*?` between props: it
+ * would also accept a prop nobody declared, which is exactly the drift these
+ * assertions exist to catch. Tolerate formatting, never content.
+ *
+ * (SettingsPanel.jsx was deliberately NOT reformatted back. A source scan that
+ * dictates the formatting of the file it reads is the tail wagging the dog, and
+ * the repo formats on its own schedule.)
+ */
+
 const domOf = (el) =>
   new JSDOM(`<!doctype html><body>${renderToStaticMarkup(el)}</body>`).window
     .document;
@@ -433,7 +458,7 @@ test("the panel dispatches the TOP-LEVEL merge for the name, not the sub-object 
   assert.ok(call.length > 40, "the SectionNameField call site was not located");
   assert.match(
     call,
-    /type: 'PATCH_SECTION'/,
+    /type: ['"]PATCH_SECTION['"]/,
     "the name no longer goes through the top-level merge",
   );
   assert.equal(
@@ -569,8 +594,11 @@ test("the tab strip does not re-implement the rule — it calls the one function
   // The literal key list must exist exactly once — a second copy at the strip
   // is the duplication this guards against.
   assert.equal(
-    code.split("'sectionId', 'customClass', 'customCss', 'customHtml'").length -
-      1,
+    (
+      code.match(
+        /['"]sectionId['"],\s*['"]customClass['"],\s*['"]customCss['"],\s*['"]customHtml['"]/g,
+      ) ?? []
+    ).length,
     1,
     "the advanced key list appears more than once — the tab strip has grown its own copy",
   );
@@ -646,7 +674,7 @@ test("the active tab is DERIVED by clamping to the tabs that exist, never by an 
   const code = readSource(SRC).code;
   assert.match(
     code,
-    /const active = tabs\.some\(\(t\) => t\.key === tab\) \? tab : 'content';/,
+    /const active = tabs\.some\(\(t\) => t\.key === tab\) \? tab : ['"]content['"];/,
     "the active tab is no longer clamped to the tabs that exist. If the remembered tab can " +
       "survive onto a section that does not have it, the panel shows nothing.",
   );
@@ -659,7 +687,7 @@ test("the active tab is DERIVED by clamping to the tabs that exist, never by an 
   // The state itself is local, not in the reducer (item D).
   assert.match(
     code,
-    /const \[tab, setTab\] = useState\('content'\);/,
+    /const \[tab, setTab\] = useState\(['"]content['"]\);/,
     "the tab is no longer local state initialised to the content tab",
   );
   assert.equal(
@@ -677,7 +705,7 @@ test("the fallback target is a tab that always exists", () => {
   const code = readSource(SRC).code;
   assert.match(
     code,
-    /const BASE_TABS = \[\s*\{ key: 'content', label: 'เนื้อหา' \},\s*\{ key: 'style', label: 'รูปแบบ' \},\s*\];/,
+    /const BASE_TABS = \[\s*\{ key: ['"]content['"], label: ['"]เนื้อหา['"] \},\s*\{ key: ['"]style['"], label: ['"]รูปแบบ['"] \},\s*\];/,
     "the unconditional tabs changed. The render-time clamp falls back to the content tab, " +
       "which must therefore always be present.",
   );
@@ -866,7 +894,7 @@ test("the type is not stated twice anywhere in the panel body", () => {
   );
   assert.match(
     code,
-    /<SelectionHeader type=\{selected\.type\} parentType=\{parentSection\?\.type \?\? null\} \/>/,
+    /<SelectionHeader\s+type=\{selected\.type\}\s+parentType=\{parentSection\?\.type \?\? null\}\s*\/>/,
     "the header is no longer wired to the selection and its derived parent",
   );
 });
