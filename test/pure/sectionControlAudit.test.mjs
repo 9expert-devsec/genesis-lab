@@ -195,12 +195,22 @@ test("AUDIT TRIPWIRE (finding 2): exactly eleven section components paint with t
        * docs/section-control-audit.md before this list is extended. It is —
        * see finding 2's addendum there, "promotion_bundle, and why it paints".
        *
-       * In one line: a bundle's ราคาสุทธิ is a KEY FIGURE, which is the exact
-       * surface round 21 measured the accent as reaching, and price_card — the
-       * type this one is closest to — already paints its price with
-       * `--pb-accent-text` for the same reason. This is not a new claim about
-       * what an accent is for; it is the existing claim applied to a type that
-       * did not exist when the eleven were counted.
+       * In one line: the รหัสส่วนลด chip is painted with the accent's
+       * fill/on PAIR, and a code the customer is meant to take away is the
+       * "links" surface round 21 measured the accent as reaching. This is not a
+       * new claim about what an accent is for; it is the existing claim applied
+       * to a type that did not exist when the eleven were counted.
+       *
+       * ── THIS COMMENT USED TO NAME THE NET PRICE, AND THAT WENT STALE ──────
+       * It argued from `--pb-accent-text` on ราคาสุทธิ (a KEY FIGURE, as
+       * price_card paints its own price). `fd0d6939` repainted the net price to
+       * `text-red-600 dark:text-red-400` and the argument stopped describing
+       * the code — while this assertion stayed GREEN, because the chip had
+       * carried a `--pb-accent-*` variable all along and the scan kept matching.
+       * Membership never lapsed; only the reason did. Corrected rather than
+       * left, because a comment claiming a fact it does not have is the thing
+       * this suite's own rule is against, and the doc's addendum now cites the
+       * same element.
        */
       "promotion_bundle",
       "rich_text",
@@ -216,10 +226,19 @@ test("AUDIT TRIPWIRE (finding 2): exactly eleven section components paint with t
 
   assert.deepEqual(
     buttonHelperConsumers(),
-    // `promotion_bundle` joins for the ordinary reason: it draws a button
-    // (คัดลอกรหัสส่วนลด) on a card, so it declares `buttonStyle` in
-    // SECTION_STYLE_CAPS and reads it through the same helper. Same pair as
-    // price_card, which is the type it is shaped like.
+    // `promotion_bundle` joins for the ordinary reason: it draws a button on a
+    // card, so it declares `buttonStyle` in SECTION_STYLE_CAPS and reads it
+    // through the same helper.
+    //
+    // The button is สมัคร Bundle นี้, not คัดลอกรหัสส่วนลด as this comment
+    // used to say — the copy button was removed when the register button
+    // shipped, and only the LABEL of the thing reading `buttonStyle` changed.
+    // Named correctly because the next reader will go looking for it.
+    //
+    // No longer "the same pair as price_card": the navy round dropped
+    // `cardStyle` from this type (its base is the navy token, which no
+    // cardStyle treatment can express) and gave it `bundleGlow` + `cardBorder`
+    // instead. `buttonStyle` is the half the two types still share.
     ["cta", "price_card", "promotion_bundle"],
     "the indirect route changed — accentButtonClass is how cta gets its accent without naming " +
       "the variable, and it is gated by SECTION_STYLE_CAPS",

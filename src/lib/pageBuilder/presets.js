@@ -44,6 +44,9 @@ import {
   CARD_STYLES,
   BUTTON_STYLES,
 } from "@/lib/schemas/sections/base";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The selectable-card round: the two whole-card styles.
+import { BUNDLE_CARD_THEMES } from "@/lib/schemas/sections/base";
 import { PAGE_THEMES } from "@/lib/schemas/pageBuilder";
 // ADDED beside the statements above rather than folded into either — the
 // standing rule in this repo. Round 39: the author-colour half.
@@ -606,20 +609,59 @@ export const SECTION_STYLE_CAPS = {
   stat_card: ["cardStyle"],
   icon_card: ["cardStyle"],
   /**
-   * `promotion_bundle` takes BOTH, and it is price_card's pair rather than a
-   * new combination: the bundle draws a card SURFACE (a bordered/filled/promo
-   * panel holding the offer) and a BUTTON on it (คัดลอกรหัสส่วนลด). Those are
-   * the two things this declaration is about, and the section reads each one
-   * through the same public helper the other four use.
+   * ── `promotion_bundle` — THE NAVY ROUND REPLACED ITS SURFACE CAP ──────────
    *
-   * The consequence is deliberate rather than incidental: declaring it here is
-   * what makes the panel OFFER the two controls, because SectionTypeFields
-   * derives its control list from this map. Reading a prop and offering a
-   * control for it are one act (2C.3) — so a bundle whose author picks
-   * `cardStyle: 'promo'` gets the promotion card treatment round 59 built for
-   * exactly this kind of panel.
+   * It used to be `["cardStyle", "buttonStyle"]` — price_card's pair — on the
+   * argument that a bundle draws a card SURFACE and a BUTTON on it. The button
+   * half is unchanged and still correct. The surface half is GONE, and the
+   * reason is that the two now contradict each other.
+   *
+   * The bundle card no longer HAS an author-chosen SURFACE TREATMENT: its base
+   * is picked from two whole-card styles (see the fourth cap below), neither of
+   * which `cardSurfaceClass` can express. Keeping `cardStyle` beside that
+   * would offer an author five treatments of which `plain` is the only one that
+   * does not fight the navy — `filled` paints `--pb-bg-light` OVER it, `border`
+   * adds a second border beside the configurable one below, and `promo` brings
+   * its own surface entirely. A control whose values mostly break the section is
+   * worse than no control, and 2C.3 means removing the control and removing the
+   * read are the same edit.
+   *
+   * So the surface cap is replaced by the two the navy card actually reads:
+   *
+   *   bundleGlow  the two corner glows, each an author-picked #RRGGBB
+   *   cardBorder  on/off + colour + width, the border the navy base needs
+   *               because `--surface-border` is invisible against it
+   *
+   * `buttonStyle` is LAST and byte-identical in meaning: the register button is
+   * untouched by this round.
+   *
+   * ── WHAT THIS DOES TO STORED SECTIONS, MEASURED ──────────────────────────
+   * Against 9exp_genesis, all three places a page's sections live: 36 stored
+   * `promotion_bundle` occurrences (2 live, 2 draft, 32 version snapshots), all
+   * on ONE page (`promotion-claude-ai-bundle`, status `closed`). Exactly ONE
+   * carries a `style.cardStyle` at all — a draft, holding `promo`. Zero carry a
+   * `buttonStyle`.
+   *
+   * That one value becomes INERT rather than invalid: `cardStyle` stays in
+   * `styleSchema` (price_card, stat_card and icon_card still declare it), so the
+   * key keeps parsing and keeps round-tripping through a save. Nothing is
+   * migrated and nothing fails to load; the draft simply stops being painted
+   * `promo` and takes the navy base like every other bundle. The page is closed,
+   * so no public render changes today.
+   *
+   * ── THE SELECTABLE-CARD ROUND ADDED A FOURTH, AND IT GATES TWO OF THEM ───
+   * `bundleCardTheme` is FIRST because it decides what the others mean. The
+   * navy card stopped being the only look: an author picks `light` (the
+   * pre-navy, theme-following soft-gray card) or `navy`, and the glow pickers
+   * are meaningful for `navy` alone — `bundleGlowFor` returns nothing for a
+   * light card, and the panel disables the two pickers with a hint rather than
+   * removing them, because `test/render/styleCaps` asserts the panel offers
+   * EXACTLY the declared caps and a control that disappeared would be a cap
+   * the panel cannot render.
+   *
+   * `cardBorder` applies to BOTH styles and is unchanged.
    */
-  promotion_bundle: ["cardStyle", "buttonStyle"],
+  promotion_bundle: ["bundleCardTheme", "bundleGlow", "cardBorder", "buttonStyle"],
 };
 
 /** Does `type` declare support for `prop`? The gate both helpers share. */
@@ -641,6 +683,223 @@ export const accentButtonClass = (type, style) =>
   sectionSupportsStyle(type, "buttonStyle")
     ? buttonStyleClass(style?.buttonStyle)
     : "";
+
+/**
+ * ── THE NAVY BUNDLE CARD: TWO CAPS, TWO GATED HELPERS ──────────────────────
+ *
+ * Same shape as the two helpers above and for the same reason: each gates on
+ * `SECTION_STYLE_CAPS` first, so a type that does not declare the cap cannot
+ * read the prop — which is what keeps "reads a prop" and "is offered a control"
+ * one act (2C.3). A type without the cap gets a className of '' and an EMPTY
+ * vars object, so a caller that spreads the result unconditionally emits no
+ * style attribute rather than a broken one.
+ *
+ * ── WHY THESE RETURN `{ className, vars }` AND NOT A STRING ───────────────
+ * `cardSurfaceClass` and `accentButtonClass` return a class because a preset
+ * resolves to a FIXED class. An author's colour cannot: a generated class would
+ * have to be `bg-[#1d4ed8]`-shaped, and an arbitrary value built by
+ * interpolation emits no CSS in this repo (Tailwind scans source text, and
+ * `bg-[${hex}]` is not in it). Round 39 already met this and already answered
+ * it — the author's colour reaches CSS as an INLINE CUSTOM PROPERTY which a
+ * STATIC class in globals.css consumes. These helpers are that answer applied
+ * to the bundle: the class is static and greppable, the colour rides in on a
+ * variable, and no class is ever built from a value.
+ *
+ * ── DEFAULTS LIVE HERE, NOT IN `styleSchema` ──────────────────────────────
+ * Deliberately, and it is the same ruling `backgroundCustom` and the three
+ * style props already in `styleSchema` carry: a `.default()` on a style key
+ * means the next save of ANY page writes that key into every one of its
+ * sections. The schema keeps every field `.optional()` with no default, and
+ * these resolvers supply the default at RENDER time. The consequence is the one
+ * wanted: a bundle nobody has recoloured stores nothing, and still paints.
+ */
+
+/**
+ * The whole-card style a bundle takes when nothing is stored.
+ *
+ * `light` — the pre-navy card — and the reasoning is in `BUNDLE_CARD_THEMES`
+ * (schemas/sections/base.js): every stored section predates the field, so an
+ * absent value must mean the look its author last saw.
+ */
+export const BUNDLE_CARD_THEME_DEFAULT = "light";
+
+/**
+ * `bundleCardTheme` — which of the two whole-card styles this section takes.
+ *
+ * Returns a STRING rather than `{ className, vars }` because it resolves no
+ * colour: it is the switch the renderer branches on, and the two branches then
+ * ask the other helpers for their classes and variables. A type without the
+ * cap gets the default rather than `''`, because every caller of this needs a
+ * valid theme to branch on and there is no "no theme" rendering.
+ *
+ * An out-of-vocabulary value — a seeded document, a stale enum — resolves to
+ * the default. Same second-layer reasoning as `hexOrNull` on the colours:
+ * the schema refuses it at write, and this refuses it at read.
+ */
+export function bundleCardThemeFor(type, style) {
+  if (!sectionSupportsStyle(type, "bundleCardTheme")) {
+    return BUNDLE_CARD_THEME_DEFAULT;
+  }
+  return BUNDLE_CARD_THEMES.includes(style?.bundleCardTheme)
+    ? style.bundleCardTheme
+    : BUNDLE_CARD_THEME_DEFAULT;
+}
+
+/** The class that forces a subtree onto the LIGHT token set. See globals.css. */
+export const BUNDLE_TILE_LIGHT_CLASS = "pb-bundle-tile-light";
+
+/**
+ * ── WHY A CLASS-STRING FILTER AND NOT A STYLESHEET OVERRIDE ────────────────
+ *
+ * Drops every `dark:`-prefixed utility from a class string, leaving the light
+ * form. Used on the three class strings inside a bundle's course tile when the
+ * CARD is navy but the TILE must read as a light surface.
+ *
+ * It exists because of what `dark:` actually compiles to. MEASURED with the
+ * repo's own compiler (test/twCompile.mjs):
+ *
+ *   dark:bg-9e-navy  ->  .dark\:bg-9e-navy:is(.dark *) { … }
+ *
+ * `:is(.dark *)` matches a descendant of ANY `.dark` ancestor. There is no
+ * closest-ancestor-wins rule, so the `dark` class the navy card scopes onto
+ * itself makes every `dark:` utility inside it fire — and NOTHING nested can
+ * switch that off. Re-declaring custom properties cannot help either, because
+ * these utilities hard-code their colour rather than reading a var. The class
+ * has to leave the markup, which is what this does.
+ *
+ * ── WHY NOT THE THREE ALTERNATIVES ────────────────────────────────────────
+ *   · A var per site (round 79's move) works for the two strings in our own
+ *     renderer and CANNOT reach the third: the badge's classes come from
+ *     `resolveDerivedRoundBadge` (lib/scheduleStatus.js), shared with the
+ *     registration carousel and other sections, so changing its output is out
+ *     of scope for a bundle round.
+ *   · Overriding the badge's `dark:` utilities under the light-scope class
+ *     means naming #39b980, #ffc94a, #ff4b55 and the slate pair in globals.css
+ *     — a second declaration of a palette that already has one.
+ *   · The badge's `solid` variant carries no `dark:` form, but it is a filled
+ *     pill rather than a tint. That is a different design, not a light form.
+ *
+ * Stripping yields the light form BY CONSTRUCTION — `bg-[#39b980]/10
+ * text-[#39b980]`, `bg-slate-100 text-slate-600` — so it keeps working if the
+ * badge palette changes, which is the property the other three lack. Both CSS
+ * forms already exist in the stylesheet because `soft` is used unmodified
+ * elsewhere, so nothing new is emitted and no arbitrary value is built here.
+ *
+ * SPLIT ON WHITESPACE, not a regular expression. The tokens include
+ * `dark:bg-[#39b980]/20` — brackets, a hash and a slash — and a regex over
+ * that is an escaping bug waiting to happen for no gain.
+ */
+export function withoutDarkVariants(cls) {
+  if (typeof cls !== "string") return "";
+  return cls
+    .split(/\s+/)
+    .filter((t) => t && !t.startsWith("dark:"))
+    .join(" ");
+}
+
+/** The left (bottom-left) glow's default — blue. */
+export const BUNDLE_GLOW_LEFT_DEFAULT = "#1D4ED8";
+/** The right (top-right) glow's default — copper. */
+export const BUNDLE_GLOW_RIGHT_DEFAULT = "#C2674B";
+
+/**
+ * The border's default colour — 9e "State Light", the brand's own pale slate.
+ *
+ * NOT a colour decided in source, which round 30 bans: #B7C3D4 is a named entry
+ * in the brand palette (app/(public)/brand/brandContent.js, tile `dark` — i.e.
+ * the palette itself records that it is meant to sit on a dark ground). That is
+ * why it is the default rather than a hand-mixed "subtle light tone".
+ */
+export const BUNDLE_BORDER_COLOR_DEFAULT = "#B7C3D4";
+
+/** The border widths an author may choose, in px. `1` is the default. */
+export const BUNDLE_BORDER_WIDTHS = [1, 2, 3, 4];
+/** The width used when none is stored, or a stored one is out of vocabulary. */
+export const BUNDLE_BORDER_WIDTH_DEFAULT = 1;
+
+/**
+ * The static classes the two helpers hand back. Declared as constants so the
+ * renderer, the stylesheet and the tests name the same string once — a class
+ * spelled twice is the drift this file keeps closing.
+ */
+export const BUNDLE_SURFACE_CLASS = "pb-bundle-surface";
+export const BUNDLE_BORDER_CLASS = "pb-bundle-border";
+
+/**
+ * `bundleGlow` — the navy base plus the author's two corner glows.
+ *
+ * The className is returned UNCONDITIONALLY for a type with the cap, because the
+ * class carries the NAVY BASE as well as the glows. A bundle whose author has
+ * picked nothing still needs it, which is why there is no "nothing stored →
+ * no class" branch here: the defaults below are real colours, not absences.
+ *
+ * `hexOrNull` is the second, independent layer (customColor.js states why): the
+ * schema refuses a bad hex at WRITE, and a directly-seeded Mongo document can
+ * still carry anything, so every value is re-checked at READ and falls back to
+ * the default rather than reaching a style attribute.
+ */
+export function bundleGlowFor(type, style) {
+  if (!sectionSupportsStyle(type, "bundleGlow")) {
+    return { className: "", vars: {} };
+  }
+  /**
+   * ── THE LIGHT CARD TAKES NO NAVY SURFACE AND NO GLOWS ───────────────────
+   * The gate lives HERE rather than in the renderer so there is one place that
+   * decides it, and so the "light emits no glow variables" claim is testable
+   * without rendering. `BUNDLE_SURFACE_CLASS` carries the navy BASE as well as
+   * the glows, so returning it for a light card would paint navy under the
+   * soft-gray background the renderer asks for separately.
+   *
+   * The author's stored colours are NOT cleared — switching back to navy
+   * restores the pair they picked. That is why this is a read-time gate and
+   * not a reason to wipe keys on save.
+   */
+  if (bundleCardThemeFor(type, style) !== "navy") {
+    return { className: "", vars: {} };
+  }
+  return {
+    className: BUNDLE_SURFACE_CLASS,
+    vars: {
+      "--bundle-glow-left":
+        hexOrNull(style?.bundleGlowLeft) ?? BUNDLE_GLOW_LEFT_DEFAULT,
+      "--bundle-glow-right":
+        hexOrNull(style?.bundleGlowRight) ?? BUNDLE_GLOW_RIGHT_DEFAULT,
+    },
+  };
+}
+
+/**
+ * `cardBorder` — the optional border, OFF unless the author turned it on.
+ *
+ * ── OFF IS THE ABSENCE OF BOTH THE CLASS AND THE VARIABLES ────────────────
+ * Not a class that sets `border-width: 0`. An off border must leave no trace in
+ * the markup, so an author who turns the control off gets exactly the element
+ * they had before they turned it on — which is also what makes the "border off →
+ * no border variables" test a statement about the markup rather than about a
+ * computed style nobody can see.
+ *
+ * `=== true` rather than truthiness, because the field is `.optional()` with no
+ * default: `undefined` must read as OFF, and that is the whole default. A
+ * stored `cardBorderColor` with the toggle off is honoured by nothing, on
+ * purpose — the author's colour is kept for the day they switch it back on.
+ */
+export function cardBorderFor(type, style) {
+  if (!sectionSupportsStyle(type, "cardBorder")) {
+    return { className: "", vars: {} };
+  }
+  if (style?.cardBorderOn !== true) return { className: "", vars: {} };
+  const width = BUNDLE_BORDER_WIDTHS.includes(style?.cardBorderWidth)
+    ? style.cardBorderWidth
+    : BUNDLE_BORDER_WIDTH_DEFAULT;
+  return {
+    className: BUNDLE_BORDER_CLASS,
+    vars: {
+      "--bundle-border-color":
+        hexOrNull(style?.cardBorderColor) ?? BUNDLE_BORDER_COLOR_DEFAULT,
+      "--bundle-border-width": `${width}px`,
+    },
+  };
+}
 
 /** `visibility === 'hidden'` → the renderer skips the section entirely. */
 export const isHiddenVisibility = (v) => String(v) === "hidden";

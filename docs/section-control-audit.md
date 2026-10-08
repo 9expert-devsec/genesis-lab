@@ -247,12 +247,16 @@ The comment makes five specific claims about the deferred per-type controls.
 | D1  | `layout.ratio` → `two_column` only                                                        | **AGREE** | 5 ratios → 5 distinct renders for `two_column`, 1 for all 26 others. `ratioClass` imported by that file alone                                            |
 | D2  | `layout.columns` → `card_grid`, `highlight_grid`                                          | **AGREE** | 5 distinct for both, 1 for all 25 others                                                                                                                 |
 | D3  | `mobileBehavior` → `two_column` honours ONLY `reverse_stack`; `card_grid` ONLY `carousel` | **AGREE** | grouped by identical output: `two_column` → `{stack, hide, carousel}` vs `{reverse_stack}`; `card_grid` → `{stack, reverse_stack, hide}` vs `{carousel}` |
-| D4  | `style.buttonStyle` → `cta`, `price_card`                                                 | **AGREE** | 4 button styles → 4 distinct renders for both, 1 for all 25 others                                                                                       |
+| D4  | `style.buttonStyle` → `cta`, `price_card`, `promotion_bundle`                             | **AGREE** | 4 button styles → 4 distinct renders for each, 1 for all 25 others                                                                                       |
 | D5  | `style.cardStyle` → `price_card`, `stat_card`, `icon_card`                                | **AGREE** | 5 card styles → 5 distinct for those three, 1 for all 24 others                                                                                          |
+| D6  | `style.bundleGlow` / `style.cardBorder` → `promotion_bundle` only                         | **AGREE** | the navy round; both declared by one type, and `test/pure/bundleCardStyle` asserts the sole ownership rather than leaving it to inspection                |
+| D7  | `style.bundleCardTheme` → `promotion_bundle` only                                         | **AGREE** | the selectable-card round; two whole-card styles, and it GATES D6's `bundleGlow` — `bundleGlowFor` returns nothing for a `light` card                    |
 
-**All five hold.** `SECTION_STYLE_CAPS` makes D4 and D5 structurally true rather
+**All seven hold.** `SECTION_STYLE_CAPS` makes D4–D7 structurally true rather
 than coincidentally true, and it shows: those are the only reader-sets that
-cannot drift.
+cannot drift. D6 arrived with the navy bundle card and D7 with the round that
+made it selectable — see finding 2's second and third addenda for what each
+added and what it removed.
 
 ### The disagreement is elsewhere, and it is the reason for §8
 
@@ -435,21 +439,146 @@ nothing joins or leaves without a deliberate decision". `promotion_bundle` joins
 and the decision is **not a new claim about what an accent is for**. It is the
 existing claim applied to a type that did not exist when the eleven were counted:
 
-* **`--pb-accent-text` on ราคาสุทธิ.** Round 21 measured the accent as reaching
-  "icons, accent rules, buttons, links and **key figures**". A bundle's net price
-  is the key figure of the section — it is the number the whole panel exists to
-  state. `price_card`, the type this one is shaped like, already paints its
-  `price` with the same variable for the same reason, and the two would look
-  unrelated sitting on one page if this did not.
-* **`accentButtonClass` on คัดลอกรหัสส่วนลด.** The ordinary indirect route, via
+* **The accent pair on the รหัสส่วนลด chip.** The discount-code chip is painted
+  `bg-[var(--pb-accent-fill)]` + `text-[var(--pb-accent-on)]`, which is the
+  sanctioned "text on the accent" pair — `accentContrastOk` picks `on` by
+  contrast, so a custom accent is legible as well as the five presets. Round 21
+  measured the accent as reaching "icons, accent rules, buttons, **links** and
+  key figures"; a code the customer is meant to take away is that surface.
+* **`accentButtonClass` on สมัคร Bundle นี้.** The ordinary indirect route, via
   `SECTION_STYLE_CAPS.promotion_bundle` declaring `buttonStyle`. Same as `cta`
   and `price_card`; nothing new.
+
+> **Correction, and why the argument moved.** This addendum originally rested the
+> direct half on **`--pb-accent-text` on ราคาสุทธิ** — a bundle's net price being
+> the "key figure" round 21 measured, and `price_card` painting its own `price`
+> with the same variable. **That claim has not described the code since
+> `fd0d6939`** ("the bundle section becomes two columns"), which repainted the
+> net price to `text-red-600 dark:text-red-400`; the renderer's own note says red
+> comes from Tailwind's palette because "there is no 9e red token to take".
+>
+> The set *membership* never lapsed — the chip has carried a `--pb-accent-*`
+> variable throughout, so `directAccentConsumers()` kept matching and the test
+> stayed green while the written argument behind it was wrong. The doc is
+> load-bearing here (the tripwire's failure message sends the reader to it), so
+> the argument is restated against the element that actually holds it.
+>
+> Two consequences worth recording rather than leaving implicit. First, the bundle
+> and `price_card` no longer paint their key figure alike, which is the outcome
+> the original argument was written to prevent — it is a live design question, not
+> a settled one. Second, the navy round moved the chip from `--pb-accent-text` to
+> the fill/on pair for a measured reason: `--pb-accent-text` resolves to
+> `--9e-action` (#005CFF) for the default accent, that token is declared in
+> `:root` only, and on the card's navy base it measured **3.29:1** — below AA for
+> 14px bold. The pair measures 5.05:1 at its worst preset.
 
 So the union grows by exactly one (11 → 12), because this type is in **both**
 routes — the same shape as `price_card`. The complement, the types the audit
 records as having no accent surface at all, is **unchanged at 16**:
 `ALL_SECTION_TYPES` went 27 → 28 in the same commit, and the new member landed in
 the painting set rather than the complement.
+
+#### Addendum 2 — the navy round's two caps, and the one it removed
+
+_Recorded here because D4–D6 in §4 are the rows a reader checks against
+`presets.js`, and because removing a cap from a type is the kind of change that
+looks like an omission when it is a ruling._
+
+`SECTION_STYLE_CAPS.promotion_bundle` was `["cardStyle", "buttonStyle"]` —
+price_card's pair — and is now **`["bundleGlow", "cardBorder", "buttonStyle"]`**.
+
+* **`cardStyle` was removed from that TYPE, not from the schema.** D5's set is
+  unchanged and `styleSchema` still declares the key for the three types in it.
+  A stored `style.cardStyle` on a bundle becomes **inert**: it parses, it
+  round-trips through a save, and nothing reads it. Measured before the change,
+  over all three places a page's sections live in `9exp_genesis` — 36 stored
+  `promotion_bundle` occurrences on one page (status `closed`), of which exactly
+  **one** carries a `cardStyle` at all (a draft, holding `promo`). No migration,
+  and no public render changes today.
+* **Why it could not stay.** The card's base is now the navy token in both site
+  themes. Of the five treatments only `plain` leaves that alone: `filled` paints
+  `--pb-bg-light` over it, `border` adds a second border beside the configurable
+  one, and `promo` replaces the surface entirely. A control whose values mostly
+  break the section is worse than no control — and under 2C.3, removing the
+  control and removing the read are one edit.
+* **These are the first caps carrying a COLOUR rather than a preset.**
+  `cardSurfaceClass` and `accentButtonClass` return a class because a preset
+  resolves to a fixed one; an author's hex cannot, because an interpolated
+  arbitrary value is not in the source Tailwind scans and so emits no CSS at
+  all. `bundleGlowFor` / `cardBorderFor` therefore return `{ className, vars }`
+  — a static class plus inline custom properties — which is round 39's
+  custom-background mechanism applied to a section's own surface rather than to
+  the page. The gate is unchanged: both check `sectionSupportsStyle` first and
+  hand a type without the cap `''` and `{}`, asserted from both sides in
+  `test/pure/bundleCardStyle`.
+
+One consequence for §3's count. The card now paints its own base, so it no
+longer reads `settings.background` at all — which **retires** the inert-control
+cell this audit would otherwise have had to open for it. Before the round the
+renderer called `backgroundClass('soft_gray')` with a literal, so the panel's
+background control was offered and did nothing for this type: the same shape as
+finding 1 and finding 3, found and closed in the same commit rather than
+catalogued.
+
+#### Addendum 3 — `bundleCardTheme`, a cap that GATES another cap
+
+_The seventh row in §4, and the first cap in this file whose job is to decide
+whether a different cap does anything._
+
+The navy card shipped as the only look. `style.bundleCardTheme` makes it one of
+two — `light` (the pre-navy, theme-following soft-gray card) or `navy` — and
+`SECTION_STYLE_CAPS.promotion_bundle` becomes
+`["bundleCardTheme", "bundleGlow", "cardBorder", "buttonStyle"]`, theme first.
+
+* **It gates `bundleGlow`, and the gate is in the RESOLVER.**
+  `bundleGlowFor` returns `{ className: '', vars: {} }` for anything but `navy`.
+  That is deliberate placement rather than convenience: it puts the rule in one
+  function that both the renderer and the panel ask, so "a light card emits no
+  glow variables" is testable without rendering, and the panel cannot disagree
+  with the page about when the pickers are live. `BUNDLE_SURFACE_CLASS` carries
+  the navy BASE as well as the glows, so returning it for a light card would
+  paint navy under the soft gray.
+* **The panel DISABLES the two pickers rather than removing them**, and §4's own
+  structure is why. `test/render/styleCaps` asserts `styleControlsFor(type)`
+  equals the declared caps exactly, so a control that unmounts for some values
+  of another control is a cap the panel cannot render. Disabling with a one-line
+  reason also answers the question an author actually has — not "where did the
+  pickers go" but "why do my colours do nothing" — and keeps the stored pair
+  visible, which matters because it is **kept, not cleared**: switching back to
+  `navy` restores it.
+* **`cardBorder` applies to BOTH styles.** `cardStyle` stays out of the type.
+* **The default is `light`, and that is a ruling.** Every stored section predates
+  the field, so an absent value has to mean the look its author last saw.
+  Defaulting to `navy` would silently restyle all 36 stored occurrences.
+  Neither choice is a no-op; this is the one that matches what was authored.
+  The stored token is `light` rather than `white` even though the panel labels
+  it `สีขาว (แบบเดิม)`, because what it selects is the theme-FOLLOWING card and
+  a value called `white` would be a lie about its dark-mode half.
+
+**One thing this round does NOT retire, and the correction it forces.** Addendum
+2 above says the card "paints its own base, so it no longer reads
+`settings.background` at all", and offers that as retiring an inert-control cell.
+That reading survives the สีขาว style but its wording does not: the light card
+paints `backgroundClass('soft_gray')`, which is the same function the panel's
+background control feeds — called with a **literal**, inside the `light` branch.
+So the control is still offered and still does nothing for this type. The cell is
+**not** retired; it is the same PARTIAL shape as findings 1 and 3, now in one of
+two styles rather than unconditionally. Recorded here rather than fixed, because
+making the bundle honour an author's background is a design question (what would
+a soft-gray bundle on a navy section background even be?) and not a defect to
+patch inside a styling round.
+
+**A mechanism note, because it is the first of its kind here.** The navy card's
+course tiles must read as LIGHT surfaces while sitting inside a subtree the card
+has scoped `dark` onto. Two halves were needed and neither is sufficient:
+`.pb-bundle-tile-light` re-declares the semantic tokens (which covers every
+var-based colour in the tile), and `withoutDarkVariants` strips the three class
+strings that carry a `dark:` utility. The second exists because `dark:` compiles
+to `:is(.dark *)` — **measured** with `test/twCompile.mjs` — which matches a
+descendant of *any* `.dark` ancestor, so nothing nested can cancel it and those
+utilities hard-code their colour rather than reading a var. Anyone adding a
+`dark:` class inside that tile needs to know both halves exist; the comment in
+each names the other.
 
 Two negative rules the existing consumers hold to, and this type holds to as
 well. The struck-through ราคาปกติ is **not** accented — it is secondary text, and
@@ -1409,12 +1538,16 @@ The comment makes five specific claims about the deferred per-type controls.
 | D1  | `layout.ratio` → `two_column` only                                                        | **AGREE** | 5 ratios → 5 distinct renders for `two_column`, 1 for all 26 others. `ratioClass` imported by that file alone                                            |
 | D2  | `layout.columns` → `card_grid`, `highlight_grid`                                          | **AGREE** | 5 distinct for both, 1 for all 25 others                                                                                                                 |
 | D3  | `mobileBehavior` → `two_column` honours ONLY `reverse_stack`; `card_grid` ONLY `carousel` | **AGREE** | grouped by identical output: `two_column` → `{stack, hide, carousel}` vs `{reverse_stack}`; `card_grid` → `{stack, reverse_stack, hide}` vs `{carousel}` |
-| D4  | `style.buttonStyle` → `cta`, `price_card`                                                 | **AGREE** | 4 button styles → 4 distinct renders for both, 1 for all 25 others                                                                                       |
+| D4  | `style.buttonStyle` → `cta`, `price_card`, `promotion_bundle`                             | **AGREE** | 4 button styles → 4 distinct renders for each, 1 for all 25 others                                                                                       |
 | D5  | `style.cardStyle` → `price_card`, `stat_card`, `icon_card`                                | **AGREE** | 5 card styles → 5 distinct for those three, 1 for all 24 others                                                                                          |
+| D6  | `style.bundleGlow` / `style.cardBorder` → `promotion_bundle` only                         | **AGREE** | the navy round; both declared by one type, and `test/pure/bundleCardStyle` asserts the sole ownership rather than leaving it to inspection                |
+| D7  | `style.bundleCardTheme` → `promotion_bundle` only                                         | **AGREE** | the selectable-card round; two whole-card styles, and it GATES D6's `bundleGlow` — `bundleGlowFor` returns nothing for a `light` card                    |
 
-**All five hold.** `SECTION_STYLE_CAPS` makes D4 and D5 structurally true rather
+**All seven hold.** `SECTION_STYLE_CAPS` makes D4–D7 structurally true rather
 than coincidentally true, and it shows: those are the only reader-sets that
-cannot drift.
+cannot drift. D6 arrived with the navy bundle card and D7 with the round that
+made it selectable — see finding 2's second and third addenda for what each
+added and what it removed.
 
 ### The disagreement is elsewhere, and it is the reason for §8
 

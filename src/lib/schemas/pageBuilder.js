@@ -95,6 +95,11 @@ export {
   MOBILE_BEHAVIORS, VISIBILITY, ACCENTS, CARD_STYLES, BUTTON_STYLES,
   ITEM_FRAMES,
 } from './sections/base';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The selectable-card round: the bundle's two whole-card
+// styles, re-exported so the panel keeps ONE import site like every other
+// preset vocabulary.
+export { BUNDLE_CARD_THEMES } from './sections/base';
 
 // ── Section union ────────────────────────────────────────────────────
 

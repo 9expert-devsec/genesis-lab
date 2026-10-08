@@ -84,6 +84,20 @@ export const CARD_STYLE_LABELS = {
   promo: 'โปรโมชัน',
 };
 
+/**
+ * The bundle card's two whole-card styles. `promotion_bundle` is the one reader.
+ *
+ * `สีขาว (แบบเดิม)` says BOTH things the author needs: which one it looks like,
+ * and that it is the incumbent. The parenthetical is load-bearing — the navy
+ * card shipped first and was briefly the only look, so an author returning to
+ * the panel has to be able to tell which option is the one their page already
+ * had. The stored value is `light`, not `white`, because the style follows the
+ * site theme; see BUNDLE_CARD_THEMES for why the two names differ.
+ */
+export const BUNDLE_CARD_THEME_LABELS = {
+  light: 'สีขาว (แบบเดิม)', navy: 'Navy',
+};
+
 export const COLUMNS_LABELS = {
   1: '1 คอลัมน์', 2: '2 คอลัมน์', 3: '3 คอลัมน์', 4: '4 คอลัมน์', auto_fit: 'อัตโนมัติ',
 };
