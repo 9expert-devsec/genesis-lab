@@ -81,6 +81,32 @@ export const CARD_STYLES = [
 export const BUTTON_STYLES = ["primary", "secondary", "outline", "ghost"];
 
 /**
+ * ── THE BUNDLE CARD'S TWO WHOLE-CARD STYLES ────────────────────────────────
+ * Read by `promotion_bundle` alone, via `bundleCardThemeFor`.
+ *
+ * `light` FIRST, and it is the resolved default — see
+ * `BUNDLE_CARD_THEME_DEFAULT` in presets.js, where the default lives because
+ * this field (like every other in `styleSchema`) is `.optional()` with no
+ * schema default.
+ *
+ * That ordering is the ruling of this round rather than a convention: the navy
+ * card shipped as the ONLY look and every stored section predates this field,
+ * so an absent value has to mean the look those sections were authored against
+ * — the pre-navy soft-gray card. Defaulting to `navy` would silently restyle
+ * all 36 stored occurrences; defaulting to `light` restyles them back to what
+ * their authors last saw. Neither is a no-op, and this is the one that matches
+ * what was authored.
+ *
+ * NOT named `white`/`navy` despite the panel labelling the first one
+ * สีขาว (แบบเดิม). The stored value is `light` because what it selects is the
+ * THEME-FOLLOWING card — soft gray in light mode, the dark surface in dark
+ * mode — and a value called `white` would be a lie about the second half. The
+ * label is for the author, who picks it in a light-mode admin; the token is for
+ * the renderer.
+ */
+export const BUNDLE_CARD_THEMES = ["light", "navy"];
+
+/**
  * ── ROUND 39: THE CUSTOM-COLOUR VOCABULARY ─────────────────────────────────
  * IMPORTED, not restated. `COLOR_MODES` and `GRADIENT_DIRECTIONS` belong with
  * the CSS they turn into, and a second copy here is the drift this file's own
@@ -332,6 +358,53 @@ export const styleSchema = z
      */
     accentMode: z.enum(COLOR_MODES).optional(),
     accentCustom: hexColor.optional(),
+
+    /**
+     * ── THE NAVY BUNDLE CARD'S FIVE FIELDS ─────────────────────────────────
+     * Read by `promotion_bundle` ONLY, through the two gated helpers
+     * `bundleGlowFor` / `cardBorderFor` (lib/pageBuilder/presets.js), because
+     * that type is the only one declaring `bundleGlow` / `cardBorder` in
+     * SECTION_STYLE_CAPS. A type without the cap cannot read them even if a
+     * document carries them — which is the 2C.3 gate, not a convention.
+     *
+     * ── EVERY ONE IS `.optional()` WITH NO DEFAULT, AND THAT IS THE RULE ───
+     * The same ruling `backgroundCustom` above states at length and the three
+     * style props above it follow: a `.default()` ANYWHERE in this object means
+     * the next save of any page writes new keys into every one of its sections.
+     * So the vocabulary and the refusal live here, and the DEFAULTS live in
+     * presets.js beside the resolvers that apply them
+     * (`BUNDLE_GLOW_LEFT_DEFAULT` and its four siblings). A bundle nobody has
+     * recoloured stores nothing at all and still paints.
+     *
+     * ── WHY THE WIDTH IS A BOUNDED INT AND NOT AN ENUM ────────────────────
+     * `z.enum` is for strings; this is a number the renderer interpolates into
+     * `Npx`. `.int().min(1).max(4)` is the same vocabulary the panel's select
+     * offers (`BUNDLE_BORDER_WIDTHS`) expressed in the form a number can take,
+     * and the resolver re-checks membership at read because a seeded document
+     * can carry anything a schema never saw.
+     *
+     * NOT COERCED from a string, for the reason `promotion_bundle`'s prices
+     * already give: a coercion would silently accept a panel that forgot to
+     * parse its own `<select>` value, and the bug would surface later as a
+     * border nobody can explain. The control's job is the Number() cast.
+     */
+    /**
+     * Which whole-card style the bundle takes. Absent means `light` — the
+     * pre-navy, theme-following card — resolved by `bundleCardThemeFor`.
+     *
+     * It GATES the two glow fields below rather than merely sitting beside
+     * them: `bundleGlowFor` returns nothing at all unless this is `navy`, so a
+     * light card emits no glow variables even when colours are stored. The
+     * stored colours are KEPT, not cleared, so switching back to navy restores
+     * the author's pair — which is why this is a gate in the resolver and not
+     * a reason to wipe the other two keys on save.
+     */
+    bundleCardTheme: z.enum(BUNDLE_CARD_THEMES).optional(),
+    bundleGlowLeft: hexColor.optional(),
+    bundleGlowRight: hexColor.optional(),
+    cardBorderOn: z.boolean().optional(),
+    cardBorderColor: hexColor.optional(),
+    cardBorderWidth: z.number().int().min(1).max(4).optional(),
   })
   .default({});
 

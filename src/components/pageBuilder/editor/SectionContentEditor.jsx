@@ -1635,7 +1635,14 @@ function PromotionBundleEditor({ content, patch, resolved, courses }) {
         </Warn>
       )}
 
-      <Field label="รหัสส่วนลด" hint='รหัสที่ลูกค้าใช้ เช่น "EXP1" — แสดงเป็นข้อความพร้อมปุ่มคัดลอก'>
+      {/*
+        THE HINT NO LONGER PROMISES A COPY BUTTON. There is not one: the
+        คัดลอกรหัสส่วนลด button was removed when the register button shipped
+        (see sections/promotion_bundle.jsx), and the code stayed as selectable
+        text. The hint had gone on describing the affordance it replaced, which
+        told the author the page does something it does not.
+      */}
+      <Field label="รหัสส่วนลด" hint='รหัสที่ลูกค้าใช้ เช่น "EXP1" — แสดงเป็นข้อความให้ลูกค้าคัดลอกเอง'>
         <TextInput
           value={content?.discountCode}
           onChange={(v) => patch({ discountCode: v })}

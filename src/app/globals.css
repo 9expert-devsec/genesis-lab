@@ -649,6 +649,124 @@
 }
 
 /* ──────────────────────────────────────────────────────────────
+   THE NAVY BUNDLE CARD — base, two corner glows, optional border
+
+   Consumed by `promotion_bundle` alone, via the two gated helpers
+   `bundleGlowFor` / `cardBorderFor` (lib/pageBuilder/presets.js). The classes
+   are STATIC and the author's colours arrive as inline custom properties, which
+   is the same division the custom-background block above uses and for the same
+   reason: a class built by interpolation (`bg-[${hex}]`) is not in the source
+   Tailwind scans, so it emits no CSS at all and the colour silently vanishes.
+
+   ── THE BASE IS THEME-INVARIANT, ON PURPOSE ──────────────────────────────
+   `--9e-navy` is #0D1B2A in BOTH the `:root` and `.dark` blocks of this file,
+   so one declaration paints both site themes and there is no `.dark` form to
+   write. That is the round's design — a bundle card is navy whatever the
+   visitor's theme — and it is why the renderer also scopes `class="dark"` onto
+   the card: the base no longer follows the theme, so everything INSIDE it must
+   be told which token set it is sitting on, or `--text-primary` would resolve
+   to #0D1B2A navy-on-navy in light mode.
+
+   ── WHY radial-gradient AND NOT TWO ABSOLUTE DIVS ────────────────────────
+   Two positioned children would need `relative` on the card and would sit in
+   the stacking context the card's own content uses; `background-image` stacks
+   below content with no extra elements and no z-index to reason about. Two
+   comma-separated layers paint in order, first on top.
+
+   ── THE OPACITY IS OURS, NOT THE AUTHOR'S, AND IT IS A CONTRAST CAP ──────
+   `color-mix` at 28% is what keeps the card readable whatever colour is picked.
+   Measured against #F8FAFD title text over #0D1B2A:
+
+     default blue   #1D4ED8 @28%  ->  13.46:1
+     default copper #C2674B @28%  ->  11.89:1
+     worst single pick (#FFFFFF)  ->   6.61:1
+
+   All well past AA. The one shape that fails is a near-white pick on BOTH
+   glows where their peaks overlap (3.38:1) — which the 60% radii at opposite
+   corners keep apart, since the two centres are a full diagonal from each
+   other and only the faded tails meet. Reported rather than engineered around:
+   an author who paints both corners white has chosen a washed card, and the
+   cap is what stops that being the default outcome of any ordinary colour.
+
+   `color-mix(in srgb, …)` rather than a hand-decomposed rgba(): the author's
+   value is a #RRGGBB string, and mixing it with `transparent` is the only form
+   that takes an opaque hex and yields a translucent stop without the renderer
+   having to parse the hex into channels. Already used elsewhere in this file.
+   ────────────────────────────────────────────────────────────── */
+.pb-bundle-surface {
+  background-color: var(--9e-navy);
+  background-image:
+    radial-gradient(
+      60% 60% at 0% 100%,
+      color-mix(in srgb, var(--bundle-glow-left) 28%, transparent) 0%,
+      transparent 100%
+    ),
+    radial-gradient(
+      60% 60% at 100% 0%,
+      color-mix(in srgb, var(--bundle-glow-right) 28%, transparent) 0%,
+      transparent 100%
+    );
+}
+
+/* The border is a SEPARATE class so that "off" is the absence of a rule rather
+   than a rule setting width 0 — an off border leaves no trace in the markup,
+   which is what makes it testable by looking at the element. It is applied by
+   BOTH card styles. */
+.pb-bundle-border {
+  border-width: var(--bundle-border-width);
+  border-style: solid;
+  border-color: var(--bundle-border-color);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   A LIGHT COURSE TILE INSIDE THE NAVY BUNDLE CARD
+
+   The navy card scopes `dark` onto itself so the fourteen semantic-token sites
+   inside it resolve dark. The course tiles in its right column must go the
+   other way: they are light cards sitting ON the navy, so everything in them
+   has to read as a light-surface element.
+
+   ── WHY THIS IS A TOKEN RE-DECLARATION AND NOT A `.light` CLASS ──────────
+   There is no light-scope selector in this file to reuse. The light values are
+   declared on `:root` only, and `.dark` overrides them — so "go back to light"
+   has to be spelt out, which is what this block is. Every token listed is one
+   the tile subtree actually reads; nothing is re-declared speculatively.
+
+   ── `--surface` IS #F8FAFD HERE, NOT #FFFFFF ─────────────────────────────
+   The one value that is NOT simply the `:root` light value. The round asked for
+   a #F8FAFD tile, and the tile already paints `bg-[var(--surface)]` — so
+   setting the token is how the requested colour arrives with no class edit at
+   all. Pure white would also be legible; #F8FAFD is what was specified, and it
+   reads as a tile rather than a hole punched in the card.
+
+   ── WHAT THIS BLOCK CANNOT DO, AND WHO HANDLES IT ────────────────────────
+   It cannot reach Tailwind's `dark:` utilities. MEASURED with the repo's own
+   compiler (test/twCompile.mjs):
+
+     dark:bg-9e-navy  ->  .dark\:bg-9e-navy:is(.dark *) { … }
+
+   `:is(.dark *)` matches a descendant of ANY `.dark` ancestor — there is no
+   closest-ancestor-wins rule — so the card's own `dark` class keeps those
+   utilities firing however deeply they are nested inside this scope, and they
+   hard-code their colour rather than reading a var, so re-declaring tokens
+   cannot touch them. The THREE class strings in the tile that carry a `dark:`
+   variant are stripped in the renderer instead, by `withoutDarkVariants`
+   (lib/pageBuilder/presets.js) — see the note there for why that beats the
+   three alternatives.
+
+   So the division is: VARIABLES here, CLASSES in the renderer. Neither half is
+   sufficient alone and the comment in each names the other.
+   ────────────────────────────────────────────────────────────── */
+.pb-bundle-tile-light {
+  --surface:        #F8FAFD;          /* the round's tile colour, not :root's #FFFFFF */
+  --surface-border: rgba(13, 27, 42, 0.12);
+  --text-primary:   #0D1B2A;
+  --text-secondary: #465469;
+  --9e-orange-800:  #FFE9D3;          /* the round-dates box: border */
+  --9e-orange-900:  #FFF4E9;          /* the round-dates box: fill   */
+}
+
+/* ──────────────────────────────────────────────────────────────
    PROSE ON AN AUTHOR-CHOSEN SECTION BACKGROUND
    Round A-fix 3. The last gap the muted-token round measured.
 

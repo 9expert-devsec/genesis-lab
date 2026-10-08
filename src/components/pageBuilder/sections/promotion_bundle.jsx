@@ -4,16 +4,45 @@ import { GraduationCap } from 'lucide-react';
 
 import { cn, formatBaht, courseHref } from '@/lib/utils';
 /**
- * `backgroundClass` and `ratioClass` are REUSED rather than re-spelt. Both are
- * single-source maps this module already owns for the two_column type, and
- * writing `bg-[var(--pb-bg-soft-gray)]` or `lg:grid-cols-[3fr_7fr]` by hand here
- * would be a second copy of a value that is allowed to change in one place.
+ * `ratioClass` is REUSED rather than re-spelt. It is a single-source map this
+ * module already owns for the two_column type, and writing
+ * `lg:grid-cols-[3fr_7fr]` by hand here would be a second copy of a value that
+ * is allowed to change in one place.
+ *
+ * `backgroundClass` is BACK, and `cardSurfaceClass` is still gone. The two were
+ * removed together by the navy round and only one of them should have been:
+ *
+ *   · `backgroundClass('soft_gray')` is the สีขาว style's surface, and it
+ *     returns. The navy round's objection was never to the function — it was
+ *     that the call was UNCONDITIONAL, so the card painted soft gray whatever
+ *     the author chose. It is now inside the `light` branch, which is what the
+ *     author chose when they chose it. (The panel's own background control
+ *     remains inert for this type: the card paints its own surface in both
+ *     styles. That is recorded in docs/section-control-audit.md rather than
+ *     fixed here.)
+ *   · `cardSurfaceClass` stays OUT. It read `style.cardStyle`, a cap
+ *     `promotion_bundle` no longer declares — and neither whole-card style can
+ *     express it, so this is not a removal to revisit when the light style came
+ *     back. Removing the read and removing the control are one edit (2C.3).
  */
 import {
-  cardSurfaceClass,
   accentButtonClass,
-  backgroundClass,
   ratioClass,
+  backgroundClass,
+} from '@/lib/pageBuilder/presets';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The navy round's two gated helpers: each returns the
+// static class AND the inline custom properties carrying the author's colours,
+// because an interpolated Tailwind arbitrary value emits no CSS here.
+import { bundleGlowFor, cardBorderFor } from '@/lib/pageBuilder/presets';
+// ADDED beside the statement above rather than folded into it. The
+// selectable-card round: which whole-card style this section takes, the class
+// that forces a course tile onto the light token set, and the filter that takes
+// the `dark:` utilities out of the tile's three class strings.
+import {
+  bundleCardThemeFor,
+  withoutDarkVariants,
+  BUNDLE_TILE_LIGHT_CLASS,
 } from '@/lib/pageBuilder/presets';
 import { discountPercent } from '@/lib/pageBuilder/bundlePricing';
 // The ONE definition of "is this bundle taking registrations". Imported rather
@@ -135,7 +164,23 @@ import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
  * here about such a round getting "no registration link either" is gone with
  * the link: no round of any state has one now.
  */
-function BundleItemCard({ entry, item, todayKey, currentYear }) {
+function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false }) {
+  /**
+   * ── THE TILE'S HALF OF THE LIGHT SCOPE ──────────────────────────────────
+   * `.pb-bundle-tile-light` (globals.css) re-declares the semantic TOKENS this
+   * subtree reads, which covers every var-based colour in it — the tile
+   * surface and border, the title, the round-dates box, the detail button. It
+   * cannot touch Tailwind's `dark:` utilities: they compile to
+   * `:is(.dark *)`, which matches a descendant of ANY `.dark` ancestor, so the
+   * card's own `dark` class keeps them firing however deeply they nest, and
+   * they hard-code their colour rather than reading a var.
+   *
+   * `lit` is that other half. The three class strings in this component that
+   * carry a `dark:` variant go through it, and ONLY when the card is navy —
+   * so the สีขาว tile keeps its `dark:` forms and renders exactly as it did
+   * before this round.
+   */
+  const lit = (cls) => (lightScope ? withoutDarkVariants(cls) : cls);
   const course = entry?.course ?? null;
   const code = String(entry?.courseId ?? item?.courseId ?? '').trim();
   const round = chooseItemRound(entry?.rounds, item, todayKey);
@@ -215,9 +260,14 @@ function BundleItemCard({ entry, item, todayKey, currentYear }) {
         this week — the next text node added inside would inherit, and would do
         it silently.
       */
-      className="flex flex-col overflow-hidden rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] text-[var(--text-primary)]"
+      className={cn(
+        'flex flex-col overflow-hidden rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] text-[var(--text-primary)]',
+        // The token re-declaration. Every colour above is a var, so this one
+        // class repaints the whole tile light without touching any of them.
+        lightScope && BUNDLE_TILE_LIGHT_CLASS,
+      )}
     >
-      <div className="relative aspect-video w-full bg-9e-ice dark:bg-9e-navy">
+      <div className={lit('relative aspect-video w-full bg-9e-ice dark:bg-9e-navy')}>
         {cover ? (
           <Image src={cover} alt={title} fill sizes="(min-width: 1024px) 320px, 100vw" className="object-cover" />
         ) : (
@@ -240,7 +290,7 @@ function BundleItemCard({ entry, item, todayKey, currentYear }) {
            * page is not broken, one reference has gone stale, and the author is
            * who can fix it.
            */
-          <p data-testid="bundle-item-unresolved" className="text-sm font-bold text-amber-700 dark:text-amber-400">
+          <p data-testid="bundle-item-unresolved" className={lit('text-sm font-bold text-amber-700 dark:text-amber-400')}>
             {code || 'ไม่ได้ระบุคอร์ส'}
             <span className="mt-0.5 block text-xs font-normal">ไม่พบคอร์สนี้แล้ว</span>
           </p>
@@ -284,7 +334,15 @@ function BundleItemCard({ entry, item, todayKey, currentYear }) {
         {derived && (
           <span
             data-testid="bundle-item-round-state"
-            className={cn('self-start rounded-full px-2 py-0.5 text-[11px] font-bold', derived.soft)}
+            /**
+             * `derived.soft` is built in lib/scheduleStatus.js and shared with
+             * the registration carousel and other sections, so its output is
+             * not ours to change. Stripping its `dark:` half at the point of
+             * use is how the navy card gets the light form without touching a
+             * module five other callers depend on. Semantic colour is
+             * otherwise untouched: which status it is still decides the hue.
+             */
+            className={cn('self-start rounded-full px-2 py-0.5 text-[11px] font-bold', lit(derived.soft))}
           >
             {derived.action}
           </span>
@@ -314,10 +372,31 @@ function BundleItemCard({ entry, item, todayKey, currentYear }) {
         */}
         {detailHref && (
           <div className="mt-auto pt-2">
+            {/*
+              ── IT NEEDED NO RECOLOURING, AND THAT IS THE LIGHT SCOPE WORKING
+              Border and text are both TOKENS, so `.pb-bundle-tile-light`
+              already gives this the dark outline and dark text the round asked
+              for on the #F8FAFD tile — rgba(13,27,42,0.12) and #0D1B2A. The
+              hover pair is `9e-action` (#005CFF), declared once in `:root` with
+              no dark form, so it is the same visible blue on either surface.
+
+              `focus-visible` is ADDED, and it is the one thing here that was
+              missing rather than merely untested: the button had a hover state
+              and no focus state at all, so a keyboard user following the tile's
+              one link had nothing to see. It uses the same `9e-action` as the
+              hover so the two read as one affordance, and `ring-offset` picks
+              up the tile's own surface token — which means it works on both
+              card styles without a second rule.
+
+              Unconditional rather than navy-only. It is invisible until
+              keyboard focus, so the สีขาว tile still LOOKS exactly as it did,
+              which is what R2 asks; scoping an accessibility fix to one style
+              would be the odder choice.
+            */}
             <Link
               href={detailHref}
               data-testid="bundle-item-detail"
-              className="inline-flex w-full items-center justify-center rounded-9e-md border border-[var(--surface-border)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] hover:border-9e-action/40 hover:text-9e-action"
+              className="inline-flex w-full items-center justify-center rounded-9e-md border border-[var(--surface-border)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] hover:border-9e-action/40 hover:text-9e-action focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-9e-action focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
             >
               รายละเอียดหลักสูตร
             </Link>
@@ -406,9 +485,55 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
   const todayKey = siteTodayKey();
   const currentYear = siteCurrentYear();
 
+  /**
+   * ── THE NAVY SURFACE, ITS GLOWS AND ITS OPTIONAL BORDER ──────────────────
+   * Both helpers gate on `SECTION_STYLE_CAPS` before reading anything, so the
+   * props cannot be read by a type that is not offered the controls. Each hands
+   * back `{ className, vars }`; the border's are BOTH empty when the author has
+   * not switched it on, so spreading them unconditionally is safe and an off
+   * border leaves no trace at all.
+   */
+  const glow = bundleGlowFor('promotion_bundle', style);
+  const border = cardBorderFor('promotion_bundle', style);
+
+  /**
+   * ── WHICH OF THE TWO WHOLE-CARD STYLES ──────────────────────────────────
+   * `light` is the resolved default, so a section with nothing stored — which
+   * is every section authored before this field existed — takes the pre-navy
+   * card. `glow` is already empty for a light card (the gate is in
+   * `bundleGlowFor`), so this flag decides only the two things the resolver
+   * cannot: which SURFACE class to apply, and whether to scope `dark`.
+   */
+  const isNavy = bundleCardThemeFor('promotion_bundle', style) === 'navy';
+
   return (
     <div
       data-pb-bundle=""
+      /**
+       * ── `dark` IS SCOPED ONTO THE CARD, AND IT IS LOAD-BEARING ───────────
+       * The base is the navy token in BOTH site themes, so the card no longer
+       * follows the theme it sits in — but everything inside it still reads the
+       * semantic tokens, and in LIGHT mode `--text-primary` is #0D1B2A. That is
+       * the navy itself: the title would be navy-on-navy, invisible, and the
+       * round-dates box and course rows would paint their light forms on a dark
+       * ground.
+       *
+       * `darkMode: 'class'` (tailwind.config.js) plus `.dark { --token: … }` as
+       * a BARE class selector in globals.css is what makes this work in one
+       * attribute: custom properties inherit, so re-declaring them here hands
+       * the whole subtree the dark set, and Tailwind's `dark:` variants compile
+       * to `.dark &` so every `dark:` class on a DESCENDANT activates too. One
+       * attribute, and the fourteen colour sites inside the card are correct
+       * without being touched — which is why this is the mechanism rather than
+       * repainting each of them.
+       *
+       * Nesting it inside the real `.dark` on <html> is a no-op: same selector,
+       * same values.
+       *
+       * The card ROOT's own `dark:` variants would NOT activate (an element is
+       * not its own descendant). It has none, and must not grow any — its
+       * colours come from the navy class and the two helpers.
+       */
       className={cn(
         'grid grid-cols-1 gap-6 rounded-9e-lg p-6',
         // A THIRD AND THE REST, and it stacks below `lg` — which is the mobile
@@ -416,9 +541,22 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
         // a customer on a phone meets the price and the button before the course
         // list, exactly as the desktop reading order does.
         ratioClass('30-70'),
-        backgroundClass('soft_gray'),
-        cardSurfaceClass('promotion_bundle', style),
+        /**
+         * THE SURFACE, AND THE ONE THING THAT MUST NOT LEAK BETWEEN STYLES.
+         * `glow.className` carries the navy base; `backgroundClass('soft_gray')`
+         * is the สีขาว surface. Exactly one is applied, because applying both
+         * would paint navy under soft gray (the glow layers are a
+         * background-IMAGE, so a background-color beside them would show
+         * through their transparent tails).
+         *
+         * `dark` is scoped for navy ONLY. For สีขาว its absence IS the feature:
+         * the card follows the site theme again, which is what the pre-navy
+         * card did and what this style exists to restore.
+         */
+        isNavy ? cn('dark', glow.className) : backgroundClass('soft_gray'),
+        border.className,
       )}
+      style={{ ...glow.vars, ...border.vars }}
     >
       {/*
         ── THE LEFT COLUMN: the offer ────────────────────────────────────────
@@ -438,10 +576,43 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
         `w-fit` rather than an inline-block: this is a flex column, so a bare
         <span> would stretch to the full width and read as a bar.
       */}
+      {/*
+        ── THE EYEBROW: LIME ON THE NAVY, NOT A NAVY PILL ON SOFT GRAY ──────
+        It was `bg-9e-navy` + `text-9e-lime` — a dark pill, which is what a lime
+        word needs when the card behind it is soft gray. The card is navy now,
+        so that pill is navy-on-navy: an invisible box around visible text, and
+        the padding it still reserved made the eyebrow sit lower than the
+        reference's.
+
+        A VERY SUBTLE LIME TINT, not transparent. `bg-9e-lime/10` keeps the
+        shape legible as a deliberate eyebrow rather than a stray line, and the
+        opacity modifier is available here because `9e-lime` is a plain hex in
+        tailwind.config.js (#D4F73F) — this is a static class Tailwind scans,
+        not an interpolated arbitrary value.
+
+        The lime token is theme-invariant (`--9e-lime` is #D4F73F in both the
+        `:root` and `.dark` blocks), so it needs no dark form and the scoped
+        `dark` on the card root does not change it. Measured on #0D1B2A:
+        14.23:1.
+
+        ── AND THE NAVY PILL IS BACK, FOR สีขาว ────────────────────────────
+        Both forms now exist because both cards do. The navy pill is the
+        pre-navy-round eyebrow restored BYTE-IDENTICALLY — `bg-9e-navy` +
+        `text-9e-lime` — because on a soft-gray card a lime word needs a dark
+        ground behind it, which is the whole reason it was a pill in the first
+        place. The tint form is for the navy card, where that pill would be
+        navy-on-navy: an invisible box around visible text.
+
+        Which is to say the two are not a style preference between them: each is
+        the only legible form on its own surface.
+      */}
       {label && (
         <span
           data-testid="bundle-label"
-          className="w-fit rounded-9e-sm bg-9e-navy px-2.5 py-1 text-xs font-bold text-9e-lime"
+          className={cn(
+            'w-fit rounded-9e-sm px-2.5 py-1 text-xs font-bold text-9e-lime',
+            isNavy ? 'bg-9e-lime/10 tracking-wide' : 'bg-9e-navy',
+          )}
         >
           {label}
         </span>
@@ -614,10 +785,41 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
                   สมัคร Bundle นี้
                 </Link>
               )}
+              {/*
+                ── THE CHIP MOVES FROM THE ACCENT'S TEXT TO ITS FILL/ON PAIR ──
+                It was `--pb-accent-text` on no background. That was right on
+                soft gray and is NOT right on navy: `--pb-accent-text` for the
+                default `brand_blue` resolves to `--9e-action` (#005CFF), which
+                is declared in `:root` only — it has no dark form, so the scoped
+                `dark` on the card root cannot help it. MEASURED on #0D1B2A:
+                3.29:1, below AA for 14px bold text. The navy base degraded this
+                one element, so it is corrected in the same round rather than
+                left as a regression the design shipped with.
+
+                `--pb-accent-fill` + `--pb-accent-on` is the SANCTIONED pair for
+                "text on the accent" and needs no new mechanism: presets.js
+                already picks `on` by contrast (`accentContrastOk` gives a dark
+                accent the light token and a pale one the dark token), so this
+                is legible for a CUSTOM accent too, not just the five presets.
+                Measured for each preset pair: brand_blue 5.05, navy 16.64,
+                cyan 8.42, orange 7.73, green 6.98 — all past AA.
+
+                THE SECTION STAYS AN ACCENT CONSUMER, which matters beyond
+                looks: test/pure/sectionControlAudit asserts the direct-consumer
+                set as an EXACT list and its message says a REMOVAL "means a
+                type stopped following the author's accent, which is the
+                original defect coming back". This still reads `--pb-accent-*`,
+                so the chip remains the surface that keeps `promotion_bundle` in
+                that set — see the doc's addendum, which now cites this element.
+
+                The border drops `--surface-border` with it: a 1px border the
+                same value as the fill it surrounds is invisible, and on the
+                navy it was nearly so anyway.
+              */}
               {code && (
                 <code
                   data-testid="bundle-code"
-                  className="rounded-9e-sm border border-[var(--surface-border)] px-3 py-2 font-en text-sm font-bold tracking-wider text-[var(--pb-accent-text)]"
+                  className="rounded-9e-sm bg-[var(--pb-accent-fill)] px-3 py-2 font-en text-sm font-bold tracking-wider text-[var(--pb-accent-on)]"
                 >
                   {code}
                 </code>
@@ -746,6 +948,14 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
                       entry={resolved[i] ?? null}
                       todayKey={todayKey}
                       currentYear={currentYear}
+                      /**
+                       * A LIGHT tile is needed exactly when the CARD is dark.
+                       * Passed as the card's own question rather than as
+                       * `theme`, so the tile does not have to know the
+                       * vocabulary — if a third dark style ever lands, this
+                       * call site changes and the tile does not.
+                       */
+                      lightScope={isNavy}
                     />
                   ))}
                 </ul>
