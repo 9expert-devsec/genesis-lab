@@ -26,22 +26,53 @@ const EMPTY_ATTENDEE = { firstName: '', lastName: '', email: '', phone: '' };
  * server-side from the coordinator, so we hide index 0 and label the
  * visible forms starting at "ท่านที่ 2".
  *
- * Keeps the `attendees` field array in sync with `attendeesCount` and
- * `coordinator.isAttending` — RHF's useFieldArray is the source of
- * truth for attendee ordering and ids.
+ * ── ONE SOURCE OF TRUTH: THE COUNT. THE ARRAY FOLLOWS IT. ─────────────────
+ *
+ * `attendeesCount` (the select) and the `attendees` field array were TWO
+ * sources of truth reconciled by a DELTA: the effect below computed how many
+ * rows were missing and called `append` once per row, or `remove` once per
+ * extra row, against a `fields.length` captured in the render that scheduled
+ * it. That shape is wrong in a way that is invisible most of the time and
+ * produces exactly one symptom when it is not:
+ *
+ *   TWO CARDS UNDER A SELECT THAT SAYS 1.
+ *
+ * Any second invocation of the effect that still sees the pre-append length —
+ * and `next.config.mjs` sets `reactStrictMode: true`, so in development React
+ * mounts, unmounts and mounts again, running every effect twice with the first
+ * render's closure — applies the same delta twice. A delta applied twice is
+ * 2n rows for a count of n. The effect did converge on a later pass, which is
+ * why this was intermittent rather than constant, and why it survived: it is
+ * a race, not a branch.
+ *
+ * It is now a RECONCILIATION and not a delta. One `replace` to exactly the
+ * required length, built from the values the form currently holds, so running
+ * it once, twice or ten times lands on the same array. `fields.length` can
+ * never end up anywhere but `target`, whatever order the renders arrive in.
+ *
+ * `getValues` rather than the `fields` from `useFieldArray`: those entries
+ * carry the values as of the last ARRAY MUTATION, not the live ones, so
+ * rebuilding from them would wipe everything typed since — the shrink path
+ * would silently clear rows 1 and 2 on the way from three attendees to two.
+ *
+ * useFieldArray remains the source of truth for attendee ORDERING and IDS.
  *
  * Props:
  * - control:      RHF control
  * - register:     RHF register
  * - watch:        RHF watch
  * - setValue:     RHF setValue (for the inverted skip-list checkbox)
+ * - getValues:    RHF getValues — the LIVE attendee values, read only when the
+ *                 array length has to change. Not `watch`: that would
+ *                 re-render this whole section on every keystroke in every
+ *                 attendee field, and the values are needed once per resize.
  * - errors:       RHF errors
  * - isSubmitted:  RHF formState.isSubmitted — see CoordinatorFields' note on
  *                 useRevealFieldError; threaded down to each AttendeeBlock's
  *                 phone field.
  */
-export function AttendeesList({ control, register, watch, setValue, errors, isSubmitted }) {
-  const { fields, append, remove } = useFieldArray({
+export function AttendeesList({ control, register, watch, setValue, getValues, errors, isSubmitted }) {
+  const { fields, replace } = useFieldArray({
     control,
     name: 'attendees',
   });
@@ -83,22 +114,32 @@ export function AttendeesList({ control, register, watch, setValue, errors, isSu
     coordinatorIsAttending ? count - 1 : count
   );
 
-  // Sync the field array length to `required` when count / isAttending /
-  // listProvided change. When list is skipped we keep attendees at []
-  // so nothing is persisted that the user didn't actually fill in.
+  /**
+   * HOW MANY ROWS THIS FORM SHOULD HOLD — the single number the array follows.
+   * Zero when the user opted out, so nothing is persisted that they never
+   * filled in.
+   */
+  const target = listProvided ? required : 0;
+
+  /**
+   * ONE IDEMPOTENT WRITE. See the note at the top of this file for why this is
+   * a `replace` to the target rather than a delta of appends and removes.
+   *
+   * ALSO WHAT KEEPS A RESTORED DRAFT HONEST. A draft can hold more attendee
+   * rows than its own saved `attendeesCount` — set the count to 3, fill three,
+   * drop it to 1, leave the step — and the rows beyond the count must not
+   * survive into the payload. `replace` TRUNCATES to `target`, so a row nobody
+   * can see on screen is a row nobody submits either; the old shrink path
+   * reached the same place only if its effect got to run.
+   */
   useEffect(() => {
-    if (!listProvided) {
-      // Drop all if user opts out
-      for (let i = fields.length - 1; i >= 0; i--) remove(i);
-      return;
-    }
-    if (fields.length < required) {
-      const missing = required - fields.length;
-      for (let i = 0; i < missing; i++) append(EMPTY_ATTENDEE);
-    } else if (fields.length > required) {
-      for (let i = fields.length - 1; i >= required; i--) remove(i);
-    }
-  }, [required, listProvided, fields.length, append, remove]);
+    if (fields.length === target) return;
+    const current = getValues?.('attendees');
+    const live = Array.isArray(current) ? current : [];
+    replace(
+      Array.from({ length: target }, (_, i) => ({ ...EMPTY_ATTENDEE, ...(live[i] ?? {}) })),
+    );
+  }, [target, fields.length, replace, getValues]);
 
   return (
     <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
