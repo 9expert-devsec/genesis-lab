@@ -1,6 +1,10 @@
 import { headers } from 'next/headers';
 import { AdminSidebar } from '@/components/layout/AdminSidebar';
 import { AdminContentWrapper } from '@/components/layout/AdminContentWrapper';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The SAME route list the wrapper uses for its padding;
+// see that module for the measurement behind main's overflow below.
+import { isFullHeightRoute } from '@/lib/admin/fullHeightRoutes';
 import { PresenceHeartbeat } from '@/components/admin/PresenceHeartbeat';
 import { auth } from '@/lib/auth/options';
 import { dbConnect } from '@/lib/db/connect';
@@ -98,7 +102,33 @@ export default async function AdminLayout({ children }) {
         userEmail={user?.email ?? null}
         userImagePublicId={userImagePublicId}
       />
-      <main className="relative h-screen flex-1 overflow-y-auto bg-[var(--page-bg)]">
+      {/*
+        ── `main` IS NOT A SCROLL CONTAINER ON A FULL-HEIGHT ROUTE ─────────
+        On those routes the page inside is exactly `100dvh`, so there is
+        nothing for `main` to scroll — but while it remains a scroll
+        container something OTHER than the user can scroll it, and did.
+
+        MEASURED in Chrome at 1920x945 on a builder edit page with a
+        promotion_bundle section selected: `main.scrollHeight` 1078 against
+        `clientHeight` 945, and focusing the first sr-only toggle checkbox
+        in the settings panel scrolled `main` to 133 — taking the editor's
+        top toolbar off-screen and leaving a 133px blank band below the
+        columns. The 133px is not an element anyone can delete: `hidden` on
+        the wrapper, on main, on the grid and on the panel all left
+        scrollHeight at 1078.
+
+        `overflow-y-clip`, NOT `hidden`. `hidden` still establishes a scroll
+        container — it only removes the scrollbar and user scrolling — and
+        measured 133 all the same. `clip` establishes none, and measured 0.
+
+        Every OTHER admin route keeps `overflow-y-auto`: a list or a form
+        page is content-height and genuinely needs `main` to scroll.
+      */}
+      <main
+        className={`relative h-screen flex-1 bg-[var(--page-bg)] ${
+          isFullHeightRoute(pathname) ? 'overflow-y-clip' : 'overflow-y-auto'
+        }`}
+      >
         <AdminContentWrapper>{children}</AdminContentWrapper>
       </main>
     </div>

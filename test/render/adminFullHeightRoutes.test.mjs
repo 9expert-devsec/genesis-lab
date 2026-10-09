@@ -5,6 +5,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { __setPathname } from 'next/navigation';
 import { AdminContentWrapper } from '@/components/layout/AdminContentWrapper';
 import { readSource } from '../sourceScan.mjs';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The route list moved out of the wrapper when the layout
+// became a second reader of it.
+import { isFullHeightRoute } from '@/lib/admin/fullHeightRoutes';
 
 /**
  * A viewport-height page must not sit inside a padded, scrolling wrapper.
@@ -320,4 +324,127 @@ test('CONTROL: a course id that merely CONTAINS "edit" is not opted out', () => 
   // accidentally lose its padding.
   assert.equal(padded(wrapperFor('/admin/courses/edit-suite')), true);
   assert.equal(padded(wrapperFor('/admin/courses/edit-suite/')), true);
+});
+
+// ── `main` must not be a SCROLL CONTAINER on a full-height route ──────────
+
+/**
+ * ── THE SECOND HALF OF THE SAME ARITHMETIC, AND WHY IT IS A SEPARATE BUG ──
+ * The padding half above makes the content TALLER than `main`. This half is
+ * the reverse: the content fits exactly, and `main` is scrolled anyway.
+ *
+ * MEASURED in Chrome at 1920×945 on `/admin/pages/builder/<id>/edit` with a
+ * `promotion_bundle` section selected: `main.scrollHeight` 1078 against
+ * `clientHeight` 945, and focusing the first `sr-only` toggle checkbox in the
+ * settings panel scrolled `main` to 133 — the editor's top toolbar off-screen
+ * and a 133px blank band under the columns.
+ *
+ * The 133px could not be removed: `overflow: hidden` on the wrapper, on `main`,
+ * on the grid and on the settings panel each left `scrollHeight` at 1078. So
+ * the rule is about SCROLLABILITY rather than about height, and the assertions
+ * below are about which overflow value the layout picks.
+ */
+
+test('the layout makes `main` overflow-y-CLIP on full-height routes and AUTO elsewhere', () => {
+  const { code } = readSource('src/app/admin/layout.jsx');
+  assert.match(
+    code, /isFullHeightRoute\(pathname\)\s*\?\s*'overflow-y-clip'\s*:\s*'overflow-y-auto'/,
+    'the layout no longer picks main\u2019s overflow from the route',
+  );
+  // And the unconditional `overflow-y-auto` is gone from the class string, or
+  // the ternary would be decoration over a rule that still always scrolls.
+  assert.doesNotMatch(
+    code, /className="relative h-screen flex-1 overflow-y-auto/,
+    'main is still unconditionally scrollable',
+  );
+});
+
+test('CLIP, not HIDDEN — and the distinction is the whole fix', () => {
+  // `overflow: hidden` still establishes a scroll container: it removes the
+  // scrollbar and user scrolling and leaves the element perfectly scrollable by
+  // focus(), scrollIntoView and `scrollTop =`. MEASURED: with hidden on main,
+  // focusing that same checkbox still moved it 133. This pins the value so a
+  // later "tidy-up" to `overflow-hidden` cannot silently restore the bug.
+  const { code } = readSource('src/app/admin/layout.jsx');
+  const at = code.indexOf('isFullHeightRoute(pathname)');
+  assert.ok(at > 0, 'the route check is gone');
+  const expr = code.slice(at, at + 120);
+  assert.doesNotMatch(expr, /overflow-hidden|overflow-y-hidden/, 'hidden is not sufficient here');
+});
+
+test('the route list has ONE definition, read by both the layout and the wrapper', () => {
+  // It used to live inside the wrapper (a client module) and now has a server
+  // reader too. Two copies would be two lists obliged to agree about every
+  // route forever.
+  for (const rel of [
+    'src/app/admin/layout.jsx',
+    'src/components/layout/AdminContentWrapper.jsx',
+  ]) {
+    // The USAGE, not the import line: readSource strips imports, and what
+    // matters is that both files ASK the shared predicate rather than
+    // deciding for themselves.
+    assert.match(
+      readSource(rel).code, /isFullHeightRoute\(/,
+      `${rel} does not call the shared route predicate`,
+    );
+  }
+  // And the patterns exist in exactly one place.
+  assert.doesNotMatch(
+    readSource('src/components/layout/AdminContentWrapper.jsx').code,
+    /FULL_HEIGHT_ROUTES\s*=/,
+    'the wrapper grew its own copy of the list again',
+  );
+});
+
+test('the predicate matches every full-height family and NO list route', () => {
+  // The regression this guards is one-sided and quiet: a list route wrongly
+  // matched loses `main`'s scrolling and simply cannot be scrolled to the
+  // bottom, with nothing on screen to explain why.
+  for (const path of [
+    '/admin/pages/builder/new',
+    '/admin/pages/builder/abc123/edit',
+    '/admin/pages/new',
+    '/admin/pages/abc123/edit',
+    '/admin/articles/new',
+    '/admin/articles/abc123/edit',
+    '/admin/courses/new',
+    '/admin/courses/abc123/edit',
+  ]) {
+    assert.equal(isFullHeightRoute(path), true, `${path} should be full-height`);
+  }
+
+  for (const path of [
+    '/admin',
+    '/admin/pages',
+    '/admin/articles',
+    '/admin/courses',
+    '/admin/courses/abc123',
+    '/admin/registrations',
+    '/admin/403',
+    '',
+  ]) {
+    assert.equal(isFullHeightRoute(path), false, `${path} must keep a scrollable main`);
+  }
+});
+
+test('the predicate tolerates a non-string pathname', () => {
+  for (const v of [undefined, null, 0, {}, []]) {
+    assert.equal(isFullHeightRoute(v), false, `${JSON.stringify(v)} should not match`);
+  }
+});
+
+// ── the panel's own focus must not yank a scroller either ─────────────────
+
+test('the course picker re-focuses with preventScroll', () => {
+  /**
+   * Moving a row re-focuses the button that moved. A bare `focus()` scrolls
+   * EVERY scrollable ancestor to reveal it — `main` (now clipped) and the
+   * settings panel (still a scroller, 2050px of content). The route-level fix
+   * handles the first; this handles the one the author actually notices when
+   * the row they moved is near the bottom of the panel.
+   */
+  const { code } = readSource('src/components/pageBuilder/editor/CoursePicker.jsx');
+  assert.match(code, /\.focus\(\{\s*preventScroll:\s*true\s*\}\)/);
+  // No bare `.focus()` left in that file.
+  assert.doesNotMatch(code, /\.focus\(\)\s*;/, 'a bare focus() came back');
 });
