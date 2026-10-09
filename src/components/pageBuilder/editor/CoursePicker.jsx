@@ -350,7 +350,16 @@ export function CourseIdsPicker({ value, onChange, courses = [], label, hint }) 
     const target = at(want.dir);
     const fallback = at(want.dir === 'up' ? 'down' : 'up');
     const el = target && !target.disabled ? target : fallback;
-    if (el && !el.disabled) el.focus();
+    /**
+     * `preventScroll`, and it is not belt-and-braces. Moving a row re-focuses
+     * the button that moved, and a bare `focus()` scrolls EVERY scrollable
+     * ancestor to reveal it — including `main`, which on this route had 133px
+     * of scrollable overflow nothing occupied. The route-level fix stops
+     * `main` being a scroll container at all; this stops the panel from being
+     * yanked either, which is the scroll the author actually notices when the
+     * row they moved is near the bottom of a 2000px panel.
+     */
+    if (el && !el.disabled) el.focus({ preventScroll: true });
   });
 
   // APPEND, never merge. Picking a course already in the list adds a second
