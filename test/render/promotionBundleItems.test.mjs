@@ -502,10 +502,14 @@ const CLOSED_D = { _id: 'rd', dates: ['2030-12-20'], status: 'closed', type: 'on
 const STARTED_E = { _id: 're', dates: ['2020-01-05'], status: 'open', type: 'online' };
 /**
  * A round that CROSSES A MONTH, so `formatRoundDays` has to print both months
- * and the label is far longer than any single-month one. The shared chip width
- * is derived from the longest label in a bundle, and this is the fixture that
- * makes "longest" mean something — without a label of a different length, the
- * width test could not tell a real maximum from a constant.
+ * and the label is far longer than any single-month one.
+ *
+ * IT USED TO FEED THE SHARED-WIDTH TESTS, which derived one chip width from
+ * the longest label in a bundle and needed a label of a different length to
+ * tell a real maximum from a constant. That width is gone with the stack it
+ * sized — see the carousel-track test — and this fixture now does the
+ * opposite job: the LONGEST label in a half-width box is the one that proves
+ * a box neither grows nor shrinks to fit its date.
  */
 const LONG_E = { _id: 'rlong', dates: ['2030-12-30', '2030-12-31', '2031-01-02'], status: 'open', type: 'online' };
 
@@ -652,58 +656,72 @@ test('CONTROL: the corner dot IS what the component draws by default', () => {
   assert.match(html, /class="absolute left-1 top-1 h-2\.5 w-2\.5 rounded-full"/);
 });
 
-test('the chips sit in a grid of ONE shared track, not one width each', () => {
+test('the boxes sit TWO to a scroll-snapped track, not one per row', () => {
   /**
-   * `w-max` per chip sized each to its own date, so a row of tiles came out
-   * ragged: `12-13 พ.ย. 69` beside `8-9 ธ.ค. 69` beside `27-28 ม.ค. 70`.
+   * WHAT THIS REPLACED. The chips filled a
+   * `grid-cols-[repeat(auto-fill,minmax(0,var(--bundle-chip-w)))]` track whose
+   * width was the longest date label in the whole bundle — about 5.2rem for a
+   * Thai round — which fits ONE column in a ~200-230px tile. So a five-round
+   * course stacked five chips one per row and the tile grew to roughly three
+   * times the height of its neighbours.
    *
-   * The chips now fill a FIXED grid track whose width the whole bundle
-   * shares. `minmax(0,…)` rather than the bare variable is the narrow-tile
-   * safety — a fixed track wider than its container overflows it, while this
-   * one shrinks and the date wraps. `auto-fill` with no `1fr` is what stops
-   * a single chip stretching across the tile.
+   * The shared width went with it, and nothing replaced it: two boxes at
+   * `calc(50% - 0.25rem)` are equal to each other and equal across every tile
+   * by construction, with no per-character estimate to go wrong in a fallback
+   * font. The absence probes below are the half that matters — a leftover grid
+   * class or a leftover `--bundle-chip-w` would both look fine and fight the
+   * track.
    */
-  const one = multi([{ id: 'ra' }], [OPEN_A]);
-  const list = one.querySelector('[data-testid="bundle-round-list"]');
-  const row = list.lastElementChild;
-  const rowCls = row.getAttribute('class');
-  assert.match(
-    rowCls,
-    /grid-cols-\[repeat\(auto-fill,minmax\(0,var\(--bundle-chip-w\)\)\)\]/,
-    `the chips are not in the shared-width track: ${rowCls}`,
+  // LONG_E is in here on purpose: it is the longest label the fixtures have,
+  // and a box that sized itself to its own date would betray it first.
+  const d = multi(
+    [{ id: 'ra' }, { id: 'rb' }, { id: 'rc' }, { id: 'rlong' }],
+    [OPEN_A, OPEN_B, FULL_C, LONG_E],
   );
-  // Not the two-column grid this replaced, and not a `1fr` track either —
-  // both of those stretch a lone chip across the whole tile.
-  assert.equal(/grid-cols-2/.test(rowCls), false, 'the two-column grid is back');
-  assert.equal(/1fr/.test(rowCls), false, 'a 1fr track would stretch a single chip');
+  const track = d.querySelector('[data-testid="bundle-round-track"]');
+  assert.notEqual(track, null, 'the carousel track is gone');
+  const cls = track.getAttribute('class') ?? '';
+  assert.match(cls, /\boverflow-x-auto\b/, `the track does not scroll: ${cls}`);
+  assert.match(cls, /\bsnap-x\b/, `the track does not snap: ${cls}`);
+  assert.match(cls, /\bsnap-mandatory\b/, `the track snaps only loosely: ${cls}`);
 
-  // EVERY chip fills its track and is still capped at the tile.
-  for (const d of [one, multi([{ id: 'ra' }, { id: 'rb' }, { id: 'rc' }], [OPEN_A, OPEN_B, FULL_C])]) {
-    const boxes = [...d.querySelectorAll('[data-testid="bundle-round-box"]')];
-    assert.ok(boxes.length > 0, 'no chips rendered');
-    for (const b of boxes) {
-      const cls = b.getAttribute('class') ?? '';
-      assert.match(cls, /\bw-full\b/, `a chip does not fill its track: ${cls}`);
-      assert.match(cls, /\bmax-w-full\b/, `a chip is not capped at the tile: ${cls}`);
-      assert.equal(/\bw-max\b/.test(cls), false, `a chip still sizes to its own date: ${cls}`);
+  assert.equal(
+    /grid-cols-/.test(cls), false,
+    `the old chip grid is back on the track: ${cls}`,
+  );
+  assert.equal(
+    /--bundle-chip-w/.test(d.body.innerHTML), false,
+    'the shared chip width is still being written somewhere',
+  );
 
-      /**
-       * AND NO `h-full` ON THE CHIP ITSELF. It is right for the course card,
-       * whose chips sit in grid cells of definite height, and wrong here:
-       * measured on a two-round tile at 207px, the percentage made both chips
-       * 76.8px — the height of the whole two-line row — beside 34.4px chips on
-       * every single-round tile. `content-start`, `items-start` and `shrink-0`
-       * were each tried on the row and each measured exactly the same 76.8;
-       * setting `height: auto` on the chip returned it to 34.4. So the class
-       * is the cause, and `fillHeight={false}` is how this caller drops it.
-       */
-      const chipCls = b.querySelector('[data-schedule-card]').getAttribute('class') ?? '';
-      assert.equal(
-        /\bh-full\b/.test(chipCls),
-        false,
-        `the chip takes its height from the row again: ${chipCls}`,
-      );
-    }
+  // Two in view, whatever the dates measure: each box takes half the track
+  // minus half the gap, and neither grows nor shrinks away from it.
+  const boxes = [...d.querySelectorAll('[data-testid="bundle-round-box"]')];
+  assert.equal(boxes.length, 4);
+  for (const b of boxes) {
+    const bc = b.getAttribute('class') ?? '';
+    assert.match(bc, /\bshrink-0\b/, `a box can shrink below half the track: ${bc}`);
+    assert.match(bc, /\bgrow-0\b/, `a box can grow past half the track: ${bc}`);
+    assert.match(bc, /\bsnap-start\b/, `a box is not a snap point: ${bc}`);
+    assert.match(bc, /\bmin-w-0\b/, `a long date will widen the track: ${bc}`);
+    assert.equal(
+      b.getAttribute('style'),
+      'flex-basis:calc(50% - 0.25rem)',
+      `a box is not half the track: ${b.getAttribute('style')}`,
+    );
+
+    /**
+     * AND NO `h-full` ON THE CHIP. It is 100% of the BOX, and the box now has
+     * a `รอบที่ k` label above the chip — so the percentage would overflow by
+     * the label's height. `flex-1` fills what is left instead, which is also
+     * what equalises the two chips when one date wraps and the other does not.
+     */
+    const chipCls = b.querySelector('[data-schedule-card]').getAttribute('class') ?? '';
+    assert.equal(
+      /\bh-full\b/.test(chipCls), false,
+      `the chip takes its height from the box: ${chipCls}`,
+    );
+    assert.match(chipCls, /\bflex-1\b/, `the chip does not fill its box: ${chipCls}`);
   }
 });
 
@@ -718,16 +736,23 @@ test('CONTROL: h-full IS what the component emits by default', () => {
   assert.match(html, /class="relative flex h-full flex-col/, 'the default chip lost h-full');
 });
 
-test('every tile heads its chips รอบอบรม, whatever the round count', () => {
+test('every tile heads its rounds รอบอบรมที่เข้าร่วม (N รอบ), counting its own', () => {
   /**
+   * TWO RULINGS, ONE LINE.
+   *
    * The heading used to be `offeredRows.length > 1 ? 'รอบที่เลือกได้' :
    * 'รอบอบรม'`, so a row of tiles labelled the same thing two different ways
    * depending on how many rounds each course happened to offer — a difference
-   * a reader has to account for before deciding it meant nothing.
+   * a reader has to account for before deciding it meant nothing. That ruling
+   * STANDS: the label does not change with the count.
+   *
+   * What it now carries is the count ITSELF, because only two rounds are on
+   * screen at a time and `(5 รอบ)` is what tells a visitor there is more to
+   * scroll to. A number is not a different label.
    *
    * Asserted across a ONE-round and a THREE-round course IN THE SAME CARD,
-   * which is the shape that made it visible, rather than across two renders
-   * where the two labels would never be seen together.
+   * which is the shape that made the old defect visible, rather than across
+   * two renders where the two headings would never be seen together.
    */
   const d = doc(
     {
@@ -753,9 +778,9 @@ test('every tile heads its chips รอบอบรม, whatever the round count
     'the fixture no longer contrasts a single round with several',
   );
   assert.deepEqual(
-    lists.map((l) => text(l.firstElementChild)),
-    ['รอบอบรม', 'รอบอบรม'],
-    'the tiles head their rounds differently',
+    lists.map((l) => text(l.querySelector('[data-testid="bundle-round-heading"]'))),
+    ['รอบอบรมที่เข้าร่วม (1 รอบ)', 'รอบอบรมที่เข้าร่วม (3 รอบ)'],
+    'the tiles head their rounds differently, or lost their count',
   );
   // And the plural wording is gone from the card entirely.
   assert.equal(
@@ -764,64 +789,6 @@ test('every tile heads its chips รอบอบรม, whatever the round count
     'the count-dependent heading is still rendered somewhere',
   );
 });
-
-test('the shared width is set ONCE, on the list every tile descends from', () => {
-  /**
-   * A tile only knows its own rounds, so the width cannot be decided inside
-   * one. It is computed from the longest label across the whole section and
-   * set as an inline custom property on the items list — which is also why
-   * it is a VARIABLE and not a Tailwind arbitrary value: the value is data,
-   * and an interpolated arbitrary value compiles to no rule at all.
-   */
-  const d = multi([{ id: 'ra' }, { id: 'rb' }], [OPEN_A, OPEN_B]);
-  const ul = d.querySelector('[data-testid="bundle-items"]');
-  const style = ul.getAttribute('style') ?? '';
-  assert.match(style, /--bundle-chip-w:\s*[\d.]+rem/, `no shared width on the list: ${style}`);
-
-  // The chips themselves carry NO width of their own — only the track does.
-  for (const b of d.querySelectorAll('[data-testid="bundle-round-box"]')) {
-    const cls = b.getAttribute('class') ?? '';
-    assert.equal(/w-\[/.test(cls), false, `a chip hard-codes a width: ${cls}`);
-  }
-});
-
-test('the shared width follows the LONGEST label in the bundle', () => {
-  /**
-   * The point of the property: a bundle whose longest date is longer must
-   * get a wider track, or the long one wraps while the others sit in space.
-   * Asserted as a COMPARISON between two bundles rather than against a
-   * magic number, so the per-character factor can be retuned against the
-   * font without this test having to be rewritten.
-   */
-  const widthOf = (d) => {
-    const m = /--bundle-chip-w:\s*([\d.]+)rem/.exec(
-      d.querySelector('[data-testid="bundle-items"]').getAttribute('style') ?? '',
-    );
-    assert.notEqual(m, null, 'no shared width was written');
-    return Number(m[1]);
-  };
-
-  const short = widthOf(multi([{ id: 'ra' }], [OPEN_A]));
-  // LONG_E runs across two months, so its label is the longest here.
-  const long = widthOf(multi([{ id: 'rlong' }], [LONG_E]));
-  assert.ok(long > short, `a longer label did not widen the track: ${long} vs ${short}`);
-
-  // And a bundle holding BOTH takes the longer of the two, not the first.
-  const both = widthOf(multi([{ id: 'ra' }, { id: 'rlong' }], [OPEN_A, LONG_E]));
-  assert.equal(both, long, 'the shared width is not the longest label in the bundle');
-});
-
-test('CONTROL: no rounds, no width — the property is not written for nothing', () => {
-  const d = bundle([item({ roundId: undefined, rounds: [] })], [entry({ rounds: [] })]);
-  const ul = d.querySelector('[data-testid="bundle-items"]');
-  assert.notEqual(ul, null, 'the list did not render at all');
-  assert.equal(
-    /--bundle-chip-w/.test(ul.getAttribute('style') ?? ''),
-    false,
-    'a width was written for a bundle with no dated round',
-  );
-});
-
 test('a closed chip fades as a WHOLE — fill, border, dot and ink together', () => {
   /**
    * `muted` used to grey the ink, border and dot to `--text-secondary` and
