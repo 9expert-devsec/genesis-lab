@@ -355,9 +355,83 @@ const bundleItemShape = z.preprocess(
  * PUBLISH. That one returns [] for draft/closed/archived, so a half-typed bundle
  * saves freely and a wrong one cannot go public.
  */
+/**
+ * ── THE BLURB'S RICH-TEXT TWIN, DECLARED AND RESTRICTED ───────────────────
+ *
+ * `blurbDoc` is the Tiptap document the staging editor writes; `blurb` stays a
+ * plain string and is its plain-text twin. The reasoning for two fields rather
+ * than one typed field is in lib/bundle/blurb.js and it is operational: the
+ * production branch reads `content.blurb` in five places that THROW, print
+ * `[object Object]`, or lock the section out of its own editor when it is not
+ * a string, and the two branches share one MongoDB.
+ *
+ * ── WHY THE SHAPE IS SPELLED OUT RATHER THAN `z.any()` ────────────────────
+ * Because this schema is what `updateSection` re-parses the whole merged
+ * section against, so it is the last place a malformed doc can be refused
+ * before it is stored. A permissive `z.record(z.any())` would accept a
+ * heading, a table or a `javascript:` link and leave the narrowing entirely to
+ * render time — which is the "looks right in the editor, publishes wrong"
+ * failure the rich-text contract file exists to prevent.
+ *
+ * The node and mark sets are the ones lib/bundle/blurb.js enforces:
+ * paragraph / text / hardBreak, with bold / italic / link. They are spelled
+ * HERE rather than imported from that module because a schema file importing a
+ * renderer-side helper is a cycle risk this tree avoids by convention, and
+ * because the two agreeing is asserted by test rather than by sharing a list.
+ *
+ * `.optional()` with NO default, deliberately. A default would stamp an empty
+ * doc onto every bundle section that has never had one — including the ones a
+ * production admin saves, where the key would then appear from nowhere. Absent
+ * must stay absent, and `resolveBlurbForRender` reads absent as "use the
+ * string".
+ *
+ * Read by: lib/bundle/blurb.js's `resolveBlurbForRender`, through the card's
+ * sub-line and the quotation page's header. NOT read by corpus/promotions.js,
+ * sectionLabels.js or `sectionRendersEmpty` — those keep reading the
+ * always-string `blurb`, which is the point of the arrangement.
+ */
+const blurbMarkShape = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('bold') }),
+  z.object({ type: z.literal('italic') }),
+  /*
+    The href is NOT validated against the protocol allowlist here. `safeUrl`
+    lives on the render side and this file must stay free of that import; the
+    sanitiser strips an unsafe mark on the way in to storage AND on the way out
+    to the renderer, so a hand-edited document carrying one renders as plain
+    text rather than as a live link. What the schema buys is the SHAPE.
+  */
+  z.object({ type: z.literal('link'), attrs: z.object({ href: z.string() }).passthrough() }),
+]);
+
+const blurbInlineShape = z.union([
+  z.object({
+    type: z.literal('text'),
+    text: z.string(),
+    marks: z.array(blurbMarkShape).optional(),
+  }),
+  z.object({ type: z.literal('hardBreak') }),
+]);
+
+export const blurbDocShape = z.object({
+  type: z.literal('doc'),
+  content: z
+    .array(z.object({
+      type: z.literal('paragraph'),
+      content: z.array(blurbInlineShape).optional(),
+    }))
+    .default([]),
+});
+
 const promotionBundleContent = z.object({
   name:  z.string().default(''),   // read by: the renderer's heading; the editor's ชื่อแพ็กเกจ field
-  blurb: z.string().default(''),   // read by: the renderer's sub-line; the editor's คำโปรย field
+  /*
+    A STRING, AND IT MUST STAY ONE. See blurbDocShape above and
+    lib/bundle/blurb.js: production reads this field and breaks on anything
+    else. No path on staging may write an object here — the editor writes it
+    through `blurbPatch`, which derives it from the doc's plain text.
+  */
+  blurb: z.string().default(''),   // read by: the renderer's sub-line, the corpus, sectionLabels, the editor's คำโปรย field
+  blurbDoc: blurbDocShape.optional(),
 
   /**
    * The SHORT label — the dark pill above the headline, and the word inside the

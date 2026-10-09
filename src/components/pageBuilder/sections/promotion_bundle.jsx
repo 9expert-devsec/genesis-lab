@@ -60,6 +60,12 @@ import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 // stacked the shared chip, which was the same height problem in the right
 // colours.
 import { BundleRoundCarousel } from './BundleRoundCarousel';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. THE SUB-LINE, which now has two possible sources: the
+// always-string `blurb` and the `blurbDoc` beside it. One component decides,
+// shared with the quotation page's header; see lib/bundle/blurb.js for why
+// there are two fields at all.
+import { BundleBlurb } from './BundleBlurb';
 import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo. The multi-round round: ALL of an item's offered rounds.
@@ -784,7 +790,16 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
         </span>
       )}
       {name && <h3 className="font-heading text-xl font-bold text-[var(--text-primary)]">{name}</h3>}
-      {blurb && <p className="text-sm text-[var(--text-secondary)]">{blurb}</p>}
+      {/*
+        ── THE SUB-LINE READS blurbDoc WHEN IT STILL MATCHES blurb ────────
+        `blurb` above is still the plain string, and it is still what the
+        all-empty check at the top of this component and the corpus both read.
+        What changed is only what gets DRAWN: a doc when the drift rule says
+        it is current, the string otherwise — and the string branch renders
+        the same `<p>` with the same class string it always did, which is what
+        every section stored today still takes.
+      */}
+      <BundleBlurb content={content} className="text-sm text-[var(--text-secondary)]" />
 
       {/*
         ── DERIVED, NEVER STORED ──────────────────────────────────────────

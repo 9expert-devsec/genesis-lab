@@ -97,8 +97,38 @@ const ALIGN_BUTTONS = [
   { value: 'right', label: 'ชิดขวา', Icon: AlignRight },
 ];
 
-export function RichTextEditor({ doc, onChange, placeholder }) {
-  const extensions = useMemo(() => richTextExtensions({ placeholder }), [placeholder]);
+/**
+ * ── TWO OPTIONAL PROPS, AND THE DEFAULT PATH IS UNTOUCHED ─────────────────
+ *
+ * `extensions` and `tools` exist for the bundle's คำโปรย field, which needs
+ * this editor with a NARROWER contract: paragraph, hard break, bold, italic,
+ * link, and nothing else (see blurbRichTextExtensions). Both default to what
+ * this component has always done, so every rich_text section renders the same
+ * toolbar and the same extension set it did before they existed.
+ *
+ * A PROP PAIR RATHER THAN A SECOND EDITOR COMPONENT. A copy of this file with
+ * three buttons would be a second place for the selection-preserving
+ * `onMouseDown`, the re-seed effect, the `setLink` allowlist prompt and the
+ * prose-spacing decisions to drift — and those are the parts that were
+ * expensive to get right, not the toolbar.
+ *
+ * `tools` is a NAME, not a list of buttons. A caller passing an array would be
+ * deciding this toolbar's composition from outside, and the next variant would
+ * add a second way to spell the same thing; a name means the two layouts live
+ * here, where the ToolButton rules already are.
+ *
+ * @param {object} o
+ * @param {object} [o.doc] the Tiptap document to edit
+ * @param {(doc: object) => void} o.onChange called with plain JSON on every edit
+ * @param {string} [o.placeholder]
+ * @param {Array} [o.extensions] override the extension set
+ * @param {'all'|'inline'} [o.tools='all'] which toolbar to draw
+ */
+export function RichTextEditor({ doc, onChange, placeholder, extensions: extensionsProp, tools = 'all' }) {
+  const extensions = useMemo(
+    () => extensionsProp ?? richTextExtensions({ placeholder }),
+    [extensionsProp, placeholder],
+  );
 
   const editor = useTiptap({
     extensions,
@@ -236,6 +266,31 @@ export function RichTextEditor({ doc, onChange, placeholder }) {
           onClick={() => editor.chain().focus().toggleBold().run()}><Bold className="h-3.5 w-3.5" /></ToolButton>
         <ToolButton label="ตัวเอียง" active={editor.isActive('italic')} disabled={!can.toggleItalic().run()}
           onClick={() => editor.chain().focus().toggleItalic().run()}><Italic className="h-3.5 w-3.5" /></ToolButton>
+
+        {/*
+          ── THE INLINE TOOLBAR ENDS HERE ───────────────────────────────────
+          Bold, italic, link, unlink — the three marks a bundle blurb may carry
+          plus the way to remove one. Everything below this point authors a
+          node or an attribute that the blurb's own extension set does not
+          install and its sanitiser would strip, so offering the button would
+          be offering a choice that does not survive the save.
+
+          The LINK pair is reached by falling through to the shared block at
+          the bottom rather than being duplicated here: `setLink` carries the
+          allowlist prompt and the alert wording, and a second copy of those
+          two buttons is a second place for that to drift.
+        */}
+        {tools === 'inline' ? (
+          <>
+            <span className="mx-1 h-4 w-px bg-[var(--surface-border)]" />
+            <ToolButton label="ลิงก์" active={editor.isActive('link')} onClick={setLink}>
+              <Link2 className="h-3.5 w-3.5" />
+            </ToolButton>
+            <ToolButton label="ลบลิงก์" disabled={!editor.isActive('link')}
+              onClick={() => editor.chain().focus().unsetLink().run()}><Link2Off className="h-3.5 w-3.5" /></ToolButton>
+          </>
+        ) : (
+        <>
         <ToolButton label="ขีดเส้นใต้" active={editor.isActive('underline')}
           onClick={() => editor.chain().focus().toggleUnderline().run()}><UnderlineIcon className="h-3.5 w-3.5" /></ToolButton>
         <ToolButton label="ขีดฆ่า" active={editor.isActive('strike')} disabled={!can.toggleStrike().run()}
@@ -322,6 +377,8 @@ export function RichTextEditor({ doc, onChange, placeholder }) {
         </ToolButton>
         <ToolButton label="ลบลิงก์" disabled={!editor.isActive('link')}
           onClick={() => editor.chain().focus().unsetLink().run()}><Link2Off className="h-3.5 w-3.5" /></ToolButton>
+        </>
+        )}
       </div>
 
       <div className="p-2">
