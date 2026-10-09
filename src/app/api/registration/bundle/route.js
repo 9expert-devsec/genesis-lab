@@ -28,6 +28,14 @@ import { validateBundlePicks } from '@/lib/pageBuilder/bundleRoundChoice';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. PREVIEW MODE: the flag the wizard forwards, and the
+// cookie gate that is the actual authorisation behind it.
+import { wantsBundlePreview } from '@/lib/registration/bundlePreview';
+// ADDED beside the statement above rather than folded into it — the gate is a
+// server-only reader (cookies + an unfiltered page load) and is deliberately
+// a separate module from the pure flag helpers above.
+import { resolveBundlePreviewPage } from '@/lib/registration/bundlePreviewGate';
 import { formatBaht } from '@/lib/utils';
 import { refNo } from '@/lib/refNo';
 
@@ -124,12 +132,51 @@ export async function POST(req) {
 
   const data = parsed.data;
 
-  // ── Re-resolve the pair, exactly as the page did ────────────────────────
-  const page = await getPublishedPageBuilderPageById(data.pageId);
+  /**
+   * ── PREVIEW MODE, DECIDED ONCE AND IN ONE PLACE ───────────────────────
+   * `preview` is read from the REQUEST URL rather than the body, so the
+   * shared `bundleRegistrationSchema` — which the live path validates every
+   * real submission against — does not grow a field that only one mode uses.
+   *
+   * THE FLAG IS NOT THE AUTHORISATION. `resolveBundlePreviewPage` re-asks
+   * the preview question against this page's own current preview material:
+   * enabled, password set, not expired, and a cookie that verifies for the
+   * slug this id resolves to. The id in the URL buys nothing on its own.
+   *
+   * AND IT NEVER FALLS BACK. A flagged request that fails the gate is a 403,
+   * not a normal registration — falling through to the published document
+   * would turn an unauthorised preview into a REAL write against a REAL
+   * promotion. That hole existed between 1c77b6ce, which started emitting
+   * the flag, and this commit, which is the first to read it.
+   */
+  const preview = wantsBundlePreview(
+    Object.fromEntries(new URL(req.url).searchParams),
+  );
+
+  let page;
+  if (preview) {
+    const gatePreview = await resolveBundlePreviewPage(data.pageId);
+    if (!gatePreview.ok) {
+      console.warn('[bundle-reg] ✋ preview refused — nothing was written.',
+        '| page:', String(data.pageId), '| reason:', gatePreview.reason);
+      return NextResponse.json(
+        { error: 'preview_forbidden' },
+        { status: 403 },
+      );
+    }
+    page = gatePreview.page;
+  } else {
+    // ── Re-resolve the pair, exactly as the page did ────────────────────
+    // `getPublishedPageBuilderPageById` selects `-draft`, so a request that
+    // did not ask for preview CANNOT read draft content even by accident.
+    page = await getPublishedPageBuilderPageById(data.pageId);
+  }
 
   // The cheap pass first: a closed or unpublished bundle is refused before any
   // upstream call at all.
-  const cheap = resolveBundleRequest({ page, sectionId: data.sectionId });
+  // `allowUnpublished` only ever carries the value the preview GATE produced
+  // — see the note at resolveBundleRequest. A failed gate returned 403 above.
+  const cheap = resolveBundleRequest({ page, sectionId: data.sectionId, allowUnpublished: preview });
   if (!cheap.ok) return refusal(cheap.reason);
 
   /**
@@ -162,6 +209,7 @@ export async function POST(req) {
     sectionId: data.sectionId,
     resolved,
     todayKey,
+    allowUnpublished: preview,
   });
   if (!gate.ok) return refusal(gate.reason);
 
@@ -221,6 +269,31 @@ export async function POST(req) {
       { error: 'bundle_picks_invalid', errors: verdict.errors },
       { status: 409 },
     );
+  }
+
+  /**
+   * ══ THE DRY RUN ENDS HERE ══════════════════════════════════════════════
+   * Everything above this line is the REAL validation and all of it has run:
+   * the page resolved, the section gated twice, the schedules fetched live,
+   * the picks derived-or-required, today's Bangkok date read on this request,
+   * and `validateBundlePicks` passed. A preview that skipped any of it would
+   * answer a question nobody asked — the point is to tell an author exactly
+   * what a customer would be told.
+   *
+   * EVERYTHING BELOW IS THE WRITE. The requestId, the bundle tag, the legs,
+   * the transaction and the email, in that order and nothing else. Returning
+   * here makes all of it unreachable in preview mode — not skipped by a flag
+   * checked inside the write, but never entered. That is the shape the
+   * guard in test/fs/bundlePreviewDryRun pins: no write and no send call may
+   * appear BEFORE this return.
+   *
+   * A 409 is already impossible by now — `validateBundlePicks` returned above
+   * — so a preview run reaches this line exactly when a real one would have
+   * gone on to write, and reports the per-item reasons through the same 409
+   * when it would not.
+   */
+  if (preview) {
+    return NextResponse.json({ ok: true, preview: true });
   }
 
   const headersList = await headers();

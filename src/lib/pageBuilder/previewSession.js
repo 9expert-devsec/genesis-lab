@@ -19,7 +19,19 @@ import { createHmac, createHash, timingSafeEqual } from 'crypto';
  * Neither value leaks: the cookie carries only exp + the HMAC digest.
  *
  * The cookie NAME is derived from the slug, so a cookie minted for one page
- * can never unlock another, and Path further scopes it to that page's route.
+ * can never unlock another: a different page's reader looks up a different
+ * name and finds nothing.
+ *
+ * PATH IS NOT PART OF THAT GUARANTEE, and used to read as though it were.
+ * This said "and Path further scopes it to that page's route" while the unlock
+ * action set `Path=/preview/<slug>` — which stopped the cookie reaching the
+ * bundle preview wizard at all (measured: sent to /preview/<slug>, not sent to
+ * /registration/bundle/* or /api/registration/bundle), so an unlocked author
+ * was refused by a gate that never saw it. The action now sets `Path=/` and
+ * the reasoning is written out there. What keeps the cookie honest is the
+ * slug-bound name, the signature over the current password material, and the
+ * expiry below — none of which Path contributed to.
+ *
  * TTL is capped at 30 minutes and never outlives the link's own expireDate.
  */
 

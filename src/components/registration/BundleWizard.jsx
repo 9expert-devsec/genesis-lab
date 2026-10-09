@@ -29,6 +29,15 @@ import {
 import { RegistrationStepper } from '@/components/registration/RegistrationStepper';
 import { StepComplete } from '@/components/registration/RegisterWizard';
 import { consentFanOut } from '@/components/payment/consent';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. PREVIEW MODE: the flag this wizard forwards on its POST,
+// and the two places it must say so out loud.
+import {
+  PREVIEW_PARAM,
+  BUNDLE_PREVIEW_SUBMIT,
+  BUNDLE_PREVIEW_SUCCESS_TITLE,
+  BUNDLE_PREVIEW_SUCCESS_BODY,
+} from '@/lib/registration/bundlePreview';
 import {
   BUNDLE_CLOSED_MESSAGE,
   BUNDLE_UNAVAILABLE_MESSAGE,
@@ -134,6 +143,19 @@ export function BundleWizard({
   */
   step = 1,
   basePath = '/registration/bundle',
+  /**
+   * ── A DRY RUN, NOT A REGISTRATION ────────────────────────────────────
+   * Decided by the SERVER half, which authorised it against the preview
+   * cookie; this component is told, never asks. It changes three things and
+   * deliberately nothing else: the POST carries the flag, the submit button
+   * says what it will do, and the success screen says what did not happen.
+   *
+   * The step LINKS need no change — `stepHref` rebuilds the query from
+   * `searchParams`, so the flag rides along with the pair for free. Were it
+   * rebuilt from props instead, step 2 would silently drop back to the
+   * published bundle, which is the bug that shape already prevents.
+   */
+  preview = false,
   summary = null,
   /**
    * ── THE PICK INPUTS, FROM THE SERVER ──────────────────────────────────
@@ -346,7 +368,18 @@ export function BundleWizard({
     setError(null);
     setRefused(null);
     try {
-      const res = await fetch('/api/registration/bundle', {
+      /*
+        THE FLAG RIDES ON THE URL, not in the body: the body is validated
+        against the shared `bundleRegistrationSchema`, which every real
+        submission goes through, and it should not grow a field one mode
+        uses. The route reads it from its own request URL and then
+        AUTHORISES it against the preview cookie — sending it here grants
+        nothing by itself.
+      */
+      const endpoint = preview
+        ? `/api/registration/bundle?${PREVIEW_PARAM}=1`
+        : '/api/registration/bundle';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -552,6 +585,7 @@ export function BundleWizard({
                 error={error}
                 consented={consented}
                 onConsentChange={setConsented}
+                preview={preview}
               />
             )}
           </div>
@@ -597,7 +631,28 @@ export function BundleWizard({
           sentence about a quotation request where the public flow's
           ขอบคุณสำหรับการลงทะเบียน would describe a registration.
         */
-        <StepComplete result={result} email={formData?.coordinator?.email} title="ได้รับคำขอใบเสนอราคาแล้ว" />
+        /*
+          IN PREVIEW THE EMAIL LINE IS WITHHELD, and that is not cosmetic.
+          `StepComplete` renders "ทาง 9Expert ได้ส่งอีเมลยืนยันไปที่ …" when it
+          is given an address, and in a dry run no mail was sent — the route
+          returns before the send. Passing the address and only changing the
+          heading would leave the one sentence on the screen that is false.
+        */
+        <StepComplete
+          result={result}
+          email={preview ? null : formData?.coordinator?.email}
+          title={preview ? BUNDLE_PREVIEW_SUCCESS_TITLE : 'ได้รับคำขอใบเสนอราคาแล้ว'}
+          closing={
+            preview ? (
+              <p
+                data-testid="bundle-preview-success"
+                className="mt-2 text-sm text-[var(--text-secondary)]"
+              >
+                {BUNDLE_PREVIEW_SUCCESS_BODY}
+              </p>
+            ) : null
+          }
+        />
       )}
     </div>
   );
@@ -732,6 +787,9 @@ export function BundleStepReview({
   error,
   consented,
   onConsentChange,
+  // A dry run. Only the button label changes here — the review itself shows
+  // the same data a real submission would send, which is the point.
+  preview = false,
 }) {
   const coord = data.coordinator ?? {};
 
@@ -845,7 +903,12 @@ export function BundleStepReview({
           disabled={submitting || !consented}
         >
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          ยืนยันการขอใบเสนอราคา
+          {/*
+            THE LAST THING READ BEFORE THE ACT. A dry run and a real
+            submission look identical on this screen, so the button is where
+            the difference has to be stated.
+          */}
+          {preview ? BUNDLE_PREVIEW_SUBMIT : 'ยืนยันการขอใบเสนอราคา'}
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>

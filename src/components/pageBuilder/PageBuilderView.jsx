@@ -46,7 +46,17 @@ import { SectionRenderer } from './SectionRenderer';
  * flag is wired through and renders nothing. Do not invent the component
  * here — that's 2C at the earliest.
  */
-export async function PageBuilderView({ page }) {
+/**
+ * `preview` — this render is a PREVIEW of a draft, not a public page.
+ *
+ * Threaded for `promotion_bundle` alone, whose register link has to carry
+ * the flag so the wizard reads the same draft this page is showing. Every
+ * other section ignores it. It is a ROUTING hint and never an
+ * authorisation: the wizard re-verifies the preview cookie for this
+ * page's own slug before it reads anything. See lib/registration/
+ * bundlePreview.js.
+ */
+export async function PageBuilderView({ page, preview = false }) {
   if (!page) return null;
 
   // Top-level sections render in sortOrder; nested children are ordered by
@@ -135,6 +145,7 @@ export async function PageBuilderView({ page }) {
           depth={0}
           resolvedData={resolvedData}
           pageId={page._id ? String(page._id) : null}
+          preview={preview}
         />
       ))}
     </div>

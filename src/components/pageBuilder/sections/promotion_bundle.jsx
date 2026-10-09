@@ -72,6 +72,10 @@ import { PICK_REASON_TEXT, BUNDLE_NO_ROUNDS_MESSAGE } from '@/lib/pageBuilder/bu
 // for an offered round, shared with the editor and the wizard.
 import { bundleRoundLabel } from '@/lib/pageBuilder/bundleRegistration';
 import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. ONE spelling of the wizard link, shared with the wizard
+// and the registration route, including its preview flag.
+import { bundleRegisterHref as buildBundleRegisterHref } from '@/lib/registration/bundlePreview';
 
 /**
  * promotion_bundle — ONE bundle promotion: a name, a blurb, ราคาปกติ and
@@ -689,7 +693,7 @@ function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false
   );
 }
 
-export function PromotionBundleSection({ content, data, style, pageId = null, sectionId = '' }) {
+export function PromotionBundleSection({ content, data, style, pageId = null, sectionId = '', preview = false }) {
   const name = typeof content?.name === 'string' ? content.name.trim() : '';
   const blurb = typeof content?.blurb === 'string' ? content.blurb.trim() : '';
   /**
@@ -728,10 +732,15 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
    * from `content` having been resolved under it upstream. It is passed as
    * `sectionId` alongside `pageId` for that reason.
    */
-  const bundleRegisterHref =
-    pageId && sectionId
-      ? `/registration/bundle?page=${encodeURIComponent(pageId)}&section=${encodeURIComponent(sectionId)}`
-      : null;
+  /*
+    BUILT BY THE SHARED HELPER, not spelled here. The wizard, the route and
+    this card all have to agree about the shape of this link — including
+    the preview flag, which decides WHICH document the other two read — and
+    a second spelling is how one of them ends up carrying a parameter the
+    others do not honour. `preview` is a routing hint only: the wizard
+    re-verifies the page's preview cookie before it reads a draft.
+  */
+  const bundleRegisterHref = buildBundleRegisterHref({ pageId, sectionId, preview });
 
   // ABSENT MEANS OPEN, and the rule lives in `isBundleRegistrationOpen` rather
   // than in this line. It used to be `content?.registrationOpen !== false`

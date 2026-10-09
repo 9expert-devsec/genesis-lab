@@ -11,6 +11,10 @@ const has = (p) => existsSync(path.join(ROOT, p));
 const VIEW = 'src/components/pageBuilder/PageBuilderView.jsx';
 const RENDERER = 'src/components/pageBuilder/SectionRenderer.jsx';
 const SECTION = 'src/components/pageBuilder/sections/promotion_bundle.jsx';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The wizard link moved here when the wizard and the
+// registration route became second readers of its shape.
+const LINK = 'src/lib/registration/bundlePreview.js';
 
 /**
  * THE PAIR REACHES THE SECTION, AND THE COPY BUTTON IS GONE.
@@ -52,12 +56,47 @@ test('CONTROL: the recursion slice is really the recursion', () => {
   assert.equal(recursion.includes('const inner ='), false, 'the slice has swallowed the dispatch');
 });
 
-test('the section builds the link from BOTH halves, and draws none without both', () => {
+test('the link is built in ONE place, and the section calls it rather than spelling it', () => {
+  /**
+   * THE SPELLING MOVED, AND THE CLAIMS DID NOT. This used to scan the section
+   * for `pageId && sectionId`, the `/registration/bundle?page=` target and the
+   * two `encodeURIComponent` calls. All four are still required — they are now
+   * in `lib/registration/bundlePreview`, because the wizard and the
+   * registration route have to agree with the card about the shape of this
+   * link, preview flag included, and a second spelling is how one surface ends
+   * up carrying a parameter the others do not honour.
+   *
+   * So the guard asks the same four questions of the shared builder, and asks
+   * the section the one question that is now its own: does it DELEGATE, or has
+   * someone re-spelled the URL beside the call?
+   */
+  const lib = read(LINK);
+  assert.match(lib, /if \(!pageId \|\| !sectionId\) return null/, 'the builder no longer requires both halves');
+  assert.match(lib, /\/registration\/bundle\?page=/, 'the link target is gone');
+  assert.match(lib, /encodeURIComponent\(pageId\)/, 'the page id is interpolated unencoded');
+  assert.match(lib, /encodeURIComponent\(sectionId\)/, 'the section id is interpolated unencoded');
+
   const code = read(SECTION);
-  assert.match(code, /pageId && sectionId/, 'the link no longer requires both halves of the pair');
-  assert.match(code, /\/registration\/bundle\?page=/, 'the link target is gone');
-  assert.match(code, /encodeURIComponent\(pageId\)/, 'the page id is interpolated unencoded');
-  assert.match(code, /encodeURIComponent\(sectionId\)/, 'the section id is interpolated unencoded');
+  assert.match(code, /buildBundleRegisterHref\(\{ pageId, sectionId, preview \}\)/, 'the section does not call the shared builder');
+  /**
+   * AND DOES NOT BUILD ONE ITSELF. Comments are stripped first: this file
+   * explains the link at length, and prose naming the path would satisfy a
+   * bare `includes` — defect 2 in test/sourceScan's header, in miniature.
+   */
+  const live = code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.equal(
+    /\/registration\/bundle\?page=/.test(live),
+    false,
+    'the section spells the wizard URL again beside the shared builder',
+  );
+});
+
+test('CONTROL: the comment-stripper leaves the code it is asked about', () => {
+  // Otherwise "the section does not spell the URL" passes against an empty
+  // string — a stripper that ate everything would look like a clean file.
+  const live = read(SECTION).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(live.length > 2000, `the stripper ate the file: ${live.length} chars left`);
+  assert.match(live, /buildBundleRegisterHref/, 'the stripper removed the call it is meant to see');
 });
 
 test('THE COPY BUTTON IS GONE, and so is the component it was the only caller of', () => {

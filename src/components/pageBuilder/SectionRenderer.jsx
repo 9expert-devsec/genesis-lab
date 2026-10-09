@@ -278,6 +278,8 @@ export function SectionRenderer({
   resolvedData = null,
   fillHeight = false,
   pageId = null,
+  // A PREVIEW render. Carried for promotion_bundle only; see PageBuilderView.
+  preview = false,
 }) {
   if (!section || typeof section !== "object") return null;
   if (section.enabled === false) return null;
@@ -334,6 +336,7 @@ export function SectionRenderer({
           resolvedData={resolvedData}
           fillHeight={FILLS_ITS_TRACK.has(section.type)}
           pageId={pageId}
+          preview={preview}
         />
       ));
     }
@@ -388,6 +391,7 @@ export function SectionRenderer({
       data={resolvedData ? resolvedData[section.id] : undefined}
       pageId={pageId}
       sectionId={section.id}
+      preview={preview}
       {...childProps}
     />
   );
