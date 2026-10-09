@@ -59,6 +59,54 @@ import ScheduleCard from '@/components/ScheduleCard';
 const PER_VIEW = 2;
 
 /**
+ * ── HOW FAR AN ARROW MOVES: ONE ROUND, NOT ONE PAGE ───────────────────────
+ *
+ * It was `PER_VIEW`, which paged. On five rounds that gave 1–2 → 3–4 → 4–5:
+ * the second press lands on index 2, the third asks for 4 and is clamped to
+ * `total - PER_VIEW` = 3, so ROUND 4 IS SHOWN TWICE and round 3 is skipped on
+ * the way back. A visitor pressing ไปรอบถัดไป twice sees a round they have
+ * already seen and never sees the one between.
+ *
+ * Stepping by one gives 1–2 → 2–3 → 3–4 → 4–5 and the same four positions in
+ * reverse. Every round appears in two of them, which is what a two-up window
+ * sliding over a list does.
+ *
+ * It also makes the arrows agree with a SWIPE, which has always moved by one:
+ * every box is a `snap-start` point and `read()` derives the position from
+ * `scrollLeft / step` where `step` is one box plus one gap. The arrows were
+ * the only thing in this component that counted in pages.
+ *
+ * The clamp is unchanged and is what keeps the last position a FULL PAIR
+ * rather than a lone box: `goTo` never sets a start above
+ * `total - PER_VIEW`.
+ */
+const STEP = 1;
+
+/**
+ * ── THE POSITION ARITHMETIC, IN ONE PLACE AND EXPORTED ────────────────────
+ *
+ * The clamp was written out three times — inside `goTo`, inside the scroll
+ * reader, and implicitly in the `from`/`to` pair — and the arrows paging by
+ * two was only visible as a defect once all three were read together. Three
+ * copies of one rule is three places for the next change to miss one.
+ *
+ * EXPORTED because it is the only part of this component a test can reach
+ * without layout: `goTo` measures a box with `getBoundingClientRect`, which
+ * is 0 in jsdom, so a simulated arrow press moves nothing and proves nothing.
+ * The sequence of positions IS the requirement, and this is where it lives.
+ */
+export function clampStart(index, total, perView = PER_VIEW) {
+  // Never past the last FULL pair — the final position shows two boxes, not a
+  // lone one. `Math.max(…, 0)` covers a list shorter than the window.
+  return Math.min(Math.max(index, 0), Math.max(total - perView, 0));
+}
+
+/** Which rounds `start` is showing, 1-based, for the กำลังแสดงรอบ line. */
+export function roundWindow(start, total, perView = PER_VIEW) {
+  return { from: start + 1, to: Math.min(start + perView, total) };
+}
+
+/**
  * ── THE BOX WIDTH, AND WHY IT IS NOT EXACTLY HALF ─────────────────────────
  *
  * It WAS `calc(50% - 0.25rem)`. With `gap-2` (0.5rem) that makes two boxes
@@ -150,7 +198,7 @@ export function BundleRoundCarousel({ rows }) {
       const step = stepPx();
       if (!step) return;
       const i = Math.round(el.scrollLeft / step);
-      setStart(Math.min(Math.max(i, 0), Math.max(total - PER_VIEW, 0)));
+      setStart(clampStart(i, total));
     };
     read();
     el.addEventListener('scroll', read, { passive: true });
@@ -165,7 +213,7 @@ export function BundleRoundCarousel({ rows }) {
     const el = trackRef.current;
     const step = stepPx();
     if (!el || !step) return;
-    const clamped = Math.min(Math.max(index, 0), Math.max(total - PER_VIEW, 0));
+    const clamped = clampStart(index, total);
     el.scrollTo({ left: clamped * step, behavior: 'smooth' });
     // Set it here too: `scroll` fires asynchronously, and on a track that
     // cannot actually scroll (a very narrow tile) it may not fire at all.
@@ -174,8 +222,9 @@ export function BundleRoundCarousel({ rows }) {
 
   const atStart = start <= 0;
   const atEnd = start + PER_VIEW >= total;
-  const from = start + 1;
-  const to = Math.min(start + PER_VIEW, total);
+  // From the same helper the arrows and the scroll reader clamp with, so the
+  // line cannot say 1–2 while the track shows 3 and 4.
+  const { from, to } = roundWindow(start, total);
 
   if (!total) return null;
 
@@ -368,7 +417,7 @@ export function BundleRoundCarousel({ rows }) {
               aria-label="เลื่อนไปรอบก่อนหน้า"
               aria-controls={trackId}
               disabled={atStart}
-              onClick={() => goTo(start - PER_VIEW)}
+              onClick={() => goTo(start - STEP)}
               className={ARROW_CLASS}
             >
               <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
@@ -379,7 +428,7 @@ export function BundleRoundCarousel({ rows }) {
               aria-label="เลื่อนไปรอบถัดไป"
               aria-controls={trackId}
               disabled={atEnd}
-              onClick={() => goTo(start + PER_VIEW)}
+              onClick={() => goTo(start + STEP)}
               className={ARROW_CLASS}
             >
               <ChevronRight className="h-3.5 w-3.5" aria-hidden />
