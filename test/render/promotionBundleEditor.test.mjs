@@ -9,6 +9,10 @@ import {
 } from '@/components/pageBuilder/editor/SectionContentEditor';
 import { roundOptionLabel, snapshotOf } from '@/components/pageBuilder/editor/RoundPicker';
 import { sectionSchema } from '@/lib/schemas/pageBuilder';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. One assertion is about which FORMATTER the echo uses,
+// which is a source fact rather than a rendered one.
+import { readSource } from '../sourceScan.mjs';
 
 /**
  * The `promotion_bundle` content editor: its fields, its per-item rows, and the
@@ -581,4 +585,54 @@ test('THE RETIRED COPY IS GONE from the whole panel', () => {
   assert.doesNotMatch(all, /คอร์สเดียวกันซ้ำได้/);
   assert.doesNotMatch(all, /ถ้าเป็นคนละรอบ/);
   assert.match(all, /ลำดับที่แสดงคือลำดับการเรียน/, 'the order hint says only what the order means');
+});
+
+// ── the deadline echoes the typed date in Thai ────────────────────────────
+
+test('a typed deadline is echoed back in Thai, so 05/09 cannot be misread', () => {
+  /**
+   * `<input type="date">` renders in the BROWSER's locale, so a Thai admin on
+   * an en-US profile sees mm/dd/yyyy and reads 05/09 as 5 September when it
+   * means 9 May. The control's format is not ours to set, so this is the answer
+   * EarlyBirdBinding already settled on for its own deadline field.
+   */
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'C', rounds: [{ id: 'r-a', pickUntil: '2030-05-09' }] }] },
+    [{ id: 'i1', courseId: 'C', course: { course_id: 'C' }, rounds: [ROUND_A] }],
+  );
+  const echo = d.querySelector('[data-testid="bundle-pick-until-echo"]');
+  assert.notEqual(echo, null, 'a typed deadline is not echoed back');
+  // 9 May 2030 = 9 พ.ค. 2573 — the unambiguous reading of 05/09.
+  assert.match(text(echo), /9 พ\.ค\. 2573/);
+  assert.match(text(echo), /23:59/, 'the end-of-day boundary is not stated');
+});
+
+test('the echo is ABSENT when the field is empty — the hint already names the default', () => {
+  // Not a gap: the empty case states the default deadline in Thai in its hint,
+  // which is why the missing echo on a TYPED value was easy to overlook.
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'C', rounds: [{ id: 'r-a' }] }] },
+    [{ id: 'i1', courseId: 'C', course: { course_id: 'C' }, rounds: [ROUND_A] }],
+  );
+  assert.equal(d.querySelector('[data-testid="bundle-pick-until-echo"]'), null);
+  assert.match(text(d.querySelector('[data-testid="bundle-round-row"]')), /19 ส\.ค\. 2573/);
+});
+
+test('a TOO-LATE deadline shows the error instead of an echo', () => {
+  // Echoing a date the system will not honour would read as confirmation.
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'C', rounds: [{ id: 'r-a', pickUntil: '2030-12-25' }] }] },
+    [{ id: 'i1', courseId: 'C', course: { course_id: 'C' }, rounds: [ROUND_A] }],
+  );
+  assert.equal(d.querySelector('[data-testid="bundle-pick-until-echo"]'), null);
+  assert.match(text(d.body), /อยู่หลังวันเริ่มรอบ/);
+});
+
+test('the echo uses the SAME formatter as EarlyBird, not a second one', () => {
+  // Two date formatters in one admin is how two fields come to disagree about
+  // what 2030-05-09 is called.
+  const { code } = readSource('src/components/pageBuilder/editor/SectionContentEditor.jsx');
+  assert.match(code, /formatThaiDate\(round\.pickUntil\)/);
+  const eb = readSource('src/components/pageBuilder/editor/EarlyBirdBinding.jsx').code;
+  assert.match(eb, /formatThaiDate\(/, 'EarlyBird stopped using it — the pair has drifted');
 });
