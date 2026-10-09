@@ -51,6 +51,36 @@
   --text-secondary: #465469;
   --text-muted:     #5E6A7E;
 
+  /* ── A ROUND CHIP THAT CANNOT BE CHOSEN ───────────────────────────────────
+   * ScheduleCard's `muted` tone: the whole chip fades, fill and border and dot
+   * and ink together, rather than the ink alone going grey inside a chip still
+   * outlined in its delivery-type colour.
+   *
+   * THREE TOKENS RATHER THAN THREE LITERALS, because the chip sits on surfaces
+   * that are not all light. A bundle course tile is `--surface` — #FFFFFF in
+   * light, #132638 in dark — EXCEPT inside a Navy card, where
+   * `.pb-bundle-tile-light` pins it light in both themes. A hard-coded pale
+   * grey would be a bright slab on the dark tile; `--surface-muted` would be a
+   * dark slab on the Navy card's light tile AND is #F8FAFD in light, which is
+   * that tile's own colour and so no fill at all. Neither existing answer
+   * works on all three, so the chip names its own.
+   *
+   * MEASURED, and the ink is the binding constraint. `--round-chip-muted-ink`
+   * is the LIGHTEST step of the 9e-slate-dp scale that still holds 4.5:1
+   * everywhere it lands: 5.47:1 on #FFFFFF, 5.23:1 on #F8FAFD and 4.80:1 on
+   * the chip's own #EFF0F2 fill, which is the one that actually sits behind
+   * the text. The next step up (#6E798B) is 4.40:1 on plain white — under AA
+   * before the fill is even considered. Fill and border are DECORATIVE and
+   * deliberately faint (1.14:1 and 1.51:1 against a white tile).
+   *
+   * No `opacity` on the chip: it would scale the ink's contrast with the
+   * surface by an amount that depends on the surface, which is exactly how a
+   * faded state drifts under AA without anyone noticing.
+   */
+  --round-chip-muted-bg:     #EFF0F2;
+  --round-chip-muted-border: #CFD2D8;
+  --round-chip-muted-ink:    #5E6A7E;
+
   /* ── Elevation & interaction (light defaults) ──
    * Light values deliberately EQUAL the hardcoded classes they replace, so
    * light mode renders pixel-identical. Dark overrides live in .dark below.
@@ -424,6 +454,15 @@
   --text-secondary: #C5CEDA;
   --text-muted:     #5E6A7E;
 
+  /* The faded round chip, on a dark tile. The ink CANNOT be the light value:
+     #5E6A7E on the #1A2D42 fill is 2.1:1. #8E97A5 is the darkest — so the most
+     faded — step that still holds AA there, measured 4.75:1 on the fill and
+     5.23:1 on the #132638 tile. Fill and border stay decorative, 1.10:1 and
+     1.69:1 against the tile. */
+  --round-chip-muted-bg:     #1A2D42;
+  --round-chip-muted-border: #2E4A68;
+  --round-chip-muted-ink:    #8E97A5;
+
   /* ── Elevation & interaction (dark overrides) ──
    * Dark elevation is conveyed by a LIGHTER surface, not a shadow (shadows
    * are invisible on the dark canvas). Values step up the navy ramp
@@ -764,6 +803,15 @@
   --text-secondary: #465469;
   --9e-orange-800:  #FFE9D3;          /* the round-dates box: border */
   --9e-orange-900:  #FFF4E9;          /* the round-dates box: fill   */
+
+  /* THE FADED ROUND CHIP, PINNED LIGHT — the same three values :root declares.
+     Re-stated here for the reason every token above is: this tile is light in
+     BOTH themes, so without these three the dark overrides would reach in and
+     paint a #1A2D42 slab with #8E97A5 ink on an #F8FAFD surface. That is the
+     `dark:`-variant trap in token form, and the same answer applies. */
+  --round-chip-muted-bg:     #EFF0F2;
+  --round-chip-muted-border: #CFD2D8;
+  --round-chip-muted-ink:    #5E6A7E;
 }
 
 /* ──────────────────────────────────────────────────────────────

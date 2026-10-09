@@ -4,6 +4,10 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
 import { TRAINING_TYPE_COLOR } from '@/lib/schedule/trainingTypeColor';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The chip itself, so the dot-placement control can render
+// the non-default form and prove the marker is wired rather than constant.
+import ScheduleCard from '@/components/ScheduleCard';
 import { readSource } from '../sourceScan.mjs';
 
 /**
@@ -63,8 +67,24 @@ const render = (course = COURSE, props = {}) =>
 
 /** The round strip's grid, and the boxes inside it. */
 const strip = (html) => html.match(/<div class="grid grid-cols-2[^"]*">([\s\S]*?)<\/div><\/div>/)?.[1] ?? '';
+/**
+ * ── THIS MATCHED ZERO BOXES FOR ONE COMMIT, AND THE MARKUP WAS FINE ────────
+ * It was `/<div class="relative flex h-full flex-col…/` — a regex that is only
+ * correct while `class` is the FIRST attribute on the chip. c5a8c5ce added
+ * `data-schedule-card` and `data-tone` ahead of it, and every matcher here
+ * silently started returning `[]`: ten tests in this file went red at once,
+ * not one of them because CourseCard had changed.
+ *
+ * ATTRIBUTE ORDER IS NOT A CONTRACT. It is whatever order the JSX happens to
+ * list props in, and nothing warns when it moves. So the anchor is now the
+ * component's own marker — the thing that identifies a chip as a chip — and a
+ * later prop can be added anywhere in the tag without reddening this file.
+ *
+ * The non-greedy `</div>` is still exact: a ScheduleCard's children are all
+ * spans, so the first closing div is its own.
+ */
 const roundBoxes = (html) =>
-  [...html.matchAll(/<div class="relative flex h-full flex-col[^"]*"[^>]*>[\s\S]*?<\/div>/g)].map((m) => m[0]);
+  [...html.matchAll(/<div data-schedule-card=""[\s\S]*?<\/div>/g)].map((m) => m[0]);
 const linkedRounds = (html) =>
   [...html.matchAll(/&amp;class=([^"&]+)/g)].map((m) => m[1]);
 
@@ -176,10 +196,12 @@ test('the label may WRAP — nothing pins it to one line', () => {
    * overflow visibly instead.
    */
   const boxes = roundBoxes(render());
-  const dateLine = boxes[1].match(/<span class="text-\[0\.72rem\][^"]*">([^<]*)<\/span>/);
+  // Anchored on the date element's MARKER, not on `class` being its first
+  // attribute — see the note on `roundBoxes`, same trap, same commit.
+  const dateLine = boxes[1].match(/<span data-schedule-card-date="" class="[^"]*">([^<]*)<\/span>/);
   assert.ok(dateLine, 'the date line is gone');
   assert.equal(dateLine[1], '8, 10, 12 ต.ค.', 'every day of the round, listed');
-  const dateClasses = boxes[1].match(/<span class="(text-\[0\.72rem\][^"]*)">/)?.[1] ?? '';
+  const dateClasses = boxes[1].match(/<span data-schedule-card-date="" class="([^"]*)">/)?.[1] ?? '';
   assert.equal(
     /whitespace-nowrap/.test(dateClasses),
     false,
@@ -278,7 +300,7 @@ test('a FULL round is NOT a link, even with a usable _id', () => {
     'a full round must not link into the wizard',
   );
   assert.equal(
-    /<a[^>]*>\s*<div class="relative flex h-full/.test(html),
+    /<a[^>]*>\s*<div data-schedule-card=""/.test(html),
     false,
     'and must not be wrapped in an anchor at all — no focus stop either',
   );
@@ -316,7 +338,7 @@ test('CONTROL: the same round, OPEN, IS a link', () => {
   };
   const html = render(open);
   assert.match(html, /href="\/registration\/public\?course=mse-pbi&amp;class=sf"/);
-  assert.ok(/<a[^>]*>\s*<div class="relative flex h-full/.test(html), 'and IS anchored');
+  assert.ok(/<a[^>]*>\s*<div data-schedule-card=""/.test(html), 'and IS anchored');
   assert.equal(/class="cursor-not-allowed"/.test(html), false);
 });
 
@@ -333,7 +355,7 @@ test('a round with neither is NOT a link', () => {
   const html = render(unbookable);
   assert.equal(roundBoxes(html).length, 1, 'the round must still be SHOWN');
   assert.equal(
-    /<a[^>]*>\s*<div class="relative flex h-full/.test(html),
+    /<a[^>]*>\s*<div data-schedule-card=""/.test(html),
     false,
     'an unbookable round must not be wrapped in an anchor',
   );
@@ -343,7 +365,7 @@ test('a round with neither is NOT a link', () => {
 test('CONTROL: the anchor probe DOES see a linked round', () => {
   // Otherwise the assertion above passes against any markup at all.
   assert.ok(
-    /<a[^>]*>\s*<div class="relative flex h-full/.test(render()),
+    /<a[^>]*>\s*<div data-schedule-card=""/.test(render()),
     'a bookable round IS wrapped in an anchor',
   );
 });
@@ -446,6 +468,51 @@ test('the status badge still renders, and a blank status renders none', () => {
   const box = roundBoxes(blank)[0];
   assert.ok(box, 'the round must still render');
   assert.equal(/rounded-full px-2 py-\[2px\]/.test(box), false, 'no empty pill, no default label');
+});
+
+test('the course card KEEPS its corner dot — dropping it is the bundle’s', () => {
+  /**
+   * `ScheduleCard` has twice grown a prop for the bundle card's sake: first
+   * `dotPlacement="inline"` (3b74d7a6), then `showDot={false}` when the inline
+   * dot turned out to be costing width the bundle tile did not have. Both
+   * times the course card had to come out unchanged, and this is the guard on
+   * that — a prop added for one caller must not quietly re-lay-out the caller
+   * it was not added for.
+   *
+   * THE DOT IS NOT DECORATION HERE, which is why the bundle may drop it and
+   * this card may not: the Classroom/Hybrid legend is printed directly above
+   * this strip, so the colour is decodable. A bundle tile has no legend.
+   *
+   * Pinned by the marker rather than by the positioning classes, so the claim
+   * survives a restyle of the dot itself.
+   */
+  const html = render();
+  const dots = [...html.matchAll(/data-dot="([a-z]+)"/g)].map((m) => m[1]);
+  assert.equal(dots.length, 2, 'the two round chips did not render');
+  assert.deepEqual(dots, ['corner', 'corner'], 'a course-card chip lost its dot');
+  // The absolutely positioned dot is still the one in the markup, twice.
+  assert.equal(
+    (html.match(/class="absolute left-1 top-1 h-2\.5 w-2\.5 rounded-full"/g) ?? []).length,
+    2,
+    'a course-card chip is not drawing its corner dot',
+  );
+});
+
+test('CONTROL: the dot marker can read "none", so the assertion above can fail', () => {
+  /**
+   * Without this, `deepEqual(dots, ['corner','corner'])` would pass against a
+   * component that emits `corner` unconditionally — a prop wired to nothing
+   * looks exactly like a prop correctly left at its default.
+   */
+  const html = renderToStaticMarkup(
+    createElement(ScheduleCard, { dateLabel: '1 ม.ค.', showDot: false }),
+  );
+  assert.match(html, /data-dot="none"/, 'the prop does not reach the marker');
+  assert.equal(
+    /class="absolute left-1 top-1/.test(html),
+    false,
+    'showDot={false} still draws the corner dot',
+  );
 });
 
 test('the inhouse-only branch still shows no strip at all', () => {

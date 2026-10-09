@@ -706,6 +706,53 @@ const CASES = [
     className: "[overflow-wrap:anywhere]",
     property: "overflow-wrap",
   },
+  /**
+   * ── THE FADED ROUND CHIP ─────────────────────────────────────────────────
+   * `ScheduleCard`'s `muted` tone paints a pale fill and a lighter ink through
+   * two variables globals.css declares three times (`:root`, `.dark`, and
+   * `.pb-bundle-tile-light`, which pins the light values on a tile that stays
+   * light inside a Navy card).
+   *
+   * Registered because this is the exact shape the file's opening note is
+   * about: a class whose paint lives in a variable compiles to nothing if the
+   * candidate is ever assembled rather than written out, and the markup looks
+   * perfect either way. A closed round would then be indistinguishable from an
+   * open one — no fill, and the ink falling back to inherited colour — with
+   * every markup assertion still green.
+   *
+   * The dot and border arrive as an inline `style`, not a class, so they are
+   * not Tailwind's to emit and are not registered here.
+   */
+  {
+    what: "the faded round chip's fill",
+    file: "src/components/ScheduleCard.jsx",
+    className: "bg-[var(--round-chip-muted-bg)]",
+    property: "background-color",
+    referencesVar: "--round-chip-muted-bg",
+  },
+  {
+    what: "the faded round chip's ink",
+    file: "src/components/ScheduleCard.jsx",
+    className: "text-[var(--round-chip-muted-ink)]",
+    property: "color",
+    referencesVar: "--round-chip-muted-ink",
+  },
+  /**
+   * ── THE BUNDLE'S SHARED CHIP TRACK ───────────────────────────────────────
+   * The one width every round chip in a bundle takes. The VALUE is data — it
+   * is computed from the longest label in the section and set as an inline
+   * custom property — so the class reading it has to be written out in full,
+   * which is precisely the shape this file exists to guard. Built by
+   * interpolation it would emit no rule, the markup would look perfect, and
+   * the chips would fall back to auto-width: ragged again, silently.
+   */
+  {
+    what: "the bundle round-chip grid track",
+    file: "src/components/pageBuilder/sections/promotion_bundle.jsx",
+    className: "grid-cols-[repeat(auto-fill,minmax(0,var(--bundle-chip-w)))]",
+    property: "grid-template-columns",
+    referencesVar: "--bundle-chip-w",
+  },
 ];
 
 /*

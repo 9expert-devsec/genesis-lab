@@ -151,8 +151,16 @@ test('a Navy card leaves NO active dark: colour inside the tile subtree', () => 
   const html = render({ bundleCardTheme: 'navy' }).body.innerHTML;
   assert.doesNotMatch(html, /dark:bg-9e-navy/, 'the cover placeholder kept its dark form');
   assert.doesNotMatch(html, /dark:text-amber-400/, 'the unresolved-course warning kept its dark form');
-  assert.doesNotMatch(html, /dark:bg-white\/10/, 'the status badge kept its dark form');
-  assert.doesNotMatch(html, /dark:text-slate-300/, 'the status badge kept its dark text form');
+  /**
+   * THE STATUS BADGE'S TWO ASSERTIONS WENT, BECAUSE THE BADGE DID. They were
+   * `dark:bg-white/10` and `dark:text-slate-300` on the per-tile round-state
+   * pill, which the chip round removed — each chip now carries its own state.
+   *
+   * Deleted rather than kept, and that is the point: an element that no longer
+   * renders satisfies `doesNotMatch` for free. Two assertions passing because
+   * their subject is gone is the exact vacuity the companion test below exists
+   * to catch, and leaving them would have been two green claims about nothing.
+   */
 });
 
 test('the tile keeps its LIGHT halves — stripping removed the dark forms only', () => {
@@ -160,18 +168,22 @@ test('the tile keeps its LIGHT halves — stripping removed the dark forms only'
   // `doesNotMatch` assertions would pass vacuously if the three elements did
   // not render at all, and a tile with no background would look like a pass.
   //
-  // All three ARE exercised by this fixture, verified rather than assumed:
+  // Both ARE exercised by this fixture, verified rather than assumed:
   //   · the cover placeholder    -> bg-9e-ice      (no cover resolves)
   //   · the unresolved warning   -> text-amber-700 (no course resolves)
-  //   · the status badge, NEUTRAL form -> bg-slate-100 text-slate-600
-  //     (the round does not resolve, so resolveDerivedRoundBadge answers
-  //     neutral — which is the one soft form carrying BOTH a dark:bg and a
-  //     dark:text, i.e. the strictest of the four to strip)
+  //
+  // IT WAS THREE. The third was the per-tile round-state badge in its NEUTRAL
+  // form (`bg-slate-100 text-slate-600`) — the one soft form carrying BOTH a
+  // dark:bg and a dark:text, and so the strictest of the four to strip. The
+  // chip round removed that badge, and this guard is weaker for it: the two
+  // survivors each carry a single dark: half, so nothing here now exercises
+  // stripping a class string with two. Said plainly rather than papered over,
+  // because the next person to touch `withoutDarkVariants` should know which
+  // case stopped being covered HERE. It is still covered in
+  // test/pure/bundleCardStyle, against the function directly.
   const html = render({ bundleCardTheme: 'navy' }).body.innerHTML;
   assert.match(html, /bg-9e-ice/, 'the cover placeholder lost its light background');
   assert.match(html, /text-amber-700/, 'the unresolved warning lost its light colour');
-  assert.match(html, /bg-slate-100/, 'the status badge lost its light background');
-  assert.match(html, /text-slate-600/, 'the status badge lost its light text colour');
 });
 
 test("the LEFT column's dark: variants are untouched on a Navy card", () => {
