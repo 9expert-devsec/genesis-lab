@@ -34,6 +34,9 @@ import {
 } from 'lucide-react';
 
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { ArticleHistoryDialog } from './ArticleHistoryDialog';
 import { withListQuery } from '@/lib/articles/adminListQuery';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import {
@@ -175,6 +178,20 @@ export function ArticleForm({
    * to a working list.
    */
   listQuery = '',
+  /**
+   * THE ประวัติการแก้ไข PANEL, RENDERED BY THE PAGE AND HANDED IN.
+   *
+   * `RecordHistory` is a SERVER component — it awaits `auth()` and re-checks
+   * `canAccess` itself — and this form is `'use client'`, so the toolbar
+   * cannot mount one. The page renders it and passes the NODE down; the
+   * dialog only places it. Same slot, and the same reason, as
+   * `InhouseDetailClient`'s `history` prop.
+   *
+   * `null` renders NO BUTTON, which is what makes /new correct without a
+   * special case: a draft that does not exist yet has no history to show, so
+   * the screen that has no record to pass also gets no control promising one.
+   */
+  historySlot = null,
 }) {
   const router = useRouter();
   const isEdit = Boolean(article?._id);
@@ -740,6 +757,12 @@ export function ArticleForm({
               บันทึก Draft
             </button>
           )}
+          {/*
+            ประวัติการแก้ไข — IMMEDIATELY BEFORE Preview, and it used to be a
+            block below this whole form. See ArticleHistoryDialog for what
+            went wrong with that and what was measured.
+          */}
+          {historySlot && <ArticleHistoryDialog>{historySlot}</ArticleHistoryDialog>}
           <button
             type="button"
             onClick={() => setShowPreview(true)}
