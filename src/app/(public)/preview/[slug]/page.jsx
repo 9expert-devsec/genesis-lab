@@ -186,7 +186,26 @@ export default async function PreviewPage({ params, searchParams }) {
   return (
     <>
       <PreviewBanner mode={mode} pending={pending} />
-      <PageBuilderView page={composeWorkingView(page)} />
+      {/*
+        ── `_id` IS PUT BACK, AND THAT IS A BUG FIX ───────────────────────
+        `composeWorkingView` returns the EDITABLE SURFACE — the schema keys,
+        drafted or live — and `_id` is in neither list. Measured: its keys
+        here are `slug, status, sections`, with `_id` undefined, while
+        `stripDraft` (the published branch above) keeps it.
+
+        That asymmetry is why a bundle on this page drew NO register button
+        and no state message either: the button needs (pageId, sectionId),
+        `pageId` came from `page._id`, and on this branch there wasn't one.
+        Both the button and the closed-state message sit inside the same
+        conditional, so a bundle with no discount code rendered nothing at
+        all below its price.
+
+        Restored HERE rather than inside `composeWorkingView`, which is
+        shared with the editor and with CustomPage and whose contract is
+        exactly "the editable surface". This route needs one more field than
+        that, and says so where it needs it.
+      */}
+      <PageBuilderView page={{ ...composeWorkingView(page), _id: page._id }} preview />
     </>
   );
 }

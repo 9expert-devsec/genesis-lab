@@ -240,7 +240,7 @@ export function unresolvedBundleItems(items, resolved, todayKey) {
  * @returns {{ok: true, section: object, content: object}
  *          |{ok: false, reason: string, unresolved?: Array<object>}}
  */
-export function resolveBundleRequest({ page, sectionId, resolved, todayKey, now = Date.now() }) {
+export function resolveBundleRequest({ page, sectionId, resolved, todayKey, now = Date.now(), allowUnpublished = false }) {
   if (!page) return { ok: false, reason: 'page_missing' };
 
   const section = findSectionById(page.sections, sectionId);
@@ -275,7 +275,27 @@ export function resolveBundleRequest({ page, sectionId, resolved, todayKey, now 
    * Both still refuse, identically and at the same point. Only the sentence
    * differs.
    */
-  if (!isPubliclyVisible(page, now)) {
+  /**
+   * ── `allowUnpublished` — THE ONE CHECK AN AUTHORISED PREVIEW SKIPS ────
+   * A previewed page is unpublished BY DEFINITION; that is what preview is
+   * for. Applying public visibility to it refuses every preview of a draft
+   * — measured on `claude-duo`, which reached this line and was told
+   * "ขณะนี้ยังไม่สามารถรับลงทะเบียนแพ็กเกจนี้ได้" after the cookie fix had
+   * already got it past the preview gate.
+   *
+   * IT IS THE ONLY CHECK THAT IS SKIPPED. Everything else in this function
+   * still runs — the section exists, is the right type, is enabled,
+   * registration is open, the items resolve — because those are exactly
+   * what an author opened a preview to find out.
+   *
+   * THE FLAG IS NOT REACHABLE WITHOUT THE COOKIE. Both callers compute it
+   * from a `preview` that is only true after `resolveBundlePreviewPage`
+   * has verified the slug-scoped preview cookie against the stored
+   * password material; a request that fails that gate is refused before it
+   * gets here. It defaults to `false`, so every existing caller — and any
+   * future one that forgets it exists — keeps the public rule.
+   */
+  if (!allowUnpublished && !isPubliclyVisible(page, now)) {
     return {
       ok: false,
       reason: invisibleReason(page, now) === 'expired' ? 'page_expired' : 'page_not_public',

@@ -27,6 +27,19 @@ import { publicPageHref } from "@/lib/pages/promotionMode";
 // lines and hands them over, and does no formatting of its own beyond the date
 // label it must produce from a threaded clock read.
 import { BundleSummary } from "@/components/registration/BundleSummary";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. PREVIEW MODE: the flag the card forwards, and the words
+// shown when it is honoured or refused.
+import {
+  wantsBundlePreview,
+  BUNDLE_PREVIEW_BANNER,
+  BUNDLE_PREVIEW_FORBIDDEN,
+  BUNDLE_PREVIEW_FORBIDDEN_BODY,
+} from "@/lib/registration/bundlePreview";
+// ADDED beside the statement above rather than folded into it — the gate is
+// the server-only half (cookies + an unfiltered page load) and is a separate
+// module from the pure helpers above.
+import { resolveBundlePreviewPage } from "@/lib/registration/bundlePreviewGate";
 
 /**
  * Base path for the bundle quotation wizard. The wizard pushes step-prefixed
@@ -89,11 +102,36 @@ export async function BundlePageContent({ searchParams, step }) {
   const pageId = typeof params.page === "string" ? params.page : "";
   const sectionId = typeof params.section === "string" ? params.section : "";
 
-  const doc = await getPublishedPageBuilderPageById(pageId);
+  /**
+   * ── PREVIEW MODE, DECIDED ONCE ────────────────────────────────────────
+   * The flag only says WHICH document is meant. `resolveBundlePreviewPage`
+   * is the authorisation: it re-checks this page's preview settings and
+   * verifies the slug-scoped cookie, and a failure is a 403 rather than a
+   * fall-through — continuing on the published document would put an
+   * unauthorised caller into the REAL wizard, whose submit really writes.
+   *
+   * The route makes the same call for the same reason, which is why the gate
+   * is a shared module: the cheaper of the two mistakes to make here would
+   * be the route accepting a cookie this page rejected.
+   */
+  const preview = wantsBundlePreview(params);
+
+  let doc;
+  if (preview) {
+    const gatePreview = await resolveBundlePreviewPage(pageId);
+    if (!gatePreview.ok) return renderPreviewForbidden();
+    doc = gatePreview.page;
+  } else {
+    // `getPublishedPageBuilderPageById` selects `-draft`, so a request that
+    // did not ask for preview cannot read draft content even by accident.
+    doc = await getPublishedPageBuilderPageById(pageId);
+  }
 
   // The cheap pass: existence, visibility, the switch. No upstream call yet, so
   // a closed or unpublished bundle costs nothing to refuse.
-  const cheap = resolveBundleRequest({ page: doc, sectionId });
+  // `allowUnpublished` only ever carries the value the preview GATE produced
+  // — see the note at resolveBundleRequest. A failed gate returned above.
+  const cheap = resolveBundleRequest({ page: doc, sectionId, allowUnpublished: preview });
   if (!cheap.ok) return renderRefusal(cheap.reason);
 
   /**
@@ -125,6 +163,7 @@ export async function BundlePageContent({ searchParams, step }) {
     sectionId,
     resolved,
     todayKey,
+    allowUnpublished: preview,
   });
   if (!gate.ok) return renderRefusal(gate.reason);
 
@@ -222,6 +261,26 @@ export async function BundlePageContent({ searchParams, step }) {
       330px card would leave the form ~518px wide.
     */
     <article className="mx-auto max-w-[1200px] px-4 py-10 lg:px-6">
+      {/*
+        ── THE PREVIEW BANNER, ON THE SERVER AND ABOVE EVERYTHING ──────────
+        Rendered here rather than inside the wizard, and that placement is
+        the "persistent" half of the requirement: this file renders on every
+        step — step-1, step-2 and step-3 all call it — so the banner is above
+        the form, above the picks AND above the success screen without the
+        client component having to remember it in three places.
+
+        `sticky` so it survives a long step-1 form; a mode warning that
+        scrolls away is a mode warning that is read once and then forgotten
+        while the author fills in a real-looking order.
+      */}
+      {preview && (
+        <p
+          data-testid="bundle-preview-banner"
+          className="sticky top-0 z-50 -mx-4 mb-6 border-b border-9e-lime bg-9e-lime px-4 py-2 text-center text-sm font-bold text-9e-navy lg:-mx-6"
+        >
+          {BUNDLE_PREVIEW_BANNER}
+        </p>
+      )}
       <header className="mb-8">
         <p className="text-sm font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
           สมัครอบรม Bundle
@@ -267,6 +326,13 @@ export async function BundlePageContent({ searchParams, step }) {
         today={todayKey}
         courseTitleByItemId={courseTitleByItemId}
         basePath={BUNDLE_BASE_PATH}
+        /*
+          THE MODE, THREADED. The client half needs it for four things, each
+          of which would be wrong to infer: the banner, the submit label, the
+          flag on its own step links (lose it and step 2 silently drops back
+          to the published bundle), and the flag on its POST.
+        */
+        preview={preview}
         summary={
           <BundleSummary
             lines={lines}
@@ -287,6 +353,35 @@ export async function BundlePageContent({ searchParams, step }) {
  * property of the REASON and lives with the reasons, so this route cannot
  * accidentally render "ปิดรับสมัครแล้ว" for a section id that never existed.
  */
+/**
+ * THE PREVIEW REFUSAL, and it says the same thing for all four causes.
+ *
+ * `resolveBundlePreviewPage` distinguishes no-page / disabled / expired /
+ * locked, and this deliberately does not: a screen that told an
+ * unauthorised caller which gate stopped them would be a probe for which
+ * unpublished pages exist and which of them have preview switched on.
+ *
+ * NOT `notFound()`. A 404 would be the same answer this route gives for a
+ * section id nobody authored, and the two are different facts — one of them
+ * is "you are not allowed", which an author who mistyped a password needs to
+ * be able to tell apart from "this does not exist".
+ */
+function renderPreviewForbidden() {
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-16 text-center">
+      <h1
+        data-testid="bundle-preview-forbidden"
+        className="text-xl font-bold text-[var(--text-primary)]"
+      >
+        {BUNDLE_PREVIEW_FORBIDDEN}
+      </h1>
+      <p className="mt-3 text-sm text-[var(--text-secondary)]">
+        {BUNDLE_PREVIEW_FORBIDDEN_BODY}
+      </p>
+    </main>
+  );
+}
+
 function renderRefusal(reason) {
   if (isSilentRefusal(reason)) notFound();
 

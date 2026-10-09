@@ -160,7 +160,24 @@ test('the preview route renders the composed view, and gates BEFORE it', () => {
     withImports,
     /import \{[\s\S]*?\bcomposeWorkingView\b[\s\S]*?\} from '@\/lib\/pageBuilder\/draftState'/
   );
-  assert.match(code, /<PageBuilderView page=\{composeWorkingView\(page\)\} \/>/, 'the route still renders the raw doc');
+  /**
+   * THE COMPOSED VIEW, PLUS THE ONE FIELD IT DOES NOT CARRY.
+   *
+   * This used to pin `page={composeWorkingView(page)}` exactly. The claim is
+   * unchanged — the route must render the COMPOSED view and never the raw doc
+   * — but the expression now spreads one field back in: `composeWorkingView`
+   * returns the editable surface and `_id` is in neither key list, which is
+   * why a bundle on this page drew no register button and no state message
+   * either. Asserted as two separate facts so the restoration cannot be
+   * mistaken for the composition.
+   */
+  assert.match(code, /composeWorkingView\(page\)/, 'the route still renders the raw doc');
+  assert.match(code, /_id: page\._id/, 'the composed view goes out without its id again');
+  assert.equal(
+    /<PageBuilderView page=\{page\}/.test(code),
+    false,
+    'the route hands the raw document straight to the view',
+  );
 
   // ORDER, asserted rather than assumed: every terminal gate returns before the
   // content is composed. An unauthenticated response must contain only the gate.

@@ -135,6 +135,62 @@ test('an unpublished, expired or not-yet-live page is refused', () => {
   }
 });
 
+test('`allowUnpublished` lets an AUTHORISED preview past visibility, and nothing else', () => {
+  /**
+   * A previewed page is unpublished by definition — that is what preview is
+   * for — so the public-visibility rule refuses every preview of a draft. It
+   * did: `claude-duo` reached this check and was told
+   * "ขณะนี้ยังไม่สามารถรับลงทะเบียนแพ็กเกจนี้ได้" even after the cookie fix had
+   * got it past the preview gate.
+   *
+   * THE RELAXATION IS EXACTLY ONE CHECK WIDE, which is the half that matters:
+   * an author opens a preview to find out whether the bundle WORKS, so a flag
+   * that also waved through a disabled section, a closed bundle or unresolved
+   * items would answer the wrong question — and, on the route, would do it one
+   * step before a write.
+   */
+  for (const over of [
+    { status: 'draft' },
+    { status: 'closed' },
+    { status: 'archived' },
+    { status: 'published', publishEndDate: '2026-01-01T00:00:00.000Z' },
+  ]) {
+    const args = { ...OK_ARGS, page: page([bundle()], over) };
+    assert.equal(resolveBundleRequest(args).ok, false, `${JSON.stringify(over)} was public`);
+    assert.equal(
+      resolveBundleRequest({ ...args, allowUnpublished: true }).ok,
+      true,
+      `${JSON.stringify(over)} is still refused for an authorised preview`,
+    );
+  }
+
+  // EVERY OTHER REFUSAL SURVIVES THE FLAG.
+  const draft = { status: 'draft' };
+  const still = [
+    ['section_disabled', page([bundle({}, { enabled: false })], draft)],
+    ['closed', page([bundle({ registrationOpen: false })], draft)],
+    ['unresolved_items', page([bundle({ items: [] })], draft)],
+  ];
+  for (const [reason, p] of still) {
+    const out = resolveBundleRequest({ ...OK_ARGS, page: p, allowUnpublished: true });
+    assert.equal(out.ok, false, `${reason} was waved through by allowUnpublished`);
+    assert.equal(out.reason, reason, `${reason} refused with the wrong reason`);
+  }
+});
+
+test('CONTROL: the flag DEFAULTS to the public rule', () => {
+  /**
+   * The guard above passes `allowUnpublished: true` explicitly. The property
+   * that keeps every existing caller safe is the DEFAULT — a caller that has
+   * never heard of this parameter must keep refusing a draft, and a future one
+   * that forgets it exists must too.
+   */
+  const args = { ...OK_ARGS, page: page([bundle()], { status: 'draft' }) };
+  assert.equal(resolveBundleRequest(args).reason, 'page_not_public');
+  assert.equal(resolveBundleRequest({ ...args, allowUnpublished: false }).reason, 'page_not_public');
+  assert.equal(resolveBundleRequest({ ...args, allowUnpublished: undefined }).reason, 'page_not_public');
+});
+
 test('expiry is the ONLY one of those that answers page_expired', () => {
   /**
    * The discrimination the split lives or dies by. Without it, a guard that
