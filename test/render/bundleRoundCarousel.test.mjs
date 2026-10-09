@@ -4,7 +4,12 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
 
-import { BundleRoundCarousel } from '@/components/pageBuilder/sections/BundleRoundCarousel';
+import {
+  BundleRoundCarousel,
+  clampStart,
+  roundWindow,
+} from '@/components/pageBuilder/sections/BundleRoundCarousel';
+import { readSource } from '../sourceScan.mjs';
 import { PICK_REASON_TEXT } from '@/lib/pageBuilder/bundleRegistration';
 
 /**
@@ -222,6 +227,107 @@ test('CONTROL: the probes DO fire on the shape that misaligned', () => {
     heading.parentElement.querySelector('button'), null,
     'the button probe cannot tell the old shape apart',
   );
+});
+
+// ── the arrows step ONE round, not one page ───────────────────────────────
+
+test('ARROWS STEP BY ONE: five rounds give 1-2, 2-3, 3-4, 4-5 and back', () => {
+  /**
+   * THE DEFECT THIS PINS. The arrows moved by `PER_VIEW`, so on five rounds the
+   * sequence was 1-2 -> 3-4 -> 4-5: the third press asks for index 4, the clamp
+   * pulls it to `total - PER_VIEW` = 3, and ROUND 4 IS SHOWN TWICE while round 3
+   * is skipped on the way back. A visitor pressing ไปรอบถัดไป twice sees a round
+   * they have already seen and never sees the one between.
+   *
+   * ── WHY THE ARITHMETIC AND NOT A CLICK ──────────────────────────────────
+   * `goTo` measures a box with `getBoundingClientRect` to turn an index into a
+   * scroll offset, and that is 0 in jsdom — so a simulated press moves nothing
+   * and a click-driven test would pass against any step size at all. The
+   * sequence of POSITIONS is the requirement, and `clampStart` / `roundWindow`
+   * are exported so it can be asserted where it is actually decided. The arrows
+   * are tied to them by the source scan below.
+   */
+  const total = 5;
+  const seen = [];
+  let start = 0;
+  seen.push(roundWindow(start, total));
+  for (let i = 0; i < 4; i += 1) {
+    start = clampStart(start + 1, total);
+    seen.push(roundWindow(start, total));
+  }
+  assert.deepEqual(
+    seen.map((w) => w.from + '-' + w.to),
+    ['1-2', '2-3', '3-4', '4-5', '4-5'],
+    'the window did not slide one round at a time',
+  );
+
+  // And the same four positions in reverse, with no round skipped.
+  const back = [];
+  for (let i = 0; i < 4; i += 1) {
+    start = clampStart(start - 1, total);
+    back.push(roundWindow(start, total).from + '-' + roundWindow(start, total).to);
+  }
+  assert.deepEqual(back, ['3-4', '2-3', '1-2', '1-2']);
+});
+
+test('CONTROL: stepping by PER_VIEW reproduces the repeat this replaced', () => {
+  /**
+   * Without this the test above would pass against any step that happens to
+   * reach 4-5 eventually. Two is the old step, and it must still produce the
+   * reported sequence — round 4 twice, round 3 never first.
+   */
+  const total = 5;
+  const seen = [];
+  let start = 0;
+  seen.push(roundWindow(start, total));
+  for (let i = 0; i < 2; i += 1) {
+    start = clampStart(start + 2, total);
+    seen.push(roundWindow(start, total));
+  }
+  assert.deepEqual(seen.map((w) => w.from + '-' + w.to), ['1-2', '3-4', '4-5']);
+});
+
+test('the last position is always a FULL pair, never a lone box', () => {
+  for (const total of [3, 4, 5, 9]) {
+    const last = clampStart(999, total);
+    const w = roundWindow(last, total);
+    assert.equal(w.to - w.from, 1, 'N=' + total + ' ends on a single box: ' + JSON.stringify(w));
+    assert.equal(w.to, total, 'N=' + total + ' does not end on the last round');
+  }
+  // A list shorter than the window cannot scroll at all.
+  for (const total of [0, 1, 2]) {
+    assert.equal(clampStart(999, total), 0, 'N=' + total + ' scrolled');
+  }
+});
+
+test('three rounds give exactly two positions', () => {
+  const total = 3;
+  assert.deepEqual(roundWindow(clampStart(0, total), total), { from: 1, to: 2 });
+  assert.deepEqual(roundWindow(clampStart(1, total), total), { from: 2, to: 3 });
+  assert.deepEqual(roundWindow(clampStart(2, total), total), { from: 2, to: 3 });
+});
+
+test('the arrows are WIRED to the one-round step, and the clamp is shared', () => {
+  /**
+   * The arithmetic above is only the requirement if the buttons use it. And the
+   * clamp has to be the SAME one the scroll reader applies, or a swipe and an
+   * arrow press would disagree about which round is first — the position line
+   * reads `1-2 จาก 5` while the track shows 3 and 4.
+   */
+  const { code } = readSource('src/components/pageBuilder/sections/BundleRoundCarousel.jsx');
+  assert.match(code, /const STEP = 1;/, 'the arrow step is no longer one round');
+  assert.match(code, /onClick=\{\(\) => goTo\(start - STEP\)\}/, 'the back arrow does not step by STEP');
+  assert.match(code, /onClick=\{\(\) => goTo\(start \+ STEP\)\}/, 'the next arrow does not step by STEP');
+  assert.equal(
+    /goTo\(start [-+] PER_VIEW\)/.test(code), false,
+    'an arrow still pages by PER_VIEW',
+  );
+  // One clamp, three readers: goTo, the scroll reader, and the position line.
+  assert.equal(
+    (code.match(/clampStart\(/g) ?? []).length, 3,
+    'the clamp is not shared by goTo, the scroll reader and the window helper',
+  );
+  assert.match(code, /const \{ from, to \} = roundWindow\(start, total\)/);
 });
 
 // ── no chip may sit on the clipping edge ──────────────────────────────────
