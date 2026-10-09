@@ -95,6 +95,15 @@ const labelFor = (type) =>
  * @param {() => void} o.onClick
  */
 export function RoundPickChip({
+  /**
+   * The round's id, emitted as `data-round-id` when given.
+   *
+   * A `<select>` put the id in `option[value]`, which is how the bundle's
+   * tests addressed one round among several; a chip has no value attribute and
+   * its date label is the wrong handle — the label is the thing under test.
+   * OPTIONAL, so career-path, which has no such test, renders without it.
+   */
+  roundId,
   dateLabel,
   type,
   selected = false,
@@ -116,6 +125,7 @@ export function RoundPickChip({
         same reason ScheduleCard carries `data-tone`.
       */
       data-round-pick-chip=""
+      data-round-id={roundId}
       data-pickable={enabled ? 'yes' : 'no'}
       data-selected={selected ? 'yes' : 'no'}
       /*

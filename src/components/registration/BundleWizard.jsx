@@ -27,6 +27,11 @@ import {
   Section,
 } from '@/components/registration/PreviewRows';
 import { RegistrationStepper } from '@/components/registration/RegistrationStepper';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The package summary is rendered HERE now, not handed in
+// as a server node: its round lines follow the applicant's picks, which are
+// this component's state. See `summaryLines`.
+import { BundleSummary } from '@/components/registration/BundleSummary';
 import { StepComplete } from '@/components/registration/RegisterWizard';
 import { consentFanOut } from '@/components/payment/consent';
 // ADDED beside the statement above rather than folded into it — the standing
@@ -58,11 +63,35 @@ import { BUNDLE_TERMS_TITLE } from '@/lib/registration/bundleTerms';
 const STORAGE_KEY = 'registration-bundle-v1';
 const FORMDATA_KEY = 'registration-bundle-formdata-v1';
 const RESULT_KEY = 'registration-bundle-result-v1';
+/**
+ * THE PICKS, AND THEY HAVE TO BE STORED FOR THE SAME REASON THE FORM IS.
+ *
+ * Round picking is its own ROUTE now, so moving from it to the form unmounts
+ * this component and clears its state — and `initialBundlePicks` would then
+ * re-seed only the single-pickable-round courses, silently throwing away every
+ * choice an applicant made on a multi-round one. Pressing back would show them
+ * an empty picker.
+ */
+const PICKS_KEY = 'registration-bundle-picks-v1';
+
+/**
+ * ── FOUR STEPS, AND THE FIRST ONE IS THE DECISION ─────────────────────────
+ * Round picking used to be a block at the top of the form. It is a separate
+ * question from "who is coming and where do we send the quotation" — it decides
+ * WHAT is being quoted — and it was asked in the same breath, above a long
+ * form, with the summary beside it already naming rounds nobody had chosen.
+ *
+ * So it is step 1, the form is step 2, and the two screens that followed keep
+ * their order and their names. The labels are passed to the shared stepper
+ * rather than taught to it: see the note there.
+ */
+const BUNDLE_STEPS = ['เลือกรอบ', 'กรอกข้อมูล', 'ตรวจสอบ', 'สำเร็จ'];
+const LAST_STEP = BUNDLE_STEPS.length;
 
 /**
  * THE BUNDLE QUOTATION WIZARD.
  *
- * ══ IT IS THREE ROUTES NOW, AND THIS REPLACES THE NOTE THAT SAID OTHERWISE ═
+ * ══ IT IS FOUR ROUTES NOW, AND THIS REPLACES THE NOTE THAT SAID OTHERWISE ═
  *
  * `BundleRegisterForm` used to say, at length, that this flow was deliberately
  * ONE page with a confirm state — "one entry point and one submission, so it is
@@ -78,8 +107,13 @@ const RESULT_KEY = 'registration-bundle-result-v1';
  * decoration on a form someone fills in from a phone, and "ตรวจสอบ" that cannot
  * be arrived at, left, and returned to is a label rather than a step.
  *
+ * AND THEN A FOURTH WENT IN FRONT: เลือกรอบ. Picking a round per course was a
+ * block at the top of the form, which put the decision about WHAT is being
+ * quoted in the same breath as the contact, attendee and invoice fields. It is
+ * step 1 now; see BUNDLE_STEPS.
+ *
  * WHAT THAT COSTS, STATED RATHER THAN DISCOVERED. Each step is its own route,
- * so the server re-resolves the bundle on every step — three times across a
+ * so the server re-resolves the bundle on every step — four times across a
  * completed flow instead of once. That is accepted deliberately: the resolve is
  * two awaited calls (`getPublishedPageBuilderPageById`, then
  * `resolveSectionData`), it is the same work the landing page already did, and
@@ -96,26 +130,39 @@ const RESULT_KEY = 'registration-bundle-result-v1';
  *   1. sessionStorage rehydration — each step is a route, so navigating
  *      remounts this component and clears React state. The draft, the confirmed
  *      payload and the result live in storage.
- *   2. a remount guard — landing on step 2 with no payload, or step 3 with no
- *      result, silently returns to step 1 with the query string intact.
+ *   2. a remount guard — landing on a step without the data it needs returns
+ *      to the step that produces it, with the query string intact. The picks
+ *      are part of that data now and are stored for exactly that reason, so a
+ *      back-button return to the picker is not an empty screen.
  *   3. `?page=&section=` preserved across every step, by building step hrefs
  *      from `searchParams` rather than from a remembered pair.
  *
  * ══ WHAT IS STILL ABSENT ═══════════════════════════════════════════════════
  *
- * NO ROUND PICKER, no ยืนยันรอบอบรม reveal, no `AttendanceModeSelector`, and
- * none of the wizard's `?class=` notices. A bundle's rounds are chosen by the
- * author and there is no single round for the customer to pick. One person
- * attends every course in the package, so there is no per-course attendee UI —
- * and the summary block says "N หลักสูตร", counting COURSES, for that reason.
+ * NO ยืนยันรอบอบรม reveal, no `AttendanceModeSelector`, and none of the
+ * wizard's `?class=` notices.
+ *
+ * THERE IS A ROUND PICKER, and the sentence that used to stand here said
+ * otherwise — "a bundle's rounds are chosen by the author and there is no
+ * single round for the customer to pick". That was true of the bundle this
+ * component was written for and is now FALSE: an author offers SEVERAL rounds
+ * per course and the customer picks one, under a sequence rule when the
+ * package is ordered. It is replaced rather than amended, because the next
+ * reader trusts it.
+ *
+ * One person still attends every course in the package, so there is no
+ * per-course attendee UI — and the summary block says "N หลักสูตร", counting
+ * COURSES, for that reason.
  *
  * NO PAYMENT. `bundleRegistrationSchema` carries no `paymentMethod` and no
  * `omiseToken`, so there is nothing to render and nothing a client could send.
- * That is also why the stepper is not told `takesPayment`: step 2 says plainly
- * `ตรวจสอบ`, never `ตรวจสอบและดำเนินการ`, because there is no payment to
- * proceed to and promising one is a promise this screen cannot keep.
+ * That is also why the stepper is not told `takesPayment`: its step 3 says
+ * plainly `ตรวจสอบ`, never `ตรวจสอบและดำเนินการ`, because there is no payment
+ * to proceed to and promising one is a promise this screen cannot keep. The
+ * label is spelled in BUNDLE_STEPS now rather than derived from the flag,
+ * which cannot change what it means.
  *
- * ══ THE CONSENT IS ON STEP 2, WHERE THE REVIEW IS ══════════════════════════
+ * ══ THE CONSENT IS ON THE REVIEW STEP, WHERE THE REVIEW IS ════════════════
  *
  * It moved off the form and onto the review screen, which is where both of the
  * public wizard's step-2 surfaces put it: a customer confirms after checking,
@@ -125,10 +172,6 @@ const RESULT_KEY = 'registration-bundle-result-v1';
  * ReviewAndPayStep's, which points at payment terms a quotation does not have.
  *
  * @param {object} o
- * @param {ReactNode} [o.summary] the server-rendered BundleSummary. Passed in
- *   rather than built here so the block stays a server component: its `lines`
- *   are formatted by `formatRoundDays` from a clock read this client must not
- *   make. Shown on steps 1 and 2 — on 3 the request is already sent.
  */
 export function BundleWizard({
   pageId,
@@ -156,7 +199,30 @@ export function BundleWizard({
    * published bundle, which is the bug that shape already prevents.
    */
   preview = false,
-  summary = null,
+  /**
+   * ── THE SUMMARY IS DATA NOW, NOT A SERVER-RENDERED NODE ──────────────
+   * It used to arrive as `summary`, a `<BundleSummary>` element the route
+   * built. That worked while the block showed a round per course decided by
+   * the AUTHOR — and it was the mechanism of the defect this round removes:
+   * the server picked a default round with `chooseItemRound` and the card
+   * printed it as `รอบอบรม 12-13 พ.ย.` while both pickers still read
+   * "— เลือกรอบ —". The customer was shown a round they had not chosen,
+   * beside the control for choosing it.
+   *
+   * A round line that follows the PICK cannot be rendered on the server,
+   * because the pick is this component's state. So the route hands over the
+   * lines as plain data — one entry per course, with every offered round's
+   * label keyed by its id — and this component chooses which to show.
+   *
+   * THE CLOCK STILL DOES NOT CROSS. Every label in `roundsById` was written
+   * by `formatRoundDays` on the server from the single threaded
+   * `todayKey`/`currentYear` pair. Nothing here formats a date; this picks a
+   * string out of a map. That is the invariant BundleSummary's own header
+   * states, and it is why the data is labels rather than raw rounds.
+   */
+  summaryLines = null,
+  listPrice = null,
+  netPrice = null,
   /**
    * ── THE PICK INPUTS, FROM THE SERVER ──────────────────────────────────
    * The stored items, the live status map and today's Bangkok date. The pure
@@ -229,10 +295,18 @@ export function BundleWizard({
    * a single-round bundle, so an older open tab keeps working.
    */
   useEffect(() => {
-    if (picksSeeded || !Array.isArray(pickItems) || !pickItems.length) return;
+    /*
+      `hydrated` IS THE NEW GUARD AND IT IS LOAD-BEARING. The storage effect
+      below restores the picks an applicant already made and sets both
+      `picksSeeded` and `hydrated`; effects run in declaration order within one
+      commit, so without this condition THIS effect would run first — with
+      `picksSeeded` still false — and overwrite the restored picks with the
+      preselections before anything had a chance to load them.
+    */
+    if (!hydrated || picksSeeded || !Array.isArray(pickItems) || !pickItems.length) return;
     setPicks(initialBundlePicks({ items: pickItems, sequential, liveStatusById, today }));
     setPicksSeeded(true);
-  }, [picksSeeded, pickItems, sequential, liveStatusById, today]);
+  }, [hydrated, picksSeeded, pickItems, sequential, liveStatusById, today]);
 
   /**
    * ── SUBMIT IS GATED ON THE SAME FUNCTION THE SERVER RUNS ───────────────
@@ -248,6 +322,28 @@ export function BundleWizard({
     !Array.isArray(pickItems) || !pickItems.length
       ? true
       : validateBundlePicks({ items: pickItems, sequential, liveStatusById, picks, today }).ok;
+
+  /**
+   * ── A COURSE SHOWS ITS ROUND ONLY ONCE THE ROUND IS PICKED ──────────────
+   * `dates` and `type` are null until then, and BundleSummary draws
+   * ยังไม่ได้เลือกรอบ in place of the date line and nothing at all in place of
+   * the delivery line. There is no default round to fall back to and there
+   * must not be one: a card that names a round the customer did not choose is
+   * the defect this replaces, and the honest state of an unpicked course is
+   * that it has no round.
+   *
+   * A LEGACY RENDER — no `summaryLines` threaded — shows nothing, which is
+   * what it showed before this prop existed.
+   */
+  const visibleSummaryLines = (Array.isArray(summaryLines) ? summaryLines : []).map((line) => {
+    const roundId = String(picks?.[line.itemId] ?? '');
+    const round = roundId ? (line.roundsById?.[roundId] ?? null) : null;
+    return { ...line, dates: round?.dates ?? null, type: round?.type ?? null };
+  });
+
+  const summary = (
+    <BundleSummary lines={visibleSummaryLines} listPrice={listPrice} netPrice={netPrice} />
+  );
 
   const handlePicksChange = (next, cleared) => {
     setPicks(next);
@@ -307,7 +403,27 @@ export function BundleWizard({
       // ignore corrupted storage
     }
 
-    if (step === 3) {
+    /*
+      THE PICKS, RESTORED BEFORE THE PRESELECTIONS GET A CHANCE TO RUN. Same
+      pair check as the draft: a set of picks belongs to THIS package or it is
+      discarded, because a roundId from another bundle names a round this one
+      does not offer and the server would refuse it with no way for the
+      applicant to see why.
+    */
+    try {
+      const rawPicks = sessionStorage.getItem(PICKS_KEY);
+      if (rawPicks) {
+        const parsed = JSON.parse(rawPicks);
+        if (matchesPair(parsed) && parsed.picks && typeof parsed.picks === 'object') {
+          setPicks(parsed.picks);
+          setPicksSeeded(true);
+        } else sessionStorage.removeItem(PICKS_KEY);
+      }
+    } catch {
+      // ignore corrupted storage
+    }
+
+    if (step === LAST_STEP) {
       try {
         const rawRes = sessionStorage.getItem(RESULT_KEY);
         if (rawRes) {
@@ -332,14 +448,46 @@ export function BundleWizard({
     setHydrated(true);
   }, [step, matchesPair]);
 
-  // THE REMOUNT GUARD. A refresh or a deep link to a later step without the
-  // data that step needs goes back to step 1 — keeping the query params, so the
-  // bundle is still the one they came for.
+  /**
+   * The picks follow the applicant across the step routes. Written on every
+   * change rather than on navigation, because a change is the only moment the
+   * value is known to be theirs — a write on the way out of step 1 would miss
+   * a back-button exit, which is exactly the navigation this exists for.
+   */
   useEffect(() => {
     if (!hydrated) return;
-    if (currentStep === 2 && !formData) router.replace(stepHref(1));
-    else if (currentStep === 3 && !result) router.replace(stepHref(1));
-  }, [hydrated, currentStep, formData, result, router, stepHref]);
+    try {
+      sessionStorage.setItem(PICKS_KEY, JSON.stringify({ picks, pageId, sectionId }));
+    } catch {}
+  }, [hydrated, picks, pageId, sectionId]);
+
+  /**
+   * THE REMOUNT GUARD. A refresh or a deep link to a later step without the
+   * data that step needs goes back to the step that produces it, keeping the
+   * query params so the bundle is still the one they came for.
+   *
+   * THE PICKS GATE STOPS AT STEP 3, DELIBERATELY. Step 4 is the success
+   * screen, and the picks are cleared from storage the moment the request is
+   * accepted — so including it would seed the preselections, find them
+   * incomplete, and bounce a customer off their own confirmation back to a
+   * picker for a package they have already requested.
+   */
+  useEffect(() => {
+    if (!hydrated) return;
+    if ((currentStep === 2 || currentStep === 3) && !picksOk) router.replace(stepHref(1));
+    else if (currentStep === 3 && !formData) router.replace(stepHref(2));
+    else if (currentStep === LAST_STEP && !result) router.replace(stepHref(1));
+  }, [hydrated, currentStep, picksOk, formData, result, router, stepHref]);
+
+  /**
+   * Step 1 → step 2. `picksOk` is the SAME gate the submit button runs, so a
+   * set of picks that would be refused cannot leave this step.
+   */
+  const handlePicksNext = () => {
+    setCurrentStep(2);
+    router.push(stepHref(2));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const handleFormSubmit = (values) => {
     // The pair goes from the PROPS, not from the form state: they are the
@@ -352,15 +500,16 @@ export function BundleWizard({
     try {
       sessionStorage.setItem(FORMDATA_KEY, JSON.stringify(data));
     } catch {}
-    setCurrentStep(2);
-    router.push(stepHref(2));
+    setCurrentStep(3);
+    router.push(stepHref(3));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  /** The review step's way back — to the FORM, which is what it reviews. */
   const handleBack = () => {
     setError(null);
-    setCurrentStep(1);
-    router.push(stepHref(1));
+    setCurrentStep(2);
+    router.push(stepHref(2));
   };
 
   async function handleConfirm() {
@@ -407,6 +556,11 @@ export function BundleWizard({
         try {
           sessionStorage.removeItem(FORMDATA_KEY);
         } catch {}
+        // The picks go with them: a customer starting a second request must not
+        // inherit the rounds of the one already sent.
+        try {
+          sessionStorage.removeItem(PICKS_KEY);
+        } catch {}
         try {
           sessionStorage.setItem(
             RESULT_KEY,
@@ -414,8 +568,8 @@ export function BundleWizard({
           );
         } catch {}
         setResult(json);
-        setCurrentStep(3);
-        router.push(stepHref(3));
+        setCurrentStep(LAST_STEP);
+        router.push(stepHref(LAST_STEP));
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
@@ -501,11 +655,12 @@ export function BundleWizard({
   return (
     <div>
       {/*
-        No `takesPayment` — a quotation never proceeds to a charge, so step 2
-        reads ตรวจสอบ. The prop is left at its default rather than passed as
-        `false` so there is one fewer place to change it to the wrong thing.
+        FOUR LABELS, PASSED IN. `takesPayment` is not passed and is ignored when
+        `steps` is: a quotation never proceeds to a charge, so step 3 reads
+        ตรวจสอบ, and the label is now spelled in BUNDLE_STEPS rather than
+        derived from a flag this flow could never set true.
       */}
-      <RegistrationStepper currentStep={currentStep} />
+      <RegistrationStepper currentStep={currentStep} steps={BUNDLE_STEPS} />
 
       {/*
         ══ THE TWO-COLUMN SHELL, AND IT IS THE SAME ONE ON BOTH STEPS ═══════
@@ -514,15 +669,20 @@ export function BundleWizard({
         330px track, `lg:items-start`, and the sticky/hidden pair below are
         that page's, not a second arrangement invented here.
 
-        STEPS 1 AND 2 SHARE IT DELIBERATELY. They are adjacent screens in one
-        wizard showing the SAME card, and a customer who moves from one to the
-        other and finds the package has jumped from the right rail into the
+        STEPS 1, 2 AND 3 SHARE IT DELIBERATELY. They are adjacent screens in
+        one wizard showing the SAME card, and a customer who moves from one to
+        the next and finds the package has jumped from the right rail into the
         flow reads that as a bug rather than as a design. The masterclass makes
         the same call — both of its steps are two-column with a sticky right
         rail. There is no reason for them to differ that survives being said
         out loud, so they do not.
 
-        Step 3 has no card: the request is sent, and re-showing what was
+        AND ON STEP 1 IT IS DOING MORE THAN SHOWING. The card is where the
+        picks LAND: every course reads ยังไม่ได้เลือกรอบ until one is chosen and
+        then names the round. The decision and its consequence are on one
+        screen, which is the whole reason the picker is a step of its own.
+
+        The LAST step has no card: the request is sent, and re-showing what was
         requested beside a confirmation invites a second reading of a decision
         already made.
 
@@ -531,7 +691,7 @@ export function BundleWizard({
         copying the padding would reserve 96px of empty space under every
         mobile screen for a thing that is not there.
       */}
-      {currentStep !== 3 && (
+      {currentStep !== LAST_STEP && (
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_330px] lg:items-start">
           <div>
             {/*
@@ -545,38 +705,49 @@ export function BundleWizard({
             */}
             <div className="mb-6 lg:hidden">{summary}</div>
 
-            {currentStep === 1 && hydrated && Array.isArray(pickItems) && pickItems.length > 0 && (
-              <div className="mb-6">
-                <BundleRoundPicks
-                  items={pickItems}
-                  sequential={sequential}
-                  liveStatusById={liveStatusById}
-                  today={today}
-                  picks={picks}
-                  onChange={handlePicksChange}
-                  cleared={clearedPicks}
-                  serverErrors={pickErrors}
-                  courseTitleByItemId={courseTitleByItemId}
-                />
-                {!picksOk && (
-                  <p data-testid="bundle-picks-incomplete" className="mt-2 text-xs font-bold text-amber-700">
-                    เลือกรอบให้ครบทุกหลักสูตรก่อนดำเนินการต่อ
-                  </p>
-                )}
-              </div>
+            {/*
+              ── STEP 1: THE ROUNDS, AND NOTHING ELSE ON THE SCREEN ──────────
+              This block used to sit above the form with `mb-6` under it. It is
+              its own step now, so the margin goes with the neighbour it was
+              separating this from, and the step owns a footer of its own.
+
+              A BUNDLE WITH NOTHING TO PICK still renders this step, and that is
+              a change: the old condition hid the block and left the form in
+              place, which worked because they shared a screen. A legacy render
+              — no `pickItems` threaded — would now show an empty first step, so
+              `BundleStepPicks` draws the sentence that says so and its ถัดไป
+              stays enabled, because `picksOk` is true for that case and the
+              server derives those picks itself.
+            */}
+            {currentStep === 1 && hydrated && (
+              <BundleStepPicks
+                items={pickItems}
+                sequential={sequential}
+                liveStatusById={liveStatusById}
+                today={today}
+                picks={picks}
+                onChange={handlePicksChange}
+                cleared={clearedPicks}
+                serverErrors={pickErrors}
+                courseTitleByItemId={courseTitleByItemId}
+                picksOk={picksOk}
+                onNext={handlePicksNext}
+                backHref={backHref}
+              />
             )}
 
-            {currentStep === 1 && hydrated && (
+            {currentStep === 2 && hydrated && (
               <BundleStepForm
                 pageId={pageId}
                 sectionId={sectionId}
                 initialValues={formData ?? restoredFromStorage}
                 onSubmit={handleFormSubmit}
-                backHref={backHref}
+                backHref={stepHref(1)}
+                backLabel="กลับไปเลือกรอบ"
               />
             )}
 
-            {currentStep === 2 && formData && (
+            {currentStep === 3 && formData && (
               <BundleStepReview
                 data={formData}
                 onBack={handleBack}
@@ -598,7 +769,7 @@ export function BundleWizard({
         </div>
       )}
 
-      {currentStep === 3 && result && (
+      {currentStep === LAST_STEP && result && (
         /*
           ── NO REFERENCE NUMBER, AND NO BUNDLE-SPECIFIC CLOSING ─────────────
           This screen renders StepComplete's DEFAULTS: the
@@ -658,7 +829,107 @@ export function BundleWizard({
   );
 }
 
-// ── Step 1: the form ───────────────────────────────────────────────
+// ── Step 1: the rounds ─────────────────────────────────────────────
+
+/**
+ * THE ROUND STEP: one card per course, its rounds as chips, and a ถัดไป that
+ * will not move until the whole set is valid.
+ *
+ * ── IT IS THE CAREER-PATH PICKER, NOT A BUNDLE-SHAPED ONE ─────────────────
+ * `BundleRoundPicks` draws `RoundPickCourseCard` / `RoundPickChip` from
+ * components/registration/RoundPickCard — the career-path registration's own
+ * card and chip. This repo had two controls for one decision (chips there, a
+ * `<select>` per course here) and now has one.
+ *
+ * ── ถัดไป IS GATED ON `validateBundlePicks`, NOT ON A COUNT ───────────────
+ * `picksOk` is computed by the wizard with the SAME function the server runs.
+ * A local 'every course has something' count would let a complete set that
+ * breaks the sequence through, and the applicant would meet a 409 two screens
+ * later that this step could have prevented.
+ *
+ * EXPORTED for the render tier, which cannot reach it through the wizard: the
+ * step is gated behind a `hydrated` flag set in an effect, and
+ * renderToStaticMarkup never runs effects. Same reason BundleStepForm and
+ * BundleStepReview are exported.
+ */
+export function BundleStepPicks({
+  items,
+  sequential = false,
+  liveStatusById,
+  today,
+  picks,
+  onChange,
+  cleared = [],
+  serverErrors = null,
+  courseTitleByItemId = null,
+  picksOk = false,
+  onNext,
+  backHref = null,
+}) {
+  const hasPicks = Array.isArray(items) && items.length > 0;
+
+  return (
+    <section data-testid="bundle-step-picks" className="space-y-6">
+      {hasPicks ? (
+        <BundleRoundPicks
+          items={items}
+          sequential={sequential}
+          liveStatusById={liveStatusById}
+          today={today}
+          picks={picks}
+          onChange={onChange}
+          cleared={cleared}
+          serverErrors={serverErrors}
+          courseTitleByItemId={courseTitleByItemId}
+        />
+      ) : (
+        /*
+          THE LEGACY RENDER, SAID OUT LOUD. An open tab from before the pick
+          inputs were threaded has nothing to choose here, and the server
+          derives the picks for a bundle whose every course offers one round.
+          An empty step with a live ถัดไป needs a sentence or it reads as a
+          screen that failed to load.
+        */
+        <p
+          data-testid="bundle-picks-none"
+          className="rounded-9e-md border border-dashed border-[var(--surface-border)] px-4 py-8 text-center text-sm text-[var(--text-secondary)]"
+        >
+          แพ็กเกจนี้มีรอบอบรมกำหนดไว้แล้ว — ไม่ต้องเลือกรอบ
+        </p>
+      )}
+
+      {hasPicks && !picksOk && (
+        <p data-testid="bundle-picks-incomplete" className="text-xs font-bold text-amber-700">
+          เลือกรอบให้ครบทุกหลักสูตรก่อนดำเนินการต่อ
+        </p>
+      )}
+
+      {/* The step footer, in BundleStepForm's own shape — see the note there. */}
+      <div
+        className={cn(
+          'flex items-center gap-4 pt-2',
+          backHref ? 'justify-between' : 'justify-end',
+        )}
+        data-testid="bundle-step-nav"
+      >
+        {backHref && (
+          <Link
+            href={backHref}
+            className="text-sm font-medium text-[var(--text-secondary)] hover:text-9e-action"
+          >
+            ← กลับไปดูโปรโมชัน
+          </Link>
+        )}
+        <Button type="button" variant="cta" disabled={!picksOk} onClick={onNext}>
+          ถัดไป
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+// ── Step 2: the form ───────────────────────────────────────────────
 
 /**
  * EXPORTED for the render tier only, which cannot reach it through the wizard:
@@ -676,7 +947,22 @@ export function BundleWizard({
  * (the attendee/coordinator asymmetry, the English-only branch, the branch-code
  * handling) reach this form at all.
  */
-export function BundleStepForm({ pageId, sectionId, initialValues, onSubmit, backHref = null }) {
+export function BundleStepForm({
+  pageId,
+  sectionId,
+  initialValues,
+  onSubmit,
+  backHref = null,
+  /**
+   * The words on the back link, because its DESTINATION changed and the words
+   * were a fact about the old one. This step used to be the first screen and
+   * `backHref` was the promotion page; the pick step is in front of it now, so
+   * the wizard passes `stepHref(1)` and ← กลับไปเลือกรอบ. The default is kept
+   * at the promotion wording so a render that still passes only a page link —
+   * the render tier does — reads as it did.
+   */
+  backLabel = 'กลับไปดูโปรโมชัน',
+}) {
   const {
     register,
     handleSubmit,
@@ -750,7 +1036,7 @@ export function BundleStepForm({ pageId, sectionId, initialValues, onSubmit, bac
             href={backHref}
             className="text-sm font-medium text-[var(--text-secondary)] hover:text-9e-action"
           >
-            ← กลับไปดูโปรโมชัน
+            ← {backLabel}
           </Link>
         )}
         <Button type="submit" variant="cta">
@@ -762,7 +1048,7 @@ export function BundleStepForm({ pageId, sectionId, initialValues, onSubmit, bac
   );
 }
 
-// ── Step 2: the review ─────────────────────────────────────────────
+// ── Step 3: the review ─────────────────────────────────────────────
 
 /**
  * WHAT IS BEING REQUESTED, AND WHAT WAS TYPED — in that order.
