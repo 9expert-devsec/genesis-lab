@@ -103,6 +103,17 @@ import {
   Toggle,
 } from "./fields";
 import { RichTextEditor } from "./richText/RichTextEditor";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The bundle คำโปรย field's NARROWER contract (paragraph,
+// hard break, bold, italic, link) and the two helpers that keep its doc and
+// its always-string twin in step. See lib/bundle/blurb.js for why there are
+// two fields.
+import { blurbRichTextExtensions } from "./richText/tiptapExtensions";
+import {
+  blurbPatch,
+  docFromPlainText,
+  resolveBlurbForRender,
+} from "@/lib/bundle/blurb";
 
 /**
  * Per-type content editors (5b).
@@ -147,6 +158,34 @@ const EMBED_PROVIDER_LABELS = {
   iframe: "iframe (โค้ดฝัง)",
 };
 const ICON_HINT = "ค้นหาด้วยชื่อภาษาอังกฤษ เช่น rocket, users";
+
+/**
+ * ── THE BUNDLE คำโปรย FIELD, AT MODULE SCOPE FOR A REASON ─────────────────
+ *
+ * MODULE SCOPE, NOT INLINE. `RichTextEditor` memoises its extension set on the
+ * array it is handed, so building a fresh one per render would give a new
+ * identity every time and rebuild the Tiptap instance on every keystroke —
+ * which loses the caret. One array, created once.
+ *
+ * The set itself is `blurbRichTextExtensions`: paragraph, hard break, bold,
+ * italic, link, and nothing else installed. See its note.
+ */
+const BLURB_EXTENSIONS = blurbRichTextExtensions();
+
+/**
+ * What the editor OPENS with — the same drift rule the renderers apply.
+ *
+ * The stored doc when its plain text still equals `blurb`; otherwise the
+ * string as paragraphs. The second branch covers both the legacy section that
+ * has no doc at all and the one a PRODUCTION admin edited through the plain
+ * textarea on `dev`, leaving a stale doc behind — in either case what
+ * production stored is what the author must see, because it is also what the
+ * card is currently rendering.
+ */
+function blurbEditorDoc(content) {
+  const choice = resolveBlurbForRender(content);
+  return choice.kind === 'doc' ? choice.doc : docFromPlainText(choice.text);
+}
 
 // ── heading ──────────────────────────────────────────────────────────
 function HeadingEditor({ content, patch }) {
@@ -1998,8 +2037,33 @@ function PromotionBundleEditor({ content, patch, resolved, courses }) {
       <Field label="ชื่อแพ็กเกจ" hint='หัวข้อเต็ม เช่น "ดีลสุดคุ้ม! จับคู่ 2 คอร์ส…" — ใช้ในใบเสนอราคาและอีเมล'>
         <TextInput value={content?.name} onChange={(v) => patch({ name: v })} />
       </Field>
+      {/*
+        ── คำโปรย IS RICH TEXT NOW, AND IT WRITES TWO FIELDS ───────────────
+
+        The hint is unchanged. What changed is the control and what it stores:
+        `blurbDoc` gets the Tiptap document and `blurb` gets its plain text,
+        in ONE patch, every time.
+
+        THE TWO WRITES ARE ONE CALL on purpose. `blurbPatch` derives the string
+        FROM the doc, so there is no ordering in which the editor writes a doc
+        and leaves a stale string behind — and `typeof blurb === "string"` holds
+        by construction. That invariant is not local tidiness: production reads
+        `blurb` and throws on an object (see lib/bundle/blurb.js), and the two
+        branches share one database.
+
+        WHAT OPENS IN THE EDITOR is decided by the same drift rule the
+        renderers use — the stored doc if its plain text still equals `blurb`,
+        otherwise the string as paragraphs. So an author who opens a section a
+        PRODUCTION admin last edited sees what production stored, not the stale
+        rich text their own branch wrote before it.
+      */}
       <Field label="คำโปรย" hint="ประโยคสั้น ๆ ใต้ชื่อแพ็กเกจ — ไม่บังคับ">
-        <TextArea value={content?.blurb} onChange={(v) => patch({ blurb: v })} rows={2} />
+        <RichTextEditor
+          doc={blurbEditorDoc(content)}
+          onChange={(doc) => patch(blurbPatch(doc))}
+          extensions={BLURB_EXTENSIONS}
+          tools="inline"
+        />
       </Field>
 
       <Field label="ราคาปกติ (บาท)" hint="ราคารวมของคอร์สทั้งหมดก่อนลด">

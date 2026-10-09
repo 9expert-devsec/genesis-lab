@@ -28,6 +28,11 @@ import { siteCurrentYear, siteTodayKey } from "@/lib/articlePublishTime";
 // bundle path was missing entirely.
 import { bundleLiveStatusById } from "@/lib/registration/bundleLiveRounds";
 import { BundleWizard } from "@/components/registration/BundleWizard";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The SAME sub-line component the promotion card draws, so
+// the page a customer lands on cannot word the package differently from the
+// card they clicked.
+import { BundleBlurb } from "@/components/pageBuilder/sections/BundleBlurb";
 import { publicPageHref } from "@/lib/pages/promotionMode";
 /*
   `BundleSummary` IS NO LONGER IMPORTED HERE. The block moved one level down,
@@ -323,11 +328,15 @@ export async function BundlePageContent({ searchParams, step }) {
         <h1 className="mt-2 text-2xl font-bold text-[var(--text-primary)] lg:text-3xl">
           {content.name || "แพ็กเกจอบรม"}
         </h1>
-        {content.blurb ? (
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            {content.blurb}
-          </p>
-        ) : null}
+        {/*
+          The same two-field decision the card makes, from the same component.
+          A customer who clicked a card showing rich text must not land on a
+          header showing something else.
+        */}
+        <BundleBlurb
+          content={content}
+          className="mt-2 text-sm text-[var(--text-secondary)]"
+        />
       </header>
 
       {/*

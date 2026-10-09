@@ -119,3 +119,62 @@ export function richTextExtensions({ placeholder = 'เริ่มพิมพ�
     Placeholder.configure({ placeholder }),
   ];
 }
+
+/**
+ * ── THE BLURB'S SET: PARAGRAPH, HARD BREAK, BOLD, ITALIC, LINK ────────────
+ *
+ * A SECOND factory rather than an option on the one above, because the two
+ * answer different questions. `richTextExtensions` answers "what may a
+ * rich_text SECTION contain", and its answer is broad on purpose — headings,
+ * lists, alignment, colour. This answers "what may a bundle's one-line
+ * คำโปรย contain", and its answer is narrow: the field sits directly under a
+ * package name on a card roughly 230px wide, so a heading or a bullet list in
+ * it would render perfectly and be wrong.
+ *
+ * Folding both into one parameterised factory would put a mode switch in front
+ * of the file whose whole subject is "exactly the contract, nothing more" — and
+ * the contract differs between the two, so there would be two contracts behind
+ * one name.
+ *
+ * ── WHAT IS SWITCHED OFF, AND WHY EACH ────────────────────────────────────
+ * heading / bulletList / orderedList / listItem / blockquote / horizontalRule:
+ *   block furniture with nowhere to go in a one-line sub-heading.
+ * codeBlock: off here for the same reason it is off above — no walker renderer.
+ * strike / code: NOT in the allowed mark set. They are switched off at the
+ *   EXTENSION rather than merely left off the toolbar, because StarterKit binds
+ *   keyboard shortcuts for them (Mod-Shift-S, Mod-e) — a toolbar that does not
+ *   offer a mark an author can still type is the "looks right in the editor,
+ *   publishes wrong" failure this file exists to prevent.
+ *
+ * Not installed at all: Underline, Image, TextAlign, TextStyle, Color. Each
+ * emits something `lib/bundle/blurb.js`'s sanitiser would strip, so offering
+ * them would be offering a formatting choice that silently does not survive.
+ *
+ * `Link` is configured EXACTLY as above — the same `safeUrl` allowlist, shared
+ * with the walker and with the sanitiser, so the editor cannot accept a link
+ * that renders as unlinked text.
+ *
+ * The sanitiser is still the authority on what gets stored. This set is what
+ * stops an author authoring something it would throw away.
+ */
+export function blurbRichTextExtensions({ placeholder = 'คำโปรยสั้น ๆ ใต้ชื่อแพ็กเกจ' } = {}) {
+  return [
+    StarterKit.configure({
+      heading: false,
+      bulletList: false,
+      orderedList: false,
+      listItem: false,
+      blockquote: false,
+      horizontalRule: false,
+      codeBlock: false,
+      strike: false,
+      code: false,
+    }),
+    Link.configure({
+      openOnClick: false,
+      isAllowedUri: (url) => Boolean(safeUrl(url)),
+      shouldAutoLink: (url) => Boolean(safeUrl(url)),
+    }),
+    Placeholder.configure({ placeholder }),
+  ];
+}
