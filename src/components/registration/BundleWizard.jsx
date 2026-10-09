@@ -969,6 +969,9 @@ export function BundleStepForm({
     control,
     watch,
     setValue,
+    // ADDED: the LIVE attendee values, which AttendeesList needs to resize its
+    // row array without losing what is already typed in it.
+    getValues,
     formState: { errors, isSubmitted },
   } = useForm({
     resolver: zodResolver(bundleRegistrationSchema),
@@ -985,6 +988,7 @@ export function BundleStepForm({
         register={register}
         watch={watch}
         setValue={setValue}
+        getValues={getValues}
         errors={errors}
         isSubmitted={isSubmitted}
       />

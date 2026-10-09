@@ -689,6 +689,9 @@ export function StepForm({
     handleSubmit,
     watch,
     setValue,
+    // ADDED: the LIVE attendee values, which AttendeesList needs to resize its
+    // row array without losing what is already typed in it.
+    getValues,
     control,
     formState: { errors, isSubmitted },
   } = useForm({
@@ -1013,6 +1016,7 @@ export function StepForm({
             register={register}
             watch={watch}
             setValue={setValue}
+            getValues={getValues}
             errors={errors}
             isSubmitted={isSubmitted}
           />
