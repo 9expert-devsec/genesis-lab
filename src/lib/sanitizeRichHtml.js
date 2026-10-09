@@ -187,6 +187,42 @@ const ALLOWED_ATTRIBUTES_BY_TAG = {
   td: ['colspan', 'rowspan', 'style'],
   iframe: ['src', 'width', 'height', 'allow', 'allowfullscreen', 'title', 'frameborder'],
   span: ['style'],
+  /**
+   * `data-youtube-video` IS NOT ADMITTED HERE, AND THAT IS A DELIBERATE
+   * NON-CHANGE WITH A COST THAT SOMEONE HAS TO DECIDE ABOUT.
+   *
+   * The Tiptap YouTube node serialises a video as
+   * `<div data-youtube-video=""><iframe …></iframe></div>`. `div: ['style']`
+   * strips the attribute, so what reaches Mongo is `<div><iframe …></div>` —
+   * MEASURED over all 499 articles: 62 of the 99 stored iframes, in 60
+   * published articles, have been flattened this way since this module started
+   * running on the save path (`fix(security): sanitise the remaining 13
+   * unsanitised HTML render sites`, 2026-09-01).
+   *
+   * That caused real data loss, because the extension's stock parse rule is
+   * `div[data-youtube-video] iframe` and could no longer read its own output
+   * back: reopening such an article discarded the video and the next save
+   * stored a body without it. THAT IS FIXED, on the editor side only — see
+   * lib/editor/youtubeEmbed.js, which parses the flattened shape directly. No
+   * stored byte changed and nothing renders differently.
+   *
+   * ── WHAT IS STILL WRONG, AND WHY IT IS NOT FIXED HERE ─────────────────────
+   * globals.css carries `.article-content [data-youtube-video] iframe {
+   * width: 100%; aspect-ratio: 16/9 }` — the rule that makes an embed
+   * responsive. For those 60 articles that selector has matched NOTHING since
+   * 2026-09-01, so their videos render at a fixed 640×360 and overflow any
+   * viewport under 672px. Adding `'data-youtube-video'` to this list is a
+   * one-token fix for it, and it is safe (a `data-*` attribute executes
+   * nothing, navigates nowhere, carries no URL, and would be named exactly
+   * rather than by a wildcard).
+   *
+   * It is NOT done in this round because it would CHANGE HOW 36 ALREADY-
+   * PUBLISHED ARTICLES RENDER — the ones whose stored wrapper still has the
+   * attribute, which this module strips at render time as well as at save. The
+   * change is an improvement in every case measured, but it is a visible change
+   * to live pages and this round was explicitly scoped not to make one. Taking
+   * it is a decision, not a cleanup.
+   */
   div: ['style'],
   p: ['style'],
 };

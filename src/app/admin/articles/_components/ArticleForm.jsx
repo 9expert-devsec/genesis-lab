@@ -4,23 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Placeholder from '@tiptap/extension-placeholder';
 import { NodeSelection } from '@tiptap/pm/state';
-import { ResizableImage, imageModalAttrs } from '@/lib/editor/resizableImage';
-import TiptapLink from '@tiptap/extension-link';
-import Table from '@tiptap/extension-table';
-import TableRow from '@tiptap/extension-table-row';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
-import Youtube from '@tiptap/extension-youtube';
-import TextAlign from '@tiptap/extension-text-align';
-import Underline from '@tiptap/extension-underline';
-import Subscript from '@tiptap/extension-subscript';
-import Superscript from '@tiptap/extension-superscript';
-import TextStyle from '@tiptap/extension-text-style';
-import { Color } from '@tiptap/extension-color';
-import CharacterCount from '@tiptap/extension-character-count';
+import { imageModalAttrs } from '@/lib/editor/resizableImage';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The extension list this replaces lived inline in the
+// `useEditor` call below, where no test could reach its schema; see the
+// module's own header for why that mattered.
+import { articleEditorExtensions } from '@/components/admin/articleEditorExtensions';
 import {
   Bold as BoldIcon, Italic as ItalicIcon, Strikethrough,
   Underline as UnderlineIcon, Subscript as SubIcon,
@@ -349,48 +339,42 @@ export function ArticleForm({
 
   // ── Tiptap ────────────────────────────────────────────────────
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [1, 2, 3, 4] },
-      }),
-      Underline,
-      Subscript,
-      Superscript,
-      TextStyle,
-      Color,
-      TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      Placeholder.configure({ placeholder: 'เริ่มเขียนเนื้อหาที่นี่…' }),
-      // openOnClick: false stops the editor from following links on
-      // single-click — admins expect clicks to place the cursor.
-      TiptapLink.configure({ openOnClick: false, autolink: true }),
-      ResizableImage.configure({
-        inline: false,
-        allowBase64: false,
-        /**
-         * The node view's edit button, opted into HERE and nowhere else.
-         *
-         * The extension is shared with CustomPageForm, which has no image
-         * modal; supplying no opener there is what keeps the button out of
-         * that editor entirely. Same destination as the double-click below,
-         * and deliberately the same three lines of state — one modal, two
-         * ways in.
-         *
-         * The node view selects the image itself before calling this, so the
-         * modal's `updateAttributes` on confirm lands on the right node.
-         */
-        onEditImage: (attrs) => {
-          setImgAlt(attrs.alt ?? '');
-          setImgWidth(attrs.width ?? '');
-          setImgModal({ url: attrs.src, mode: 'edit' });
-        },
-      }),
-      Table.configure({ resizable: true }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      Youtube.configure({ controls: true, nocookie: true, width: 640, height: 360 }),
-      CharacterCount,
-    ],
+    /**
+     * THE SCHEMA LIVES IN A MODULE NOW, NOT IN THIS CALL.
+     *
+     * Every extension and every option is unchanged — see
+     * components/admin/articleEditorExtensions.js, which was extracted from
+     * this literal. The one substantive difference is that its `youtube` node
+     * can PARSE the shape the store actually holds, which this one could not:
+     * a video inserted here was stripped of its wrapper's data attribute by
+     * the save-time sanitiser and then silently discarded on reload, so the
+     * save after that wrote the body without it. lib/editor/youtubeEmbed.js
+     * carries the measurement and the reasoning.
+     *
+     * The extraction is also what makes the schema testable at all: a list
+     * inside this hook call cannot be reached from a node test, and that is
+     * why nothing went red while 60 published articles sat one save away from
+     * losing their video.
+     */
+    extensions: articleEditorExtensions({
+      /**
+       * The node view's edit button, opted into HERE and nowhere else.
+       *
+       * The extension is shared with CustomPageForm, which has no image
+       * modal; supplying no opener there is what keeps the button out of
+       * that editor entirely. Same destination as the double-click below,
+       * and deliberately the same three lines of state — one modal, two
+       * ways in.
+       *
+       * The node view selects the image itself before calling this, so the
+       * modal's `updateAttributes` on confirm lands on the right node.
+       */
+      onEditImage: (attrs) => {
+        setImgAlt(attrs.alt ?? '');
+        setImgWidth(attrs.width ?? '');
+        setImgModal({ url: attrs.src, mode: 'edit' });
+      },
+    }),
     content: article?.content ?? '',
     editorProps: {
       attributes: {

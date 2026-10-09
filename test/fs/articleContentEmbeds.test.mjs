@@ -52,6 +52,12 @@ const YT_DIST = readFileSync(
   path.join(ROOT, 'node_modules/@tiptap/extension-youtube/dist/index.js'), 'utf8'
 );
 const ARTICLE_FORM = readSource('src/app/admin/articles/_components/ArticleForm.jsx');
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The article editor's extension LIST moved out of
+// ArticleForm.jsx into this module (so a test could reach its schema at all —
+// see test/render/articleEditorEmbedRoundTrip.test.mjs); the 640x360 decision
+// pinned below moved with it, and is read from where it now lives.
+const ARTICLE_EXTENSIONS = readSource('src/components/admin/articleEditorExtensions.js');
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -474,9 +480,14 @@ test('the editor still writes width/height, because omitting them is worse', () 
   // the reason attached. The extension does not omit the attributes when the
   // options are absent — it substitutes its OWN defaults, and they are 4:3.
   assert.match(
-    ARTICLE_FORM.code,
-    /Youtube\.configure\(\{[^}]*width:\s*640[^}]*height:\s*360/,
-    'ArticleForm still configures 640x360'
+    ARTICLE_EXTENSIONS.code,
+    /Youtube\w*\.configure\(\{[^}]*width:\s*640[^}]*height:\s*360/,
+    'the article editor still configures 640x360'
+  );
+  // And the extraction did not leave a second, stale copy behind in the form.
+  assert.doesNotMatch(
+    ARTICLE_FORM.code, /Youtube\w*\.configure\(/,
+    'ArticleForm configures the node again — two places decide the ratio'
   );
   assert.match(YT_DIST, /height:\s*480,/, "the extension's own default height is 480");
   assert.match(YT_DIST, /width:\s*640,/, 'and its default width is 640');
@@ -492,7 +503,7 @@ test('CONTROL: omitting the options would genuinely change the shipped ratio', (
   // so the numbers are compared rather than merely asserted to exist.
   const defaultHeight = Number(/height:\s*(\d+),/.exec(YT_DIST)[1]);
   const configured = Number(/height:\s*(\d+)/.exec(
-    /Youtube\.configure\(\{[^}]*\}\)/.exec(ARTICLE_FORM.code)[0]
+    /Youtube\w*\.configure\(\{[^}]*\}\)/.exec(ARTICLE_EXTENSIONS.code)[0]
   )[1]);
   assert.notEqual(defaultHeight, configured, 'the default is not what the editor sets');
   assert.equal(defaultHeight, 480, '640x480 is 4:3');
