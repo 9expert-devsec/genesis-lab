@@ -55,35 +55,51 @@ export default async function EditArticlePage({ params, searchParams }) {
   }));
 
   return (
-    <>
-      <ArticleForm
-        article={article}
-        programs={programs}
-        skills={skills}
-        courses={courses}
-        isSuperAdmin={isSuperAdmin}
-        pinCapacity={pinCapacity}
-        listQuery={listQuery}
-      />
-      {/* Mounted here rather than inside ArticleForm because RecordHistory is a
-          SERVER component that reads the session itself — the form is
-          'use client'. `menu` and `entity` are literals written into this
-          screen's source, never derived from the URL or from client state, and
-          the reader re-checks canAccess against the session anyway.
+    <ArticleForm
+      article={article}
+      programs={programs}
+      skills={skills}
+      courses={courses}
+      isSuperAdmin={isSuperAdmin}
+      pinCapacity={pinCapacity}
+      listQuery={listQuery}
+      /*
+        ── THE HISTORY PANEL IS A SLOT NOW, NOT A BLOCK BELOW THE FORM ───────
+        It was `<div className="mx-auto mt-6 max-w-7xl">` after `<ArticleForm>`,
+        and it was UNREACHABLE: the form declares `h-[100dvh]`, so the block's
+        top sat at 969 in a 945px viewport (measured) and was only visible by
+        scrolling the admin layout's `<main>` — which is now `overflow-y-clip`
+        on every full-height route, so `main.scrollTop` is pinned at 0. The
+        panel now opens from a toolbar button beside Preview. See
+        ArticleHistoryDialog.
 
-          THIS SCREEN, NOT THE LIST. The list would need a 486-element $in per
-          render; measured, that query fetches every audit row ever written for
-          every article on the page — 9,720 documents at twenty rows per article
-          — to keep 486 of them. See the note in
-          test/fs/auditArticles.test.mjs. The edit screen asks about ONE record
-          and is where the question is actually asked. */}
-      <div className="mx-auto mt-6 max-w-7xl">
+        STILL RENDERED HERE, and that part has not changed: RecordHistory is a
+        SERVER component that reads the session itself, and the form is
+        'use client', so the toolbar cannot mount one. `menu` and `entity` stay
+        literals written into this screen's source, never derived from the URL
+        or from client state, and the reader re-checks canAccess against the
+        session anyway.
+
+        THIS SCREEN, NOT THE LIST. The list would need a 486-element $in per
+        render; measured, that query fetches every audit row ever written for
+        every article on the page — 9,720 documents at twenty rows per article
+        — to keep 486 of them. See the note in test/fs/auditArticles.test.mjs.
+        The edit screen asks about ONE record and is where the question is
+        actually asked.
+
+        `defaultOpen` BECAUSE THE PANEL NOW HAS A SURFACE OF ITS OWN. Collapsed
+        inside a dialog the admin opened to read it, the accordion would ask a
+        question they just answered — the same reason the in-house detail tab
+        passes it.
+      */
+      historySlot={(
         <RecordHistory
           menu="articles"
           entity="article"
           recordId={String(article._id)}
+          defaultOpen
         />
-      </div>
-    </>
+      )}
+    />
   );
 }
