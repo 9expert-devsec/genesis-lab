@@ -106,13 +106,67 @@ test('the full-height matcher covers the Page Builder editor', () => {
 });
 
 test('CONTROL: the builder prefix does not reach the sibling /admin/pages routes', () => {
-  // The negative case, and the reason the entry is anchored on
-  // `/admin/pages/builder/` rather than `/admin/pages/`. `/admin/pages` is the
-  // list of both page kinds; a prefix on `/admin/pages/` would strip its padding
-  // — the same three-pages-broken-to-fix-one regression the courses control
-  // above guards against.
-  assert.equal(padded(wrapperFor('/admin/pages')), true, '/admin/pages lost its padding');
-  assert.equal(padded(wrapperFor('/admin/pages/')), true, '/admin/pages/ lost its padding');
+  /**
+   * The negative case, and the reason the entry is anchored on
+   * `/admin/pages/builder/` rather than `/admin/pages/`: a prefix would reach
+   * every sibling of the builder at once, which is the
+   * three-pages-broken-to-fix-one regression the courses control above guards
+   * against.
+   *
+   * ── THIS USED TO ASSERT `/admin/pages` AND `/admin/pages/` AS PADDED ──────
+   * FLIPPED, and for the reason the `/admin/courses/new` note above gives
+   * rather than to get a commit green. The bare route is the LIST of both page
+   * kinds, and it is now a `h-[100dvh]` column in its own right: the 12-row
+   * table was taller than the viewport at 1920×1080 and put the pagination bar
+   * below the fold, so the rows scroll inside the table card and the page has
+   * to know its own height to do that. It carries its own `p-6` on that root
+   * (border-box, so the total stays 100dvh) — the padding moved, it was not
+   * dropped.
+   *
+   * THE CONTROL'S TEETH ARE UNCHANGED, which is the thing worth checking when
+   * a negative assertion flips. What it protects against is a PREFIX reaching
+   * siblings, and the sibling cases are what prove that — they are asserted
+   * below and in 'the two new patterns are narrow', they are unchanged, and
+   * they still pass, because the new entry is an exact anchored pattern like
+   * every other one in that list.
+   */
+  for (const path of ['/admin/pages', '/admin/pages/']) {
+    assert.equal(padded(wrapperFor(path)), false, `${path} is still padded`);
+  }
+  // The siblings a `/admin/pages/` prefix would have taken with it. These are
+  // the assertion that was ever doing the work here.
+  for (const path of [
+    '/admin/pages/builder-notes',
+    '/admin/pages/newsletter',
+    '/admin/pages/6a968329b8/preview',
+  ]) {
+    assert.equal(padded(wrapperFor(path)), true, `${path} lost its padding`);
+  }
+});
+
+test('the /admin/pages list states 100dvh, and the wrapper is what makes that fit', () => {
+  /**
+   * THE PAIR, asserted together for the same reason the builder's and the
+   * Tiptap form's pairs are below: two facts in two files with nothing
+   * mechanical holding them together. `h-[100dvh]` on the list is only correct
+   * while this route is unpadded from outside, and unpadding the route is only
+   * worth doing while the list declares a viewport height. Either one changing
+   * alone is the defect — and here there is a third half, because this is a
+   * LIST and not an editor: the padding had to move INTO the page, or the
+   * screen simply loses its margins.
+   */
+  const list = readSource('src/app/admin/pages/_components/CustomPagesAdminClient.jsx').code;
+  assert.match(list, /h-\[100dvh\]/,
+    'CustomPagesAdminClient no longer declares a viewport height — if it went '
+    + 'back to auto height, opting this route out of p-6 is now just missing '
+    + 'padding, and the pager is below the fold again');
+  assert.match(list, /className="flex h-\[100dvh\] flex-col p-6"/,
+    'the list root no longer carries its OWN p-6. The wrapper stopped supplying '
+    + 'it when this route joined FULL_HEIGHT_ROUTES, so the screen is now '
+    + 'flush against the sidebar and the viewport edges');
+  assert.equal(padded(wrapperFor('/admin/pages')), false,
+    'the wrapper pads the list again — its 100dvh is now 100dvh + 48px and '
+    + '<main> has the second scrollbar this file exists to prevent');
 });
 
 test('CONTROL: a path merely CONTAINING "builder" is not opted out', () => {
@@ -232,8 +286,6 @@ test('CONTROL: the two new patterns are narrow, and reach nothing else', () => {
    * this commit is the one that could break them.
    */
   for (const path of [
-    '/admin/pages',                       // the list
-    '/admin/pages/',
     '/admin/pages/builder-notes',         // a sibling that merely starts alike
     '/admin/pages/6a968329b8/edit-notes', // ends alike, is not /edit
     '/admin/pages/6a968329b8/preview',    // a future non-editor subroute
@@ -242,6 +294,19 @@ test('CONTROL: the two new patterns are narrow, and reach nothing else', () => {
   ]) {
     assert.equal(padded(wrapperFor(path)), true, `${path} lost its padding`);
   }
+  /**
+   * `/admin/pages` AND `/admin/pages/` ARE NO LONGER IN THAT LIST, and the two
+   * reasons they were are now covered by different assertions rather than
+   * dropped:
+   *   · "a `/admin/pages/` prefix must not reach the siblings" — the five cases
+   *     above, which is where that claim always actually lived;
+   *   · "the bare route is padded" — it is not, since the list became a
+   *     `h-[100dvh]` column carrying its own `p-6`. See the flipped control
+   *     above and lib/admin/fullHeightRoutes for the reasoning.
+   * The bare route is asserted here too, in its new direction, so this case
+   * list still says something about it rather than falling silent.
+   */
+  assert.equal(padded(wrapperFor('/admin/pages')), false, '/admin/pages is padded again');
 });
 
 // ── THE CONTROL: everything else keeps its padding ──────────────────────────
@@ -396,15 +461,30 @@ test('the route list has ONE definition, read by both the layout and the wrapper
   );
 });
 
-test('the predicate matches every full-height family and NO list route', () => {
-  // The regression this guards is one-sided and quiet: a list route wrongly
-  // matched loses `main`'s scrolling and simply cannot be scrolled to the
-  // bottom, with nothing on screen to explain why.
+test('the predicate matches every full-height family and NO content-height route', () => {
+  /**
+   * The regression this guards is one-sided and quiet: a route wrongly matched
+   * loses `main`'s scrolling AND its padding, so a content-height page simply
+   * cannot be scrolled to the bottom, flush against the chrome, with nothing on
+   * screen to explain why.
+   *
+   * `/admin/pages` MOVED FROM THE SECOND LIST TO THE FIRST. It is no longer a
+   * content-height page: the list is a `h-[100dvh]` column whose rows scroll
+   * inside the table card, so there is nothing for `main` to scroll and the
+   * clip is what stops it being scrolled by something other than the user. The
+   * flipped control near the top of this file carries the reasoning; the eight
+   * routes still in the second list are what keep this guard honest, including
+   * three OTHER paginated lists (`/admin/articles`, `/admin/registrations`,
+   * `/admin/courses`) that have not had this treatment and must keep their
+   * scrollable main until they do.
+   */
   for (const path of [
     '/admin/pages/builder/new',
     '/admin/pages/builder/abc123/edit',
     '/admin/pages/new',
     '/admin/pages/abc123/edit',
+    '/admin/pages',                 // the LIST, as of this round
+    '/admin/pages/',
     '/admin/articles/new',
     '/admin/articles/abc123/edit',
     '/admin/courses/new',
@@ -415,12 +495,17 @@ test('the predicate matches every full-height family and NO list route', () => {
 
   for (const path of [
     '/admin',
-    '/admin/pages',
     '/admin/articles',
     '/admin/courses',
     '/admin/courses/abc123',
     '/admin/registrations',
     '/admin/403',
+    // The siblings the new `/admin/pages` entry must not have swallowed. It is
+    // an exact pattern, so none of these matches — and if it were ever loosened
+    // to a prefix, this is where that shows up.
+    '/admin/pages/newsletter',
+    '/admin/pages/builder-notes',
+    '/admin/pages/abc123/preview',
     '',
   ]) {
     assert.equal(isFullHeightRoute(path), false, `${path} must keep a scrollable main`);

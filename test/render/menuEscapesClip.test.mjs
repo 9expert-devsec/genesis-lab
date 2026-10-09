@@ -7,6 +7,10 @@ import { compile, declarationsFor } from '../twCompile.mjs';
 import { RegistrationDetailClient } from '@/app/admin/registrations/_components/RegistrationDetailClient';
 import { RegistrationsClient } from '@/app/admin/registrations/_components/RegistrationsClient';
 import { resolveDateWindow } from '@/lib/registrations/listFilter';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The markup walk this file defined moved to a module when
+// adminListCardScroll became its second reader; see the note below.
+import { chainsTo, attr } from '../markupTree.mjs';
 
 /**
  * THE FLOATING SHEETS ARE NOT IN A CLIPPED COORDINATE SPACE.
@@ -138,72 +142,24 @@ const COMPILED_FROM = [
 
 const css = await compile(COMPILED_FROM.map((rel) => ({ raw: readSource(rel).code, extension: 'js' })));
 
-// ── Walking the real render ─────────────────────────────────────────────────
+// ── Walking the real render ─────────────────────────────────────
 
 /**
- * HTML void elements ONLY.
+ * `VOID`, `tagsOf`, `attr` and `chainsTo` WERE DEFINED HERE and now live in
+ * test/markupTree.mjs. They moved rather than being copied when
+ * test/render/adminListCardScroll became a second reader asking the same
+ * SHAPE of question — "is this element inside that one" — about the admin
+ * list card’s rows scroller and its pagination footer.
  *
- * This list was wrong once, in the probe this test grew out of, and the failure
- * is worth recording because it looked like a finding: `path`, `rect` and the
- * other SVG leaves were in here, React emits them with explicit close tags, and
- * every `</path>` therefore popped somebody else's element. The walk reported
- * the row menu as having THREE ancestors and no clip — a true-looking answer
- * arrived at by a broken instrument. `unmatched`/`leftover` below is the guard
- * that would have caught it immediately.
- */
-const VOID = new Set([
-  'br', 'img', 'input', 'hr', 'meta', 'link', 'col',
-  'source', 'area', 'base', 'embed', 'track', 'wbr', 'param',
-]);
-
-/** Tags in document order, quote-aware so a `>` inside an attribute is safe. */
-function* tagsOf(html) {
-  let i = 0;
-  while (i < html.length) {
-    const lt = html.indexOf('<', i);
-    if (lt === -1) return;
-    if (html.startsWith('<!', lt)) { i = html.indexOf('>', lt) + 1; continue; }
-    let j = lt + 1;
-    let quote = null;
-    while (j < html.length) {
-      const c = html[j];
-      if (quote) { if (c === quote) quote = null; }
-      else if (c === '"' || c === "'") quote = c;
-      else if (c === '>') break;
-      j += 1;
-    }
-    yield html.slice(lt, j + 1);
-    i = j + 1;
-  }
-}
-
-const attr = (tag, name) => new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1] ?? '';
-
-/**
- * Every element matching `match`, with its ANCESTOR class strings — outermost
- * first, excluding the element itself.
+ * The reasoning behind each piece moved with them, including the note on why
+ * the VOID list may not contain SVG leaves: getting that wrong once made this
+ * walk report the row menu as having three ancestors and no clip, which is a
+ * true-looking answer from a broken instrument. A second copy of that list is
+ * exactly how that comes back, and is the whole argument for the move.
  *
- * Returns `{ found, unmatched, leftover }` so a caller can prove the walk was
- * balanced before believing anything it says about depth. See VOID above.
+ * NOTHING about the walk changed. The balance checks below still run against
+ * it here, and now guard the shared module for both readers.
  */
-function chainsTo(html, match) {
-  const stack = [];
-  const found = [];
-  let unmatched = 0;
-  for (const raw of tagsOf(html)) {
-    if (raw[1] === '/') {
-      if (stack.length === 0) unmatched += 1; else stack.pop();
-      continue;
-    }
-    const tag = /^<([a-zA-Z0-9]+)/.exec(raw)?.[1];
-    if (!tag) continue;
-    if (VOID.has(tag.toLowerCase()) || raw.endsWith('/>')) continue;
-    const node = { tag, cls: attr(raw, 'class'), raw };
-    if (match(node, stack)) found.push({ node, ancestors: stack.map((n) => ({ tag: n.tag, cls: n.cls })) });
-    stack.push(node);
-  }
-  return { found, unmatched, leftover: stack.length };
-}
 
 /** Every declaration any class in `classes` compiles to. */
 const declsFor = (classes) => classes.flatMap((c) => declarationsFor(css, c));

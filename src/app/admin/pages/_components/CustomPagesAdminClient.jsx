@@ -192,8 +192,52 @@ export function CustomPagesAdminClient({ pages: initial, canCreateAdvanced = fal
   }
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    /**
+     * ── THE PAGE IS A FIXED-HEIGHT COLUMN, AND THE ROWS ARE THE ONLY SCROLLER
+     *
+     * REPORTED: at 1920×1080 / 100% zoom the 12-row table is taller than the
+     * viewport, so the `ก่อนหน้า 1 2 ถัดไป` bar sits below the fold and is
+     * unreachable without zooming out.
+     *
+     * This used to be a bare `<div>` — a content-height column — so nothing
+     * from `main` downwards had a height and the pager was simply the last
+     * thing in a stack taller than the screen. The chain is now:
+     *
+     *   admin/layout.jsx       <div class="flex h-screen overflow-hidden">
+     *   admin/layout.jsx         <main class="h-screen flex-1 overflow-y-clip">
+     *   AdminContentWrapper        <div class="">            ← no p-6 any more
+     *   here                         <div class="flex h-[100dvh] flex-col p-6">
+     *     header + filters             shrink-0
+     *     the card                     flex-1 min-h-0 flex flex-col
+     *       the rows                     flex-1 min-h-0 overflow-auto  ← SCROLLS
+     *       the pager                    shrink-0, OUTSIDE the scroller
+     *
+     * `p-6` MOVED HERE from AdminContentWrapper, and this route joined
+     * `FULL_HEIGHT_ROUTES` to make that happen — see that module for the
+     * per-route reasoning and admin/layout.jsx for why `main` stops being a
+     * scroll container. Tailwind's preflight sets `box-sizing: border-box`, so
+     * `h-[100dvh] p-6` is 100dvh INCLUDING the padding; leaving the wrapper's
+     * `p-6` in place would have made it 100dvh + 48px, which is the second
+     * scrollbar test/render/adminFullHeightRoutes exists to prevent.
+     *
+     * WHY NOT `h-[calc(100dvh-3rem)]` AND KEEP THE WRAPPER'S PADDING: it works,
+     * and it couples a number here to a padding value in another file with
+     * nothing holding the two together. That is the exact shape this repo
+     * already removed from EditorShell (`calc(100dvh-4rem)`, whose 4rem had no
+     * referent on a sidebar layout), and the four other full-height admin
+     * screens all use the route-opt-out form instead. One pattern, not two.
+     *
+     * `min-h-0` ON EVERY FLEX CHILD IN THE CHAIN IS THE LOAD-BEARING PART. A
+     * flex item's default `min-height: auto` floors it at its CONTENT height,
+     * so `flex-1` alone cannot shrink the card below the full table and the
+     * overflow reappears one level down — the card grows, the page grows, and
+     * the pager goes back below the fold with every class looking correct.
+     *
+     * NOT CHANGED: PAGE_SIZE stays 12. Rows-per-page is not computed from the
+     * viewport (ruled out), and no data, URL param, sort or filter is touched.
+     */
+    <div className="flex h-[100dvh] flex-col p-6">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
             จัดการหน้าเพจ
@@ -242,14 +286,61 @@ export function CustomPagesAdminClient({ pages: initial, canCreateAdvanced = fal
       </div>
 
       {actionError && (
-        <div className="mt-2 rounded-9e-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+        <div className="mt-2 shrink-0 rounded-9e-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
           {actionError}
         </div>
       )}
 
-      <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c] mt-2">
+      {/*
+        THE CARD takes whatever height the header and filters leave. `min-h-0`
+        is what lets it be SHORTER than the table it contains; without it
+        `flex-1` is floored at the content height and the page overflows again.
+        `overflow-hidden` is kept so the rounded corners still clip the rows
+        region at the top and the pager at the bottom.
+      */}
+      <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c]">
+        {/*
+          THE ONLY SCROLLER ON THIS PAGE.
+
+          `overflow-auto`, not `overflow-y-auto`: the card was `overflow-hidden`
+          before, so a table wider than the content column was CLIPPED and its
+          rightmost column unreachable. Both axes scroll here instead, inside
+          the card, which is what keeps this working as the sidebar eats width
+          at 1366 and below. Column widths are untouched — no `min-w` floor is
+          added, because adding one would change how the table renders at narrow
+          widths (from compressed to scrolled) and that was not asked for; it is
+          the obvious follow-up if a column is ever measured as clipped, the way
+          /admin/courses and /admin/articles already have one.
+
+          WHEN THERE ARE FEWER ROWS THAN FIT: the rows do NOT stretch — the
+          table keeps its content height and the leftover space is blank card
+          below the last row, so THE PAGER SITS AT THE CARD BOTTOM rather than
+          riding up under the last row. Chosen over a shrink-to-fit card so the
+          pager is in the same place on every page of every filter, which is the
+          whole point of keeping it in view.
+
+          THE `<table>` BLOCK BELOW IS NOT RE-INDENTED, deliberately. It gained
+          one level of nesting and re-indenting its ~200 lines would bury the
+          four lines this round actually changed in a whitespace diff nobody can
+          review. The scroller's open and close tags therefore sit at the
+          table's own indentation rather than one step out.
+        */}
+        <div data-testid="admin-list-scroll" className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10 bg-9e-ice dark:bg-[#0D1B2A]">
+            {/*
+              STICKY ON THE `thead`, WITH THE BACKGROUND ON BOTH IT AND THE
+              `tr`. Tailwind's preflight sets `border-collapse: collapse`, under
+              which a sticky header's own background can paint as transparent in
+              some engines and the rows then scroll visibly underneath the
+              labels; the colour is therefore declared on the element that
+              sticks as well as on the row that already had it. Same two tokens
+              as before, so light and dark are unchanged.
+
+              `z-10` so the header paints above the rows, not merely beside
+              them. Below the `z-50` dialogs further down this file, which are
+              `position: fixed` and in any case outside this scroller.
+            */}
             <tr className="border-b border-[var(--surface-border)] bg-9e-ice dark:bg-[#0D1B2A]">
               <th className="w-8 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">#</th>
               <th className="w-32 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ประเภท</th>
@@ -387,9 +478,33 @@ export function CustomPagesAdminClient({ pages: initial, canCreateAdvanced = fal
             })}
           </tbody>
         </table>
-      </div>
+        </div>
+        {/*
+          THE PAGER IS A FOOTER OF THE CARD, OUTSIDE THE SCROLLER.
 
-      <Pager page={page} totalPages={totalPages} onGo={setPage} />
+          That is the whole fix: it is a sibling of the scrolling region rather
+          than the last thing after it, so it occupies its own strip of the card
+          and cannot be scrolled away or pushed below the fold however many rows
+          the page holds.
+
+          `data-testid` because the STRUCTURE is the claim — that the pager is
+          not a descendant of the scroller — and
+          test/render/adminListCardScroll walks the real rendered tree to assert
+          it. A class-name match could not tell the two arrangements apart.
+
+          Rendered only when there is more than one page, matching `Pager`'s own
+          `totalPages <= 1 → null`: a bordered strip with nothing in it would be
+          a visible empty footer on every short list.
+        */}
+        {totalPages > 1 && (
+          <div
+            data-testid="admin-list-pager"
+            className="shrink-0 border-t border-[var(--surface-border)] bg-white dark:bg-[#111d2c]"
+          >
+            <Pager page={page} totalPages={totalPages} onGo={setPage} />
+          </div>
+        )}
+      </div>
 
       {showPicker && (
         <NewPagePicker

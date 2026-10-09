@@ -107,6 +107,49 @@ const FULL_HEIGHT_ROUTES = [
    */
   (path) => /^\/admin\/pages\/new\/?$/.test(path),
   (path) => /^\/admin\/pages\/[^/]+\/edit\/?$/.test(path),
+  /**
+   * …and `/admin/pages` ITSELF — the LIST, which is new in kind: every entry
+   * above is an editor, and this one is a table.
+   *
+   * ── WHY A LIST NEEDS THIS, AND WHY IT IS NOT THE SAME BUG AS THE EDITORS ──
+   * The editors are here because they declare `h-[100dvh]` and the wrapper's
+   * `p-6` made that 100dvh + 48px — a SECOND scrollbar. Nothing was wrong with
+   * their height; the padding around it was.
+   *
+   * The list is the opposite case. It had NO height at all: a bare `<div>`
+   * under `main`, so the column was content-height and at 1920×1080 / 100% zoom
+   * the 12-row table pushed the `ก่อนหน้า 1 2 ถัดไป` bar below the fold, where
+   * it could only be reached by zooming out. The ruling is that the rows scroll
+   * inside the table card and the pager stays in view, which requires the page
+   * to know how tall it is — i.e. to become a `h-[100dvh]` column like the
+   * editors, which in turn requires this route to stop being padded from
+   * outside and to stop `main` scrolling behind it. Same mechanism, arrived at
+   * from the other direction.
+   *
+   * `p-6` MOVES INTO CustomPagesAdminClient, which now carries it on its own
+   * `h-[100dvh]` root (border-box, so the total stays 100dvh). The padding is
+   * not lost, it is owned by the thing whose height it has to fit inside.
+   *
+   * ── THIS FLIPS THREE CONTROLS, DELIBERATELY ──────────────────────────────
+   * `test/render/adminFullHeightRoutes` asserted `/admin/pages` and
+   * `/admin/pages/` as PADDED, three times, as the negative case proving the
+   * `/admin/pages/builder/` and `/admin/pages/[id]/edit` patterns were not a
+   * `/admin/pages/` prefix. Those assertions were right when written and are
+   * now the `/admin/courses/new` situation that file already documents: a route
+   * that genuinely became full-height, where keeping the old assertion would
+   * write a defect down as a requirement.
+   *
+   * What those controls were actually protecting is NOT weakened: the hazard
+   * was a prefix reaching the list's siblings, and every sibling case
+   * (`/admin/pages/builder-notes`, `/admin/pages/newsletter`,
+   * `/admin/pages/6a.../preview`, `/admin/pages/a/b/edit`) is still asserted
+   * padded and still passes — because this is an EXACT anchored pattern, the
+   * same discipline every entry above uses, and not the prefix they all refuse
+   * to be.
+   *
+   * `\/?` so `/admin/pages/` matches too; Next serves both spellings.
+   */
+  (path) => /^\/admin\/pages\/?$/.test(path),
 ];
 
 /** Does `pathname` manage its own full-height layout? */
