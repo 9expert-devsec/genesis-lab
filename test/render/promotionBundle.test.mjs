@@ -30,7 +30,23 @@ import { newSection } from '@/lib/pageBuilder/newSection';
  * button (correctly: that is the editor canvas, which threads neither). Tests
  * that are about the pair itself pass their own.
  */
-const doc = (content, style, ref = { pageId: 'p1', sectionId: 'sec-1' }) =>
+/**
+ * ── THE FIXTURE NOW RESOLVES ITS ROUND, AND IT HAS TO ──────────────────────
+ * `data` was absent here, which was harmless while the card drew whatever
+ * `items` named. It is not harmless now: a course with no PICKABLE round
+ * auto-closes the bundle (R5), so a fixture with an item and no live round
+ * correctly loses its register button — and every test about the LAYOUT or the
+ * LABELS would have been asserting the closed state while reading as if it
+ * asserted the open one.
+ *
+ * So the default resolves ITEM's round as live and open, i.e. a COMPLETE
+ * bundle, which is what those tests meant all along. A test that wants the
+ * auto-closed state passes its own `data`.
+ */
+const LIVE_ROUND = { _id: 'r-1', dates: ['2030-08-20', '2030-08-21'], type: 'classroom', status: 'open' };
+const DEFAULT_DATA = [{ id: 'i1', courseId: 'MSE-L1', course: { course_id: 'MSE-L1', title: 'MSE L1' }, rounds: [LIVE_ROUND] }];
+
+const doc = (content, style, ref = { pageId: 'p1', sectionId: 'sec-1', data: DEFAULT_DATA }) =>
   new JSDOM(
     `<!doctype html><body>${renderToStaticMarkup(
       createElement(PromotionBundleSection, { content, style, ...ref }),
@@ -79,7 +95,7 @@ test('CONTROL: the same probes find NOTHING when the fields are absent', () => {
 // derivable from the other. It is also not derived from the section's POSITION
 // — reordering a page must not rename its bundles.
 
-const ITEM = { id: 'i1', courseId: 'MSE-L1' };
+const ITEM = { id: 'i1', courseId: 'MSE-L1', rounds: [{ id: 'r-1' }] };
 
 test('an authored label draws the pill, above the headline', () => {
   const d = doc({ ...FULL, label: 'Bundle 1' });
@@ -720,7 +736,11 @@ test("a round snapshot may carry ONLY {id, dates, type} — status and signup_ur
       }],
     },
   });
-  const snap = parsed.content.items[0].roundSnapshot;
+  // THE PATH MOVED, THE PROHIBITION DID NOT. An item offers several rounds
+  // now, so the snapshot lives at `rounds[n].snapshot`. The input above is
+  // deliberately left on the LEGACY shape, which makes this also a check that
+  // the normalising preprocess carries the snapshot across without widening it.
+  const snap = parsed.content.items[0].rounds[0].snapshot;
   assert.deepEqual(Object.keys(snap).sort(), ['dates', 'id', 'type']);
   assert.equal('status' in snap, false);
   assert.equal('signup_url' in snap, false);

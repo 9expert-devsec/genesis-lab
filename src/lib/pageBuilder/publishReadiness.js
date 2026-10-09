@@ -57,6 +57,13 @@ import { slotsOf } from './containerSlots';
 // restated so this refusal and the editor's warning cannot disagree — see
 // the note on adding a per-section rule above.
 import { isInvertedPrice } from './bundlePricing';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. `offeredRoundsOf` normalises an item that may still be
+// stored on the legacy one-round shape; the other two are the pickUntil ruling
+// — the runtime clamps a too-late date anyway, and these let the author be
+// told rather than left to discover it.
+import { offeredRoundsOf } from './chosenRounds';
+import { pickUntilTooLate, latestAllowedPickUntil } from './bundleRoundChoice';
 
 export const PLACEHOLDER_SLUG = 'untitled';
 export const PLACEHOLDER_TITLE = 'หน้าใหม่';
@@ -134,15 +141,101 @@ function bundlePriceBlockers(sections) {
       if (s.type === 'promotion_bundle') {
         index += 1;
         const c = s.content ?? {};
+        const name = String(c.name ?? '').trim();
+        const which = name ? ` “${name}”` : `ลำดับที่ ${index}`;
         if (isInvertedPrice(c.listPrice, c.netPrice)) {
-          const name = String(c.name ?? '').trim();
           out.push({
             field: 'sections',
             message:
-              `แพ็กเกจ${name ? ` “${name}”` : `ลำดับที่ ${index}`} มีราคาสุทธิสูงกว่าราคาปกติ — ` +
-              'แก้ราคาก่อนเผยแพร่',
+              `แพ็กเกจ${which} มีราคาสุทธิสูงกว่าราคาปกติ — แก้ราคาก่อนเผยแพร่`,
           });
         }
+
+        /**
+         * ── AN ITEM WITH NO OFFERED ROUND, AND A pickUntil THAT CANNOT HOLD ─
+         *
+         * Both are blockers rather than warnings, and the difference from the
+         * sequential-chain check (which is a WARNING, in the editor) is the
+         * reason: these two are facts about the stored document and will still
+         * be true tomorrow, whereas whether a chain exists depends on live
+         * status and can fix itself without anyone touching the page.
+         *
+         * An item with no round is not cosmetic. `resolveBundleRequest`
+         * refuses the whole package for it, so publishing one ships a
+         * promotion that silently takes no registrations — the shape
+         * docs/ticket-bundle-unavailable-invisible.md is about.
+         *
+         * `pickUntilTooLate` is the publish half of the ruling that the
+         * author's date may only ever close a round EARLIER. The runtime
+         * clamps it anyway (`effectivePickDeadline` takes the earliest of the
+         * two), so this cannot change what a visitor sees — it exists so the
+         * author is told their date is doing nothing rather than discovering
+         * it by watching the card close on a day they did not choose.
+         *
+         * `offeredRoundsOf` rather than `c.items[n].rounds`: this runs over the
+         * stored document, where a legacy item still carries `roundId`.
+         */
+        const items = Array.isArray(c.items) ? c.items : [];
+
+        /**
+         * ── ONE COURSE = ONE ITEM ─────────────────────────────────────────
+         * A course now carries its own list of offered rounds, so naming it
+         * twice is never the way to offer two rounds of it — and under
+         * `sequential` it is incoherent: the item order is the learning order,
+         * so two items for one course would say it must be taken after itself.
+         * It also makes the package price ambiguous (two items, one course,
+         * one seat sold).
+         *
+         * A BLOCKER rather than a warning, by the same line the other two
+         * draw: this is a fact about the stored document and will still be
+         * true tomorrow.
+         *
+         * MEASURED before adding it, across all 36 stored bundles in all three
+         * places sections live: ZERO repeat a courseId. So this cannot
+         * retroactively block a page anyone has, and there was nothing to
+         * merge — which is why the editor simply refuses the pick rather than
+         * offering a migration.
+         */
+        const seen = new Map();
+        for (const it of items) {
+          const code = String(it?.courseId ?? '').trim();
+          if (!code) continue;
+          seen.set(code, (seen.get(code) ?? 0) + 1);
+        }
+        for (const [code, n] of seen) {
+          if (n < 2) continue;
+          out.push({
+            field: 'sections',
+            message:
+              `แพ็กเกจ${which} — หลักสูตร “${code}” อยู่ในแพ็กเกจ ${n} ครั้ง ` +
+              'ให้เหลือการ์ดเดียวแล้วเพิ่มรอบในการ์ดนั้น',
+          });
+        }
+
+        items.forEach((it, i) => {
+          const offered = offeredRoundsOf(it);
+          const code = String(it?.courseId ?? '').trim();
+          const row = code ? `“${code}”` : `ลำดับที่ ${i + 1}`;
+          if (offered.length === 0) {
+            out.push({
+              field: 'sections',
+              message:
+                `แพ็กเกจ${which} — คอร์ส${row} ยังไม่ได้เลือกรอบ ` +
+                'แพ็กเกจที่มีคอร์สไม่ครบรอบจะไม่รับลงทะเบียน',
+            });
+            return;
+          }
+          for (const round of offered) {
+            if (!pickUntilTooLate(round)) continue;
+            out.push({
+              field: 'sections',
+              message:
+                `แพ็กเกจ${which} — คอร์ส${row} ตั้งวันสุดท้ายที่เลือกรอบได้ ` +
+                `(${round.pickUntil}) หลังวันเริ่มรอบ ระบบจะปิดให้เลือกก่อนรอบเริ่มอยู่แล้ว — ` +
+                `แก้เป็น ${latestAllowedPickUntil(round) ?? 'วันก่อนรอบเริ่ม'} หรือเว้นว่าง`,
+            });
+          }
+        });
       }
       const slots = slotsOf(s.type);
       if (slots) for (const slot of slots) walk(s.content?.[slot]);

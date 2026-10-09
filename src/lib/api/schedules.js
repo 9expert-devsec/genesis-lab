@@ -184,7 +184,20 @@ export async function listSchedulesByCourse(courseObjectId, options = {}) {
       limit: options.limit ?? 20,
       status: options.status,
     },
-    revalidate: 1800,
+    /**
+     * ── `revalidate` IS NOW OVERRIDABLE, AND DEFAULTS TO WHAT IT WAS ───────
+     * 1800 was hard-coded here, which is right for every surface that shows a
+     * schedule and wrong for exactly one that ASKS A VISITOR TO CHOOSE from
+     * it: the bundle quotation wizard. A pick list up to 30 minutes old lets
+     * an applicant choose a round that filled, and the submit then refuses
+     * them — a dead end created by our own cache.
+     *
+     * `?? 1800` rather than a new default, so every existing caller keeps the
+     * exact window it had. Only the bundle wizard and the bundle registration
+     * route pass `0`; the promotion page, /schedule, /search and the course
+     * pages are untouched.
+     */
+    revalidate: options.revalidate ?? 1800,
     tags: [`schedules:course:${courseObjectId}`],
   });
   const res = unwrap(raw);

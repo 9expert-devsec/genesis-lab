@@ -70,13 +70,21 @@ async function fetchByFilter(kind, filters) {
 // list ids); /schedules needs that object's `_id`. A code with no resolved course
 // (decommissioned upstream) or a failed schedule call resolves to [] — the
 // component renders nothing and the editor warns.
-async function fetchSchedules(codes, courseMap) {
+/**
+ * `opts.revalidate` is threaded through to the schedules fetch and nowhere
+ * else. Absent means the adapter's own 1800s window, which is what every
+ * caller had before this parameter existed; `0` means read live, which only
+ * the bundle quotation wizard and the bundle registration route ask for.
+ */
+async function fetchSchedules(codes, courseMap, opts = {}) {
   const map = new Map();
   for (let i = 0; i < codes.length; i += CHUNK) {
     const chunk = codes.slice(i, i + CHUNK);
     const results = await Promise.allSettled(chunk.map((code) => {
       const oid = courseMap.get(String(code))?._id;
-      return oid ? listSchedulesByCourse(oid, { limit: 20 }) : Promise.resolve({ items: [] });
+      return oid
+        ? listSchedulesByCourse(oid, { limit: 20, revalidate: opts.revalidate })
+        : Promise.resolve({ items: [] });
     }));
     results.forEach((r, j) => {
       map.set(chunk[j], r.status === 'fulfilled' ? (r.value?.items ?? []) : []);
@@ -85,7 +93,17 @@ async function fetchSchedules(codes, courseMap) {
   return map;
 }
 
-export async function resolveSectionData(sections) {
+/**
+ * @param {Array<object>} sections the section nodes to resolve
+ * @param {object} [opts]
+ * @param {number} [opts.revalidate] ISR seconds for the SCHEDULES fetch only.
+ *   Omit for the shared 1800s window every page has always used; pass `0`
+ *   where a visitor is being asked to pick a round and a stale list would
+ *   offer them one that has since filled. Course, instructor and filter
+ *   fetches are deliberately NOT affected — their staleness costs a title or a
+ *   cover, not a refused submission.
+ */
+export async function resolveSectionData(sections, opts = {}) {
   const { nodes, courseIds, needInstructors, scheduleCourseIds, skillFilters, programFilters } =
     collectRefs(sections);
   if (!nodes.length) return {};
@@ -103,7 +121,7 @@ export async function resolveSectionData(sections) {
   ]);
 
   // Schedules depend on courseMap (code→_id), so this runs after the course pass.
-  const scheduleMap = await fetchSchedules(scheduleCourseIds, courseMap);
+  const scheduleMap = await fetchSchedules(scheduleCourseIds, courseMap, opts);
 
   const instructorById = new Map();
   for (const ins of Array.isArray(instructors) ? instructors : []) {

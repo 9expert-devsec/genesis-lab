@@ -186,14 +186,127 @@ export function chooseRounds(rows, content, todayKey) {
  * @returns {{id: string, state: 'live'|'elapsed'|'missing', live: object|null,
  *   dates: Array<string|Date>, type: string}|null}
  */
+/**
+ * ── THE OFFERED ROUNDS OF AN ITEM, WHATEVER SHAPE IT IS STORED IN ─────────
+ *
+ * `rounds: [{id, snapshot?, pickUntil?}]` is the shape; `roundId` +
+ * `roundSnapshot` is what the 91 items already in the database carry. This
+ * returns the former for either.
+ *
+ * ── WHY THIS EXISTS AS WELL AS THE SCHEMA'S `z.preprocess` ───────────────
+ * Not a duplicate of it — the two cover different moments, and MEASURING that
+ * is what put this function here rather than leaving the preprocess to do it.
+ *
+ * NOTHING PARSES ON READ. `sectionSchema.parse` runs when an author SAVES (and
+ * in `newSection`); every public surface — the renderer, the registration
+ * request guard, the route, the corpus feed for the chat agent — reads the page
+ * straight out of Mongo with `.lean()`. So the preprocess keeps a legacy
+ * document VALID the next time someone saves that page, and does nothing at
+ * all for the reads. A reader relying on it alone would find `item.rounds`
+ * undefined for every bundle currently stored.
+ *
+ * So the schema's preprocess calls THIS, and so does every reader. One
+ * definition, both moments. The alternative — a fallback written at each read
+ * site — is the same rule in five places, which is how the renderer and the
+ * route come to disagree about what a bundle offers.
+ *
+ * Returns a NEW array and never mutates the item.
+ */
+export function offeredRoundsOf(item) {
+  if (Array.isArray(item?.rounds)) {
+    return item.rounds.filter((r) => r && typeof r === 'object');
+  }
+  const legacyId = typeof item?.roundId === 'string' ? item.roundId.trim() : '';
+  if (!legacyId) return [];
+  // The legacy item carried no deadline, so the normalised round has none —
+  // which closes it the day before it starts, exactly what the legacy card
+  // already did through the `started` test.
+  return [{ id: legacyId, ...(item.roundSnapshot ? { snapshot: item.roundSnapshot } : {}) }];
+}
+
+/**
+ * ── THE ROUND AN APPLICANT PICKED, OR THE ONLY ONE ON OFFER ───────────────
+ *
+ * The one place that turns a pick into a drawable round, so the rows written
+ * to RegisterPublic and the rounds listed in the confirmation mail cannot
+ * disagree about which round was bought.
+ *
+ * ── NO PICK IS ONLY SAFE WHEN THERE IS NOTHING TO PICK ──────────────────
+ * Returns null when no pick is given and the item offers more than one
+ * round. That asymmetry is the whole point: a submission from a tab opened
+ * before the picking flow existed carries no picks, and for a course with a
+ * single offered round that is unambiguous — the author's round is the only
+ * round. For a course offering several it is NOT, and defaulting to the
+ * first would write a quotation for a round the customer never chose while
+ * everything downstream looked correct. That silent wrong answer is the
+ * thing commit ed73c0b5's placeholder guard existed to prevent, and this is
+ * what replaces it.
+ *
+ * @param {Array<object>} rows the course's fetched rounds, from the resolver
+ * @param {object} item one entry of content.items
+ * @param {Record<string,string>|Map<string,string>|null} picks itemId → roundId
+ * @param {string} todayKey today in Asia/Bangkok
+ */
+export function pickedItemRound(rows, item, picks, todayKey) {
+  const all = chooseItemRounds(rows, item, todayKey);
+  const itemId = String(item?.id ?? '').trim();
+  const raw = picks instanceof Map ? picks.get(itemId) : picks?.[itemId];
+  const picked = String(raw ?? '').trim();
+  if (picked) return all.find((r) => r.id === picked) ?? null;
+  return all.length === 1 ? all[0] : null;
+}
+
 export function chooseItemRound(rows, item, todayKey) {
-  const id = typeof item?.roundId === 'string' ? item.roundId.trim() : '';
-  if (!id) return null;
-  const snapshot = item?.roundSnapshot;
-  const [chosen] = chooseRounds(
+  const [first] = chooseItemRounds(rows, item, todayKey);
+  return first ?? null;
+}
+
+/**
+ * ── ALL of an item's OFFERED rounds, in the author's order ────────────────
+ *
+ * An item used to carry one `roundId`; it now carries `rounds: [{id, snapshot,
+ * pickUntil?}]` and the applicant picks one. This is the same question
+ * `chooseItemRound` asked, for the whole list, and it DELEGATES to
+ * `chooseRounds` in manual mode for exactly the reasons that function's note
+ * gives: the live/elapsed/missing split, the snapshot fallback and the
+ * never-silently-dropped rule are decided once, above, and adapted here.
+ *
+ * `chooseItemRound` is now this function's FIRST element rather than a separate
+ * walk. That keeps one definition, and it is also what makes the legacy shape
+ * behave identically: the normalising preprocess turns a stored `roundId` into
+ * a single-element `rounds`, so the surfaces that still show one round — the
+ * course-detail block, the corpus feed, the confirmation mail — get byte-for-
+ * byte what they got before. MEASURED: all 91 stored items are single-round,
+ * so for today's data the two functions cannot disagree.
+ *
+ * The returned rows carry `pickUntil` through UNCHANGED from the stored round.
+ * It is not interpreted here — `effectivePickDeadline`
+ * (lib/pageBuilder/bundleRoundChoice.js) is the one place that reads it, and
+ * this module deliberately knows nothing about deadlines or pickability. What
+ * it answers is "which rounds, and can the site still draw them".
+ *
+ * @param {Array<object>} rows the course's fetched rounds, from the resolver
+ * @param {object} item one entry of `content.items`
+ * @param {string} todayKey today in Asia/Bangkok, from `siteTodayKey()`
+ * @returns {Array<{id: string, state: 'live'|'elapsed'|'missing', live: object|null,
+ *   dates: Array<string|Date>, type: string, pickUntil: string|undefined}>}
+ */
+export function chooseItemRounds(rows, item, todayKey) {
+  const offered = offeredRoundsOf(item);
+  const ids = [];
+  const snapshots = [];
+  const pickUntilById = new Map();
+  for (const round of offered) {
+    const id = typeof round?.id === 'string' ? round.id.trim() : '';
+    if (!id) continue;
+    ids.push(id);
+    if (round.snapshot) snapshots.push(round.snapshot);
+    if (typeof round.pickUntil === 'string') pickUntilById.set(id, round.pickUntil);
+  }
+  if (ids.length === 0) return [];
+  return chooseRounds(
     rows,
-    { source: 'manual', roundIds: [id], roundSnapshots: snapshot ? [snapshot] : [] },
+    { source: 'manual', roundIds: ids, roundSnapshots: snapshots },
     todayKey,
-  );
-  return chosen ?? null;
+  ).map((row) => ({ ...row, pickUntil: pickUntilById.get(row.id) }));
 }

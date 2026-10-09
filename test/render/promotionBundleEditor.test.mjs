@@ -65,6 +65,7 @@ test('the tab offers every stored field, and nothing that is not stored', () => 
     'ราคาสุทธิ (บาท)',
     'รหัสส่วนลด',
     'เปิดรับสมัครแพ็กเกจนี้',
+    'คอร์สต่อเนื่อง — ต้องเรียนตามลำดับ',
   ]);
 
   // Every one of those maps to a content key the schema declares, and the only
@@ -73,7 +74,8 @@ test('the tab offers every stored field, and nothing that is not stored', () => 
     sectionSchema.parse({ id: 's', type: 'promotion_bundle' }).content,
   ).sort();
   assert.deepEqual(keys, [
-    'blurb', 'discountCode', 'items', 'label', 'listPrice', 'name', 'netPrice', 'registrationOpen',
+    'blurb', 'discountCode', 'items', 'label', 'listPrice', 'name', 'netPrice',
+    'registrationOpen', 'sequential',
   ]);
 });
 
@@ -214,7 +216,12 @@ test('each item draws a course picker and a round picker, and rows are keyed by 
     { id: 'i1', courseId: 'MSE-L1', course: { course_id: 'MSE-L1' }, rounds: [ROUND_A, ROUND_B] },
     { id: 'i2', courseId: 'VIBE-CODE-L2', course: { course_id: 'VIBE-CODE-L2' }, rounds: [] },
   ]);
-  assert.equal(d.querySelectorAll('[data-testid="round-picker"]').length, 2);
+  // THE CONTROL CHANGED, THE CLAIM DID NOT. The single รอบอบรม select became a
+  // rounds LIST inside each course card, so what proves "each item draws a
+  // round control" is now one add-round select per card — and i1's one offered
+  // round draws one row while i2's none draws none.
+  assert.equal(d.querySelectorAll('[data-testid="bundle-add-round"]').length, 2);
+  assert.equal(d.querySelectorAll('[data-testid="bundle-round-row"]').length, 1);
   assert.notEqual(d.querySelector('[data-testid="bundle-add-item"]'), null);
 
   // The move buttons carry their row index and the ends are disabled — the same
@@ -276,31 +283,100 @@ test('the round picker lists real dates, from the resolved map', () => {
     { items: [{ id: 'i1', courseId: 'MSE-L1', roundId: 'r-a' }] },
     [{ id: 'i1', courseId: 'MSE-L1', course: { course_id: 'MSE-L1' }, rounds: [ROUND_A, ROUND_B] }],
   );
-  const opts = [...d.querySelectorAll('[data-testid="round-picker"] option')].map((o) => ({
+  // The ADD control is what now lists the course's rounds, and it EXCLUDES the
+  // one already offered — r-a is in the item, so only r-b is addable. That
+  // exclusion is what makes "the same round twice" unreachable rather than
+  // merely discouraged.
+  const opts = [...d.querySelectorAll('[data-testid="bundle-add-round"] option')].map((o) => ({
     value: o.getAttribute('value'), label: text(o),
   }));
-  assert.equal(opts[0].value, '', 'the first option must be the empty one');
-  assert.deepEqual(opts.slice(1).map((o) => o.value), ['r-a', 'r-b']);
-  // Real dates, not an ObjectId — and consecutive days collapse to a range.
-  assert.match(opts[1].label, /20\s*-\s*21 ส\.ค\./);
-  assert.match(opts[2].label, /5 พ\.ย\./);
+  assert.equal(opts[0].value, '', 'the first option is the + เพิ่มรอบ placeholder');
+  assert.deepEqual(opts.slice(1).map((o) => o.value), ['r-b'], 'r-a is already offered');
+  assert.match(opts[1].label, /5 พ\.ย\./);
+
+  // And the offered round draws its own row with its real dates — consecutive
+  // days collapsing to a range, which is the formatter's job and not ours.
+  const row = d.querySelector('[data-testid="bundle-round-row"]');
+  assert.notEqual(row, null);
+  assert.match(text(row), /20\s*-\s*21 ส\.ค\./);
 });
 
-test('a stored round the fetch no longer returns keeps a "(รอบเดิม)" option', () => {
+test('a stored round the fetch no longer returns is LISTED, never as a raw id', () => {
   /**
-   * Without it, opening a bundle to change a PRICE would silently drop the
-   * round: a <select> whose value matches no option reports the empty one, and
-   * the next save writes that back. The Early Bird form's one correct instinct,
-   * kept — see RoundPicker.jsx for what was NOT carried over from it.
+   * ── THIS TEST ASSERTED THE BUG, AND THE INVERSION IS THE FIX ───────────
+   * It used to require `/r-old/` in the row — i.e. that the raw ObjectId
+   * appeared. That was a faithful description of what the code did and a bad
+   * description of what it should do: the reported defect was exactly this,
+   * `6a0578e52cf974910f88cdf8 (รอบเดิม)` on screen where the author expected
+   * dates.
+   *
+   * The round is still LISTED — never silently dropped, which is the half of
+   * the original claim that was right and is kept. What changed is the label.
    */
   const d = panel(
     { items: [{ id: 'i1', courseId: 'MSE-L1', roundId: 'r-old' }] },
     [{ id: 'i1', courseId: 'MSE-L1', course: { course_id: 'MSE-L1' }, rounds: [ROUND_A] }],
   );
-  const kept = d.querySelector('[data-testid="round-picker-kept"]');
-  assert.notEqual(kept, null, 'a stored round vanished from its own picker');
-  assert.equal(kept.getAttribute('value'), 'r-old');
-  assert.match(text(kept), /รอบเดิม/);
+  const row = d.querySelector('[data-testid="bundle-round-row"]');
+  assert.notEqual(row, null, 'a stored round vanished from its own card');
+
+  // No dates anywhere — no live row and no snapshot — so the Thai sentence.
+  assert.doesNotMatch(text(row), /r-old/, 'the raw id is on screen again');
+  assert.match(text(row), /ไม่พบในตารางแล้ว/);
+
+  // And it is marked unpickable, because the author is who can replace it.
+  assert.notEqual(
+    row.querySelector('[data-testid="bundle-round-gone"]'), null,
+    'a round the schedule lost is not marked as such',
+  );
+  assert.equal(
+    row.querySelector('[data-testid="bundle-round-status"]'), null,
+    'a round with no live row must show no status',
+  );
+});
+
+test('a round the fetch LOST but the SNAPSHOT can date shows the DATES', () => {
+  /**
+   * The reported case, reproduced from the live document. The round
+   * `6a0578e52cf974910f88cdf8` carries `dates: ['2026-09-24','2026-09-25']`
+   * in its snapshot and has no live row, because those days are past and
+   * `excludeStartedRounds` drops them from the fetch. It rendered as the raw
+   * id; it must render as its dates.
+   */
+  const d = panel(
+    {
+      items: [{
+        id: 'i1', courseId: 'MSE-L1',
+        rounds: [{
+          id: '6a0578e52cf974910f88cdf8',
+          snapshot: {
+            id: '6a0578e52cf974910f88cdf8',
+            dates: ['2026-09-24T00:00:00.000Z', '2026-09-25T00:00:00.000Z'],
+            type: 'classroom',
+          },
+        }],
+      }],
+    },
+    // The fetch returns a DIFFERENT round for this course, so the offered one
+    // has no live row — exactly the stored situation.
+    [{ id: 'i1', courseId: 'MSE-L1', course: { course_id: 'MSE-L1' }, rounds: [ROUND_A] }],
+  );
+  const row = d.querySelector('[data-testid="bundle-round-row"]');
+  assert.doesNotMatch(text(row), /6a0578e52cf974910f88cdf8/, 'the raw id is still being shown');
+  assert.match(text(row), /24\s*-\s*25 ก\.ย\./, 'the snapshot dates are not being read');
+  // Still unpickable: the schedule no longer has it, whatever the dates say.
+  assert.notEqual(row.querySelector('[data-testid="bundle-round-gone"]'), null);
+});
+
+test('CONTROL: a round the fetch DOES return shows dates and is not marked gone', () => {
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'MSE-L1', rounds: [{ id: 'r-a' }] }] },
+    [{ id: 'i1', courseId: 'MSE-L1', course: { course_id: 'MSE-L1' }, rounds: [ROUND_A] }],
+  );
+  const row = d.querySelector('[data-testid="bundle-round-row"]');
+  assert.match(text(row), /20\s*-\s*21 ส\.ค\./);
+  assert.equal(row.querySelector('[data-testid="bundle-round-gone"]'), null);
+  assert.notEqual(row.querySelector('[data-testid="bundle-round-status"]'), null);
 });
 
 test('CONTROL: a stored round that IS returned gets no "(รอบเดิม)" option', () => {
@@ -353,5 +429,156 @@ test('a snapshot the builder produces is accepted by the schema unchanged', () =
     id: 's', type: 'promotion_bundle',
     content: { items: [{ id: 'i1', courseId: 'MSE-L1', roundId: 'r-a', roundSnapshot: snap }] },
   });
-  assert.deepEqual(parsed.content.items[0].roundSnapshot, snap);
+  // The input stays on the LEGACY shape on purpose, so this also checks the
+  // normalising preprocess hands the snapshot across byte for byte.
+  assert.deepEqual(parsed.content.items[0].rounds[0].snapshot, snap);
+});
+
+// ── the rounds list lives INSIDE the course card ───────────────────────────
+
+const ROUND_C = { _id: 'r-c', dates: ['2031-02-10'], type: 'online', status: 'full' };
+
+test('three offered rounds render as three rows in ONE course card', () => {
+  // The ruling: a course is one card and its rounds are rows in it. Before
+  // this, three rounds meant three cards naming the same course.
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'MSE-L1', rounds: [{ id: 'r-a' }, { id: 'r-b' }, { id: 'r-c' }] }] },
+    [{ id: 'i1', courseId: 'MSE-L1', course: { course_id: 'MSE-L1' }, rounds: [ROUND_A, ROUND_B, ROUND_C] }],
+  );
+  assert.equal(d.querySelectorAll('[data-testid="bundle-round-row"]').length, 3);
+  // ONE card, not three: the move buttons are per ITEM, so one item has one pair.
+  assert.equal(d.querySelectorAll('[data-move="up"]').length, 1);
+});
+
+test('the add-round control EXCLUDES rounds already offered', () => {
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'MSE-L1', rounds: [{ id: 'r-a' }, { id: 'r-c' }] }] },
+    [{ id: 'i1', courseId: 'MSE-L1', course: { course_id: 'MSE-L1' }, rounds: [ROUND_A, ROUND_B, ROUND_C] }],
+  );
+  const values = [...d.querySelectorAll('[data-testid="bundle-add-round"] option')]
+    .map((o) => o.getAttribute('value')).filter(Boolean);
+  assert.deepEqual(values, ['r-b'], 'only the round not yet offered may be added');
+});
+
+test('no add-round control until a course is chosen', () => {
+  const d = panel({ items: [{ id: 'i1', courseId: '', rounds: [] }] }, [{ id: 'i1', courseId: '' }]);
+  assert.equal(d.querySelector('[data-testid="bundle-add-round"]'), null);
+  assert.match(text(d.body), /เลือกคอร์สก่อน/);
+});
+
+test('the live status comes from the fetched row, and a rolled-off round shows none', () => {
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'MSE-L1', rounds: [{ id: 'r-c' }, { id: 'r-gone' }] }] },
+    [{ id: 'i1', courseId: 'MSE-L1', course: { course_id: 'MSE-L1' }, rounds: [ROUND_C] }],
+  );
+  const rows = [...d.querySelectorAll('[data-testid="bundle-round-row"]')];
+  assert.equal(rows.length, 2, 'a round the fetch lost is still listed');
+  assert.notEqual(rows[0].querySelector('[data-testid="bundle-round-status"]'), null);
+  assert.equal(
+    rows[1].querySelector('[data-testid="bundle-round-status"]'), null,
+    'no live row means no status — never a frozen one',
+  );
+  assert.match(text(rows[1]), /รอบเดิม/);
+});
+
+test('the sort action appears only when there is more than one round', () => {
+  const one = panel(
+    { items: [{ id: 'i1', courseId: 'C', rounds: [{ id: 'r-a' }] }] },
+    [{ id: 'i1', courseId: 'C', course: { course_id: 'C' }, rounds: [ROUND_A] }],
+  );
+  assert.equal(one.querySelector('[data-testid="bundle-sort-rounds"]'), null);
+
+  const two = panel(
+    { items: [{ id: 'i1', courseId: 'C', rounds: [{ id: 'r-a' }, { id: 'r-b' }] }] },
+    [{ id: 'i1', courseId: 'C', course: { course_id: 'C' }, rounds: [ROUND_A, ROUND_B] }],
+  );
+  assert.notEqual(two.querySelector('[data-testid="bundle-sort-rounds"]'), null);
+});
+
+// ── the per-round pick deadline ────────────────────────────────────────────
+
+test('an empty deadline hint states the date the page will actually use', () => {
+  // An empty box is NOT "open for ever" — it closes the day before the round
+  // starts. ROUND_A begins 2030-08-20, so the default is the 19th.
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'C', rounds: [{ id: 'r-a' }] }] },
+    [{ id: 'i1', courseId: 'C', course: { course_id: 'C' }, rounds: [ROUND_A] }],
+  );
+  const row = d.querySelector('[data-testid="bundle-round-row"]');
+  assert.match(text(row), /ปิดเมื่อรอบเริ่ม/);
+  assert.match(text(row), /19 ส\.ค\. 2573/, 'the Thai default date, Buddhist year');
+  assert.match(text(row), /23:59/);
+  assert.equal(d.querySelector('[data-testid="bundle-pick-until"]').getAttribute('value'), '');
+});
+
+test('a stored deadline fills the field and switches the hint to end-of-day wording', () => {
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'C', rounds: [{ id: 'r-a', pickUntil: '2030-08-01' }] }] },
+    [{ id: 'i1', courseId: 'C', course: { course_id: 'C' }, rounds: [ROUND_A] }],
+  );
+  assert.equal(d.querySelector('[data-testid="bundle-pick-until"]').getAttribute('value'), '2030-08-01');
+  assert.match(text(d.querySelector('[data-testid="bundle-round-row"]')), /23:59 น\. ของวันนั้น/);
+});
+
+test('a deadline AFTER the round starts is a field error, not a silent clamp', () => {
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'C', rounds: [{ id: 'r-a', pickUntil: '2030-12-25' }] }] },
+    [{ id: 'i1', courseId: 'C', course: { course_id: 'C' }, rounds: [ROUND_A] }],
+  );
+  const input = d.querySelector('[data-testid="bundle-pick-until"]');
+  assert.equal(input.getAttribute('aria-invalid'), 'true');
+  assert.equal(input.getAttribute('value'), '2030-12-25', 'the typed value is kept, never rewritten');
+  assert.match(text(d.body), /อยู่หลังวันเริ่มรอบ/);
+  assert.match(text(d.body), /2030-08-19/, 'and it names the latest date that would work');
+});
+
+test('CONTROL: an in-range deadline is not flagged', () => {
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'C', rounds: [{ id: 'r-a', pickUntil: '2030-08-19' }] }] },
+    [{ id: 'i1', courseId: 'C', course: { course_id: 'C' }, rounds: [ROUND_A] }],
+  );
+  assert.equal(d.querySelector('[data-testid="bundle-pick-until"]').getAttribute('aria-invalid'), null);
+  assert.doesNotMatch(text(d.body), /อยู่หลังวันเริ่มรอบ/);
+});
+
+// ── one course = one item ──────────────────────────────────────────────────
+
+test('a card whose course another card already names is flagged', () => {
+  const d = panel(
+    {
+      items: [
+        { id: 'i1', courseId: 'MSE-L1', rounds: [{ id: 'r-a' }] },
+        { id: 'i2', courseId: 'MSE-L1', rounds: [{ id: 'r-b' }] },
+      ],
+    },
+    [
+      { id: 'i1', courseId: 'MSE-L1', course: { course_id: 'MSE-L1' }, rounds: [ROUND_A] },
+      { id: 'i2', courseId: 'MSE-L1', course: { course_id: 'MSE-L1' }, rounds: [ROUND_B] },
+    ],
+  );
+  assert.match(text(d.body), /หลักสูตรนี้มีอยู่แล้ว/);
+  assert.match(text(d.body), /เพิ่มรอบในการ์ดเดิม/);
+});
+
+test('CONTROL: two different courses are not flagged as duplicates', () => {
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'A', rounds: [] }, { id: 'i2', courseId: 'B', rounds: [] }] },
+    [
+      { id: 'i1', courseId: 'A', course: { course_id: 'A' }, rounds: [] },
+      { id: 'i2', courseId: 'B', course: { course_id: 'B' }, rounds: [] },
+    ],
+  );
+  assert.doesNotMatch(text(d.body), /หลักสูตรนี้มีอยู่แล้ว/);
+});
+
+test('THE RETIRED COPY IS GONE from the whole panel', () => {
+  // The hint that used to invite "add the course again for another round".
+  const d = panel(
+    { items: [{ id: 'i1', courseId: 'A', rounds: [{ id: 'r-a' }] }] },
+    [{ id: 'i1', courseId: 'A', course: { course_id: 'A' }, rounds: [ROUND_A] }],
+  );
+  const all = text(d.body);
+  assert.doesNotMatch(all, /คอร์สเดียวกันซ้ำได้/);
+  assert.doesNotMatch(all, /ถ้าเป็นคนละรอบ/);
+  assert.match(all, /ลำดับที่แสดงคือลำดับการเรียน/, 'the order hint says only what the order means');
 });

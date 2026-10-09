@@ -1,4 +1,8 @@
 import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The one resolver from a pick to a round, shared with the
+// confirmation mail so the rows and the mail name the same round.
+import { pickedItemRound } from '@/lib/pageBuilder/chosenRounds';
 import { roundFieldsFor } from '@/lib/registrations/roundSelection';
 // The SAME consent builder the quote route and the charge route write through.
 // Not `consent: data.consent`: that would store the four raw booleans without
@@ -62,7 +66,7 @@ import { buildConsentRecord } from '@/lib/registration/build-public';
  * @param {string|null} p.ipAddress
  * @returns {{ok: true, legs: Array<object>} | {ok: false, index: number, courseId: string}}
  */
-export function buildBundleLegs({ items, resolved, todayKey, data, attendees, bundle, ipAddress = null }) {
+export function buildBundleLegs({ items, resolved, todayKey, data, attendees, bundle, picks = null, ipAddress = null }) {
   const list = Array.isArray(items) ? items : [];
   const entries = Array.isArray(resolved) ? resolved : [];
   const legs = [];
@@ -73,7 +77,15 @@ export function buildBundleLegs({ items, resolved, todayKey, data, attendees, bu
     const course = entry?.course ?? null;
     const courseId = String(entry?.courseId ?? item?.courseId ?? '').trim();
 
-    const round = chooseItemRound(entry?.rounds, item, todayKey);
+    /**
+     * The round the applicant PICKED. `pickedItemRound` answers null when no
+     * pick was sent and the course offers more than one — so a payload with
+     * missing picks fails here rather than booking round one by default.
+     * The route has already refused that case with a 409; this is the second
+     * reader of the same fact and refuses rather than assuming its sibling
+     * ran.
+     */
+    const round = pickedItemRound(entry?.rounds, item, picks, todayKey);
     // `live` only: a snapshot can draw a date but cannot hold a seat, and a
     // round nobody can fetch has no `_id` to book against. resolveBundleRequest
     // has already refused these; this is the second reader of the same fact,

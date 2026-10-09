@@ -2,6 +2,18 @@ import { slotsOf } from '@/lib/pageBuilder/containerSlots';
 import { isPubliclyVisible, invisibleReason } from '@/lib/pageBuilder/visibility';
 import { isBundleRegistrationOpen } from '@/lib/pageBuilder/bundleRegistration';
 import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
+/**
+ * ── THE FAIL-CLOSED GUARD IS GONE, AND SO IS ITS IMPORT ──────────────────
+ * Commit ed73c0b5 refused any bundle offering several rounds per course,
+ * because the flow could not ask which one and would have booked round one
+ * silently. The route now requires a pick per item and validates each one
+ * against live status, so the guard has been replaced by the check it was
+ * standing in for. `offeredRoundsOf` was imported for it alone and went with
+ * it; the route imports what it needs directly.
+ *
+ * test/pure/bundleRequestGuard asserts a multi-round bundle RESOLVES here,
+ * so the guard cannot quietly return.
+ */
 
 /**
  * CAN THIS (pageId, sectionId) PAIR BE REGISTERED FOR? The whole refusal, pure.

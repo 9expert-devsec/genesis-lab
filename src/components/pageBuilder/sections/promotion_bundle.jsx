@@ -53,6 +53,21 @@ import { BUNDLE_CLOSED_MESSAGE, isBundleRegistrationOpen } from '@/lib/pageBuild
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { resolveDerivedRoundBadge } from '@/lib/scheduleStatus';
 import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The multi-round round: ALL of an item's offered rounds.
+import { chooseItemRounds, offeredRoundsOf } from '@/lib/pageBuilder/chosenRounds';
+// Pickability, the reason and the effective deadline — computed once for the
+// section and never re-derived per tile, so the card cannot disagree with the
+// wizard or the server.
+import { roundChoices, bundleRegistrable } from '@/lib/pageBuilder/bundleRoundChoice';
+// The Thai reason words and the auto-close sentence, beside the author's own
+// closed message so one surface cannot word a refusal differently from another.
+import { PICK_REASON_TEXT, BUNDLE_NO_ROUNDS_MESSAGE } from '@/lib/pageBuilder/bundleRegistration';
+// ADDED beside the statement above rather than folded into it. The ONE label
+// for an offered round, shared with the editor and the wizard.
+import { bundleRoundLabel } from '@/lib/pageBuilder/bundleRegistration';
+// One Thai calendar day, for the "เลือกได้ถึง" line.
+import { formatThaiDate } from '@/lib/promotions/promotionDateLabel';
 import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
 
 /**
@@ -164,7 +179,7 @@ import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
  * here about such a round getting "no registration link either" is gone with
  * the link: no round of any state has one now.
  */
-function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false }) {
+function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false, choice = null, orderLabel = null }) {
   /**
    * ── THE TILE'S HALF OF THE LIGHT SCOPE ──────────────────────────────────
    * `.pb-bundle-tile-light` (globals.css) re-declares the semantic TOKENS this
@@ -184,6 +199,44 @@ function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false
   const course = entry?.course ?? null;
   const code = String(entry?.courseId ?? item?.courseId ?? '').trim();
   const round = chooseItemRound(entry?.rounds, item, todayKey);
+
+  /**
+   * ── EVERY OFFERED ROUND, AS A DRAWABLE ROW ──────────────────────────────
+   * `chooseItemRounds` gives the display facts (dates, state, the live row);
+   * `choice` — this item's row from `roundChoices`, computed once for the
+   * whole section — gives pickability, the reason and the effective deadline.
+   * Neither is recomputed here: the card must not be able to disagree with the
+   * wizard or the server about whether a round can be picked.
+   *
+   * A round with no readable dates is DROPPED from the list rather than drawn
+   * as an empty box. That is the one case where silence beats a row: there is
+   * nothing for a visitor to read and nothing for them to choose by.
+   */
+  const offeredRows = chooseItemRounds(entry?.rounds, item, todayKey)
+    .map((row) => {
+      // THE SHARED LABEL. Same chain as the editor and the wizard — live
+      // dates, then the stored snapshot — so one round cannot be named three
+      // ways. `row.dates` already carries the snapshot fallback from
+      // `chooseRounds`, which is why this passes it as the live side.
+      const { text: dateLabel, hasDates } = bundleRoundLabel(round, { dates: row.dates });
+      // A round NOTHING can date is omitted here, and that differs from the
+      // editor on purpose: an author needs to be told their round went stale
+      // so they can replace it, a visitor has nothing to do with that
+      // sentence and an undated row gives them nothing to choose by.
+      if (!hasDates) return null;
+      const option = choice?.options?.find((o) => o.roundId === row.id) ?? null;
+      const pickable = option ? option.pickable : false;
+      const reason = option?.reason ?? 'closed';
+      return {
+        key: row.id,
+        dateLabel,
+        pickable,
+        reason,
+        reasonLabel: PICK_REASON_TEXT[reason] ?? PICK_REASON_TEXT.closed,
+        deadlineLabel: option?.deadline ? formatThaiDate(option.deadline) : null,
+      };
+    })
+    .filter(Boolean);
 
   /**
    * `isLive` SURVIVED the per-course button's removal, and `round.live` did
@@ -280,6 +333,20 @@ function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-4">
+        {/*
+          ── THE LEARNING ORDER, STATED ON THE TILE ────────────────────────
+          Only when the bundle is sequential. The tiles are already in order,
+          but order alone does not say that the order is a RULE — and the rule
+          is what makes an earlier round unpickable for a later course.
+        */}
+        {orderLabel && (
+          <span
+            data-testid="bundle-item-order"
+            className="w-fit rounded-9e-sm bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-bold text-[var(--text-secondary)]"
+          >
+            {orderLabel}
+          </span>
+        )}
         {course ? (
           <h4 className="line-clamp-2 h-10 text-sm font-bold text-[var(--text-primary)]">{title}</h4>
         ) : (
@@ -297,9 +364,17 @@ function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false
         )}
 
         {/*
-          ── THE ROUND BOX ────────────────────────────────────────────────
-          The label and the date on two lines inside a bordered, pale-warm
-          box, where they used to be one muted sentence.
+          ── EVERY OFFERED ROUND, NOT JUST ONE ────────────────────────────
+          The card used to draw ONE round box. An item offers several now and
+          the applicant picks one, so all of them are listed — the visitor has
+          to be able to see whether any date suits them before starting a
+          quotation.
+
+          NON-PICKABLE ROUNDS STAY VISIBLE, faded and labelled. Removing them
+          would make the card shorter the moment a round filled, which is the
+          same silently-shrinking failure `chooseRounds` already refuses for a
+          rolled-off round: a visitor who can see "เต็ม" knows to pick another
+          date, one whose option vanished does not know it ever existed.
 
           THE COLOUR IS THE VAR FORM, NOT `bg-9e-orange-900`, AND THAT IS THE
           WHOLE POINT. The Tailwind token compiles to the LIGHT hex (#FFF4E9)
@@ -307,31 +382,59 @@ function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false
           are declared: those hexes are light-mode and the dark adaptation
           lives only in the `--9e-<name>-<step>` vars. Taking the token here
           would paint a cream slab on a dark page, which is exactly the defect
-          presets.js records shipping once. `courseStatusBadge` already builds
-          a soft tinted box this way (`border-[var(--9e-green-800)]
-          bg-[var(--9e-green-900)]`); this is that construction in orange.
+          presets.js records shipping once.
 
           `formatRoundDays` is UNCHANGED and no second formatter was added —
-          the date string is the same one this card already rendered; only the
-          box around it is new.
+          the date string is the same one this card already rendered.
+
+          `opacity-60` carries the faded state rather than a muted colour,
+          deliberately: it works on BOTH card styles and inside the navy
+          card's light tile scope without a second rule, and it cannot be the
+          `dark:`-variant trap the tile's other colours needed `lit()` for.
         */}
-        {dateLabel && dateLabel !== '-' && (
-          <div
-            data-testid="bundle-round-box"
-            className="rounded-9e-md border border-[var(--9e-orange-800)] bg-[var(--9e-orange-900)] px-3 py-2"
-          >
+        {!!offeredRows.length && (
+          <div data-testid="bundle-round-list" className="flex flex-col gap-1">
             <span className="block text-[11px] font-bold text-[var(--text-secondary)]">
-              รอบอบรม
+              {offeredRows.length > 1 ? 'รอบที่เลือกได้' : 'รอบอบรม'}
             </span>
-            <span
-              data-testid="bundle-item-dates"
-              className="block text-xs font-bold text-[var(--text-primary)]"
-            >
-              {dateLabel}
-            </span>
+            {offeredRows.map((row) => (
+              <div
+                key={row.key}
+                data-testid="bundle-round-box"
+                data-pickable={row.pickable ? 'yes' : 'no'}
+                data-reason={row.reason ?? undefined}
+                className={cn(
+                  'rounded-9e-md border border-[var(--9e-orange-800)] bg-[var(--9e-orange-900)] px-3 py-2',
+                  !row.pickable && 'opacity-60',
+                )}
+              >
+                <span
+                  data-testid="bundle-item-dates"
+                  className="block text-xs font-bold text-[var(--text-primary)]"
+                >
+                  {row.dateLabel}
+                </span>
+                {row.pickable ? (
+                  row.deadlineLabel && (
+                    <span
+                      data-testid="bundle-round-deadline"
+                      className="mt-0.5 block text-[11px] text-[var(--text-secondary)]"
+                    >
+                      เลือกได้ถึง {row.deadlineLabel}
+                    </span>
+                  )
+                ) : (
+                  <span
+                    data-testid="bundle-round-unpickable"
+                    className="mt-0.5 block text-[11px] font-bold text-[var(--text-secondary)]"
+                  >
+                    {row.reasonLabel}
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
-        )}
-        {derived && (
+        )}        {derived && (
           <span
             data-testid="bundle-item-round-state"
             /**
@@ -460,6 +563,7 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
   // why it is `!== false` and never truthiness.
   const open = isBundleRegistrationOpen(content);
 
+
   // The guard `sectionRendersEmpty` mirrors. Nothing authored at all → nothing
   // drawn; the editor warns and the structure tree marks it.
   if (!name && !blurb && !code && listPrice == null && netPrice == null && !items.length) {
@@ -484,6 +588,65 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
   // a midnight boundary, and formatRoundDays refuses to read the clock at all.
   const todayKey = siteTodayKey();
   const currentYear = siteCurrentYear();
+
+  const sequential = content?.sequential === true;
+
+  /**
+   * ── PICKABILITY, COMPUTED ONCE FOR THE WHOLE SECTION ───────────────────
+   * Every round of every item, keyed by id, from the LIVE rows the resolver
+   * fetched. The snapshot is deliberately not consulted for status: it carries
+   * none, and a frozen one would be a second, stale answer.
+   */
+  const liveStatusById = {};
+  for (const entry of Array.isArray(data) ? data : []) {
+    for (const row of Array.isArray(entry?.rounds) ? entry.rounds : []) {
+      const id = String(row?._id ?? '');
+      if (id) liveStatusById[id] = { status: row?.status, dates: row?.dates };
+    }
+  }
+
+  /**
+   * ── THE CARD ASKS WITHOUT THE SEQUENCE; AUTO-CLOSE ASKS WITH IT ────────
+   * `sequential: false` here ON PURPOSE, and it is the subtle call of this
+   * commit. With the real flag and no picks, every round of every course after
+   * the first would come back `previous_not_picked` — true, and useless on a
+   * card: the card is not a picker, so fading an entire course's dates behind
+   * "choose the previous course first" would hide the dates a visitor came to
+   * read. So each round is shown with its OWN state — closed, full, started,
+   * deadline passed — which is exactly the four labels the ruling lists, and
+   * the sequence is stated once as a rule below the list.
+   *
+   * `bundleRegistrable` DOES get the real flag, because that question is
+   * "could anyone complete this", and under sequential the answer genuinely
+   * depends on the chain.
+   */
+  const choices = roundChoices({
+    items,
+    sequential: false,
+    liveStatusById,
+    picks: {},
+    today: todayKey,
+  });
+  const choiceByItemId = new Map(choices.map((c) => [c.itemId, c]));
+
+  /**
+   * ── AUTO-CLOSE (R5), AND WHY THE AUTHOR'S SWITCH STILL WINS ───────────
+   * A bundle nobody can complete must not offer a register button. But the two
+   * refusals are different facts and are kept apart: `open === false` is the
+   * author saying no, and it is checked FIRST, so an author who closed a
+   * bundle is never told instead that the schedule did.
+   *
+   * AN ITEMLESS BUNDLE IS NOT AUTO-CLOSED, and the distinction is the point.
+   * `bundleRegistrable` answers false for it, correctly — there is no chain
+   * over zero courses — but "ยังไม่มีรอบที่เปิดรับครบทุกหลักสูตร" would be a
+   * claim about ROUNDS, and a bundle with no courses has none to make it
+   * about. It is UNFINISHED: the editor warns, `publishBlockers` refuses the
+   * publish, and `resolveBundleRequest` refuses the quotation. Telling a
+   * visitor the schedule is full would be the one wrong sentence available.
+   */
+  const chainPossible =
+    items.length === 0 ||
+    bundleRegistrable({ items, sequential, liveStatusById, today: todayKey });
 
   /**
    * ── THE NAVY SURFACE, ITS GLOWS AND ITS OPTIONAL BORDER ──────────────────
@@ -707,7 +870,7 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
         now asserts the cards carry no registration link at all, which is the
         stronger claim and the one that would catch the button coming back.
       */}
-      {open
+      {open && chainPossible
         ? (bundleRegisterHref || code) && (
             /*
               A COLUMN now, not a row. The button takes the full width of the
@@ -874,7 +1037,7 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
             aria-disabled="true"
             className="inline-flex w-full cursor-default select-none items-center justify-center rounded-9e-md bg-[var(--surface-muted)] px-4 py-3 text-center text-sm font-bold text-9e-slate-dp-50 dark:text-[#94a3b8]"
           >
-            {BUNDLE_CLOSED_MESSAGE}
+            {open ? BUNDLE_NO_ROUNDS_MESSAGE : BUNDLE_CLOSED_MESSAGE}
           </span>
         )}
       </div>
@@ -956,9 +1119,32 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
                        * call site changes and the tile does not.
                        */
                       lightScope={isNavy}
+                      choice={choiceByItemId.get(String(it?.id ?? '').trim()) ?? null}
+                      orderLabel={sequential ? `ลำดับที่ ${i + 1}` : null}
                     />
                   ))}
                 </ul>
+              {/*
+                ── THE SEQUENCE, STATED ONCE ──────────────────────────────
+                Under the list rather than on each tile: it is one rule about
+                the whole package, and repeating it per course would say the
+                same sentence three times.
+
+                It is the OTHER half of the decision not to fade later courses
+                behind `previous_not_picked` on the card. The rounds show their
+                own availability; this says why a visitor may still not be able
+                to combine them freely. Without it the card would look like
+                free choice and the wizard would refuse — which is the gap this
+                line closes.
+              */}
+              {sequential && (
+                <p
+                  data-testid="bundle-sequential-note"
+                  className="mt-1 text-xs text-[var(--text-secondary)]"
+                >
+                  เลือกรอบตามลำดับ — รอบของหลักสูตรถัดไปต้องเริ่มหลังหลักสูตรก่อนหน้าจบ
+                </p>
+              )}
           </>
         )}
       </div>

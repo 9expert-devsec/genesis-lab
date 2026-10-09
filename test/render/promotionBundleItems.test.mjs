@@ -33,10 +33,10 @@ import { siteCurrentYear } from '@/lib/articlePublishTime';
  * except the control asserting the switch still governs it — the subject here
  * is the per-COURSE buttons, which the pair does not touch.
  */
-const doc = (content, data) =>
+const doc = (content, data, style) =>
   new JSDOM(
     `<!doctype html><body>${renderToStaticMarkup(
-      createElement(PromotionBundleSection, { content, data, pageId: 'p1', sectionId: 'sec-1' }),
+      createElement(PromotionBundleSection, { content, data, style, pageId: 'p1', sectionId: 'sec-1' }),
     )}</body>`,
   ).window.document;
 
@@ -174,7 +174,16 @@ test('the round sits in a BOX, with its label and its date on separate lines', (
   const d = bundle([item()], [entry()]);
   const box = d.querySelector('[data-testid="bundle-round-box"]');
   assert.notEqual(box, null, 'the card has no round box');
-  assert.match(text(box), /รอบอบรม/);
+
+  // THE LABEL MOVED OUT OF THE BOX, because there can be several boxes now:
+  // one item offers many rounds, and repeating "รอบอบรม" above each date was
+  // a word per row saying what the list already says. It is a single heading
+  // on the list instead — asserted here so the label is still SOMEWHERE and
+  // this test keeps being about the label/date separation rather than
+  // quietly becoming a test about the date alone.
+  const list = d.querySelector('[data-testid="bundle-round-list"]');
+  assert.notEqual(list, null, 'the rounds list wrapper is gone');
+  assert.match(text(list), /รอบอบรม/, 'the list heading lost its label');
 
   const date = box.querySelector('[data-testid="bundle-item-dates"]');
   assert.notEqual(date, null, 'the date is not inside the box');
@@ -449,4 +458,199 @@ test('CONTROL: chooseItemRound is not simply returning a constant', () => {
   // …and it picks the RIGHT row when several are fetched.
   const second = { _id: 'r2', dates: ['2031-01-01'], status: 'open' };
   assert.equal(chooseItemRound([LIVE_ROUND, second], { roundId: 'r2' }, TODAY).id, 'r2');
+});
+
+// ── several offered rounds, their states and their deadlines ───────────────
+
+const OPEN_A = { _id: 'ra', dates: ['2030-08-20', '2030-08-21'], status: 'open', type: 'classroom' };
+const OPEN_B = { _id: 'rb', dates: ['2030-11-05'], status: 'open', type: 'online' };
+const FULL_C = { _id: 'rc', dates: ['2030-12-01'], status: 'full', type: 'online' };
+const CLOSED_D = { _id: 'rd', dates: ['2030-12-20'], status: 'closed', type: 'online' };
+const STARTED_E = { _id: 're', dates: ['2020-01-05'], status: 'open', type: 'online' };
+
+const multi = (rounds, live, extra = {}, style) =>
+  doc(
+    { name: 'Bundle 1', items: [{ id: 'i1', courseId: 'MSE-L1', rounds }], ...extra },
+    [{ id: 'i1', courseId: 'MSE-L1', course: COURSE, rounds: live }],
+    style,
+  );
+
+test('ALL offered rounds are listed, not just the first', () => {
+  const d = multi(
+    [{ id: 'ra' }, { id: 'rb' }, { id: 'rc' }],
+    [OPEN_A, OPEN_B, FULL_C],
+  );
+  assert.equal(d.querySelectorAll('[data-testid="bundle-round-box"]').length, 3);
+});
+
+test('a non-pickable round stays VISIBLE, faded, and says why', () => {
+  // Removing it would make the card shorter the moment a round filled — the
+  // same silently-shrinking failure chooseRounds already refuses.
+  const d = multi([{ id: 'ra' }, { id: 'rc' }, { id: 'rd' }, { id: 're' }],
+    [OPEN_A, FULL_C, CLOSED_D, STARTED_E]);
+  const boxes = [...d.querySelectorAll('[data-testid="bundle-round-box"]')];
+  assert.equal(boxes.length, 4, 'nothing is dropped');
+
+  const by = Object.fromEntries(boxes.map((b) => [b.getAttribute('data-reason') ?? 'ok', b]));
+  assert.equal(boxes[0].getAttribute('data-pickable'), 'yes');
+  assert.equal(boxes[0].className.includes('opacity-60'), false);
+
+  for (const [reason, word] of [['full', 'เต็ม'], ['closed', 'ปิดรับ'], ['started', 'เริ่มแล้ว']]) {
+    const box = by[reason];
+    assert.notEqual(box, null, `no box reported ${reason}`);
+    assert.equal(box.getAttribute('data-pickable'), 'no');
+    assert.ok(box.className.includes('opacity-60'), `${reason} is not faded`);
+    assert.match(text(box.querySelector('[data-testid="bundle-round-unpickable"]')), new RegExp(word));
+  }
+});
+
+test('a round past its pick deadline says หมดเวลาเลือก', () => {
+  const d = multi([{ id: 'ra', pickUntil: '2020-01-01' }], [OPEN_A]);
+  const box = d.querySelector('[data-testid="bundle-round-box"]');
+  assert.equal(box.getAttribute('data-reason'), 'deadline_passed');
+  assert.match(text(box.querySelector('[data-testid="bundle-round-unpickable"]')), /หมดเวลาเลือก/);
+});
+
+test('a pickable round shows its EFFECTIVE deadline in Thai', () => {
+  // No pickUntil: the default is the day before the round starts, 2030-08-19.
+  const d = multi([{ id: 'ra' }], [OPEN_A]);
+  const line = d.querySelector('[data-testid="bundle-round-deadline"]');
+  assert.notEqual(line, null, 'a pickable round shows no deadline');
+  assert.match(text(line), /เลือกได้ถึง/);
+  assert.match(text(line), /19 ส\.ค\. 2573/);
+});
+
+test('an EARLIER pickUntil is the date shown, and a later one is clamped away', () => {
+  const early = multi([{ id: 'ra', pickUntil: '2030-07-01' }], [OPEN_A]);
+  assert.match(text(early.querySelector('[data-testid="bundle-round-deadline"]')), /1 ก\.ค\. 2573/);
+
+  // A date after the round starts cannot extend it — the card shows the cap.
+  const late = multi([{ id: 'ra', pickUntil: '2031-01-01' }], [OPEN_A]);
+  assert.match(text(late.querySelector('[data-testid="bundle-round-deadline"]')), /19 ส\.ค\. 2573/);
+});
+
+test('a non-pickable round shows NO deadline line — the reason replaces it', () => {
+  const d = multi([{ id: 'rc' }], [FULL_C]);
+  assert.equal(d.querySelector('[data-testid="bundle-round-deadline"]'), null);
+});
+
+// ── sequential: the order labels and the rule line ─────────────────────────
+
+test('sequential draws ลำดับที่ N on every tile', () => {
+  const d = doc(
+    {
+      name: 'B',
+      sequential: true,
+      items: [
+        { id: 'i1', courseId: 'A', rounds: [{ id: 'ra' }] },
+        { id: 'i2', courseId: 'B', rounds: [{ id: 'rb' }] },
+      ],
+    },
+    [
+      { id: 'i1', courseId: 'A', course: COURSE, rounds: [OPEN_A] },
+      { id: 'i2', courseId: 'B', course: COURSE, rounds: [OPEN_B] },
+    ],
+  );
+  const labels = [...d.querySelectorAll('[data-testid="bundle-item-order"]')].map((e) => text(e));
+  assert.deepEqual(labels, ['ลำดับที่ 1', 'ลำดับที่ 2']);
+  assert.match(text(d.querySelector('[data-testid="bundle-sequential-note"]')), /เลือกรอบตามลำดับ/);
+});
+
+test('CONTROL: a NON-sequential bundle draws no order labels and no rule line', () => {
+  const d = multi([{ id: 'ra' }], [OPEN_A]);
+  assert.equal(d.querySelector('[data-testid="bundle-item-order"]'), null);
+  assert.equal(d.querySelector('[data-testid="bundle-sequential-note"]'), null);
+});
+
+test('the card does NOT fade a later course behind previous_not_picked', () => {
+  // The subtle call: with the real sequential flag and no picks, every round of
+  // course 2 would be `previous_not_picked` — true and useless on a card, which
+  // is not a picker. Each round shows its OWN state and the sequence is stated
+  // once as a rule.
+  const d = doc(
+    {
+      name: 'B',
+      sequential: true,
+      items: [
+        { id: 'i1', courseId: 'A', rounds: [{ id: 'ra' }] },
+        { id: 'i2', courseId: 'B', rounds: [{ id: 'rb' }] },
+      ],
+    },
+    [
+      { id: 'i1', courseId: 'A', course: COURSE, rounds: [OPEN_A] },
+      { id: 'i2', courseId: 'B', course: COURSE, rounds: [OPEN_B] },
+    ],
+  );
+  const boxes = [...d.querySelectorAll('[data-testid="bundle-round-box"]')];
+  assert.equal(boxes.length, 2);
+  assert.equal(boxes.every((b) => b.getAttribute('data-pickable') === 'yes'), true);
+});
+
+// ── auto-close (R5) ───────────────────────────────────────────────────────
+
+test('AUTO-CLOSE: a course whose every round is full closes the bundle', () => {
+  const d = multi([{ id: 'rc' }], [FULL_C]);
+  assert.equal(d.querySelector('[data-testid="bundle-register"]'), null);
+  const state = d.querySelector('[data-testid="bundle-closed"]');
+  assert.notEqual(state, null, 'there is no state message in the button slot');
+  assert.match(text(state), /ยังไม่มีรอบที่เปิดรับครบทุกหลักสูตร/);
+});
+
+test("the AUTHOR'S switch wins over auto-close, and says the author's sentence", () => {
+  // Both refusals are true at once here. The author's is checked first, so an
+  // author who closed a bundle is never told instead that the schedule did.
+  const d = multi([{ id: 'rc' }], [FULL_C], { registrationOpen: false });
+  assert.match(text(d.querySelector('[data-testid="bundle-closed"]')), /ปิดรับสมัครแล้ว/);
+});
+
+test('AUTO-CLOSE: sequential with no fitting chain closes it, non-sequential does not', () => {
+  // Course 2's only round starts before course 1's only round ends.
+  const items = [
+    { id: 'i1', courseId: 'A', rounds: [{ id: 'rb' }] }, // 2030-11-05
+    { id: 'i2', courseId: 'B', rounds: [{ id: 'ra' }] }, // 2030-08-20..21, EARLIER
+  ];
+  const data = [
+    { id: 'i1', courseId: 'A', course: COURSE, rounds: [OPEN_B] },
+    { id: 'i2', courseId: 'B', course: COURSE, rounds: [OPEN_A] },
+  ];
+  const free = doc({ name: 'B', items }, data);
+  assert.notEqual(free.querySelector('[data-testid="bundle-register"]'), null, 'order does not matter when off');
+
+  const seq = doc({ name: 'B', sequential: true, items }, data);
+  assert.equal(seq.querySelector('[data-testid="bundle-register"]'), null);
+  assert.match(text(seq.querySelector('[data-testid="bundle-closed"]')), /ยังไม่มีรอบที่เปิดรับครบทุกหลักสูตร/);
+});
+
+test('A LEGACY single-round bundle still registers — the regression this caught', () => {
+  // THE BUG THIS PINS: bundleRoundChoice read `item.rounds` only, so a legacy
+  // item (roundId, no rounds[]) looked like a course offering NOTHING — and
+  // every one of the 91 stored items is legacy. The card would have
+  // auto-closed every existing bundle. Caught by a fixture on the old shape.
+  const d = doc(
+    { name: 'B', discountCode: 'EXP1', items: [{ id: 'i1', courseId: 'MSE-L1', roundId: 'ra' }] },
+    [{ id: 'i1', courseId: 'MSE-L1', course: COURSE, rounds: [OPEN_A] }],
+  );
+  assert.notEqual(d.querySelector('[data-testid="bundle-register"]'), null, 'a legacy bundle lost its button');
+  assert.equal(d.querySelector('[data-testid="bundle-closed"]'), null);
+  assert.equal(d.querySelectorAll('[data-testid="bundle-round-box"]').length, 1);
+});
+
+// ── both card styles ──────────────────────────────────────────────────────
+
+test('the rounds list renders in BOTH card styles, with no active dark: colour on Navy', () => {
+  for (const theme of ['light', 'navy']) {
+    const d = multi([{ id: 'ra' }, { id: 'rc' }], [OPEN_A, FULL_C], {}, { bundleCardTheme: theme });
+    assert.equal(
+      d.querySelectorAll('[data-testid="bundle-round-box"]').length, 2,
+      `the list did not render on ${theme}`,
+    );
+    assert.notEqual(d.querySelector('[data-testid="bundle-round-deadline"]'), null);
+    assert.notEqual(d.querySelector('[data-testid="bundle-round-unpickable"]'), null);
+  }
+
+  // On Navy the tile is a LIGHT surface, so no dark: utility may remain inside
+  // it — they compile to :is(.dark *) and the card scopes `dark` on itself.
+  const navy = multi([{ id: 'ra' }], [OPEN_A], {}, { bundleCardTheme: 'navy' });
+  const tile = navy.querySelector('[data-testid="bundle-item"]');
+  assert.doesNotMatch(tile.innerHTML, /dark:/, 'a dark: utility survived inside the light tile');
 });

@@ -1,3 +1,4 @@
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 /**
  * IS THIS BUNDLE ACCEPTING REGISTRATIONS? One definition, two readers.
  *
@@ -114,3 +115,78 @@ export const BUNDLE_UNAVAILABLE_MESSAGE =
   'ขณะนี้ยังไม่สามารถรับลงทะเบียนแพ็กเกจนี้ได้ กรุณาติดต่อทีมขายเพื่อสอบถามรายละเอียด';
 
 export const BUNDLE_EXPIRED_MESSAGE = 'โปรโมชันนี้สิ้นสุดแล้ว';
+
+/**
+ * Why a round cannot be picked, in Thai, for a visitor.
+ *
+ * ── ONE MAP, READ BY THE CARD AND THE WIZARD ──────────────────────────────
+ * Exported rather than inlined because the wizard says the same six things
+ * beside its disabled options, and a visitor told "เต็ม" on the card and
+ * something else in the form has been told nothing. `PICK_REASONS` pins the
+ * vocabulary, so a reason with no text here cannot ship silently.
+ */
+export const PICK_REASON_TEXT = Object.freeze({
+  closed: 'ปิดรับ',
+  full: 'เต็ม',
+  started: 'เริ่มแล้ว',
+  deadline_passed: 'หมดเวลาเลือก',
+  previous_not_picked: 'ต้องเลือกรอบของหลักสูตรก่อนหน้าก่อน',
+  before_previous: 'เริ่มก่อนหลักสูตรก่อนหน้าจบ',
+});
+
+/**
+ * The state message when no complete set of picks exists (R5).
+ *
+ * Distinct from `BUNDLE_CLOSED_MESSAGE`, which is the author's switch. This one
+ * is the schedule's answer: every course may have rounds and still no valid
+ * combination, which is a different fact and a different sentence. It shares
+ * the switch's SLOT and styling, because to a visitor both mean "not today".
+ */
+export const BUNDLE_NO_ROUNDS_MESSAGE = 'ยังไม่มีรอบที่เปิดรับครบทุกหลักสูตร';
+
+/**
+ * ── THE LABEL FOR ONE OFFERED ROUND, AND WHY IT IS SHARED ──────────────────
+ *
+ * Dates from whichever source has them — the LIVE row first, then the stored
+ * snapshot — and a Thai sentence when neither does. It never returns an id.
+ *
+ * ── THE BUG THIS REPLACES, MEASURED ──────────────────────────────────────
+ * The editor rendered `6a0578e52cf974910f88cdf8 (รอบเดิม)` for a real round.
+ * Read off the stored document: that round's snapshot carries
+ * `dates: ['2026-09-24', '2026-09-25']` — the dates were there all along. What
+ * it did NOT have was a live row, because `listSchedulesByCourse` runs
+ * `excludeStartedRounds` and those days are behind us (today 2026-10-09). The
+ * label fell back to the id the moment the live row was missing, ignoring the
+ * snapshot sitting right beside it.
+ *
+ * So the fallback order is the whole fix, and it is the same order
+ * `chooseRounds` already uses to decide a round's STATE: live, then snapshot,
+ * then nothing. A raw ObjectId is never a thing to show anybody — it tells an
+ * author nothing about which round it is and nothing about what to do.
+ *
+ * ── ONE FUNCTION BECAUSE THERE ARE THREE SURFACES ────────────────────────
+ * The editor row, the wizard's pick options and the public card all name the
+ * same round. Two of the three had their own fallback and the third dropped
+ * the round entirely; that is how an author comes to see an id while a visitor
+ * sees a date. The card keeps its own rule for a round with NO dates at all —
+ * it omits it rather than showing a visitor a sentence about our data — and
+ * that difference is deliberate and recorded at the call site.
+ *
+ * @param {object} round one entry of `item.rounds` (or the normalised legacy one)
+ * @param {object|null} live the matching MSDB row, when the fetch returned one
+ * @returns {{text: string, hasDates: boolean}}
+ */
+export function bundleRoundLabel(round, live = null) {
+  const liveDates = Array.isArray(live?.dates) ? live.dates : [];
+  const snapDates = Array.isArray(round?.snapshot?.dates) ? round.snapshot.dates : [];
+  const dates = liveDates.length ? liveDates : snapDates;
+  const label = formatRoundDays(dates, { showMonth: true, showYear: true });
+  if (label && label !== '-') return { text: label, hasDates: true };
+  return { text: BUNDLE_ROUND_GONE_LABEL, hasDates: false };
+}
+
+/** Shown when neither the live row nor the snapshot can date a round. */
+export const BUNDLE_ROUND_GONE_LABEL = 'รอบเดิม (ไม่พบในตารางแล้ว)';
+
+/** Appended to a dated round the live fetch no longer returns. */
+export const BUNDLE_ROUND_STALE_SUFFIX = 'ไม่พบในตารางแล้ว';
