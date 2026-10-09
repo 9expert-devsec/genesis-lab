@@ -737,6 +737,27 @@ const CASES = [
     property: "color",
     referencesVar: "--round-chip-muted-ink",
   },
+  /**
+   * ── THE `ลำดับที่ N` TAG'S FILL ───────────────────────────────────────────
+   * Same shape, same reason, and registered now because the Navy round made it
+   * load-bearing: the tag's pill is `--surface-muted`, which globals.css
+   * declares three times (`:root`, `.dark`, and `.pb-bundle-tile-light`, where
+   * it is one step below the Navy tile's own #F8FAFD so the pill is visible on
+   * it). If this candidate ever stops being emitted the tag loses its fill
+   * entirely and reads as bare bold text on the tile — with the markup, the
+   * `data-testid` and every order-label assertion still green.
+   *
+   * The ink is `text-[var(--text-secondary)]`, which is not registered: it is
+   * one of the file's plainest utilities, written out in a dozen places, and
+   * the guard is for the colour that would vanish silently.
+   */
+  {
+    what: "the bundle order tag's fill",
+    file: "src/components/pageBuilder/sections/promotion_bundle.jsx",
+    className: "bg-[var(--surface-muted)]",
+    property: "background-color",
+    referencesVar: "--surface-muted",
+  },
   /*
     ── THE BUNDLE'S SHARED CHIP TRACK IS GONE, AND SO IS ITS CASE ──────────
     It was `grid-cols-[repeat(auto-fill,minmax(0,var(--bundle-chip-w)))]`, the

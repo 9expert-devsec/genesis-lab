@@ -65,6 +65,14 @@
    * that tile's own colour and so no fill at all. Neither existing answer
    * works on all three, so the chip names its own.
    *
+   * THE NAVY HALF OF THAT SENTENCE IS NOW FIXED RATHER THAN MERELY DESCRIBED.
+   * `.pb-bundle-tile-light` pins `--surface-muted` too, because the `ลำดับที่ N`
+   * tag reads it and was taking the dark slab this note predicted. The chip
+   * still names its own three: the fix is the Navy tile only, and
+   * `--surface-muted` is #1A2D42 on the สีขาว card's DARK tile and #F8FAFD —
+   * no fill — on its light one, so two of the three surfaces are unchanged and
+   * neither is a chip fill.
+   *
    * MEASURED, and the ink is the binding constraint. `--round-chip-muted-ink`
    * is the LIGHTEST step of the 9e-slate-dp scale that still holds 4.5:1
    * everywhere it lands: 5.47:1 on #FFFFFF, 5.23:1 on #F8FAFD and 4.80:1 on
@@ -812,6 +820,36 @@
   --round-chip-muted-bg:     #EFF0F2;
   --round-chip-muted-border: #CFD2D8;
   --round-chip-muted-ink:    #5E6A7E;
+
+  /* ── THE `ลำดับที่ N` TAG'S FILL ──────────────────────────────────────────
+     The one token the tile subtree read and this block did NOT re-declare, and
+     the only leak the Navy sweep found: the order tag is
+     `bg-[var(--surface-muted)]` + `text-[var(--text-secondary)]`, so the ink
+     came out light (#465469, re-declared above) on a #1A2D42 slab the `.dark`
+     override handed down through the card — a dark pill with dim text on a
+     tile that is deliberately light. MEASURED IN CHROME: 1.82:1.
+
+     NOT :root's #F8FAFD, and the reason is already written down at the top of
+     this file, in the note on `--round-chip-muted-*`: `--surface-muted` "is
+     #F8FAFD in light, which is that tile's own colour and so no fill at all".
+     Pinning the :root value here would make the tokens match the สีขาว card
+     exactly and delete the pill — a #F8FAFD box on a #F8FAFD tile. The tile's
+     `--surface` is one step down from :root's #FFFFFF, so its muted companion
+     has to be one step further down too; this is the SAME measured pale step
+     the faded chip's fill uses three lines up, which is the only light grey
+     this file has already proved sits legibly on a #F8FAFD tile.
+
+     So the tag renders the same WAY in both styles — faint light pill, dark
+     ink, one step of grey between pill and tile — on two tile surfaces that
+     are themselves a step apart. MEASURED IN CHROME against the compiled
+     stylesheet, ink #465469:
+
+       สีขาว  #F8FAFD pill on #FFFFFF tile   7.35:1   AA
+       Navy   #EFF0F2 pill on #F8FAFD tile   6.74:1   AA
+       (and the defect it replaces: #1A2D42 pill, 1.82:1)
+
+     Fill only. `--text-secondary` was already here and needed nothing. */
+  --surface-muted:  #EFF0F2;
 }
 
 /* ──────────────────────────────────────────────────────────────

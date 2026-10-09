@@ -265,8 +265,10 @@ function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false
    * ── THE TILE'S HALF OF THE LIGHT SCOPE ──────────────────────────────────
    * `.pb-bundle-tile-light` (globals.css) re-declares the semantic TOKENS this
    * subtree reads, which covers every var-based colour in it — the tile
-   * surface and border, the title, the round-dates box, the detail button. It
-   * cannot touch Tailwind's `dark:` utilities: they compile to
+   * surface and border, the title, the `ลำดับที่ N` tag's fill and ink, the
+   * round-dates box, the carousel's heading, ordinals, position line and
+   * arrows, the faded chip, the detail button. It cannot touch Tailwind's
+   * `dark:` utilities: they compile to
    * `:is(.dark *)`, which matches a descendant of ANY `.dark` ancestor, so the
    * card's own `dark` class keeps them firing however deeply they nest, and
    * they hard-code their colour rather than reading a var.
@@ -394,6 +396,15 @@ function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false
           Only when the bundle is sequential. The tiles are already in order,
           but order alone does not say that the order is a RULE — and the rule
           is what makes an earlier round unpickable for a later course.
+
+          BOTH COLOURS ARE TOKENS AND THE CLASS STRING IS UNTOUCHED. This tag
+          was the one leak the Navy sweep found, and it was a MISSING
+          re-declaration rather than a wrong class: `--text-secondary` was
+          already pinned by `.pb-bundle-tile-light`, `--surface-muted` was not,
+          so the fill came down from the card's `dark` scope as a #1A2D42 slab
+          under light ink. Fixed at the tile boundary, in that block, where the
+          other nine tokens already are — not here, because a hard-coded pale
+          grey would then be a bright slab on the สีขาว card's DARK tile.
         */}
         {orderLabel && (
           <span
