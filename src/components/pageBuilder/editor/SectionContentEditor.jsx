@@ -1584,6 +1584,31 @@ function BundleRoundRow({ round, index, rounds, onPatch, onRemove }) {
             ล้าง
           </button>
         </span>
+        {/*
+          ── THE INTERPRETED DATE, ECHOED BACK IN THAI ────────────────────
+          `<input type="date">` renders in the BROWSER’s locale, so a Thai
+          admin on an en-US profile sees mm/dd/yyyy and reads 05/09 as
+          5 September when it means 9 May. The control’s format is not ours
+          to set — `lang` is a hint browsers may ignore — so this is the
+          answer EarlyBirdBinding already settled on for its own deadline
+          field: render the interpreted date back in Thai, with the same
+          `formatThaiDate` the promotions grid uses. A mis-typed date is then
+          visible before it is saved rather than after it closes a round on
+          the wrong day.
+
+          THE EMPTY CASE ALREADY HAD THIS, via the hint above — which is
+          exactly why its absence here was easy to miss: the field echoed the
+          DEFAULT deadline in Thai and then stopped echoing anything the
+          moment the author typed one of their own.
+        */}
+        {round?.pickUntil && !tooLate && (
+          <span
+            data-testid="bundle-pick-until-echo"
+            className="mt-1 block text-xs text-9e-slate-dp-50"
+          >
+            = {formatThaiDate(round.pickUntil) ?? round.pickUntil} (ถึง 23:59 น.)
+          </span>
+        )}
       </Field>
       {tooLate && (
         <Warn tone="red">
