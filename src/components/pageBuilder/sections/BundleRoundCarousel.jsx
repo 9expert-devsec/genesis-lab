@@ -59,16 +59,38 @@ import ScheduleCard from '@/components/ScheduleCard';
 const PER_VIEW = 2;
 
 /**
- * `gap-2` is 0.5rem, so a box is half the track minus half the gap.
+ * ── THE BOX WIDTH, AND WHY IT IS NOT EXACTLY HALF ─────────────────────────
  *
- * AN INLINE STYLE RATHER THAN `basis-[calc(50%-0.25rem)]`, and the reason is a
+ * It WAS `calc(50% - 0.25rem)`. With `gap-2` (0.5rem) that makes two boxes
+ * plus one gap total EXACTLY 100% of the track — arithmetically perfect and
+ * wrong on screen, because it leaves the second box's right border sitting on
+ * the overflow clip edge with nothing to spare. MEASURED in Chrome, the second
+ * box's right edge against the track's end:
+ *
+ *     1440px   -0.02px        768px    0.00px
+ *      640px    0.00px        375px    0.00px
+ *
+ * Zero at every width. A border is 2px of the box, device-pixel rounding moves
+ * sub-pixel values either way, and the third box begins on that same pixel —
+ * so the second chip reads as cut off at the right, which is how it was
+ * reported (`8-9 ธ.ค. 6…`). Nothing was wrong with the chip or its text: no
+ * date overflows its chip at any width (`scrollWidth === clientWidth`
+ * throughout). It was this subtraction.
+ *
+ * A FULL GAP is subtracted instead, so the pair occupies `100% - 0.5rem` and
+ * the clip edge falls half a gap clear of the second box's border. The 8px
+ * that frees up shows a sliver of the third box, which is the ordinary
+ * carousel affordance for "there is more this way" and costs the two visible
+ * chips nothing.
+ *
+ * AN INLINE STYLE RATHER THAN `basis-[calc(50%-0.5rem)]`, and the reason is a
  * real Tailwind trap rather than a preference: inside an arbitrary value a
  * space must be written as an underscore, so the readable spelling compiles to
- * `flex-basis: calc(50%-0.25rem)` — invalid CSS, which the browser drops, with
+ * `flex-basis: calc(50%-0.5rem)` — invalid CSS, which the browser drops, with
  * nothing on screen saying the boxes lost their width. The value is one layout
  * constant paired to one gap; it is written once, here.
  */
-const BOX_WIDTH = { flexBasis: 'calc(50% - 0.25rem)' };
+const BOX_WIDTH = { flexBasis: 'calc(50% - 0.5rem)' };
 
 const ARROW_CLASS =
   'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-9e-sm border ' +
@@ -160,66 +182,43 @@ export function BundleRoundCarousel({ rows }) {
   return (
     <div data-testid="bundle-round-list" className="flex flex-col gap-2">
       {/*
-        THE HEADING AND THE ARROWS ON ONE ROW. `gap-2` between the heading and
-        the track survives from the stacked version — measured in the builder
-        canvas at a 207px tile, where `gap-1` left four pixels between an 11px
-        label and the first box and read as the box sitting ON the word.
+        ── THE HEADING ROW HOLDS THE HEADING, AND NOTHING ELSE ─────────────
+        The arrows used to sit here, at the row's right. They are `h-6` — 24px
+        — against an 11px label, so on a tile with more than two rounds the
+        row grew to the buttons' height and `items-center` pushed the text
+        down inside it. MEASURED in Chrome against a card holding a five-round
+        and a two-round course side by side:
+
+            tile        headingTop    chip-row top
+            5 rounds        385.8          413.3
+            2 rounds        381.3          404.3
+
+        4.5px of heading and 9px of chip row, so neighbouring tiles in one
+        bundle drew their rounds at different heights and the difference was
+        caused by how many rounds each course happened to offer. The controls
+        moved BELOW the chips, where nothing they do can push the chips down.
+
+        `gap-2` between the heading and the track survives from the stacked
+        version — measured in the builder canvas at a 207px tile, where `gap-1`
+        left four pixels between an 11px label and the first box and read as
+        the box sitting ON the word.
       */}
-      <div className="flex items-center justify-between gap-2">
-        <span
-          data-testid="bundle-round-heading"
-          className="block min-w-0 text-[11px] font-bold text-[var(--text-secondary)]"
-        >
-          {/*
-            ── THE COUNT IS IN THE HEADING, AND THE WORDING IS NEW ───────────
-            This read `รอบอบรม` — one string, deliberately, after a round in
-            which it had been `offeredRows.length > 1 ? 'รอบที่เลือกได้' :
-            'รอบอบรม'` and a row of tiles headed its rounds two different ways.
-            That ruling was about the LABEL changing with the count, and it
-            still holds: this label does not change, it merely states the
-            number, which a visitor now needs because only two of them are on
-            screen at a time. `(N รอบ)` is also what tells them to scroll.
-          */}
-          รอบอบรมที่เข้าร่วม ({total} รอบ)
-        </span>
-
+      <span
+        data-testid="bundle-round-heading"
+        className="block text-[11px] font-bold text-[var(--text-secondary)]"
+      >
         {/*
-          ARROWS ONLY WHEN THERE IS SOMEWHERE TO GO. Two rounds fit, so a pair
-          of permanently dead buttons would be chrome describing a scroll that
-          cannot happen.
-
-          DISABLED AT THE ENDS RATHER THAN HIDDEN, which is where this differs
-          from registration/ScheduleCarousel: a control that vanishes at the
-          end of a track takes its own position with it, and on a 6px-tall
-          heading row the layout shifts as you reach the last round.
+          ── THE COUNT IS IN THE HEADING, AND THE WORDING IS NEW ───────────
+          This read `รอบอบรม` — one string, deliberately, after a round in
+          which it had been `offeredRows.length > 1 ? 'รอบที่เลือกได้' :
+          'รอบอบรม'` and a row of tiles headed its rounds two different ways.
+          That ruling was about the LABEL changing with the count, and it
+          still holds: this label does not change, it merely states the
+          number, which a visitor now needs because only two of them are on
+          screen at a time. `(N รอบ)` is also what tells them to scroll.
         */}
-        {paged && (
-          <span className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              data-testid="bundle-round-prev"
-              aria-label="เลื่อนไปรอบก่อนหน้า"
-              aria-controls={trackId}
-              disabled={atStart}
-              onClick={() => goTo(start - PER_VIEW)}
-              className={ARROW_CLASS}
-            >
-              <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
-            </button>
-            <button
-              type="button"
-              data-testid="bundle-round-next"
-              aria-label="เลื่อนไปรอบถัดไป"
-              aria-controls={trackId}
-              disabled={atEnd}
-              onClick={() => goTo(start + PER_VIEW)}
-              className={ARROW_CLASS}
-            >
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-            </button>
-          </span>
-        )}
-      </div>
+        รอบอบรมที่เข้าร่วม ({total} รอบ)
+      </span>
 
       {/*
         THE TRACK IS WHAT SCROLLS, never the page. `overflow-x-auto` with
@@ -315,21 +314,78 @@ export function BundleRoundCarousel({ rows }) {
       </div>
 
       {/*
-        WHICH TWO OF HOW MANY. `aria-live="polite"` because the arrows change
-        it without moving focus, so a screen-reader user who presses ไปรอบถัดไป
-        would otherwise get no confirmation that anything happened.
+        ── THE FOOTER: WHERE THE CONTROLS LIVE NOW ─────────────────────────
+        Position text on the LEFT, arrows on the RIGHT, below the chips.
 
-        Absent when every round is on screen — `กำลังแสดงรอบ 1–2 จาก 2` is a
-        sentence about scrolling to a visitor who has nothing to scroll.
+        WHY BELOW. The arrows were beside the heading, and they are 24px tall
+        against an 11px label — so a tile with three or more rounds had a
+        taller heading row than its two-round neighbour and drew its chips 9px
+        lower. Nothing in a footer can push the chips down, so every tile in a
+        bundle now starts its heading and its chip row at the same height
+        whatever each course happens to offer.
+
+        WHY TEXT LEFT, ARROWS RIGHT. The text is the longer element and reads
+        left-to-right from the chips above it; the arrows are the thing a
+        thumb reaches for, and the right edge is where this card already puts
+        its only other control. `justify-between` rather than two columns, so
+        a narrow tile lets the sentence wrap instead of squeezing the buttons.
+
+        ONE ROW, ONE CONDITION. Both halves describe scrolling, so both are
+        absent together below three rounds — `กำลังแสดงรอบ 1–2 จาก 2` beside a
+        pair of permanently dead buttons is chrome about something that cannot
+        happen.
+
+        It does NOT disturb `ดูรายละเอียดหลักสูตร`: that button is pinned to
+        the tile bottom by `mt-auto`, and the tiles share a grid row, so the
+        extra row is absorbed above it rather than pushing it out of line.
       */}
       {paged && (
-        <p
-          data-testid="bundle-round-position"
-          aria-live="polite"
-          className="text-[10px] leading-none text-[var(--text-secondary)]"
-        >
-          กำลังแสดงรอบ {from}–{to} จาก {total}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          {/*
+            WHICH TWO OF HOW MANY. `aria-live="polite"` because the arrows
+            change it without moving focus, so a screen-reader user who presses
+            ไปรอบถัดไป would otherwise get no confirmation that anything
+            happened.
+          */}
+          <p
+            data-testid="bundle-round-position"
+            aria-live="polite"
+            className="min-w-0 text-[10px] leading-none text-[var(--text-secondary)]"
+          >
+            กำลังแสดงรอบ {from}–{to} จาก {total}
+          </p>
+
+          {/*
+            DISABLED AT THE ENDS RATHER THAN HIDDEN, which is where this differs
+            from registration/ScheduleCarousel: a control that vanishes at the
+            end of a track takes its own position with it, and the row would
+            then reflow as a visitor reached the last round.
+          */}
+          <span className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              data-testid="bundle-round-prev"
+              aria-label="เลื่อนไปรอบก่อนหน้า"
+              aria-controls={trackId}
+              disabled={atStart}
+              onClick={() => goTo(start - PER_VIEW)}
+              className={ARROW_CLASS}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+            </button>
+            <button
+              type="button"
+              data-testid="bundle-round-next"
+              aria-label="เลื่อนไปรอบถัดไป"
+              aria-controls={trackId}
+              disabled={atEnd}
+              onClick={() => goTo(start + PER_VIEW)}
+              className={ARROW_CLASS}
+            >
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </span>
+        </div>
       )}
     </div>
   );

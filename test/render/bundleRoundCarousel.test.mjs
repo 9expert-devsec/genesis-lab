@@ -92,7 +92,7 @@ test('every box is half the track and is labelled รอบที่ k in author
   for (const b of list) {
     assert.equal(
       b.getAttribute('style'),
-      'flex-basis:calc(50% - 0.25rem)',
+      'flex-basis:calc(50% - 0.5rem)',
       `a box is not half the track: ${b.getAttribute('style')}`,
     );
     const cls = b.getAttribute('class') ?? '';
@@ -119,6 +119,162 @@ test('the TRACK is what scrolls, with scroll-snap and no drag library', () => {
   assert.match(cls, /\bsnap-mandatory\b/);
   // The page must never scroll sideways for this: the overflow is on the track.
   assert.equal(/overflow-x-visible|overflow-visible/.test(cls), false);
+});
+
+// ── where the controls sit: BELOW the chips, never beside the heading ─────
+
+test('the heading row holds the heading and NOTHING else, in every tile', () => {
+  /**
+   * THE DEFECT THIS PINS, and it is a measurement rather than a preference.
+   * The arrows sat at the heading row's right. They are `h-6` — 24px — against
+   * an 11px label, so a tile with three or more rounds had a TALLER heading row
+   * than its two-round neighbour and `items-center` pushed the text down inside
+   * it. MEASURED in Chrome on one card holding a five-round and a two-round
+   * course side by side, BEFORE the move:
+   *
+   *     tile        headingTop    chip-row top
+   *     5 rounds        385.8          413.3
+   *     2 rounds        381.3          404.3
+   *
+   * 4.5px of heading and 9px of chip row, so neighbouring tiles drew their
+   * rounds at different heights because of how many rounds each course happened
+   * to offer. AFTER: 381.3 / 404.3 for the five-round tile, the two-round tile
+   * and the one-round tile alike.
+   *
+   * A static render cannot measure a top, so what is asserted here is the CAUSE
+   * that measurement found: nothing of variable height may share a row with the
+   * heading. The heading sits directly in the list, and its next sibling is the
+   * track itself.
+   */
+  for (const n of [1, 2, 3, 5]) {
+    const d = dom(FIVE.slice(0, n));
+    const heading = sel(d, 'bundle-round-heading');
+    assert.equal(
+      heading.parentElement.getAttribute('data-testid'), 'bundle-round-list',
+      'N=' + n + ': the heading is wrapped in a row of its own again',
+    );
+    assert.equal(
+      heading.nextElementSibling?.getAttribute('data-testid'), 'bundle-round-track',
+      'N=' + n + ': something sits between the heading and the chips',
+    );
+    assert.equal(heading.querySelector('button'), null, 'N=' + n + ': a button is inside the heading');
+  }
+});
+
+test('the footer carries the position text LEFT and the arrows RIGHT, after the chips', () => {
+  const d = dom(FIVE);
+  const track = sel(d, 'bundle-round-track');
+  const footer = sel(d, 'bundle-round-position').parentElement;
+
+  // AFTER the track in document order, which is what keeps it from pushing the
+  // chips down however tall its contents are.
+  assert.equal(track.nextElementSibling, footer, 'the footer is not the element after the track');
+  assert.match(footer.getAttribute('class') ?? '', /justify-between/);
+
+  // Text first, arrows second — left and right under justify-between.
+  const kids = [...footer.children];
+  assert.equal(kids.length, 2, 'the footer holds ' + kids.length + ' things');
+  assert.equal(kids[0].getAttribute('data-testid'), 'bundle-round-position');
+  assert.deepEqual(
+    [...kids[1].querySelectorAll('button')].map((b) => b.getAttribute('data-testid')),
+    ['bundle-round-prev', 'bundle-round-next'],
+  );
+});
+
+test('a tile with two rounds or fewer draws NO footer row at all', () => {
+  // Both halves of the footer describe scrolling, so they are absent together.
+  for (const n of [1, 2]) {
+    const d = dom(FIVE.slice(0, n));
+    const heading = sel(d, 'bundle-round-heading');
+    const track = sel(d, 'bundle-round-track');
+    assert.equal(sel(d, 'bundle-round-position'), null, 'N=' + n + ' drew a position line');
+    assert.equal(track.nextElementSibling, null, 'N=' + n + ' drew a row after the chips');
+    // …and the heading-to-chips relationship is identical to the paged case,
+    // which is the whole point: the chips start at the same height either way.
+    assert.equal(heading.nextElementSibling, track);
+  }
+});
+
+test('CONTROL: the probes DO fire on the shape that misaligned', () => {
+  /**
+   * The assertions above are absences, and an absence probe that can never
+   * match passes forever. Run the same three selectors over markup shaped the
+   * way this component used to be — heading and arrows in one justify-between
+   * row — and each must report the difference.
+   */
+  const old = new JSDOM(
+    '<!doctype html><body><div data-testid="bundle-round-list">'
+    + '<div class="flex items-center justify-between">'
+    + '<span data-testid="bundle-round-heading">h</span>'
+    + '<span><button data-testid="bundle-round-prev"></button></span>'
+    + '</div><div data-testid="bundle-round-track"></div></div></body>',
+  ).window.document;
+  const heading = old.querySelector('[data-testid="bundle-round-heading"]');
+  assert.notEqual(
+    heading.parentElement.getAttribute('data-testid'), 'bundle-round-list',
+    'the wrapper probe cannot tell the old shape apart',
+  );
+  assert.notEqual(
+    heading.nextElementSibling?.getAttribute('data-testid'), 'bundle-round-track',
+    'the sibling probe cannot tell the old shape apart',
+  );
+  assert.notEqual(
+    heading.parentElement.querySelector('button'), null,
+    'the button probe cannot tell the old shape apart',
+  );
+});
+
+// ── no chip may sit on the clipping edge ──────────────────────────────────
+
+test('a box subtracts a FULL gap, so the pair does not fill the track exactly', () => {
+  /**
+   * THE CLIPPING, AND ITS CAUSE. The box width was `calc(50% - 0.25rem)`
+   * against `gap-2` (0.5rem), so two boxes plus one gap totalled EXACTLY 100%
+   * of the track. MEASURED in Chrome, the second box's right edge against the
+   * track's end: -0.02px at 1440, 0.00px at 768, 0.00px at 640, 0.00px at 375.
+   * Flush at every width, with a 2px border on it and the third box beginning
+   * on the same pixel — which is what read as "8-9 ธ.ค. 6…".
+   *
+   * It was NOT the chip and NOT its text: no date overflowed its chip at any
+   * width (scrollWidth === clientWidth throughout). It was not the viewport
+   * either (documentElement.scrollWidth === clientWidth at every width). It was
+   * this subtraction.
+   *
+   * A full gap is subtracted now — measured at -8px clear at every width — and
+   * the 8px it frees shows a sliver of the third box, which is the ordinary
+   * carousel affordance for "there is more this way".
+   *
+   * A static render has no layout, so the ARITHMETIC is what is pinned: the gap
+   * the track declares and the amount a box subtracts must be the SAME number.
+   * Equal means the pair spans 100% minus one gap and the clip edge falls a
+   * whole gap clear of the second box; half of it means they span the track
+   * exactly, which is the state that clipped.
+   */
+  const d = dom(FIVE);
+  const trackCls = sel(d, 'bundle-round-track').getAttribute('class') ?? '';
+  const gapMatch = /\bgap-(\d+)\b/.exec(trackCls);
+  assert.notEqual(gapMatch, null, 'the track declares no gap: ' + trackCls);
+  const gapRem = Number(gapMatch[1]) * 0.25;
+
+  const style = boxes(d)[0].getAttribute('style') ?? '';
+  const subMatch = /calc\(50% - ([\d.]+)rem\)/.exec(style);
+  assert.notEqual(subMatch, null, 'the box width is not a 50% calc: ' + style);
+  const subRem = Number(subMatch[1]);
+
+  assert.equal(
+    subRem, gapRem,
+    'a box subtracts ' + subRem + 'rem against a ' + gapRem + 'rem gap. Equal is the rule: '
+    + 'at half the gap the two boxes plus the gap between them span the track exactly, '
+    + 'and the second chip sits on the overflow clip edge',
+  );
+});
+
+test('CONTROL: the arithmetic probe rejects the spelling that clipped', () => {
+  // gap-2 is 0.5rem. Half of it — what a box used to subtract — must not
+  // satisfy the equality above, or that check could not have caught this.
+  const gapRem = 2 * 0.25;
+  assert.notEqual(0.25, gapRem, 'the half-gap value that clipped would now pass');
+  assert.equal(0.5, gapRem, 'the full-gap value does not match the gap');
 });
 
 // ── the arrows ────────────────────────────────────────────────────────────

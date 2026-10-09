@@ -706,7 +706,7 @@ test('the boxes sit TWO to a scroll-snapped track, not one per row', () => {
     assert.match(bc, /\bmin-w-0\b/, `a long date will widen the track: ${bc}`);
     assert.equal(
       b.getAttribute('style'),
-      'flex-basis:calc(50% - 0.25rem)',
+      'flex-basis:calc(50% - 0.5rem)',
       `a box is not half the track: ${b.getAttribute('style')}`,
     );
 
