@@ -31,6 +31,18 @@ import {
   ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Loader2, Lock,
 } from 'lucide-react';
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. THE ROUND PICKER, now shared with the bundle quotation
+// wizard: this file's own course card and round chip, lifted out unchanged.
+// The two palette tables moved with them and are read below by `badgeForType`
+// and `displayType`, which keep the resolved-hybrid label a round chip never
+// has to draw.
+import {
+  RoundPickCourseCard,
+  RoundPickChip,
+  ROUND_TYPE_BADGE,
+  ROUND_TYPE_LABEL,
+} from '@/components/registration/RoundPickCard';
 import { SuccessPulseIcon } from '@/components/ui/SuccessPulseIcon';
 import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { typedAttendeeRows } from '@/lib/registration/careerPathRoster';
@@ -41,17 +53,16 @@ import { cn } from '@/lib/utils';
 
 // ── Constants ───────────────────────────────────────────────────
 
-const TYPE_BADGE = {
-  classroom: 'bg-blue-100 text-blue-700 border-blue-200',
-  hybrid:    'bg-purple-100 text-purple-700 border-purple-200',
-  online:    'bg-green-100 text-green-700 border-green-200',
-};
-
-const TYPE_LABEL = {
-  classroom: 'Classroom',
-  hybrid:    'Hybrid',
-  online:    'Online',
-};
+/**
+ * The two palette tables MOVED to components/registration/RoundPickCard, with
+ * the chip that was their first reader, and are aliased back here under their
+ * old names so the two helpers below read exactly as they did. Aliased rather
+ * than renamed at their call sites: those helpers are about a RESOLVED pick's
+ * compound type (`Hybrid (Classroom)`), which is a different subject from a
+ * round chip, and renaming them would imply they moved too.
+ */
+const TYPE_BADGE = ROUND_TYPE_BADGE;
+const TYPE_LABEL = ROUND_TYPE_LABEL;
 
 const THAI_MONTHS = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
@@ -888,99 +899,38 @@ function Step1Courses({
                 const choiceFull =
                   isChoice && chooseMax > 1 && !selected[code] && picks >= chooseMax;
 
+                /*
+                  ── THE CARD AND ITS CHIPS COME FROM THE SHARED PICKER ─────
+                  They were spelled out here. They now live in
+                  components/registration/RoundPickCard, which the bundle
+                  quotation wizard reads too — its round step was a block of
+                  <select> dropdowns, a different control for the same decision.
+                  The markup moved UNCHANGED (see that module's header), so this
+                  screen renders as it did apart from the `data-round-pick-*`
+                  markers the shared component carries.
+
+                  THE RULES DID NOT MOVE. `itemLock`, `eligible`, `dateOk` and
+                  `choiceFull` are still decided here, over this flow's groups and
+                  the last day of the previous course, and only their verdict is
+                  handed down. The shared component owns no rules at all.
+                */
                 return (
-                  <div
+                  <RoundPickCourseCard
                     key={`${code}-${ii}`}
-                    className="rounded-9e-md border border-[var(--surface-border)] bg-9e-ice/30 p-3 dark:bg-[#0D1B2A]/30"
-                  >
-                    <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                      <h3 className="text-sm font-semibold text-9e-navy dark:text-white">
-                        {name}
-                      </h3>
-                      <span className="font-mono text-[11px] text-9e-action">{code}</span>
-                    </div>
+                    name={name}
+                    code={code}
+                    lockReason={itemLock.locked ? itemLock.reason : ''}
+                    hasRounds={schedules.length > 0}
+                    notices={
+                      /*
+                        Rendered under the chips, exactly where it was.
 
-                    {itemLock.locked && (
-                      <p className="mb-2 inline-flex items-center gap-1 rounded-9e-sm bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 dark:bg-[#0D1B2A] dark:text-amber-400">
-                        <Lock className="h-3 w-3" /> {itemLock.reason}
-                      </p>
-                    )}
-
-                    {schedules.length === 0 ? (
-                      <p className="text-xs italic text-9e-slate-dp-50">
-                        ยังไม่มีรอบเปิดรับสมัคร
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {schedules.map((sched) => {
-                          const isSelected = myPick === sched._id;
-                          const start = minDateOf(sched.dates);
-                          const dateOk = !latestPriorDate || isAfter(start, latestPriorDate);
-                          const isEnabled = eligible && dateOk && !choiceFull && !itemLock.locked;
-                          const t = String(sched.type ?? '').toLowerCase();
-                          const badge = TYPE_BADGE[t] ?? 'bg-gray-100 text-gray-700 border-gray-200';
-
-                          return (
-                            <button
-                              key={sched._id}
-                              type="button"
-                              disabled={!isEnabled && !isSelected}
-                              title={
-                                itemLock.locked
-                                  ? itemLock.reason
-                                  : !eligible
-                                    ? 'กรุณาเลือกรอบอบรมของกลุ่มก่อนหน้าก่อน'
-                                    : !dateOk
-                                      ? 'วันอบรมต้องมาหลังจากคอร์สก่อนหน้า'
-                                      : choiceFull
-                                        ? `เลือกได้สูงสุด ${chooseMax} คอร์สในกลุ่มนี้`
-                                        : undefined
-                              }
-                              onClick={() => onPick(group, item, sched)}
-                              className={cn(
-                                'inline-flex items-center gap-2 rounded-9e-md border px-3 py-2 text-sm transition-colors',
-                                isSelected
-                                  ? 'border-9e-action bg-9e-action text-white shadow-sm'
-                                  : isEnabled
-                                    ? 'border-[var(--surface-border)] bg-white text-9e-navy hover:border-9e-action/50 hover:bg-9e-ice dark:bg-[#0D1B2A] dark:text-white'
-                                    : 'cursor-not-allowed border-[var(--surface-border)] bg-gray-50 text-gray-400 dark:bg-[#0D1B2A]/40'
-                              )}
-                            >
-                              <span>{formatThaiRange(sched.dates)}</span>
-                              <span
-                                className={cn(
-                                  'rounded-full border px-2 py-0.5 text-[10px] font-medium',
-                                  isSelected
-                                    ? 'border-white/40 bg-white/10 text-white'
-                                    : badge
-                                )}
-                              >
-                                {TYPE_LABEL[t] ?? sched.type ?? '—'}
-                              </span>
-                              {sched.status === 'nearly_full' && (
-                                <span
-                                  className={cn(
-                                    'rounded-full border px-1.5 py-0.5 text-[10px] font-medium',
-                                    isSelected
-                                      ? 'border-white/40 bg-white/10 text-white'
-                                      : 'border-orange-200 bg-orange-50 text-orange-700'
-                                  )}
-                                >
-                                  ใกล้เต็ม
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Hybrid sub-selection — shown only when the
-                        currently selected round for this course is a
-                        hybrid round. Unresolved (no Classroom/MS Teams
-                        chosen) means the pick is incomplete and the
-                        group stays unsatisfied. */}
-                    {(() => {
+                        Hybrid sub-selection — shown only when the currently
+                        selected round for this course is a hybrid round.
+                        Unresolved (no Classroom/MS Teams chosen) means the pick
+                        is incomplete and the group stays unsatisfied.
+                      */
+                      (() => {
                       const sel = selected[code];
                       if (!sel) return null;
                       const selSched = schedules.find((x) => x._id === sel.scheduleId);
@@ -1017,8 +967,39 @@ function Step1Courses({
                           )}
                         </div>
                       );
-                    })()}
-                  </div>
+                      })()
+                    }
+                  >
+                    {schedules.map((sched) => {
+                      const isSelected = myPick === sched._id;
+                      const start = minDateOf(sched.dates);
+                      const dateOk = !latestPriorDate || isAfter(start, latestPriorDate);
+                      const isEnabled = eligible && dateOk && !choiceFull && !itemLock.locked;
+
+                      return (
+                        <RoundPickChip
+                          key={sched._id}
+                          dateLabel={formatThaiRange(sched.dates)}
+                          type={sched.type}
+                          selected={isSelected}
+                          enabled={isEnabled}
+                          nearlyFull={sched.status === 'nearly_full'}
+                          title={
+                            itemLock.locked
+                              ? itemLock.reason
+                              : !eligible
+                                ? 'กรุณาเลือกรอบอบรมของกลุ่มก่อนหน้าก่อน'
+                                : !dateOk
+                                  ? 'วันอบรมต้องมาหลังจากคอร์สก่อนหน้า'
+                                  : choiceFull
+                                    ? `เลือกได้สูงสุด ${chooseMax} คอร์สในกลุ่มนี้`
+                                    : undefined
+                          }
+                          onClick={() => onPick(group, item, sched)}
+                        />
+                      );
+                    })}
+                  </RoundPickCourseCard>
                 );
               })}
             </div>
