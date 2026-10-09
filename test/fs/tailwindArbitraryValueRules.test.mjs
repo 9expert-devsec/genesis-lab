@@ -737,22 +737,27 @@ const CASES = [
     property: "color",
     referencesVar: "--round-chip-muted-ink",
   },
-  /**
-   * ── THE BUNDLE'S SHARED CHIP TRACK ───────────────────────────────────────
-   * The one width every round chip in a bundle takes. The VALUE is data — it
-   * is computed from the longest label in the section and set as an inline
-   * custom property — so the class reading it has to be written out in full,
-   * which is precisely the shape this file exists to guard. Built by
-   * interpolation it would emit no rule, the markup would look perfect, and
-   * the chips would fall back to auto-width: ragged again, silently.
-   */
-  {
-    what: "the bundle round-chip grid track",
-    file: "src/components/pageBuilder/sections/promotion_bundle.jsx",
-    className: "grid-cols-[repeat(auto-fill,minmax(0,var(--bundle-chip-w)))]",
-    property: "grid-template-columns",
-    referencesVar: "--bundle-chip-w",
-  },
+  /*
+    ── THE BUNDLE'S SHARED CHIP TRACK IS GONE, AND SO IS ITS CASE ──────────
+    It was `grid-cols-[repeat(auto-fill,minmax(0,var(--bundle-chip-w)))]`, the
+    one width every round chip in a bundle took, computed from the longest
+    label in the section and handed down as an inline custom property. The
+    class had to be written out in full because an interpolated arbitrary
+    value emits no rule at all, which is exactly the shape this file guards.
+
+    The rounds are a two-up carousel now (BundleRoundCarousel): each box is
+    half the track, so there is no computed width to carry and no class to
+    keep literal. The case is REMOVED rather than left pointing at a class no
+    file renders — a case whose className is absent from its file compiles to
+    nothing and passes for the wrong reason, which `CONTROL: a class NOT
+    present in the scanned source produces nothing` is about.
+
+    The carousel writes its own box width as an INLINE STYLE, deliberately:
+    `calc(50% - 0.25rem)` inside an arbitrary value needs its spaces spelled
+    as underscores, and the readable form compiles to invalid CSS the browser
+    drops in silence. An inline style cannot develop that defect, so there is
+    nothing for this file to guard there either.
+  */
 ];
 
 /*
