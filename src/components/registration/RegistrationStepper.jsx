@@ -63,16 +63,37 @@ import { cn } from "@/lib/utils";
  * carries no `paymentMethod` and no `omiseToken`, so there is no value a client
  * could send that would make the other label correct.
  *
+ * ══ A FOURTH STEP IS A LABEL LIST, NOT A SECOND COMPONENT ══════════════════
+ *
+ * The bundle quotation grew a round-picking step in front of its form, so its
+ * stepper reads เลือกรอบ / กรอกข้อมูล / ตรวจสอบ / สำเร็จ — four, where the
+ * public wizard has three. `steps` is how it says so.
+ *
+ * AN OVERRIDE AND NOT A FLAG. A `hasPickStep` boolean would put the bundle's
+ * own vocabulary inside this component, which is exactly what the note above
+ * declines to do for the other three steppers: the thing that differs between
+ * call sites is the LIST OF LABELS, so the list is the parameter. The default
+ * is the three the public wizard has always had, built the same way from
+ * `takesPayment`, so every existing caller renders byte-for-byte what it did —
+ * including the step-2 label rule, which stays a rule and not a string.
+ *
+ * `takesPayment` is IGNORED when `steps` is given, and that is not a trap: a
+ * caller spelling its own labels has already said what step 2 is called, and a
+ * quotation flow can never take payment anyway.
+ *
  * @param {object} o
- * @param {number} o.currentStep  1, 2 or 3 — the step being shown
+ * @param {number} o.currentStep  1-based index of the step being shown
  * @param {boolean} [o.takesPayment=false]  does step 2 lead to a charge?
+ * @param {string[]} [o.steps]  the labels, in order, overriding the default three
  */
-export function RegistrationStepper({ currentStep, takesPayment = false }) {
-  const steps = [
-    { n: 1, label: "กรอกข้อมูล" },
-    { n: 2, label: takesPayment ? "ตรวจสอบและดำเนินการ" : "ตรวจสอบ" },
-    { n: 3, label: "สำเร็จ" },
-  ];
+export function RegistrationStepper({ currentStep, takesPayment = false, steps: labels = null }) {
+  const steps = Array.isArray(labels) && labels.length
+    ? labels.map((label, i) => ({ n: i + 1, label }))
+    : [
+      { n: 1, label: "กรอกข้อมูล" },
+      { n: 2, label: takesPayment ? "ตรวจสอบและดำเนินการ" : "ตรวจสอบ" },
+      { n: 3, label: "สำเร็จ" },
+    ];
   return (
     <ol className="mb-8 flex items-center justify-center text-sm">
       {steps.map((s, i) => (

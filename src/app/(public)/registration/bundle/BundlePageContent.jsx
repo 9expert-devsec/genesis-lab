@@ -12,7 +12,14 @@ import {
   BUNDLE_UNAVAILABLE_MESSAGE,
   BUNDLE_EXPIRED_MESSAGE,
 } from "@/lib/pageBuilder/bundleRegistration";
-import { chooseItemRound } from "@/lib/pageBuilder/chosenRounds";
+/*
+  `chooseItemRound` — the SINGULAR one — is no longer imported. It picked the
+  default round this route used to hand the summary, which is the defect the
+  pick step removes; an import with no reader is the thing this project keeps
+  out. The function itself stays: `assembleResolved` still runs it, and four
+  other call sites read it.
+*/
+import { chooseItemRounds } from "@/lib/pageBuilder/chosenRounds";
 import { formatRoundDays } from "@/lib/schedule/roundDateLabel";
 import { siteCurrentYear, siteTodayKey } from "@/lib/articlePublishTime";
 // ADDED beside the statement above rather than folded into it — the standing
@@ -22,11 +29,13 @@ import { siteCurrentYear, siteTodayKey } from "@/lib/articlePublishTime";
 import { bundleLiveStatusById } from "@/lib/registration/bundleLiveRounds";
 import { BundleWizard } from "@/components/registration/BundleWizard";
 import { publicPageHref } from "@/lib/pages/promotionMode";
-// The summary block. `trainingTypeLabel`, `formatPrice` and `discountPercent`
-// moved WITH it and are no longer imported here — this route now derives the
-// lines and hands them over, and does no formatting of its own beyond the date
-// label it must produce from a threaded clock read.
-import { BundleSummary } from "@/components/registration/BundleSummary";
+/*
+  `BundleSummary` IS NO LONGER IMPORTED HERE. The block moved one level down,
+  into BundleWizard, because its round lines now follow the applicant's picks
+  and those are client state. This route still derives the LINES — including
+  every round label, from the one threaded clock read — and hands them over as
+  data; what it no longer does is instantiate the component.
+*/
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo. PREVIEW MODE: the flag the card forwards, and the words
 // shown when it is honoured or refused.
@@ -193,20 +202,46 @@ export async function BundlePageContent({ searchParams, step }) {
    * `resolveBundleRequest` has already refused the whole request if any item's
    * course or round could not be named, so there is no marked or partial row to
    * render here and no branch that could draw one.
+   *
+   * ── NO DEFAULT ROUND. THAT WAS THE DEFECT. ─────────────────────────────
+   * This used to call `chooseItemRound` and hand the summary ONE round per
+   * course — the author-ordered first one still open — which the card printed
+   * as `รอบอบรม 12-13 พ.ย.` while the pick controls beside it still read
+   * "— เลือกรอบ —". The customer was shown a round nobody had chosen, on the
+   * screen where they were choosing it.
+   *
+   * So every OFFERED round is sent instead, keyed by its id, and the client
+   * half shows the one the applicant picked and ยังไม่ได้เลือกรอบ until they
+   * have. `chooseItemRounds` is the same function the public bundle card draws
+   * its chips from, so the summary cannot list a round the card does not.
+   *
+   * THE LABELS ARE WRITTEN HERE, and that is the invariant rather than a
+   * convenience: `formatRoundDays` refuses to read a clock, the pair it needs
+   * was read once at the top of this function, and the client half is a
+   * `use client` component that must never make a second read. It picks a
+   * string out of this map; it does not format a date.
    */
   const lines = items.map((item, i) => {
     const entry = entries[i] ?? null;
-    const round = chooseItemRound(entry?.rounds, item, todayKey);
+    const roundsById = {};
+    for (const row of chooseItemRounds(entry?.rounds, item, todayKey)) {
+      const id = String(row?.id ?? "").trim();
+      if (!id) continue;
+      roundsById[id] = {
+        dates: formatRoundDays(row.dates, {
+          showMonth: true,
+          showYear: "auto",
+          currentYear,
+        }),
+        type: row.live?.type ?? row.type ?? "classroom",
+      };
+    }
     return {
       key: item?.id || `item-${i}`,
+      itemId: String(item?.id ?? "").trim(),
       courseName: String(entry?.course?.course_name ?? "").trim(),
       courseId: String(entry?.courseId ?? item?.courseId ?? "").trim(),
-      dates: formatRoundDays(round.dates, {
-        showMonth: true,
-        showYear: "auto",
-        currentYear,
-      }),
-      type: round.live?.type ?? "classroom",
+      roundsById,
     };
   });
 
@@ -333,13 +368,18 @@ export async function BundlePageContent({ searchParams, step }) {
           to the published bundle), and the flag on its POST.
         */
         preview={preview}
-        summary={
-          <BundleSummary
-            lines={lines}
-            listPrice={listPrice}
-            netPrice={netPrice}
-          />
-        }
+        /*
+          THE SUMMARY AS DATA, NOT AS A RENDERED NODE. It was built here and
+          passed down as an element, which it could be while its round lines
+          came from a round this route chose. They follow the APPLICANT now, and
+          the pick is client state — so the wizard renders `BundleSummary`
+          itself, from these lines and these two prices. The block is still a
+          presentational component with no hooks and no clock, which is what
+          lets either tier render it.
+        */
+        summaryLines={lines}
+        listPrice={listPrice}
+        netPrice={netPrice}
         backHref={backHref}
       />
     </article>

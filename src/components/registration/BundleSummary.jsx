@@ -144,14 +144,52 @@ export function BundleSummary({
               <span className="text-sm font-bold text-[var(--text-primary)]">
                 {line.courseName || line.courseId}
               </span>
-              <span className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
-                <CalendarDays className="mt-px h-4 w-4 shrink-0" aria-hidden />
-                <span>รอบอบรม {line.dates}</span>
-              </span>
-              <span className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
-                <MapPin className="mt-px h-4 w-4 shrink-0" aria-hidden />
-                <span>{trainingTypeLabel(line.type)}</span>
-              </span>
+              {/*
+                ── A ROUND, OR THE FACT THAT THERE ISN'T ONE YET ──────────────
+                `line.dates` is null until the applicant has picked, and the
+                row then says so. It used to be filled by the route from
+                `chooseItemRound` — the author-ordered first round still open —
+                so this card read `รอบอบรม 12-13 พ.ย.` beside two pick controls
+                that both still said "— เลือกรอบ —". It named a round the
+                customer had not chosen, on the screen where they were choosing
+                it, and there was no reading of that which was true.
+
+                NOT A DASH AND NOT AN EMPTY LINE. ยังไม่ได้เลือกรอบ is the
+                state, muted so it does not compete with the course name, and it
+                keeps the row the same shape it has once picked — a line that
+                appears rather than changes makes the card jump as the applicant
+                works down it.
+              */}
+              {line.dates ? (
+                <span
+                  data-testid="bundle-summary-round"
+                  className="flex items-start gap-2 text-xs text-[var(--text-secondary)]"
+                >
+                  <CalendarDays className="mt-px h-4 w-4 shrink-0" aria-hidden />
+                  <span>รอบอบรม {line.dates}</span>
+                </span>
+              ) : (
+                <span
+                  data-testid="bundle-summary-unpicked"
+                  className="flex items-start gap-2 text-xs text-[var(--text-muted)]"
+                >
+                  <CalendarDays className="mt-px h-4 w-4 shrink-0" aria-hidden />
+                  <span>ยังไม่ได้เลือกรอบ</span>
+                </span>
+              )}
+              {/*
+                THE DELIVERY LINE FOLLOWS THE ROUND AND IS ABSENT WITHOUT ONE.
+                `trainingTypeLabel` would answer for a null — every one of these
+                labels is a sentence about where a round is held, and there is no
+                round to hold. A Classroom line under ยังไม่ได้เลือกรอบ would be
+                the same invented fact in a second place.
+              */}
+              {line.dates && (
+                <span className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
+                  <MapPin className="mt-px h-4 w-4 shrink-0" aria-hidden />
+                  <span>{trainingTypeLabel(line.type)}</span>
+                </span>
+              )}
             </div>
           </li>
         ))}

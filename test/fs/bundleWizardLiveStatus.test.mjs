@@ -21,7 +21,8 @@ import { readSource } from '../sourceScan.mjs';
  * regression nobody would attribute to this round.
  */
 
-const STEPS = [1, 2, 3].map((n) => `src/app/(public)/registration/bundle/step-${n}/page.jsx`);
+// FOUR, since round picking became step 1 and pushed the other three along.
+const STEPS = [1, 2, 3, 4].map((n) => `src/app/(public)/registration/bundle/step-${n}/page.jsx`);
 const CONTENT = 'src/app/(public)/registration/bundle/BundlePageContent.jsx';
 const ROUTE = 'src/app/api/registration/bundle/route.js';
 const ADAPTER = 'src/lib/api/schedules.js';
@@ -100,7 +101,7 @@ test('SCOPE: the promotion page and the other surfaces are NOT made live', () =>
 });
 
 test('SCOPE: force-dynamic reaches the bundle wizard and no other route', () => {
-  // A directory walk rather than a list, so a step-4 added later is covered
+  // A directory walk rather than a list, so a step-5 added later is covered
   // and a `force-dynamic` dropped somewhere else is caught.
   assert.deepEqual(
     dynamicPagesUnderRegistration().sort(),

@@ -17,11 +17,11 @@ import { BundlePageContent } from '../BundlePageContent';
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'ตรวจสอบข้อมูล - ขอใบเสนอราคาแพ็กเกจ',
+  title: 'ขอใบเสนอราคาแพ็กเกจ',
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/registration/bundle/step-2` },
 };
 
-/** Step 2 — review the package and the submitted information before confirming. */
+/** Step 2 — fill in the quotation request. */
 export default function Page({ searchParams }) {
   return <BundlePageContent searchParams={searchParams} step={2} />;
 }

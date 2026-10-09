@@ -17,11 +17,11 @@ import { BundlePageContent } from '../BundlePageContent';
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'ขอใบเสนอราคาแพ็กเกจ',
+  title: 'เลือกรอบอบรม - ขอใบเสนอราคาแพ็กเกจ',
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/registration/bundle/step-1` },
 };
 
-/** Step 1 — fill in the quotation request. */
+/** Step 1 — pick a round for every course in the package. */
 export default function Page({ searchParams }) {
   return <BundlePageContent searchParams={searchParams} step={1} />;
 }
