@@ -37,6 +37,9 @@
  */
 
 import { storedValuesForFilter } from '@/lib/registrations/statuses';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { searchTermPattern } from '@/lib/searchTerm';
 
 /** The ranges the UI offers. `all` is the absence of a date clause. */
 export const RANGE_VALUES = ['all', 'today', 'week', 'month'];
@@ -281,7 +284,17 @@ export function legacyClause(legacy) {
  * @param {string[]} courseCodes codes the term resolved to by name; may be empty
  */
 function searchClauses(source, term, courseCodes = []) {
-  const rx = { $regex: term, $options: 'i' };
+  /**
+   * ESCAPED AND CAPPED HERE, not at the caller — see lib/searchTerm.js.
+   *
+   * The caller's `term` is ALSO the input to `codesMatchingCourseName`
+   * (lib/registrations/inhouseCourseSearch.js), which matches it as TEXT
+   * against course names with `includes`. Escaping it up there would make a
+   * typed `(` fail to match a course called "Excel (Advanced)" — the one place
+   * in this search where the raw characters are what is wanted. So the escape
+   * belongs to the clauses that compile a pattern, and only to them.
+   */
+  const rx = { $regex: searchTermPattern(term), $options: 'i' };
   if (source !== 'inhouse') {
     return [
       { courseName:              rx },

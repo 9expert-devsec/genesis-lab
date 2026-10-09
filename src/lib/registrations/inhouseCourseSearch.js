@@ -58,7 +58,12 @@ import { buildCourseNameMap } from '@/lib/api/courseNameMap';
  *
  * The term is matched as TEXT, not compiled to a regex, so a user typing `(` or
  * `.*` gets a literal search here rather than a pattern — and never a throw.
- * (The stored-field clauses do compile it; that is pre-existing and unchanged.)
+ * The stored-field clauses DO compile it, and they used to compile it raw: an
+ * admin typing `(` threw there while this half kept working. They are escaped
+ * now (`searchClauses` in listFilter.js, via lib/searchTerm.js), so both halves
+ * of the box finally agree that a metacharacter is a character — which is why
+ * the escape lives in `searchClauses` and not at its caller: this function
+ * needs the term UNESCAPED to match "Excel (Advanced)" by name.
  *
  * @param {string} term the typed text
  * @param {Record<string, string>|null} map lowercased code → name

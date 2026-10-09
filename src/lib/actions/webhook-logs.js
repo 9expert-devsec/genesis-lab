@@ -13,6 +13,9 @@ import { dbConnect } from '@/lib/db/connect';
 import WebhookLog from '@/models/WebhookLog';
 import { requireAdmin } from '@/lib/actions/auth';
 import { dispatchEvent } from '@/lib/webhooks/handlers';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { searchTermPattern } from '@/lib/searchTerm';
 
 const ADMIN_PATH = '/admin/webhook-logs';
 const PAGE_SIZE  = 50;
@@ -36,7 +39,16 @@ export async function getWebhookLogs({ page = 1, event = '', status = '' } = {})
   await dbConnect();
 
   const filter = {};
-  if (event)  filter.event  = new RegExp(`^${event}\\.`);
+  /**
+   * ESCAPED — see lib/searchTerm.js. This one is a literal `new RegExp`, so an
+   * unescaped `(` from the admin's `?event=` query threw a SyntaxError in the
+   * handler rather than a Mongo error, with the same result on screen. The
+   * prefix shape (`^<event>.`) is unchanged; the trailing `\\.` stays a regex
+   * escape written here, because it is THIS function's grammar and not part of
+   * the admin's input.
+   */
+  const eventPrefix = searchTermPattern(event);
+  if (eventPrefix) filter.event = new RegExp(`^${eventPrefix}\\.`);
   if (status) filter.status = status;
 
   const safePage = Math.max(1, Number(page) || 1);

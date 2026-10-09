@@ -103,6 +103,9 @@ import {
   buildPageAuditQuery,
   encodeAuditTrailCursor,
 } from "@/lib/pageBuilder/auditTrail";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { searchTermPattern } from "@/lib/searchTerm";
 
 const ADMIN_PATH = "/admin/pages";
 // DISPLAY cap for the admin history list only — how many rows the UI shows,
@@ -261,10 +264,13 @@ export async function getPageBuilderPages({
   const filter = {};
   if (status) filter.status = String(status);
   if (pageType) filter.pageType = String(pageType);
-  if (search) {
+  // Escaped and length-capped — see lib/searchTerm.js. Admin surface, same
+  // unescaped-`$regex` throw as /articles?q=( had.
+  const term = searchTermPattern(search);
+  if (term) {
     filter.$or = [
-      { title: { $regex: search, $options: "i" } },
-      { slug: { $regex: search, $options: "i" } },
+      { title: { $regex: term, $options: "i" } },
+      { slug: { $regex: term, $options: "i" } },
     ];
   }
 

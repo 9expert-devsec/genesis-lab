@@ -14,6 +14,9 @@ import CareerPathRegistration from '@/models/CareerPathRegistration';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { sendCareerPathRegistrationEmail } from '@/lib/email/template-senders/careerpath-registration';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { searchTermPattern } from '@/lib/searchTerm';
 
 const ADMIN_PATH = '/admin/career-path-registrations';
 
@@ -82,11 +85,14 @@ export async function getCareerPathRegistrations({
   await dbConnect();
 
   const filter = {};
-  if (search) {
+  // Escaped and length-capped — see lib/searchTerm.js. A `+` in a pasted email
+  // address (`a+b@x.com`) is a real metacharacter and made this throw.
+  const term = searchTermPattern(search);
+  if (term) {
     filter.$or = [
-      { contactFirstName: { $regex: search, $options: 'i' } },
-      { contactLastName:  { $regex: search, $options: 'i' } },
-      { contactEmail:     { $regex: search, $options: 'i' } },
+      { contactFirstName: { $regex: term, $options: 'i' } },
+      { contactLastName:  { $regex: term, $options: 'i' } },
+      { contactEmail:     { $regex: term, $options: 'i' } },
     ];
   }
   if (careerSlug) filter.careerSlug = String(careerSlug);

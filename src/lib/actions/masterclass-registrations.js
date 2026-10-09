@@ -12,6 +12,9 @@ import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo. Public masterclass pages are ISR; a freed seat must bust them.
 import { revalidateMasterclassPublic } from '@/lib/masterclass/revalidatePublic';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { searchTermPattern } from '@/lib/searchTerm';
 
 const ADMIN_PATH = '/admin/masterclass/registrations';
 const PAGE_SIZE  = 20;          // fallback / SSR default
@@ -43,8 +46,11 @@ export async function listMasterclassRegistrations({
   if (licenseScope === 'all' || licenseScope === 'per_attendee') {
     filter.license_scope = licenseScope;
   }
-  if (q && q.trim()) {
-    const term = q.trim();
+  // Escaped and length-capped — see lib/searchTerm.js. `searchTermPattern`
+  // trims too, so the `q.trim()` that stood here is folded into it; a term that
+  // is only whitespace leaves `$or` unset and the list renders normally.
+  const term = searchTermPattern(q);
+  if (term) {
     filter.$or = [
       { course_title:            { $regex: term, $options: 'i' } },
       { 'attendee.firstName':    { $regex: term, $options: 'i' } },

@@ -30,6 +30,8 @@
  * the old form cut in.
  */
 
+import { escapeRegex } from '@/lib/searchTerm';
+
 const segmenter = new Intl.Segmenter('th', { granularity: 'grapheme' });
 
 /** User-perceived character count. */
@@ -41,7 +43,10 @@ export function graphemeLength(value) {
 
 /** `(?:a(?:b(?:c)?)?)` — matches every non-empty prefix of `word` from `min` chars. */
 function prefixPattern(word, min) {
-  const esc = (c) => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // `escapeRegex` rather than a sixth private copy of the same expression in
+  // the same file. Not user input (the words are literals above), so this is
+  // consistency, not a fix.
+  const esc = escapeRegex;
   const chars = [...word];
   let tail = '';
   for (let i = chars.length - 1; i >= min; i -= 1) tail = `(?:${esc(chars[i])}${tail})?`;
@@ -93,8 +98,11 @@ export function looksCutMidWord(value, title, excerpt) {
   if (!s || CLEAN_END_RE.test(s)) return false;
   const token = s.split(/\s+/).at(-1);
   if (!token) return false;
-  const esc = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const complete = new RegExp(`${esc}(?=[\\s\\p{P}\\p{S}]|$)`, 'u');
+  // Shared helper, replacing a private copy — see lib/searchTerm.js.
+  // `escapeRegex` rather than `searchTermPattern`: this is a token lifted out of
+  // a stored title, not a search box, and the length cap would be meaningless
+  // (a one-word token) while trimming would change which token is tested.
+  const complete = new RegExp(`${escapeRegex(token)}(?=[\\s\\p{P}\\p{S}]|$)`, 'u');
   return !complete.test(String(title ?? '')) && !complete.test(String(excerpt ?? ''));
 }
 
