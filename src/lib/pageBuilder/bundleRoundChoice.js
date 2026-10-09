@@ -257,6 +257,26 @@ function reasonFor({ round, live, today, locked, prevLastDay }) {
  * @returns {Array<{itemId: string, locked: boolean,
  *   options: Array<{roundId: string, pickable: boolean, reason: string|null,
  *   deadline: string|null}>}>}
+ *
+ * ── `deadline` HAS NO RENDERER LEFT, AND IS KEPT ANYWAY ────────────────────
+ * Stated rather than left for someone to discover. Its one reader drew
+ * `ยืนยันรอบนี้ได้ถึง <date>` on the wizard's pick step, and that line is gone:
+ * the pick deadline is not shown to applicants, which is the ruling the public
+ * bundle card already followed. The round's own CARD never showed it either.
+ *
+ * The field is NOT removed with the line, and the distinction is which half of
+ * this function does the work. `deadline` is the value `reasonFor` already
+ * compared against `today` to answer `deadline_passed` — the enforcement the
+ * greyed chip, the server's re-validation and `bundleRegistrable`'s auto-close
+ * all rest on. Reporting it beside the verdict is what makes that verdict
+ * checkable: test/pure/bundleRoundChoice pins it directly ("the reported
+ * deadline is the EFFECTIVE one, not the stored one"), which is the one
+ * assertion that can tell a correct deadline from a correct-looking one.
+ *
+ * So this is a field whose readers are a test and a rule, not a field with no
+ * reader. If a future round wants it gone, `effectivePickDeadline` is the thing
+ * to keep — the editor calls it directly for the author, who DOES act on the
+ * date.
  */
 export function roundChoices({ items, sequential = false, liveStatusById, picks, today }) {
   const list = Array.isArray(items) ? items : [];

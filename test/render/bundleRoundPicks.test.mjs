@@ -149,16 +149,44 @@ test('a round past its pick deadline is not selectable and says หมดเว�
   assert.equal(chip.getAttribute('title'), 'หมดเวลาเลือก');
 });
 
-test('the PICKED round is marked as such and shows its confirm-by deadline', () => {
+test('the PICKED round is marked as such and shows NO pick deadline', () => {
+  /**
+   * ── THE DEADLINE LINE IS GONE, AND THIS IS THE SAME TEST INVERTED ───────
+   * It read `shows its confirm-by deadline` and asserted
+   * `ยืนยันรอบนี้ได้ถึง 9 ธ.ค. 2569` under the picked chip. The standing
+   * ruling the public bundle card already follows applies here: the pick
+   * deadline is NOT shown to applicants.
+   *
+   * THE FIXTURE IS UNCHANGED — one course, one round picked, `pickUntil`
+   * unset so the effective deadline is the day before the round starts and
+   * the line WOULD render under the old code. That matters: asserting the
+   * absence of an element on a fixture that never produced it is a pass for
+   * the wrong reason, and this fixture is exactly the one that produced it.
+   * The day the line showed (9 ธ.ค. 2569) is named below for the same reason —
+   * the string that must not appear is the string this fixture would have
+   * rendered.
+   *
+   * `data-selected` SURVIVES from the old test. Removing the line must not
+   * also remove the only on-screen confirmation that a round was chosen.
+   */
   const d = dom({
     items: [item('i1', [offer('a1', ['2026-12-10'])])],
     liveStatusById: liveOf(live('a1', ['2026-12-10'])),
     picks: { i1: 'a1' },
   });
   assert.equal(chipsOf(d).a1.getAttribute('data-selected'), 'yes');
-  const line = d.querySelector('[data-testid="bundle-pick-deadline"]');
-  assert.notEqual(line, null);
-  assert.match(text(line), /9 ธ\.ค\. 2569/, 'the day before the round starts, Thai Buddhist year');
+  assert.equal(
+    d.querySelector('[data-testid="bundle-pick-deadline"]'),
+    null,
+    'the confirm-by line is back on the pick step',
+  );
+  const body = text(d.querySelector('[data-testid="bundle-picks"]'));
+  assert.equal(body.includes('ยืนยันรอบนี้ได้ถึง'), false, `pick step text: ${body}`);
+  assert.equal(
+    body.includes('9 ธ.ค. 2569'),
+    false,
+    'the deadline this fixture WOULD have shown is on screen in some other wording',
+  );
 });
 
 // ── sequential ─────────────────────────────────────────────────────────────

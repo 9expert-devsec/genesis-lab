@@ -186,8 +186,13 @@ export function RoundPickChip({
  * @param {string} [o.emptyLabel]  shown instead of the chips when there are
  *   none. Default is the career-path wording.
  * @param {ReactNode} [o.notices]  rendered under the chips. The bundle's
- *   cleared-pick notice, its 409 reason and its confirm-by line live here;
- *   career-path's hybrid sub-selection does too.
+ *   cleared-pick notice and its 409 reason live here; career-path's hybrid
+ *   sub-selection does too. ITS CONFIRM-BY LINE DOES NOT, any more: the pick
+ *   deadline is not shown to applicants, which is the ruling the public bundle
+ *   card already followed. Named here because this doc listed it, and a prop
+ *   doc that still advertises a removed caller is how the next person adds it
+ *   back. Nothing about the prop itself changed, and no caller passes a
+ *   deadline through it.
  * @param {string} [o.testId]      `data-testid` for the caller's own tests
  * @param {Record<string,string>} [o.dataAttrs] extra data-* for the caller
  */
