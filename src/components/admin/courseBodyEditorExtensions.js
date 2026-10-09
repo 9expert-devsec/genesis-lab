@@ -6,8 +6,15 @@ import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
-import Youtube from '@tiptap/extension-youtube';
 import { ResizableImage } from '@/lib/editor/resizableImage';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Replaces the stock `@tiptap/extension-youtube` import that
+// stood here: these fields pass through `sanitizeRichHtml` too, so a video
+// inserted in this editor would be dropped on reload for exactly the reason
+// lib/editor/youtubeEmbed.js documents. MEASURED before changing it — 0 of 81
+// course_extensions rows hold an `<iframe>` in any of the five rich fields, so
+// nothing stored is affected; this closes the defect before the first one is.
+import { YoutubeEmbed } from '@/lib/editor/youtubeEmbed';
 
 /**
  * The course rich body editor's Tiptap extension set.
@@ -93,6 +100,6 @@ export function courseBodyEditorExtensions({ placeholder = 'เริ่มเ�
     TableRow,
     TableHeader,
     TableCell,
-    Youtube.configure({ controls: true, nocookie: true, width: 640, height: 360 }),
+    YoutubeEmbed.configure({ controls: true, nocookie: true, width: 640, height: 360 }),
   ];
 }
