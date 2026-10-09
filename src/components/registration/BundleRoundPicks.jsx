@@ -11,7 +11,10 @@ import { bundleRoundLabel } from '@/lib/pageBuilder/bundleRegistration';
 // PICKER — the career-path registration's course card and round chip, which
 // this block used to answer with a <select>.
 import { RoundPickCourseCard, RoundPickChip } from '@/components/registration/RoundPickCard';
-import { formatThaiDate } from '@/lib/promotions/promotionDateLabel';
+// `formatThaiDate` WAS imported here and is REMOVED rather than left: its one
+// call formatted the pick deadline this step no longer shows. Removing the
+// render and removing the import are one edit — an import with no call is the
+// shape that makes the next person think the value is still on screen.
 
 /**
  * ── ONE ROUND PER COURSE, PICKED BY THE APPLICANT ──────────────────────────
@@ -176,20 +179,29 @@ export function BundleRoundPicks({
             notices={
               <>
                 {/*
-                  The deadline of the round actually PICKED. Shown after the
-                  choice rather than per chip, because a chip carrying both its
-                  date and its deadline reads as two dates and the applicant
-                  cannot tell which one they are choosing.
-                */}
-                {picked && (() => {
-                  const opt = row?.options?.find((o) => o.roundId === picked);
-                  return opt?.pickable && opt.deadline ? (
-                    <p data-testid="bundle-pick-deadline" className="mt-2 text-xs text-9e-slate-dp-50">
-                      ยืนยันรอบนี้ได้ถึง {formatThaiDate(opt.deadline) ?? opt.deadline}
-                    </p>
-                  ) : null;
-                })()}
+                  ── NO PICK DEADLINE HERE, AND THAT IS THE STANDING RULING ──
+                  A `<p data-testid="bundle-pick-deadline">` sat here reading
+                  ยืนยันรอบนี้ได้ถึง <date> for the round actually picked. The
+                  ruling the public bundle CARD already follows applies to this
+                  step too: THE PICK DEADLINE IS NOT SHOWN TO APPLICANTS. A
+                  round past its deadline is greyed and unselectable, and that
+                  is the whole of what an applicant needs — a date by which
+                  they must confirm is a second deadline to track on a screen
+                  whose only question is which dates suit them, and it reads as
+                  pressure rather than as information.
 
+                  ENFORCEMENT IS UNTOUCHED, which is what makes this safe to
+                  remove rather than a loss of a warning. `roundChoices` still
+                  computes the effective deadline and still reports
+                  `deadline_passed`, the chip is still disabled with
+                  หมดเวลาเลือก as its `sr-only` text and its tooltip, and the
+                  server still re-validates every pick and sends the applicant
+                  back to this step on a 409. Nothing here was the guard.
+
+                  `formatThaiDate` went WITH it: this was its only call in this
+                  file. The editor still formats `pickUntil` for the author,
+                  which is where the deadline is a fact someone acts on.
+                */}
                 {/*
                   NO SECOND LOCK LINE. The `<p data-testid="bundle-pick-locked">`
                   that used to sit here said the shared reason word under a
