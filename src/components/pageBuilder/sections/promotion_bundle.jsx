@@ -51,7 +51,12 @@ import { discountPercent } from '@/lib/pageBuilder/bundlePricing';
 // accepts a submission is a closed bundle registerable through a stale link.
 import { BUNDLE_CLOSED_MESSAGE, isBundleRegistrationOpen } from '@/lib/pageBuilder/bundleRegistration';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
-import { resolveDerivedRoundBadge } from '@/lib/scheduleStatus';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. THE SAME CHIP THE COURSE CARD DRAWS: this card used to
+// stack its own cream boxes, which was a second round visual competing with
+// the one the site already had. `resolveDerivedRoundBadge` left on the same
+// line it arrived on — the per-tile status badge it fed is gone.
+import ScheduleCard from '@/components/ScheduleCard';
 import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo. The multi-round round: ALL of an item's offered rounds.
@@ -66,8 +71,6 @@ import { PICK_REASON_TEXT, BUNDLE_NO_ROUNDS_MESSAGE } from '@/lib/pageBuilder/bu
 // ADDED beside the statement above rather than folded into it. The ONE label
 // for an offered round, shared with the editor and the wizard.
 import { bundleRoundLabel } from '@/lib/pageBuilder/bundleRegistration';
-// One Thai calendar day, for the "เลือกได้ถึง" line.
-import { formatThaiDate } from '@/lib/promotions/promotionDateLabel';
 import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
 
 /**
@@ -179,6 +182,99 @@ import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
  * here about such a round getting "no registration link either" is gone with
  * the link: no round of any state has one now.
  */
+/**
+ * ── ONE CHIP WIDTH FOR A WHOLE BUNDLE, AND WHY IT IS ESTIMATED ───────────
+ * 0b845005 gave each chip `w-max`, so every chip was exactly as wide as its
+ * own date — and a row of tiles came out ragged, `12-13 พ.ย. 69` beside
+ * `8-9 ธ.ค. 69` beside `27-28 ม.ค. 70`, none of them lining up.
+ *
+ * The chips live in SEPARATE containers (one row per course tile), so no
+ * amount of CSS can equalise them: there is no shared grid to belong to and
+ * `subgrid` does not reach across siblings. The width has to be computed
+ * from the labels and handed down, which is what this does.
+ *
+ * ── THE FACTOR IS MEASURED, NOT GUESSED, AND IT IS NOT `ch` ──────────────
+ * `ch` is the width of "0", and in this font at this size that is 7.75px —
+ * while the real Thai labels measure 4.41-5.50px PER CHARACTER, because a
+ * date is mostly Thai glyphs, dots, commas and spaces rather than digits.
+ * A `ch`-based width would have been ~40% too wide on every chip.
+ *
+ * Measured in Chrome against the rendered chip (0.72rem, font-bold, the
+ * real font stack), over ten real labels from one-day to cross-month:
+ *
+ *   8-9 ธ.ค. 69             11 chars   57.20px   5.20 / char
+ *   16-17 ก.ย. 69           13 chars   67.17px   5.17 / char
+ *   27-28 ม.ค. 70           13 chars   71.45px   5.50 / char   ← worst
+ *   1, 3, 5 มี.ค. 70        16 chars   70.52px   4.41 / char
+ *   30 ธ.ค. 69 - 2 ม.ค. 70  22 chars  109.77px   4.99 / char
+ *
+ * 5.50px at an 11.52px font is 0.344rem, so PER_CHAR_REM is 0.36 — the worst
+ * observed case plus about 5%. It is deliberately an UPPER bound: too wide
+ * is a chip with some air in it, too narrow is a date that wraps.
+ *
+ * CHROME_REM is exact rather than estimated: `px-2` twice plus `border-2`
+ * twice is 20px, confirmed by measuring a chip at 90.61px against its
+ * 70.61px date.
+ *
+ * THE LONGEST LABEL BY CHARACTER COUNT is what is measured, and that is safe
+ * even though the widest label is not always the longest one (`27-28 ม.ค.
+ * 70` at 13 chars is wider than `1, 3, 5 มี.ค. 70` at 16): the factor is an
+ * upper bound for EVERY label, so the longest string always estimates at
+ * least as wide as the widest one actually renders.
+ *
+ * If the webfont fails and a wider fallback is used the estimate can fall
+ * short. Nothing breaks: the chip is `max-w-full` and the date wraps, which
+ * is the same degradation a tile narrower than the chip already gets.
+ */
+const CHIP_PER_CHAR_REM = 0.36;
+const CHIP_CHROME_REM = 1.25;
+
+/** The inline custom property the chip grid reads. `null` when there are no
+  * rounds at all, so the style attribute is not written for nothing. */
+export function bundleChipWidthStyle(labels) {
+  const longest = (Array.isArray(labels) ? labels : [])
+    .reduce((n, l) => Math.max(n, typeof l === 'string' ? l.length : 0), 0);
+  if (!longest) return null;
+  const rem = (longest * CHIP_PER_CHAR_REM + CHIP_CHROME_REM).toFixed(3);
+  return { '--bundle-chip-w': `${rem}rem` };
+}
+
+/**
+ * THE OFFERED ROUNDS OF ONE ITEM, as rows a chip can be drawn from.
+ *
+ * Module scope rather than inline in the card because the SECTION needs the
+ * labels too — it has to know the longest one across every tile before any
+ * tile renders. One function, called from both places, so the card and the
+ * width can never disagree about what a round is called.
+ */
+function offeredRowsFor({ entry, item, todayKey, choice, round }) {
+  return chooseItemRounds(entry?.rounds, item, todayKey)
+    .map((row) => {
+      // THE SHARED LABEL. Same chain as the editor and the wizard — live
+      // dates, then the stored snapshot — so one round cannot be named three
+      // ways. `row.dates` already carries the snapshot fallback from
+      // `chooseRounds`, which is why this passes it as the live side.
+      const { text: dateLabel, hasDates } = bundleRoundLabel(round, { dates: row.dates });
+      // A round NOTHING can date is omitted here, and that differs from the
+      // editor on purpose: an author needs to be told their round went stale
+      // so they can replace it, a visitor has nothing to do with that
+      // sentence and an undated row gives them nothing to choose by.
+      if (!hasDates) return null;
+      const option = choice?.options?.find((o) => o.roundId === row.id) ?? null;
+      const pickable = option ? option.pickable : false;
+      const reason = option?.reason ?? 'closed';
+      return {
+        key: row.id,
+        dateLabel,
+        pickable,
+        reason,
+        reasonLabel: PICK_REASON_TEXT[reason] ?? PICK_REASON_TEXT.closed,
+        type: row.type,
+      };
+    })
+    .filter(Boolean);
+}
+
 function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false, choice = null, orderLabel = null }) {
   /**
    * ── THE TILE'S HALF OF THE LIGHT SCOPE ──────────────────────────────────
@@ -212,50 +308,25 @@ function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false
    * as an empty box. That is the one case where silence beats a row: there is
    * nothing for a visitor to read and nothing for them to choose by.
    */
-  const offeredRows = chooseItemRounds(entry?.rounds, item, todayKey)
-    .map((row) => {
-      // THE SHARED LABEL. Same chain as the editor and the wizard — live
-      // dates, then the stored snapshot — so one round cannot be named three
-      // ways. `row.dates` already carries the snapshot fallback from
-      // `chooseRounds`, which is why this passes it as the live side.
-      const { text: dateLabel, hasDates } = bundleRoundLabel(round, { dates: row.dates });
-      // A round NOTHING can date is omitted here, and that differs from the
-      // editor on purpose: an author needs to be told their round went stale
-      // so they can replace it, a visitor has nothing to do with that
-      // sentence and an undated row gives them nothing to choose by.
-      if (!hasDates) return null;
-      const option = choice?.options?.find((o) => o.roundId === row.id) ?? null;
-      const pickable = option ? option.pickable : false;
-      const reason = option?.reason ?? 'closed';
-      return {
-        key: row.id,
-        dateLabel,
-        pickable,
-        reason,
-        reasonLabel: PICK_REASON_TEXT[reason] ?? PICK_REASON_TEXT.closed,
-        deadlineLabel: option?.deadline ? formatThaiDate(option.deadline) : null,
-      };
-    })
-    .filter(Boolean);
+  const offeredRows = offeredRowsFor({ entry, item, todayKey, choice, round });
 
   /**
-   * `isLive` SURVIVED the per-course button's removal, and `round.live` did
-   * not — the two used to go together and only one of them was about the link.
+   * ── `isLive` AND `derived` ARE GONE, WITH THE BADGE THEY EXISTED FOR ─────
+   * They fed the per-tile status pill (`จบไปแล้ว` and its siblings) under the
+   * rounds. That pill described the ONE round `chooseItemRound` picked, while
+   * the list beside it already showed EVERY offered round — so on an item
+   * offering three rounds it was a verdict about one of them, printed once,
+   * with nothing saying which. It is removed rather than repaired: each chip
+   * now carries its own state, and a chip that cannot be picked says so by
+   * being greyed (and in an `sr-only` word, because greying is a colour).
    *
-   * `registerHref` was the sole reader of `round.live` in this file, so
-   * `scheduleRegistrationHref` and its import went with the button. `isLive`
-   * stays because the DERIVED BADGE below is keyed on it: a round that is
-   * `elapsed` or `missing` still has to say so.
-   *
-   * `chooseItemRound` still RETURNS `live` and that is not now a field with no
-   * reader — four other call sites take it (the bundle route's `emailCourses`,
-   * `bundleLegs`' round fields, the bundle page's summary, and
-   * `course_schedule`). What went is this card's use of it, not the field.
+   * `chooseItemRound` and `round` SURVIVE — `bundleRoundLabel` still takes the
+   * live row as the first half of the date chain, and `data-round-state` on
+   * the tile still reports it. `chooseItemRound` still RETURNS `live`, read by
+   * four other call sites (the bundle route's `emailCourses`, `bundleLegs`'
+   * round fields, the bundle page's summary, and `course_schedule`). What went
+   * is this card's use of it, not the field.
    */
-  const isLive = round?.state === 'live';
-  // A derived state has no upstream status to resolve and must not be handed
-  // one — resolveDerivedRoundBadge is for exactly this call site.
-  const derived = round && !isLive ? resolveDerivedRoundBadge(round.state) : null;
 
   /**
    * `showYear: 'auto'` prints the year only when the round is not in the
@@ -370,87 +441,195 @@ function BundleItemCard({ entry, item, todayKey, currentYear, lightScope = false
           to be able to see whether any date suits them before starting a
           quotation.
 
-          NON-PICKABLE ROUNDS STAY VISIBLE, faded and labelled. Removing them
-          would make the card shorter the moment a round filled, which is the
-          same silently-shrinking failure `chooseRounds` already refuses for a
-          rolled-off round: a visitor who can see "เต็ม" knows to pick another
-          date, one whose option vanished does not know it ever existed.
+          NON-PICKABLE ROUNDS STAY VISIBLE. Removing them would make the card
+          shorter the moment a round filled, which is the same
+          silently-shrinking failure `chooseRounds` already refuses for a
+          rolled-off round: a visitor who can see a date is spoken for knows
+          to pick another, one whose option vanished does not know it ever
+          existed.
 
-          THE COLOUR IS THE VAR FORM, NOT `bg-9e-orange-900`, AND THAT IS THE
-          WHOLE POINT. The Tailwind token compiles to the LIGHT hex (#FFF4E9)
-          in both themes — tailwind.config.js says so where the accent scales
-          are declared: those hexes are light-mode and the dark adaptation
-          lives only in the `--9e-<name>-<step>` vars. Taking the token here
-          would paint a cream slab on a dark page, which is exactly the defect
-          presets.js records shipping once.
+          ── WHAT THEY NO LONGER SAY, AND WHY THAT IS NOT A LOSS ──────────
+          They used to be labelled too — a Thai reason word under each date
+          ("เต็ม", "ปิดรับ", "เริ่มแล้ว") and a `เลือกได้ถึง <date>` line under
+          the pickable ones. Both are gone from the PUBLIC card, and from the
+          public card only:
+
+            · the reason word, because a greyed chip beside a coloured one
+              already says "not this one" at a glance, and four refusal
+              vocabularies on a card that sells a package is a card arguing
+              with itself. The word survives where it changes what someone
+              does — the wizard still tells an applicant why a round cannot
+              be picked — and it is still IN this chip as `sr-only` text,
+              because greying is a colour and WCAG 1.4.1 does not let colour
+              be the only carrier.
+            · the pick deadline, because it is a date about the BUYING
+              process printed beside the date the training actually runs. The
+              author still sees it in the editor.
+
+          THE CREAM BOX WENT WITH THEM. It was this file drawing a second
+          round visual — `bg-[var(--9e-orange-900)]`, with `opacity-60` for
+          the faded state — while the site already had one. The chips below
+          are `components/ScheduleCard`, the same component the course card
+          draws, so there is no longer a bundle-shaped round and a
+          course-shaped round to keep in step. The var-not-token reasoning
+          that note carried still holds for every other colour on this tile,
+          and is stated where those colours are.
 
           `formatRoundDays` is UNCHANGED and no second formatter was added —
           the date string is the same one this card already rendered.
-
-          `opacity-60` carries the faded state rather than a muted colour,
-          deliberately: it works on BOTH card styles and inside the navy
-          card's light tile scope without a second rule, and it cannot be the
-          `dark:`-variant trap the tile's other colours needed `lit()` for.
         */}
         {!!offeredRows.length && (
-          <div data-testid="bundle-round-list" className="flex flex-col gap-1">
+          <div data-testid="bundle-round-list" className="flex flex-col gap-2">
+            {/*
+              `gap-2`, UP FROM `gap-1`. Measured in the builder canvas at a
+              207px tile: the label's bottom was 793 and the first box's top
+              797 — four pixels, which at an 11px label reads as the box
+              sitting ON the word rather than under it. It was reported as the
+              round box covering the label; the DOM says they never actually
+              intersect, and what was wrong is that nothing separated them.
+            */}
             <span className="block text-[11px] font-bold text-[var(--text-secondary)]">
-              {offeredRows.length > 1 ? 'รอบที่เลือกได้' : 'รอบอบรม'}
+              {/*
+                ONE STRING, NOT A COUNT-DEPENDENT PAIR. This read
+                `offeredRows.length > 1 ? 'รอบที่เลือกได้' : 'รอบอบรม'`, so a
+                row of tiles headed its rounds two different ways depending on
+                how many each course happened to offer — a difference a reader
+                has to account for before deciding it meant nothing. The label
+                names WHAT THE CHIPS ARE, which does not change with their
+                number, and the chips themselves already say how many there
+                are.
+              */}
+              รอบอบรม
             </span>
-            {offeredRows.map((row) => (
-              <div
-                key={row.key}
-                data-testid="bundle-round-box"
-                data-pickable={row.pickable ? 'yes' : 'no'}
-                data-reason={row.reason ?? undefined}
-                className={cn(
-                  'rounded-9e-md border border-[var(--9e-orange-800)] bg-[var(--9e-orange-900)] px-3 py-2',
-                  !row.pickable && 'opacity-60',
-                )}
-              >
-                <span
-                  data-testid="bundle-item-dates"
-                  className="block text-xs font-bold text-[var(--text-primary)]"
-                >
-                  {row.dateLabel}
-                </span>
-                {row.pickable ? (
-                  row.deadlineLabel && (
-                    <span
-                      data-testid="bundle-round-deadline"
-                      className="mt-0.5 block text-[11px] text-[var(--text-secondary)]"
-                    >
-                      เลือกได้ถึง {row.deadlineLabel}
-                    </span>
-                  )
-                ) : (
-                  <span
-                    data-testid="bundle-round-unpickable"
-                    className="mt-0.5 block text-[11px] font-bold text-[var(--text-secondary)]"
-                  >
-                    {row.reasonLabel}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}        {derived && (
-          <span
-            data-testid="bundle-item-round-state"
-            /**
-             * `derived.soft` is built in lib/scheduleStatus.js and shared with
-             * the registration carousel and other sections, so its output is
-             * not ours to change. Stripping its `dark:` half at the point of
-             * use is how the navy card gets the light form without touching a
-             * module five other callers depend on. Semantic colour is
-             * otherwise untouched: which status it is still decides the hue.
-             */
-            className={cn('self-start rounded-full px-2 py-0.5 text-[11px] font-bold', lit(derived.soft))}
-          >
-            {derived.action}
-          </span>
-        )}
+            {/*
+              ── A WRAPPING ROW, NOT TWO FIXED COLUMNS ─────────────────────
+              This was `grid grid-cols-2`, borrowed from
+              training-course/CourseCard so a round would read the same on
+              both surfaces. The borrowing was wrong, and the reason is that
+              the two surfaces are not the same width.
 
+              A course card's chip gets half of a ~250px card. A bundle course
+              tile is ~200-230px and the grid gave each chip half of THAT —
+              83-100px — against a Thai round label that needs ~110px. So
+              `16-17 ก.ย. 69` broke across two lines, and it did so EVEN FOR A
+              COURSE WITH ONE ROUND, because a two-column grid reserves the
+              second column whether anything occupies it or not. The constant
+              shape that CourseCard's note calls a feature is, at this width, a
+              column of empty space paid for by the date.
+
+              A wrapping flex row inverts the relationship: the CHIP asks for
+              the width its date needs (`w-max` below) and the row decides how
+              many fit, breaking to a second line when they do not. One round
+              draws one chip as wide as its date and no wider; three draw three
+              and wrap. No chip is ever narrower than its content because of a
+              neighbour that does not exist.
+
+              ── AND NOW A GRID, BECAUSE A ROW CANNOT EQUALISE WIDTHS ──────
+              `w-max` per chip made every chip exactly as wide as its own
+              date, which is right for ONE chip and ragged for a row of
+              tiles: `12-13 พ.ย. 69` beside `8-9 ธ.ค. 69` beside
+              `27-28 ม.ค. 70`, none of them lining up.
+
+              The track is a FIXED width shared by the whole bundle —
+              `--bundle-chip-w`, set once on the items list from the longest
+              label anywhere in the section (see bundleChipWidthStyle). Every
+              chip in every tile therefore measures the same.
+
+              `minmax(0,var(…))` rather than the bare variable, and that is
+              the narrow-tile safety: a bare fixed track wider than its
+              container overflows it, while `minmax(0,X)` lets the track
+              shrink below X when there is not room, at which point the date
+              wraps instead of spilling. Nothing clips and nothing scrolls.
+
+              `auto-fill` rather than `auto-fit`, and NOT `1fr`: both of
+              those collapse or stretch the track to the container when only
+              one chip is present, which would make a single round a
+              full-width slab — the opposite of the shared width.
+
+              NOTHING ELSE IS ON THIS ELEMENT, and that is a finding rather
+              than a minimal first draft. The two-round tile first rendered
+              76.8px-tall chips — the height of its whole two-line row — beside
+              34.4px ones on every single-round tile. `content-start`,
+              `items-start` and `shrink-0` were each tried here and each
+              measured EXACTLY the same 76.8, so none of them is the cause and
+              none of them stayed. The cause was `h-full` on the chip itself,
+              proven by setting `height: auto` on it in the live DOM and
+              watching the chips return to 34.4 while this row stayed 76.8 —
+              correct, because 34.4 + 8 + 34.4 is two lines. See `fillHeight`
+              in ScheduleCard, which the call site below turns off.
+            */}
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(0,var(--bundle-chip-w)))] items-stretch gap-2">
+              {offeredRows.map((row) => (
+                <div
+                  key={row.key}
+                  data-testid="bundle-round-box"
+                  data-pickable={row.pickable ? 'yes' : 'no'}
+                  data-reason={row.reason ?? undefined}
+                  /*
+                    `w-full` — the chip fills its GRID TRACK, and the track is
+                    the width the whole bundle agreed on. This was `w-max`,
+                    which sized each chip to its own date and is exactly what
+                    made the rows ragged.
+
+                    `max-w-full` stays as the floor under the track: the
+                    shared width is computed from a label, not from the tile,
+                    so on a narrow screen it can exceed the space available.
+                    The cap wins, the date wraps, and nothing clips or
+                    scrolls sideways.
+                  */
+                  className="w-full max-w-full"
+                >
+                  {/*
+                    ── NO `status`, SO NO BADGE — AND THAT IS THE RULING ──────
+                    `resolveScheduleBadge('')` returns null and ScheduleCard
+                    draws no pill for it. The pill it would otherwise draw for
+                    an open round is the green `ลงทะเบียน` one, and a bundle
+                    chip must not offer it: registration happens through the
+                    bundle's own button, and a register pill per round would
+                    say each round is separately bookable. These chips are not
+                    links and not buttons.
+
+                    A NON-PICKABLE ROUND SHOWS NO WORD AT ALL, only the greyed
+                    `muted` tone — and therefore carries `srStatus`, because
+                    greying is a colour and WCAG 1.4.1 does not let colour be
+                    the only carrier. The Thai reason is the SAME
+                    `PICK_REASON_TEXT` the wizard words its refusals with, so
+                    the two surfaces cannot disagree about why.
+
+                    `scoped` rather than the default tone, because a tile can
+                    carry `.pb-bundle-tile-light` and stay light inside a navy
+                    card — where ScheduleCard's own `dark:text-white` would
+                    paint the date white on near-white. See the tone note
+                    there.
+                  */}
+                  {/*
+                    NO DOT. It was moved inline in 3b74d7a6 because the corner
+                    version overlapped a wrapped date; inline it stopped
+                    overlapping and went on costing width — a dot plus its gap
+                    — on the one surface with none to spare.
+
+                    It was never carrying information HERE. On a course card
+                    the dot names the delivery type against the
+                    Classroom/Hybrid legend printed above it. A bundle tile has
+                    no legend, so the dot was an undecodable colour, and the
+                    chip's BORDER is already that same colour. Dropping it
+                    gives the width to the date, which is the thing a visitor
+                    is actually reading.
+                  */}
+                  <ScheduleCard
+                    dateLabel={row.dateLabel}
+                    type={row.type}
+                    status=""
+                    tone={row.pickable ? 'scoped' : 'muted'}
+                    srStatus={row.pickable ? '' : row.reasonLabel}
+                    showDot={false}
+                    fillHeight={false}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {/*
           ── ONE BUTTON, AND THE ลงทะเบียน ONE IS NOT COMING BACK ───────────
           THIS PANEL SELLS A PACKAGE. A per-course ลงทะเบียน button took the
@@ -628,6 +807,33 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
     today: todayKey,
   });
   const choiceByItemId = new Map(choices.map((c) => [c.itemId, c]));
+
+  /**
+   * ── THE ONE CHIP WIDTH, DECIDED HERE AND NOWHERE ELSE ─────────────────
+   * Every round chip in this bundle is the same width, and the width is the
+   * longest label across ALL of its tiles. That cannot be decided inside a
+   * tile — a tile only knows its own rounds — so it is decided here, where
+   * every item is in hand, and handed down as one inline custom property on
+   * the list below.
+   *
+   * `offeredRowsFor` is the SAME function each tile draws from, so the
+   * labels measured here are character-for-character the labels rendered.
+   * Calling it twice is the price of not threading rows through the tree,
+   * and it is pure: same inputs, same rows.
+   */
+  const chipWidthStyle = bundleChipWidthStyle(
+    items.flatMap((it, i) => {
+      const id = String(it?.id ?? '').trim();
+      const entry = resolved[i] ?? null;
+      return offeredRowsFor({
+        entry,
+        item: it,
+        todayKey,
+        choice: choiceByItemId.get(id) ?? null,
+        round: chooseItemRound(entry?.rounds, it, todayKey),
+      }).map((r) => r.dateLabel);
+    }),
+  );
 
   /**
    * ── AUTO-CLOSE (R5), AND WHY THE AUTHOR'S SWITCH STILL WINS ───────────
@@ -1094,6 +1300,20 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
                 <ul
                   data-testid="bundle-items"
                   className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                  /*
+                    THE SHARED CHIP WIDTH, as an inline custom property on the
+                    one element every tile descends from. A custom property is
+                    what crosses this boundary rather than a class, because the
+                    value is DATA — it changes with the longest label — and a
+                    Tailwind arbitrary value built by interpolation compiles to
+                    nothing at all: Tailwind scans source text and never
+                    evaluates it. The class that reads this lives on the chip
+                    grid and is written out in full.
+
+                    `null` when the bundle offers no dated round anywhere, so
+                    no style attribute is written for a variable nothing reads.
+                  */
+                  style={chipWidthStyle ?? undefined}
                 >
                   {items.map((it, i) => (
                     /**
@@ -1125,26 +1345,24 @@ export function PromotionBundleSection({ content, data, style, pageId = null, se
                   ))}
                 </ul>
               {/*
-                ── THE SEQUENCE, STATED ONCE ──────────────────────────────
-                Under the list rather than on each tile: it is one rule about
-                the whole package, and repeating it per course would say the
-                same sentence three times.
+                ── THE SEQUENCE RULE IS NOT STATED HERE ANY MORE ──────────
+                It read `เลือกรอบตามลำดับ — รอบของหลักสูตรถัดไปต้องเริ่มหลัง
+                หลักสูตรก่อนหน้าจบ` under the list. It was true, and it was
+                answering a question nobody has yet: this card describes what
+                is IN the package, and the constraint only bites once someone
+                is choosing dates.
 
-                It is the OTHER half of the decision not to fade later courses
-                behind `previous_not_picked` on the card. The rounds show their
-                own availability; this says why a visitor may still not be able
-                to combine them freely. Without it the card would look like
-                free choice and the wizard would refuse — which is the gap this
-                line closes.
+                WHERE IT WENT, rather than simply going: the wizard states the
+                same sentence above its controls (BundleRoundPicks), and says
+                it per option too — a round that cannot follow the previous
+                course is disabled there with its own reason. So the rule is
+                read at the moment it applies instead of on a card the visitor
+                is still only browsing.
+
+                `ลำดับที่ N` stays on each tile. That is the ORDER, which is a
+                fact about the package and readable here; the rule about how
+                rounds must chain is not.
               */}
-              {sequential && (
-                <p
-                  data-testid="bundle-sequential-note"
-                  className="mt-1 text-xs text-[var(--text-secondary)]"
-                >
-                  เลือกรอบตามลำดับ — รอบของหลักสูตรถัดไปต้องเริ่มหลังหลักสูตรก่อนหน้าจบ
-                </p>
-              )}
           </>
         )}
       </div>

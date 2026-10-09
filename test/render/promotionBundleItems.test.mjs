@@ -11,6 +11,11 @@ import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
 // formatter call the component makes, so "no second date formatter" is checked
 // against the real one rather than against a literal that could drift.
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+// ADDED beside the statements above rather than folded into one — the same
+// standing rule. The chip itself, so the "no ลงทะเบียน pill" guard can prove
+// the pill is reachable from this component rather than asserting an absence
+// that might just be a dead selector.
+import ScheduleCard from '@/components/ScheduleCard';
 import { siteCurrentYear } from '@/lib/articlePublishTime';
 
 /**
@@ -77,7 +82,7 @@ test('a resolved item draws its cover, title, round dates and its ONE link', () 
 
   // The date range comes from the ONE formatter. 20 and 21 are consecutive, so
   // they collapse to a range with the month on the last token.
-  assert.match(text(card.querySelector('[data-testid="bundle-item-dates"]')), /20\s*-\s*21 ส\.ค\./);
+  assert.match(text(card.querySelector('[data-schedule-card-date]')), /20\s*-\s*21 ส\.ค\./);
 
   /**
    * ── ONE LINK, AND IT IS THE DETAIL PAGE ────────────────────────────────
@@ -139,10 +144,21 @@ test('the card takes the site card surface, and the round box keeps its own', ()
   assert.ok(cls.includes('bg-[var(--surface)]'), `the card surface is not the Card token: ${cls}`);
   assert.ok(cls.includes('border-[var(--surface-border)]'), 'the card lost the matching border');
 
-  // The round box keeps its OWN cream — the two must not collapse into one.
+  /**
+   * THE ROUND NO LONGER PAINTS A SURFACE AT ALL, and that is the change this
+   * assertion was inverted for rather than deleted. It used to carry its own
+   * cream slab (`bg-[var(--9e-orange-900)]`), which was this file drawing a
+   * second round visual while the site already had one. The round is now a
+   * `ScheduleCard` chip — a type-coloured border on the tile's own surface —
+   * so the correct claim is that NEITHER background is there.
+   */
   const box = card.querySelector('[data-testid="bundle-round-box"]');
-  const boxCls = box.getAttribute('class');
-  assert.ok(boxCls.includes('bg-[var(--9e-orange-900)]'), `the round box lost its cream: ${boxCls}`);
+  const boxCls = box.getAttribute('class') ?? '';
+  assert.equal(
+    boxCls.includes('bg-[var(--9e-orange-900)]'),
+    false,
+    'the round box still paints the retired cream slab',
+  );
   assert.equal(
     boxCls.includes('bg-[var(--surface)]'),
     false,
@@ -150,26 +166,33 @@ test('the card takes the site card surface, and the round box keeps its own', ()
   );
 });
 
-test('CONTROL: the class probe discriminates between the two surfaces', () => {
-  // Without this, both `includes` checks would pass on a class string that
-  // happened to contain everything, and the negative one proves the probe can
-  // answer false.
+test('CONTROL: the class probe can answer true as well as false', () => {
+  /**
+   * Every surface assertion above is now a NEGATIVE one — "this class is not
+   * there" — and a probe that can only answer false would satisfy all of them
+   * against an empty string, a missing element or a typo in the selector. So
+   * this proves the same probe returns true for a class that IS present, on
+   * the one element that still carries a painted surface.
+   */
   const d = bundle([item()], [entry()]);
   const card = d.querySelector('[data-testid="bundle-item"]');
-  const box = card.querySelector('[data-testid="bundle-round-box"]');
-  assert.notEqual(card.getAttribute('class'), box.getAttribute('class'));
+  assert.ok(card.getAttribute('class').includes('bg-[var(--surface)]'));
   assert.equal(card.getAttribute('class').includes('bg-[var(--9e-orange-900)]'), false);
 });
 
 // ── the round box ─────────────────────────────────────────────────────────
 
-test('the round sits in a BOX, with its label and its date on separate lines', () => {
+test('the round is a shared ScheduleCard chip, under its own label', () => {
   /**
-   * It was one muted sentence — "รอบอบรม 20 - 21 ส.ค. 69" — and is now a
-   * bordered pale box with the label above the date. The date element keeps its
-   * testid, so every assertion about the DATE elsewhere in this file is
-   * unchanged; what is new is the box around it and the label being its own
-   * node rather than a prefix on the same string.
+   * It was one muted sentence — "รอบอบรม 20 - 21 ส.ค. 69", then a
+   * bundle-shaped cream box, and is now the SAME CHIP the course card draws:
+   * `components/ScheduleCard`, a type-coloured border with a corner dot and a
+   * bold date.
+   *
+   * PINNED BY THE COMPONENT'S OWN MARKER, not by a colour class. A class
+   * assertion would go green against a hand-rolled div that copied the
+   * classes, which is the drift that reusing the component exists to prevent
+   * — `[data-schedule-card]` can only be satisfied by the shared chip.
    */
   const d = bundle([item()], [entry()]);
   const box = d.querySelector('[data-testid="bundle-round-box"]');
@@ -185,8 +208,12 @@ test('the round sits in a BOX, with its label and its date on separate lines', (
   assert.notEqual(list, null, 'the rounds list wrapper is gone');
   assert.match(text(list), /รอบอบรม/, 'the list heading lost its label');
 
-  const date = box.querySelector('[data-testid="bundle-item-dates"]');
-  assert.notEqual(date, null, 'the date is not inside the box');
+  // THE SHARED COMPONENT, not a look-alike.
+  const chip = box.querySelector('[data-schedule-card]');
+  assert.notEqual(chip, null, 'the round is not drawn by the shared ScheduleCard');
+
+  const date = box.querySelector('[data-schedule-card-date]');
+  assert.notEqual(date, null, 'the date is not inside the chip');
   assert.match(text(date), /20\s*-\s*21 ส\.ค\./);
   assert.equal(
     text(date).includes('รอบอบรม'),
@@ -203,7 +230,7 @@ test('the date in the box is still formatRoundDays — no second formatter', () 
    * introduced here would diverge immediately.
    */
   const d = bundle([item()], [entry()]);
-  const rendered = text(d.querySelector('[data-testid="bundle-item-dates"]'));
+  const rendered = text(d.querySelector('[data-schedule-card-date]'));
   const expected = formatRoundDays(LIVE_ROUND.dates, {
     showMonth: true,
     showYear: 'auto',
@@ -219,7 +246,7 @@ test('CONTROL: no round, no box — never a bordered rectangle with a bare label
   const card = d.querySelector('[data-testid="bundle-item"]');
   assert.notEqual(card, null, 'the card itself vanished');
   assert.equal(card.querySelector('[data-testid="bundle-round-box"]'), null);
-  assert.equal(card.querySelector('[data-testid="bundle-item-dates"]'), null);
+  assert.equal(card.querySelector('[data-schedule-card-date]'), null);
 });
 
 test('CONTROL: the same probes come back empty on an item with nothing resolved', () => {
@@ -229,7 +256,7 @@ test('CONTROL: the same probes come back empty on an item with nothing resolved'
   assert.notEqual(card, null, 'the card itself must still exist');
   assert.equal(card.querySelector('h4'), null);
   assert.equal(card.querySelector('img'), null);
-  assert.equal(card.querySelector('[data-testid="bundle-item-dates"]'), null);
+  assert.equal(card.querySelector('[data-schedule-card-date]'), null);
   assert.equal(card.querySelector('[data-testid="bundle-item-register"]'), null);
 });
 
@@ -276,16 +303,22 @@ test('a round that ROLLED OFF draws its dates from the snapshot, with no registr
   const card = d.querySelector('[data-testid="bundle-item"]');
 
   assert.equal(card.getAttribute('data-round-state'), 'elapsed');
-  assert.match(text(card.querySelector('[data-testid="bundle-item-dates"]')), /10\s*-\s*11 มี\.ค\./);
+  assert.match(text(card.querySelector('[data-schedule-card-date]')), /10\s*-\s*11 มี\.ค\./);
 
   // NOT a link: /registration/public?class=<id> for an id upstream does not
   // have renders a blank step 1.
   assert.equal(card.querySelector('[data-testid="bundle-item-register"]'), null);
   // …and the course link is untouched — the COURSE still exists.
   assert.notEqual(card.querySelector('[data-testid="bundle-item-detail"]'), null);
-  // A state chip, which is not a status: a status is the seats-left signal and
-  // cannot be true about a round nobody can fetch.
-  assert.notEqual(card.querySelector('[data-testid="bundle-item-round-state"]'), null);
+  /**
+   * THE PER-TILE STATE BADGE IS GONE, and this assertion is inverted rather
+   * than deleted so its absence is a pinned claim. It read `จบไปแล้ว` for a
+   * rolled-off round — a verdict about the ONE round `chooseItemRound`
+   * picked, printed once beneath a list that shows EVERY offered round, with
+   * nothing saying which of them it was about. Each chip now carries its own
+   * state instead.
+   */
+  assert.equal(card.querySelector('[data-testid="bundle-item-round-state"]'), null);
 });
 
 test('a round withdrawn while still FUTURE reads as missing, not as elapsed', () => {
@@ -314,7 +347,7 @@ test('an item with NO round chosen draws the course and no date line', () => {
   const d = bundle([item({ roundId: '' })], [entry()]);
   const card = d.querySelector('[data-testid="bundle-item"]');
   assert.equal(card.getAttribute('data-round-state'), 'none');
-  assert.equal(card.querySelector('[data-testid="bundle-item-dates"]'), null);
+  assert.equal(card.querySelector('[data-schedule-card-date]'), null);
   assert.equal(card.querySelector('[data-testid="bundle-item-register"]'), null);
   // The course is resolved, so its title and detail link are still there.
   assert.equal(text(card.querySelector('h4')), COURSE.course_name);
@@ -331,7 +364,7 @@ test('a FULL round is shown but not clickable — the builder’s refusal is hon
   const d = bundle([item()], [entry({ rounds: [full] })]);
   const card = d.querySelector('[data-testid="bundle-item"]');
   assert.equal(card.getAttribute('data-round-state'), 'live', 'a full round is still a LIVE round');
-  assert.notEqual(card.querySelector('[data-testid="bundle-item-dates"]'), null, 'it must still be shown');
+  assert.notEqual(card.querySelector('[data-schedule-card-date]'), null, 'it must still be shown');
   assert.equal(card.querySelector('[data-testid="bundle-item-register"]'), null, 'a sold-out round was linkable');
 });
 
@@ -467,6 +500,14 @@ const OPEN_B = { _id: 'rb', dates: ['2030-11-05'], status: 'open', type: 'online
 const FULL_C = { _id: 'rc', dates: ['2030-12-01'], status: 'full', type: 'online' };
 const CLOSED_D = { _id: 'rd', dates: ['2030-12-20'], status: 'closed', type: 'online' };
 const STARTED_E = { _id: 're', dates: ['2020-01-05'], status: 'open', type: 'online' };
+/**
+ * A round that CROSSES A MONTH, so `formatRoundDays` has to print both months
+ * and the label is far longer than any single-month one. The shared chip width
+ * is derived from the longest label in a bundle, and this is the fixture that
+ * makes "longest" mean something — without a label of a different length, the
+ * width test could not tell a real maximum from a constant.
+ */
+const LONG_E = { _id: 'rlong', dates: ['2030-12-30', '2030-12-31', '2031-01-02'], status: 'open', type: 'online' };
 
 const multi = (rounds, live, extra = {}, style) =>
   doc(
@@ -483,56 +524,468 @@ test('ALL offered rounds are listed, not just the first', () => {
   assert.equal(d.querySelectorAll('[data-testid="bundle-round-box"]').length, 3);
 });
 
-test('a non-pickable round stays VISIBLE, faded, and says why', () => {
-  // Removing it would make the card shorter the moment a round filled — the
-  // same silently-shrinking failure chooseRounds already refuses.
+/**
+ * The four Thai words a round used to be refused with ON THIS CARD. They are
+ * still the wizard's words — `PICK_REASON_TEXT` is one table — so the list is
+ * written out here rather than imported: if the table gains a fifth word, this
+ * guard should keep testing the four it was written about and a human should
+ * decide about the fifth, which an import would quietly skip.
+ */
+const REFUSAL_WORDS = ['เต็ม', 'ปิดรับ', 'เริ่มแล้ว', 'หมดเวลาเลือก'];
+
+test('a non-pickable round stays VISIBLE, and is greyed rather than worded', () => {
+  /**
+   * Removing it would make the card shorter the moment a round filled — the
+   * same silently-shrinking failure chooseRounds already refuses.
+   *
+   * WHAT CHANGED: it used to be `opacity-60` plus a Thai reason word under
+   * the date. The word is gone from the public card — a greyed chip beside a
+   * coloured one already says "not this one" — and the fading is now the
+   * shared chip's `muted` tone rather than a blanket opacity.
+   */
   const d = multi([{ id: 'ra' }, { id: 'rc' }, { id: 'rd' }, { id: 're' }],
     [OPEN_A, FULL_C, CLOSED_D, STARTED_E]);
   const boxes = [...d.querySelectorAll('[data-testid="bundle-round-box"]')];
   assert.equal(boxes.length, 4, 'nothing is dropped');
 
   const by = Object.fromEntries(boxes.map((b) => [b.getAttribute('data-reason') ?? 'ok', b]));
+
+  // The pickable one takes the NORMAL chip colours.
   assert.equal(boxes[0].getAttribute('data-pickable'), 'yes');
-  assert.equal(boxes[0].className.includes('opacity-60'), false);
+  assert.equal(
+    boxes[0].querySelector('[data-schedule-card]').getAttribute('data-tone'),
+    'scoped',
+    'a pickable round is not drawn in the normal tone',
+  );
 
   for (const [reason, word] of [['full', 'เต็ม'], ['closed', 'ปิดรับ'], ['started', 'เริ่มแล้ว']]) {
     const box = by[reason];
     assert.notEqual(box, null, `no box reported ${reason}`);
     assert.equal(box.getAttribute('data-pickable'), 'no');
-    assert.ok(box.className.includes('opacity-60'), `${reason} is not faded`);
-    assert.match(text(box.querySelector('[data-testid="bundle-round-unpickable"]')), new RegExp(word));
+
+    // GREYED — asserted through the shared chip's own variant marker, not
+    // through a colour class a look-alike could copy.
+    const chip = box.querySelector('[data-schedule-card]');
+    assert.notEqual(chip, null, `${reason} is not drawn by the shared chip`);
+    assert.equal(chip.getAttribute('data-tone'), 'muted', `${reason} is not greyed`);
+
+    // THE STATUS IS STILL THERE, FOR A SCREEN READER. Greying is a colour,
+    // and WCAG 1.4.1 does not let colour be the only carrier.
+    const sr = box.querySelector('.sr-only');
+    assert.notEqual(sr, null, `${reason} conveys its state by colour alone`);
+    assert.match(text(sr), new RegExp(word));
   }
 });
 
-test('a round past its pick deadline says หมดเวลาเลือก', () => {
+test('no refusal word is VISIBLE anywhere on the card', () => {
+  /**
+   * The companion to the test above, and the half it cannot make: that one
+   * proves the word is in the `sr-only` node, this one proves it is nowhere
+   * ELSE — not under the date, not as a per-tile badge, not in a pill. The
+   * card text is read with every `.sr-only` subtree removed first, which is
+   * what "visible" means here.
+   */
+  const d = multi([{ id: 'ra' }, { id: 'rc' }, { id: 'rd' }, { id: 're' }],
+    [OPEN_A, FULL_C, CLOSED_D, STARTED_E]);
+  const card = d.querySelector('[data-testid="bundle-item"]');
+  for (const el of [...card.querySelectorAll('.sr-only')]) el.remove();
+  const visible = text(card);
+
+  for (const word of REFUSAL_WORDS) {
+    assert.equal(
+      visible.includes(word),
+      false,
+      `the card still shows the refusal word ${word}: ${visible}`,
+    );
+  }
+});
+
+test('a bundle chip draws NO dot at all', () => {
+  /**
+   * It had a corner dot, which overlapped a wrapped date; then an inline one
+   * (3b74d7a6), which did not overlap and went on costing width — a dot plus
+   * its gap — on the one surface with none to spare.
+   *
+   * The dot was never carrying information HERE. On a course card it names
+   * the delivery type against the Classroom/Hybrid legend printed directly
+   * above the strip; a bundle tile has no legend, and the chip's BORDER is
+   * already that same colour. So it is dropped rather than squeezed in, and
+   * the width goes to the date.
+   */
+  const d = multi([{ id: 'ra' }, { id: 'rc' }], [OPEN_A, FULL_C]);
+  const chips = [...d.querySelectorAll('[data-schedule-card]')];
+  assert.equal(chips.length, 2, 'the chips did not render');
+
+  for (const chip of chips) {
+    assert.equal(chip.getAttribute('data-dot'), 'none', 'a bundle chip still declares a dot');
+    // Neither of the two shapes a dot has ever taken in this component.
+    assert.equal(
+      chip.querySelector('.absolute'),
+      null,
+      'the out-of-flow corner dot is still in the markup',
+    );
+    const date = chip.querySelector('[data-schedule-card-date]');
+    assert.notEqual(date, null, 'the chip has no date element');
+    assert.equal(
+      date.firstElementChild,
+      null,
+      'the date element still leads with an inline dot',
+    );
+    // The date is the chip’s only visible content — a bare text node now,
+    // not a flex row built around a dot.
+    assert.equal(/flex items-start/.test(date.getAttribute('class') ?? ''), false);
+
+    // The colour the dot used to carry is still on the border.
+    assert.match(chip.getAttribute('style') ?? '', /border-color/);
+  }
+});
+
+test('CONTROL: the corner dot IS what the component draws by default', () => {
+  /**
+   * Every assertion above is "no dot". They would all pass against a chip
+   * that never had one, a renamed marker or a dead selector. So: the same
+   * component, same date, default props, must produce exactly the
+   * absolutely positioned dot the bundle is asserting the absence of.
+   */
+  const html = renderToStaticMarkup(createElement(ScheduleCard, { dateLabel: '1 ม.ค.' }));
+  assert.match(html, /data-dot="corner"/);
+  assert.match(html, /class="absolute left-1 top-1 h-2\.5 w-2\.5 rounded-full"/);
+});
+
+test('the chips sit in a grid of ONE shared track, not one width each', () => {
+  /**
+   * `w-max` per chip sized each to its own date, so a row of tiles came out
+   * ragged: `12-13 พ.ย. 69` beside `8-9 ธ.ค. 69` beside `27-28 ม.ค. 70`.
+   *
+   * The chips now fill a FIXED grid track whose width the whole bundle
+   * shares. `minmax(0,…)` rather than the bare variable is the narrow-tile
+   * safety — a fixed track wider than its container overflows it, while this
+   * one shrinks and the date wraps. `auto-fill` with no `1fr` is what stops
+   * a single chip stretching across the tile.
+   */
+  const one = multi([{ id: 'ra' }], [OPEN_A]);
+  const list = one.querySelector('[data-testid="bundle-round-list"]');
+  const row = list.lastElementChild;
+  const rowCls = row.getAttribute('class');
+  assert.match(
+    rowCls,
+    /grid-cols-\[repeat\(auto-fill,minmax\(0,var\(--bundle-chip-w\)\)\)\]/,
+    `the chips are not in the shared-width track: ${rowCls}`,
+  );
+  // Not the two-column grid this replaced, and not a `1fr` track either —
+  // both of those stretch a lone chip across the whole tile.
+  assert.equal(/grid-cols-2/.test(rowCls), false, 'the two-column grid is back');
+  assert.equal(/1fr/.test(rowCls), false, 'a 1fr track would stretch a single chip');
+
+  // EVERY chip fills its track and is still capped at the tile.
+  for (const d of [one, multi([{ id: 'ra' }, { id: 'rb' }, { id: 'rc' }], [OPEN_A, OPEN_B, FULL_C])]) {
+    const boxes = [...d.querySelectorAll('[data-testid="bundle-round-box"]')];
+    assert.ok(boxes.length > 0, 'no chips rendered');
+    for (const b of boxes) {
+      const cls = b.getAttribute('class') ?? '';
+      assert.match(cls, /\bw-full\b/, `a chip does not fill its track: ${cls}`);
+      assert.match(cls, /\bmax-w-full\b/, `a chip is not capped at the tile: ${cls}`);
+      assert.equal(/\bw-max\b/.test(cls), false, `a chip still sizes to its own date: ${cls}`);
+
+      /**
+       * AND NO `h-full` ON THE CHIP ITSELF. It is right for the course card,
+       * whose chips sit in grid cells of definite height, and wrong here:
+       * measured on a two-round tile at 207px, the percentage made both chips
+       * 76.8px — the height of the whole two-line row — beside 34.4px chips on
+       * every single-round tile. `content-start`, `items-start` and `shrink-0`
+       * were each tried on the row and each measured exactly the same 76.8;
+       * setting `height: auto` on the chip returned it to 34.4. So the class
+       * is the cause, and `fillHeight={false}` is how this caller drops it.
+       */
+      const chipCls = b.querySelector('[data-schedule-card]').getAttribute('class') ?? '';
+      assert.equal(
+        /\bh-full\b/.test(chipCls),
+        false,
+        `the chip takes its height from the row again: ${chipCls}`,
+      );
+    }
+  }
+});
+
+test('CONTROL: h-full IS what the component emits by default', () => {
+  /**
+   * The assertion above is an absence, and would pass against a renamed class
+   * or a chip that never had one. The course card still needs `h-full` — its
+   * grid cells rely on it — so the default must still carry it, in the same
+   * position in the string it has always occupied.
+   */
+  const html = renderToStaticMarkup(createElement(ScheduleCard, { dateLabel: '1 ม.ค.' }));
+  assert.match(html, /class="relative flex h-full flex-col/, 'the default chip lost h-full');
+});
+
+test('every tile heads its chips รอบอบรม, whatever the round count', () => {
+  /**
+   * The heading used to be `offeredRows.length > 1 ? 'รอบที่เลือกได้' :
+   * 'รอบอบรม'`, so a row of tiles labelled the same thing two different ways
+   * depending on how many rounds each course happened to offer — a difference
+   * a reader has to account for before deciding it meant nothing.
+   *
+   * Asserted across a ONE-round and a THREE-round course IN THE SAME CARD,
+   * which is the shape that made it visible, rather than across two renders
+   * where the two labels would never be seen together.
+   */
+  const d = doc(
+    {
+      name: 'B',
+      items: [
+        { id: 'i1', courseId: 'A', rounds: [{ id: 'ra' }] },
+        { id: 'i2', courseId: 'B', rounds: [{ id: 'rb' }, { id: 'rc' }, { id: 'rd' }] },
+      ],
+    },
+    [
+      { id: 'i1', courseId: 'A', course: COURSE, rounds: [OPEN_A] },
+      { id: 'i2', courseId: 'B', course: COURSE, rounds: [OPEN_B, FULL_C, CLOSED_D] },
+    ],
+  );
+
+  const lists = [...d.querySelectorAll('[data-testid="bundle-round-list"]')];
+  assert.equal(lists.length, 2, 'both tiles must draw a rounds list');
+  // One round on the first tile, three on the second — the case that used to
+  // produce two different headings.
+  assert.deepEqual(
+    lists.map((l) => l.querySelectorAll('[data-testid="bundle-round-box"]').length),
+    [1, 3],
+    'the fixture no longer contrasts a single round with several',
+  );
+  assert.deepEqual(
+    lists.map((l) => text(l.firstElementChild)),
+    ['รอบอบรม', 'รอบอบรม'],
+    'the tiles head their rounds differently',
+  );
+  // And the plural wording is gone from the card entirely.
+  assert.equal(
+    text(d.body).includes('รอบที่เลือกได้'),
+    false,
+    'the count-dependent heading is still rendered somewhere',
+  );
+});
+
+test('the shared width is set ONCE, on the list every tile descends from', () => {
+  /**
+   * A tile only knows its own rounds, so the width cannot be decided inside
+   * one. It is computed from the longest label across the whole section and
+   * set as an inline custom property on the items list — which is also why
+   * it is a VARIABLE and not a Tailwind arbitrary value: the value is data,
+   * and an interpolated arbitrary value compiles to no rule at all.
+   */
+  const d = multi([{ id: 'ra' }, { id: 'rb' }], [OPEN_A, OPEN_B]);
+  const ul = d.querySelector('[data-testid="bundle-items"]');
+  const style = ul.getAttribute('style') ?? '';
+  assert.match(style, /--bundle-chip-w:\s*[\d.]+rem/, `no shared width on the list: ${style}`);
+
+  // The chips themselves carry NO width of their own — only the track does.
+  for (const b of d.querySelectorAll('[data-testid="bundle-round-box"]')) {
+    const cls = b.getAttribute('class') ?? '';
+    assert.equal(/w-\[/.test(cls), false, `a chip hard-codes a width: ${cls}`);
+  }
+});
+
+test('the shared width follows the LONGEST label in the bundle', () => {
+  /**
+   * The point of the property: a bundle whose longest date is longer must
+   * get a wider track, or the long one wraps while the others sit in space.
+   * Asserted as a COMPARISON between two bundles rather than against a
+   * magic number, so the per-character factor can be retuned against the
+   * font without this test having to be rewritten.
+   */
+  const widthOf = (d) => {
+    const m = /--bundle-chip-w:\s*([\d.]+)rem/.exec(
+      d.querySelector('[data-testid="bundle-items"]').getAttribute('style') ?? '',
+    );
+    assert.notEqual(m, null, 'no shared width was written');
+    return Number(m[1]);
+  };
+
+  const short = widthOf(multi([{ id: 'ra' }], [OPEN_A]));
+  // LONG_E runs across two months, so its label is the longest here.
+  const long = widthOf(multi([{ id: 'rlong' }], [LONG_E]));
+  assert.ok(long > short, `a longer label did not widen the track: ${long} vs ${short}`);
+
+  // And a bundle holding BOTH takes the longer of the two, not the first.
+  const both = widthOf(multi([{ id: 'ra' }, { id: 'rlong' }], [OPEN_A, LONG_E]));
+  assert.equal(both, long, 'the shared width is not the longest label in the bundle');
+});
+
+test('CONTROL: no rounds, no width — the property is not written for nothing', () => {
+  const d = bundle([item({ roundId: undefined, rounds: [] })], [entry({ rounds: [] })]);
+  const ul = d.querySelector('[data-testid="bundle-items"]');
+  assert.notEqual(ul, null, 'the list did not render at all');
+  assert.equal(
+    /--bundle-chip-w/.test(ul.getAttribute('style') ?? ''),
+    false,
+    'a width was written for a bundle with no dated round',
+  );
+});
+
+test('a closed chip fades as a WHOLE — fill, border, dot and ink together', () => {
+  /**
+   * `muted` used to grey the ink, border and dot to `--text-secondary` and
+   * leave the fill transparent, which read as a chip drawn in dark slate: a
+   * closed round looked EMPHASISED beside an open one. It now takes a pale
+   * fill as well.
+   *
+   * NOT `opacity`, and that is asserted rather than assumed. Fading the
+   * element scales the ink's contrast against whatever is behind it by an
+   * amount that depends on the surface — the one way a faded state drifts
+   * under AA with nothing on screen to say so. The three
+   * `--round-chip-muted-*` tokens carry measured values instead.
+   */
+  const d = multi([{ id: 'ra' }, { id: 'rc' }], [OPEN_A, FULL_C]);
+  const [open, closed] = [...d.querySelectorAll('[data-schedule-card]')];
+
+  assert.equal(closed.getAttribute('data-tone'), 'muted');
+  const cls = closed.getAttribute('class');
+  assert.match(cls, /bg-\[var\(--round-chip-muted-bg\)\]/, 'the closed chip has no faded fill');
+  assert.match(
+    closed.querySelector('[data-schedule-card-date]').getAttribute('class'),
+    /text-\[var\(--round-chip-muted-ink\)\]/,
+    'the closed date is not using the faded ink',
+  );
+  // The border is an inline style from the same token. There is no dot to
+  // check any more — a bundle chip draws none (see the no-dot test), so the
+  // border is the only thing carrying the colour, which is exactly why
+  // dropping the dot cost the chip no information.
+  assert.match(closed.getAttribute('style') ?? '', /var\(--round-chip-muted-border\)/);
+  assert.equal(
+    closed.querySelector('[data-schedule-card-date] span'),
+    null,
+    'the chip grew a dot back inside its date',
+  );
+
+  // NO blanket opacity anywhere on the chip.
+  assert.equal(/opacity-/.test(cls), false, `the chip fades with opacity: ${cls}`);
+  assert.equal(/opacity/.test(closed.getAttribute('style') ?? ''), false, 'inline opacity on the chip');
+
+  // The status is still there for a screen reader.
+  assert.match(text(closed.querySelector('.sr-only')), /เต็ม/);
+
+  // THE PICKABLE CHIP IS UNTOUCHED: no fill, no muted ink, and its border is
+  // still the delivery-type colour rather than a token.
+  const openCls = open.getAttribute('class');
+  assert.equal(open.getAttribute('data-tone'), 'scoped');
+  assert.equal(/round-chip-muted/.test(openCls), false, 'the open chip took the faded fill');
+  assert.equal(
+    /round-chip-muted/.test(open.getAttribute('style') ?? ''),
+    false,
+    'the open chip took the faded border',
+  );
+  assert.match(open.getAttribute('style') ?? '', /border-color:\s*#/, 'the open chip lost its type colour');
+});
+
+test('no chip offers ลงทะเบียน — the bundle button is the only way in', () => {
+  /**
+   * ScheduleCard draws a green `ลงทะเบียน` pill for an open round, because on a
+   * course card that is exactly the next thing to do. Here it would be false
+   * twice over: a bundle is bought as a package through its own button, and a
+   * register pill per round would say each round is separately bookable at its
+   * own price — the same competing cheaper-looking exit the per-course
+   * ลงทะเบียน button was removed for.
+   *
+   * Suppressed by passing NO status, which `resolveScheduleBadge` answers with
+   * null. Asserted on an all-OPEN item, which is the only state that would
+   * produce the pill.
+   */
+  const d = multi([{ id: 'ra' }, { id: 'rb' }], [OPEN_A, OPEN_B]);
+  const card = d.querySelector('[data-testid="bundle-item"]');
+  assert.equal(d.querySelectorAll('[data-schedule-card]').length, 2, 'the chips did not render');
+  assert.equal(
+    text(card).includes('ลงทะเบียน'),
+    false,
+    `a chip offers registration: ${text(card)}`,
+  );
+  // And no status pill of ANY wording — the slot itself is empty.
+  assert.equal(text(card).includes('เปิดรับ'), false, 'a status pill came back');
+});
+
+test('CONTROL: ScheduleCard DOES draw ลงทะเบียน when a status is passed', () => {
+  /**
+   * Without this the test above passes against a chip that never had the pill
+   * to begin with — a renamed component, a broken import, a dead selector. The
+   * pill must be demonstrably reachable from the same component, so that its
+   * absence in the bundle is a decision this card made and not an accident.
+   */
+  const html = renderToStaticMarkup(
+    createElement(ScheduleCard, { dateLabel: '1 ม.ค.', status: 'open' }),
+  );
+  assert.match(html, /ลงทะเบียน/, 'ScheduleCard no longer draws the pill at all');
+});
+
+test('CONTROL: the visible-text probe would SEE a refusal word if one were shown', () => {
+  /**
+   * Without this, the guard above passes against a card that renders nothing
+   * at all, a broken selector or a stripped-too-hard probe. Strip only the
+   * chip's `sr-only` nodes from a FULL card and the word must come back.
+   */
+  const d = multi([{ id: 'rc' }], [FULL_C]);
+  const card = d.querySelector('[data-testid="bundle-item"]');
+  assert.match(text(card), /เต็ม/, 'the word is not even in the sr-only node');
+  for (const el of [...card.querySelectorAll('.sr-only')]) el.remove();
+  assert.equal(text(card).includes('เต็ม'), false);
+  // …and the chip survived the strip, so the probe did not empty the card.
+  assert.notEqual(
+    card.querySelector('[data-schedule-card-date]'),
+    null,
+    'the strip removed the chip itself, not just its sr-only node',
+  );
+});
+
+test('a round past its pick deadline is greyed, and says so only to a screen reader', () => {
   const d = multi([{ id: 'ra', pickUntil: '2020-01-01' }], [OPEN_A]);
   const box = d.querySelector('[data-testid="bundle-round-box"]');
   assert.equal(box.getAttribute('data-reason'), 'deadline_passed');
-  assert.match(text(box.querySelector('[data-testid="bundle-round-unpickable"]')), /หมดเวลาเลือก/);
+  assert.equal(box.querySelector('[data-schedule-card]').getAttribute('data-tone'), 'muted');
+  assert.match(text(box.querySelector('.sr-only')), /หมดเวลาเลือก/);
 });
 
-test('a pickable round shows its EFFECTIVE deadline in Thai', () => {
-  // No pickUntil: the default is the day before the round starts, 2030-08-19.
-  const d = multi([{ id: 'ra' }], [OPEN_A]);
-  const line = d.querySelector('[data-testid="bundle-round-deadline"]');
-  assert.notEqual(line, null, 'a pickable round shows no deadline');
-  assert.match(text(line), /เลือกได้ถึง/);
-  assert.match(text(line), /19 ส\.ค\. 2573/);
+test('NO round shows a pick deadline — the เลือกได้ถึง line is gone', () => {
+  /**
+   * It read `เลือกได้ถึง 19 ส.ค. 2573` under every pickable round: the last
+   * day the round can be CHOSEN, printed beside the days the training runs.
+   * Two dates per round, one of them about the buying process, on a card
+   * whose job is to let a visitor see whether any date suits them.
+   *
+   * REMOVED FROM THE PUBLIC CARD ONLY. The deadline is still computed by
+   * `roundChoices` and still decides pickability — `deadline_passed` above is
+   * that same computation — and the editor still shows the author the date.
+   * Asserted over BOTH a default deadline and an explicit one, so a later
+   * `pickUntil` branch cannot bring the line back for one of them.
+   */
+  for (const rounds of [[{ id: 'ra' }], [{ id: 'ra', pickUntil: '2030-07-01' }]]) {
+    const d = multi(rounds, [OPEN_A]);
+    assert.equal(
+      d.querySelector('[data-testid="bundle-round-deadline"]'),
+      null,
+      'the deadline line is back',
+    );
+    // `text(d.body)`, NOT `text(d)` — a Document has no textContent, so the
+    // document form reads null and `.includes` throws instead of asserting.
+    assert.equal(text(d.body).includes('เลือกได้ถึง'), false, 'the deadline wording is back');
+    // The dates it was printed beside are untouched.
+    assert.match(text(d.querySelector('[data-schedule-card-date]')), /20\s*-\s*21 ส\.ค\./);
+  }
 });
 
-test('an EARLIER pickUntil is the date shown, and a later one is clamped away', () => {
-  const early = multi([{ id: 'ra', pickUntil: '2030-07-01' }], [OPEN_A]);
-  assert.match(text(early.querySelector('[data-testid="bundle-round-deadline"]')), /1 ก\.ค\. 2573/);
-
-  // A date after the round starts cannot extend it — the card shows the cap.
-  const late = multi([{ id: 'ra', pickUntil: '2031-01-01' }], [OPEN_A]);
-  assert.match(text(late.querySelector('[data-testid="bundle-round-deadline"]')), /19 ส\.ค\. 2573/);
-});
-
-test('a non-pickable round shows NO deadline line — the reason replaces it', () => {
-  const d = multi([{ id: 'rc' }], [FULL_C]);
-  assert.equal(d.querySelector('[data-testid="bundle-round-deadline"]'), null);
-});
+/**
+ * ── TWO DEADLINE TESTS RETIRED HERE, AND WHERE THEIR SUBJECT LIVES NOW ────
+ * "an EARLIER pickUntil is the date shown, and a later one is clamped away"
+ * and "a non-pickable round shows NO deadline line" both read the
+ * `bundle-round-deadline` element, which the public card no longer renders.
+ *
+ * NEITHER IS A COVERAGE LOSS, and that was checked rather than assumed. The
+ * first was really a test of the CLAMP, asserted through a card that happened
+ * to print the result; the clamp is pinned directly in
+ * test/pure/bundleRoundChoice — "an EARLIER pickUntil wins", "a LATER
+ * pickUntil does NOT extend the round", "a pickUntil EQUAL to the cap is kept
+ * as-is", and "the reported deadline is the EFFECTIVE one, not the stored
+ * one". The second asserted the absence of a line that is now absent for
+ * EVERY round, which "NO round shows a pick deadline" above states once and
+ * for both branches.
+ */
 
 // ── sequential: the order labels and the rule line ─────────────────────────
 
@@ -553,7 +1006,19 @@ test('sequential draws ลำดับที่ N on every tile', () => {
   );
   const labels = [...d.querySelectorAll('[data-testid="bundle-item-order"]')].map((e) => text(e));
   assert.deepEqual(labels, ['ลำดับที่ 1', 'ลำดับที่ 2']);
-  assert.match(text(d.querySelector('[data-testid="bundle-sequential-note"]')), /เลือกรอบตามลำดับ/);
+
+  /**
+   * AND NO RULE LINE. `เลือกรอบตามลำดับ — รอบของหลักสูตรถัดไปต้องเริ่มหลัง
+   * หลักสูตรก่อนหน้าจบ` used to sit under the list. It was true and it was
+   * early: this card describes what is IN the package, and the constraint
+   * only bites once someone is choosing dates.
+   *
+   * The wizard still states it — above its controls AND per disabled option
+   * — so the rule is read where it applies. Asserted here as BOTH the
+   * element and the wording, because the element could be renamed.
+   */
+  assert.equal(d.querySelector('[data-testid="bundle-sequential-note"]'), null);
+  assert.equal(text(d.body).includes('เลือกรอบตามลำดับ'), false, 'the rule line is back on the card');
 });
 
 test('CONTROL: a NON-sequential bundle draws no order labels and no rule line', () => {
@@ -644,8 +1109,16 @@ test('the rounds list renders in BOTH card styles, with no active dark: colour o
       d.querySelectorAll('[data-testid="bundle-round-box"]').length, 2,
       `the list did not render on ${theme}`,
     );
-    assert.notEqual(d.querySelector('[data-testid="bundle-round-deadline"]'), null);
-    assert.notEqual(d.querySelector('[data-testid="bundle-round-unpickable"]'), null);
+    // BOTH chips are the shared component, and the pair of tones is intact —
+    // one pickable, one greyed — on each style.
+    const tones = [...d.querySelectorAll('[data-schedule-card]')].map((c) => c.getAttribute('data-tone'));
+    assert.deepEqual(tones, ['scoped', 'muted'], `the tones are wrong on ${theme}`);
+    // The greyed one still says why, to a screen reader only.
+    assert.match(text(d.querySelector('.sr-only')), /ปิดรับ|เต็ม|เริ่มแล้ว|หมดเวลาเลือก/);
+    // And neither chip draws a dot on EITHER style — this is a property of
+    // the bundle chip, not of which card it happens to sit on.
+    const dots = [...d.querySelectorAll('[data-schedule-card]')].map((c) => c.getAttribute('data-dot'));
+    assert.deepEqual(dots, ['none', 'none'], `a chip drew a dot on ${theme}`);
   }
 
   // On Navy the tile is a LIGHT surface, so no dark: utility may remain inside
