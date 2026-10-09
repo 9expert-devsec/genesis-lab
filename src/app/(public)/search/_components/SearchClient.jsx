@@ -5,6 +5,9 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { resolveScheduleBadge } from '@/lib/scheduleStatus';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { escapeRegex } from '@/lib/searchTerm';
 import {
   Search,
   X,
@@ -120,8 +123,11 @@ const priceLabel = (price) => coursePriceLabel(price, { suffix: '.-' });
 // ── Highlight matched substring with brand lime ───────────────────
 function highlightText(text, term) {
   if (!term || !text) return text;
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const parts = String(text).split(new RegExp(`(${escaped})`, 'gi'));
+  // Shared helper, replacing a private copy — see lib/searchTerm.js. `escapeRegex`
+  // rather than `searchTermPattern` because this is a HIGHLIGHTER, not a query:
+  // it must mark the whole of whatever the matcher already matched, so capping
+  // the term here would leave the tail of a long match unhighlighted.
+  const parts = String(text).split(new RegExp(`(${escapeRegex(term)})`, 'gi'));
   return parts.map((part, i) =>
     part.toLowerCase() === term.toLowerCase() ? (
       <mark

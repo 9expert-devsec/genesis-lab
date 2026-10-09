@@ -28,6 +28,9 @@ import { requireAdmin } from '@/lib/actions/auth';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import { CONTENT_FIELDS, contentChanged } from '@/lib/articles/contentChanged';
 import { isUnsetKeyword, normalizeForMatch, parseFocusKeywords } from '@/lib/seo/articleSeoChecks';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { searchTermPattern } from '@/lib/searchTerm';
 
 const ADMIN_PATH  = '/admin/articles';
 const PUBLIC_PATH = '/articles';
@@ -224,10 +227,26 @@ export async function getArticles({
   // in the commit before this one — the measurement lives beside it).
   if (skill)       filter.skills      = String(skill);
   if (articleType) filter.articleType = String(articleType);
-  if (search) {
+  /**
+   * ESCAPED, AND THIS IS THE SITE THAT WAS CRASHING PRODUCTION.
+   *
+   * `/articles?q=(` returned HTTP 500 and the เกิดข้อผิดพลาด page: `$regex`
+   * compiles a STRING as a pattern, `(` is an unterminated group, and the
+   * throw happens here while the query is being built — nowhere downstream can
+   * recover a data read that never ran. Serves BOTH /articles (public) and
+   * /admin/articles, so one line was two broken screens.
+   *
+   * `searchTermPattern` trims, caps the length and escapes; the clause itself
+   * — unanchored substring, case-insensitive, title OR excerpt — is unchanged,
+   * so ordinary text and Thai match exactly as before. A term that escapes to
+   * nothing leaves `$or` unset, so the page renders its normal empty state
+   * rather than an error.
+   */
+  const term = searchTermPattern(search);
+  if (term) {
     filter.$or = [
-      { title:   { $regex: search, $options: 'i' } },
-      { excerpt: { $regex: search, $options: 'i' } },
+      { title:   { $regex: term, $options: 'i' } },
+      { excerpt: { $regex: term, $options: 'i' } },
     ];
   }
 
@@ -342,8 +361,13 @@ export async function searchArticles(q) {
   const query = String(q ?? '').trim();
   if (query.length < 2) return [];
   await dbConnect();
+  // The two-character floor above is read off the RAW term, before escaping —
+  // `((` is two characters the admin typed and should search for two literal
+  // brackets, not be read as a four-character pattern that clears the floor.
+  const term = searchTermPattern(query);
+  if (!term) return [];
   const docs = await Article.find({
-    title: { $regex: query, $options: 'i' },
+    title: { $regex: term, $options: 'i' },
   })
     .select('_id title slug')
     .limit(20)

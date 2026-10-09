@@ -22,6 +22,9 @@ import { dbConnect } from '@/lib/db/connect';
 import RedirectRule from '@/models/RedirectRule';
 import NotFoundHit from '@/models/NotFoundHit';
 import { validateRule, normaliseHost, normalisePath } from '@/lib/redirects/redirectRules';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { searchTermPattern } from '@/lib/searchTerm';
 
 const ADMIN_PATH = '/admin/redirects';
 
@@ -73,14 +76,16 @@ export async function listRedirectRules({ q = '', host = '', page = 1 } = {}) {
 
   const filter = {};
   if (host) filter.host = normaliseHost(host);
-  if (q) {
-    const escaped = String(q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (escaped) {
-      filter.$or = [
-        { source: { $regex: escaped, $options: 'i' } },
-        { destination: { $regex: escaped, $options: 'i' } },
-      ];
-    }
+  // Was a private copy of the escape expression; now the shared helper, which
+  // also caps the length — see lib/searchTerm.js. Behaviour unchanged for this
+  // screen: the same characters were already escaped here, and `/` and `-` are
+  // the only additions, both of which escape to themselves.
+  const escaped = searchTermPattern(q);
+  if (escaped) {
+    filter.$or = [
+      { source: { $regex: escaped, $options: 'i' } },
+      { destination: { $regex: escaped, $options: 'i' } },
+    ];
   }
 
   const current = Math.max(1, Number(page) || 1);
@@ -209,10 +214,12 @@ export async function listNotFoundHits({ q = '', page = 1, includeResolved = fal
 
   const filter = {};
   if (!includeResolved) filter.resolvedAt = null;
-  if (q) {
-    const escaped = String(q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (escaped) filter.path = { $regex: escaped, $options: 'i' };
-  }
+  // Same swap as listRedirectRules above. NOTE the cap bites hardest here:
+  // `not_found_hits.path` runs to 512 characters, so a full paste of the
+  // longest stored path searches on its first 200 — still a match, because the
+  // clause is unanchored. Stated at MAX_SEARCH_TERM too.
+  const escaped = searchTermPattern(q);
+  if (escaped) filter.path = { $regex: escaped, $options: 'i' };
 
   const current = Math.max(1, Number(page) || 1);
   const [rows, total] = await Promise.all([

@@ -3,6 +3,9 @@ import mongoose from 'mongoose';
 import { dbConnect } from '@/lib/db/connect';
 import Article from '@/models/Article';
 import ArticleView from '@/models/ArticleView';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Replaces this module's private escapeRegex copy.
+import { searchTermPattern } from '@/lib/searchTerm';
 
 /**
  * /admin/article-views — the reads. READ-ONLY: find / distinct / aggregate
@@ -18,7 +21,6 @@ import ArticleView from '@/models/ArticleView';
 /** The fields the dashboard reads off an article. */
 export const ARTICLE_VIEWS_FIELDS = '_id title slug skills programs active publishedAt contentUpdatedAt';
 
-const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const oid = (id) => new mongoose.Types.ObjectId(String(id));
 
 /** The earliest counted day ('YYYY-MM-DD'), or null when nothing was ever counted. */
@@ -39,8 +41,12 @@ export async function listDashboardArticles({ q = '', program = '', status = 'ac
   if (status === 'active') filter.active = true;
   else if (status === 'hidden') filter.active = false;
   if (program) filter.programs = program;
-  if (q) {
-    const re = new RegExp(escapeRegex(q), 'i');
+  // The private `escapeRegex` this file used to define was the ONLY correct
+  // copy in the repo and is now the shared helper, which also caps the length —
+  // see lib/searchTerm.js. Matching is unchanged.
+  const term = searchTermPattern(q);
+  if (term) {
+    const re = new RegExp(term, 'i');
     filter.$or = [{ title: re }, { slug: re }];
   }
   return Article.find(filter).select(ARTICLE_VIEWS_FIELDS).lean();

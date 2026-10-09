@@ -27,6 +27,9 @@ import { planFormerAliases } from '@/lib/courses/aliasHistory';
 import { sanitiseTopicRichForWrite } from '@/lib/courses/topicEditorSave';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { searchTermPattern } from '@/lib/searchTerm';
 
 const ADMIN_PATH = '/admin/courses';
 
@@ -71,7 +74,10 @@ export async function getCourseExtensionByFormerCode(code) {
   const wanted = String(code ?? '').trim();
   if (!wanted) return null;
   await dbConnect();
-  const escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Shared helper now, replacing a private copy of the escape expression — see
+  // lib/searchTerm.js. Same characters escaped as before, plus the length cap;
+  // the anchors stay here because they are this lookup's grammar, not input.
+  const escaped = searchTermPattern(wanted);
   const doc = await CourseExtension.findOne({
     formerCodes: { $elemMatch: { $regex: `^${escaped}$`, $options: 'i' } },
   }).lean();
@@ -94,7 +100,8 @@ export async function findCourseExtensionCodeInsensitive(code) {
   const wanted = String(code ?? '').trim();
   if (!wanted) return null;
   await dbConnect();
-  const escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Same swap as getCourseExtensionByFormerCode above.
+  const escaped = searchTermPattern(wanted);
   const doc = await CourseExtension.findOne({
     courseId: { $regex: `^${escaped}$`, $options: 'i' },
   })
