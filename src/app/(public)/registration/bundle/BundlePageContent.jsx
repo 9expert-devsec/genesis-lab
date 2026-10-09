@@ -15,6 +15,11 @@ import {
 import { chooseItemRound } from "@/lib/pageBuilder/chosenRounds";
 import { formatRoundDays } from "@/lib/schedule/roundDateLabel";
 import { siteCurrentYear, siteTodayKey } from "@/lib/articlePublishTime";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The one assembler of live round status for a bundle,
+// shared with the registration route; it applies the admin override layer the
+// bundle path was missing entirely.
+import { bundleLiveStatusById } from "@/lib/registration/bundleLiveRounds";
 import { BundleWizard } from "@/components/registration/BundleWizard";
 import { publicPageHref } from "@/lib/pages/promotionMode";
 // The summary block. `trainingTypeLabel`, `formatPrice` and `discountPercent`
@@ -91,9 +96,28 @@ export async function BundlePageContent({ searchParams, step }) {
   const cheap = resolveBundleRequest({ page: doc, sectionId });
   if (!cheap.ok) return renderRefusal(cheap.reason);
 
-  const resolvedMap = await resolveSectionData([cheap.section]);
+  /**
+   * ── `revalidate: 0` — THE OTHER HALF OF READING LIVE ───────────────────
+   * `export const dynamic = 'force-dynamic'` on the step pages stops NEXT
+   * caching the rendered HTML. It does nothing about the schedules FETCH,
+   * which carries its own 1800s window inside `listSchedulesByCourse` — so
+   * without this the wizard would re-render on every request and keep handing
+   * out the same half-hour-old round list.
+   *
+   * Scoped to the SCHEDULES fetch: courses, instructors and filters keep their
+   * normal windows, because their staleness costs a title or a cover rather
+   * than a pick the server will refuse.
+   */
+  const resolvedMap = await resolveSectionData([cheap.section], { revalidate: 0 });
   const resolved = resolvedMap?.[cheap.section.id];
   const todayKey = siteTodayKey();
+
+  /**
+   * The LIVE status of every round this bundle offers, admin overrides applied.
+   * Shared with the registration route so the wizard cannot offer a round the
+   * server will refuse — see bundleLiveRounds.js for why that module exists.
+   */
+  const liveStatusById = await bundleLiveStatusById(resolved);
   const currentYear = siteCurrentYear();
 
   const gate = resolveBundleRequest({
@@ -107,6 +131,23 @@ export async function BundlePageContent({ searchParams, step }) {
   const content = gate.content;
   const items = Array.isArray(content.items) ? content.items : [];
   const entries = Array.isArray(resolved) ? resolved : [];
+
+  /**
+   * itemId → the course name the pick control labels its row with.
+   *
+   * Built here rather than in the client component because the NAME is
+   * resolver data: the browser is handed the stored items, which carry a
+   * course CODE and nothing a customer would recognise. Falls back to the
+   * code inside the component when a course does not resolve — which
+   * resolveBundleRequest has already refused the whole request for, so it
+   * is a belt-and-braces path rather than a reachable one.
+   */
+  const courseTitleByItemId = {};
+  for (const entry of entries) {
+    const id = String(entry?.id ?? '').trim();
+    const title = entry?.course?.course_name ?? entry?.course?.title ?? '';
+    if (id && title) courseTitleByItemId[id] = String(title);
+  }
 
   /**
    * The lines the customer is asked to confirm. Every one of them resolved —
@@ -213,6 +254,18 @@ export async function BundlePageContent({ searchParams, step }) {
         pageId={String(doc._id)}
         sectionId={gate.section.id}
         step={step}
+        /*
+          THE PICK INPUTS. The stored items (not the resolved entries): the
+          pure core reads offered rounds and pickUntil off the DOCUMENT, and
+          takes status from the live map beside it. Passing the resolved
+          entries instead would hand the browser a course object and a
+          cover URL it has no use for.
+        */
+        pickItems={gate.content.items}
+        sequential={gate.content.sequential === true}
+        liveStatusById={liveStatusById}
+        today={todayKey}
+        courseTitleByItemId={courseTitleByItemId}
         basePath={BUNDLE_BASE_PATH}
         summary={
           <BundleSummary

@@ -51,6 +51,11 @@ import {
   hasEarlyBirdBinding,
 } from '@/lib/earlyBird/pageWriteThrough';
 import { resolveBatchPrice } from '@/lib/masterclass/getMasterclass';
+// ADDED beside the statement above rather than folded into it. The corpus reads
+// pages straight out of Mongo with .lean(), so nothing has parsed them and a
+// bundle item may still carry the legacy one-round shape — this is the shared
+// normaliser every other reader uses.
+import { offeredRoundsOf } from '@/lib/pageBuilder/chosenRounds';
 
 /** Every item's URL is on the main site host — the masterclass pages included. */
 export const CORPUS_PUBLIC_ORIGIN = 'https://www.9experttraining.com';
@@ -213,13 +218,38 @@ export function builderPageItems(pages = [], now) {
           ...base,
           title: text(content.name) ?? base.title,
           price: price(content.listPrice, content.netPrice),
-          courses: (content.items ?? []).map((it) =>
-            course({
-              course_code: it?.courseId,
-              schedule_id: it?.roundId,
-              dates:       it?.roundSnapshot?.dates ?? [],
-            })
-          ),
+          /**
+           * ── AN ITEM NOW OFFERS SEVERAL ROUNDS, AND THE AGENT MUST SEE THAT
+           * This read `it.roundId` / `it.roundSnapshot` — the one-round shape.
+           * It takes the FIRST offered round for the `schedule_id`/`dates` the
+           * feed has always carried, so an agent reading an existing bundle
+           * sees exactly what it saw before (all 91 stored items are
+           * single-round, so for today's data nothing moves), and reports the
+           * full list beside it.
+           *
+           * `offered_schedule_ids` rather than replacing `schedule_id` with an
+           * array: the field is part of a published contract the chat agent
+           * already reads, and silently changing its TYPE would break a
+           * consumer that cannot be redeployed with us. Added beside, not
+           * swapped.
+           *
+           * NO STATUS and NO DEADLINE here. Both are live-only questions
+           * (`bundleRoundChoice` answers them from the live row at request
+           * time) and a cached corpus entry stating either would be a stale
+           * answer the agent would repeat as fact.
+           */
+          courses: (content.items ?? []).map((it) => {
+            const offered = offeredRoundsOf(it);
+            const first = offered[0] ?? null;
+            return {
+              ...course({
+                course_code: it?.courseId,
+                schedule_id: first?.id,
+                dates:       first?.snapshot?.dates ?? [],
+              }),
+              offered_schedule_ids: offered.map((r) => str(r?.id)).filter(Boolean),
+            };
+          }),
           bundle: {
             label:             text(content.label),
             list_price:        num(content.listPrice),

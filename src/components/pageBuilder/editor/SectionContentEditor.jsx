@@ -26,8 +26,54 @@ import { CourseIdsPicker, CourseSelectPicker } from "./CoursePicker";
 // ADDED beside the line above rather than folded into it — the standing rule in
 // this repo. The bundle's per-item round control; see RoundPicker.jsx for where
 // its options come from and why the Early Bird selects were not extracted.
-import { RoundPicker } from "./RoundPicker";
+/**
+ * ── THE `RoundPicker` COMPONENT NO LONGER HAS A CALLER, AND IS NOT DELETED ─
+ * Its import is removed because it is dead HERE: the bundle's single
+ * `รอบอบรม` select became a list inside the course card, which is the only
+ * place that mounted it. `roundOptionLabel` and `snapshotOf` are still used
+ * and still come from that module — the new list writes exactly what the old
+ * select wrote.
+ *
+ * The component itself is LEFT IN PLACE rather than removed in a build round:
+ * it is a working, tested control for "pick one round of a course", and
+ * `course_schedule`'s manual mode is the obvious next caller. Reported rather
+ * than deleted, so the decision is a deliberate one.
+ */
+import { roundOptionLabel, snapshotOf } from "./RoundPicker";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this directory. The ONE label for an offered round, shared with
+// the wizard and the public card; it reads dates from the live row OR the
+// stored snapshot and never falls back to a raw id.
+import {
+  bundleRoundLabel,
+  BUNDLE_ROUND_STALE_SUFFIX,
+} from "@/lib/pageBuilder/bundleRegistration";
+// The pick-deadline rules. All three come from the pure core so the editor's
+// field and the public page cannot disagree about when a round closes.
+import {
+  effectivePickDeadline,
+  latestAllowedPickUntil,
+  pickUntilTooLate,
+} from "@/lib/pageBuilder/bundleRoundChoice";
+// ADDED beside the statement above rather than folded into it. The chain
+// warning asks the SAME question the public card's auto-close asks.
+import { bundleRegistrable } from "@/lib/pageBuilder/bundleRoundChoice";
+// The one place in this repo that decides what day it is in Asia/Bangkok.
+import { siteTodayKey } from "@/lib/articlePublishTime";
+// Sorting "เรียงตามวันที่" and reading a round's first day — the same helper
+// the deadline rules use, never a local date comparison.
+import { roundFirstDayKey } from "@/lib/schedule/roundHasStarted";
+// The LIVE status word for a round row. Aliases closed -> full on purpose for
+// badge colour; this is display only, and the pick rules read the raw status.
+import { scheduleStatusLabel } from "@/lib/scheduleStatus";
+// The Thai calendar day, for the deadline hint.
+import { formatThaiDate } from "@/lib/promotions/promotionDateLabel";
 import { newSectionId } from "@/lib/pageBuilder/reidSection";
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this directory. The ONE normaliser for a bundle item's offered
+// rounds; see its note in chosenRounds.js for why readers need it as well as
+// the schema's preprocess.
+import { offeredRoundsOf } from "@/lib/pageBuilder/chosenRounds";
 // The ONE derivation of a bundle's percentage and of the inverted-price rule.
 // Imported by this editor AND by the renderer/publishBlockers respectively, so
 // the author's preview and the published page cannot disagree about the first,
@@ -1405,6 +1451,150 @@ export function priceFromInput(raw) {
 /** A price for the input's `value` — `null` must render EMPTY, never "null". */
 const priceToInput = (v) => (typeof v === 'number' ? String(v) : '');
 
+/** The most offered rounds one bundle item may carry. Mirrors the schema cap. */
+const MAX_BUNDLE_ROUNDS = 12;
+
+/**
+ * ── ONE OFFERED ROUND, INSIDE ITS COURSE'S CARD ───────────────────────────
+ *
+ * The date line, the live status, its own pick deadline and a remove button.
+ *
+ * ── THE STATUS SHOWN HERE IS THE LIVE ONE, AND IT IS NOT A SNAPSHOT ──────
+ * Read off the fetched row, never off `round.snapshot` — the snapshot shape
+ * deliberately carries no status, for the reason it states: a frozen 'เปิดรับ'
+ * on a round that has since filled is a lie an author would price against. A
+ * round the fetch no longer returns shows `(รอบเดิม)` and no status at all,
+ * which is the honest answer rather than the last one we saw.
+ */
+function BundleRoundRow({ round, index, rounds, onPatch, onRemove }) {
+  const id = String(round?.id ?? '');
+  const list = Array.isArray(rounds) ? rounds : [];
+  const liveRow = list.find((r) => String(r?._id) === id) ?? null;
+  /**
+   * ── THE DATES COME FROM WHICHEVER SOURCE HAS THEM ────────────────────
+   * This read `liveRow ? roundOptionLabel(liveRow) : id`, which rendered a
+   * raw ObjectId the moment the fetch stopped returning the round — even
+   * though the stored snapshot had the dates all along. MEASURED on the
+   * live document: the round that showed as an id carries
+   * `dates: ['2026-09-24','2026-09-25']`; what it lacked was a live row,
+   * because those days are past and `excludeStartedRounds` drops them from
+   * the fetch.
+   *
+   * `bundleRoundLabel` is shared with the wizard and the card so the three
+   * surfaces cannot name one round three ways.
+   */
+  const { text: label, hasDates } = bundleRoundLabel(round, liveRow);
+  const status = liveRow ? scheduleStatusLabel(liveRow?.status) : null;
+
+  /**
+   * A round the schedule no longer returns CANNOT BE PICKED, whatever its
+   * dates say. `bundleRoundChoice` already treats a missing live row as
+   * `closed`, so this is the editor telling the author the same thing the
+   * applicant's form would — and the point of saying it here is that it is
+   * the author who can replace the round.
+   */
+  const gone = liveRow === null;
+
+  /**
+   * The latest date the author may choose, and the one the page will use when
+   * they choose nothing. BOTH come from `bundleRoundChoice` rather than being
+   * recomputed here, so the field and the page cannot disagree about when a
+   * round closes — which is the whole point of that module being pure.
+   *
+   * `liveRow` is passed so a round whose stored snapshot has gone stale is
+   * still measured against the dates MSDB reports now.
+   */
+  const cap = latestAllowedPickUntil(round, liveRow);
+  const effective = effectivePickDeadline(round, liveRow);
+  const tooLate = pickUntilTooLate(round, liveRow);
+
+  return (
+    <div
+      data-testid="bundle-round-row"
+      className="mb-1 rounded-9e-sm border border-[var(--surface-border)] p-2"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold text-[var(--text-primary)]">
+          {index + 1}. {label}
+        </span>
+        <span className="flex items-center gap-2">
+          {status && (
+            <span data-testid="bundle-round-status" className="text-[11px] text-[var(--text-secondary)]">
+              {status}
+            </span>
+          )}
+          {gone && (
+            <span
+              data-testid="bundle-round-gone"
+              className="text-[11px] font-bold text-amber-700"
+            >
+              {hasDates ? BUNDLE_ROUND_STALE_SUFFIX : 'เลือกไม่ได้'}
+            </span>
+          )}
+          <button
+            type="button"
+            aria-label={`ลบรอบที่ ${index + 1}`}
+            onClick={onRemove}
+            className="shrink-0 rounded-9e-sm border border-[var(--surface-border)] px-2 py-0.5 text-[11px] font-bold text-[var(--text-secondary)] hover:text-red-600"
+          >
+            ลบ
+          </button>
+        </span>
+      </div>
+
+      {/*
+        ── THE PICK DEADLINE, AND WHY THE HINT STATES THE DEFAULT ───────────
+        Empty is the common case and it is NOT "no deadline" — it closes the
+        day before the round starts. An author who reads an empty box as "open
+        for ever" would set nothing and be surprised when the card closes, so
+        the hint says the date the page will actually use.
+
+        The wording matches EarlyBirdBinding's own deadline field
+        ("ถึง 23:59 น. ของวันนั้น"): both are end-of-day Asia/Bangkok, and two
+        date fields in one admin that describe the same boundary differently
+        is how an author comes to believe they differ.
+      */}
+      <Field
+        label="เลือกรอบนี้ได้ถึงวันที่"
+        hint={
+          tooLate
+            ? `ต้องไม่เกิน ${cap} (วันก่อนรอบเริ่ม) — ระบบจะปิดให้เลือกตามวันนั้นอยู่แล้ว`
+            : round?.pickUntil
+              ? `ถึง 23:59 น. ของวันนั้น`
+              : `ว่างไว้ = ปิดเมื่อรอบเริ่ม${effective ? ` (ถึง ${formatThaiDate(effective) ?? effective}, 23:59 น.)` : ''}`
+        }
+      >
+        <span className="flex items-center gap-2">
+          <input
+            type="date"
+            data-testid="bundle-pick-until"
+            className={cn(INPUT_CLASS, tooLate && 'border-red-400')}
+            aria-invalid={tooLate || undefined}
+            max={cap ?? undefined}
+            value={round?.pickUntil ?? ''}
+            onChange={(e) => onPatch({ pickUntil: e.target.value })}
+          />
+          <button
+            type="button"
+            data-testid="bundle-pick-until-clear"
+            disabled={!round?.pickUntil}
+            onClick={() => onPatch({ pickUntil: undefined })}
+            className="shrink-0 rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-[11px] font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ล้าง
+          </button>
+        </span>
+      </Field>
+      {tooLate && (
+        <Warn tone="red">
+          วันที่นี้อยู่หลังวันเริ่มรอบ — ระบบจะปิดให้เลือกก่อนรอบเริ่มอยู่แล้ว
+          แก้เป็น {cap} หรือเว้นว่าง (เผยแพร่ไม่ได้จนกว่าจะแก้)
+        </Warn>
+      )}
+    </div>
+  );
+}
+
 /**
  * ── ONE BUNDLE ITEM'S ROW ─────────────────────────────────────────────────
  *
@@ -1427,7 +1617,7 @@ const priceToInput = (v) => (typeof v === 'number' ? String(v) : '');
  * button, the same aria wording. An author should not meet two different list
  * idioms in one panel.
  */
-function BundleItemRow({ item, index, total, courses, resolved, onPatch, onMove, onRemove }) {
+function BundleItemRow({ item, index, total, courses, resolved, otherCourseIds = [], onPatch, onMove, onRemove }) {
   const courseId = String(item?.courseId ?? '').trim();
   // Tri-state, the same discipline as every other data-backed editor here:
   // `undefined` = the canvas fetch is in flight (never warn), `[]` = it landed
@@ -1435,6 +1625,63 @@ function BundleItemRow({ item, index, total, courses, resolved, onPatch, onMove,
   const rounds = resolved?.rounds;
   const courseMissing = courseId !== '' && resolved !== undefined && !resolved?.course;
   const noRounds = courseId !== '' && Array.isArray(rounds) && rounds.length === 0;
+  // The item's OFFERED rounds, normalised — the canvas can be handed a section
+  // straight from Mongo, where a legacy item still carries `roundId`.
+  const offered = offeredRoundsOf(item);
+  // A card whose course another card already names. Only reachable for data
+  // stored before the refusal existed — the pickers cannot create it.
+  const duplicateCourse = courseId !== '' && otherCourseIds.includes(courseId);
+
+  /** Rounds of THIS course not already offered — what `+ เพิ่มรอบ` may add. */
+  const taken = new Set(offered.map((r) => String(r?.id ?? '')));
+  const addableRounds = (Array.isArray(rounds) ? rounds : []).filter(
+    (row) => !taken.has(String(row?._id)),
+  );
+
+  /** Write the whole list back; every mutation below goes through this. */
+  const setRounds = (next) => onPatch(index, { rounds: next });
+
+  const addRound = (roundId) => {
+    if (!roundId) return;
+    const row = (Array.isArray(rounds) ? rounds : []).find((r) => String(r?._id) === roundId);
+    if (offered.length >= MAX_BUNDLE_ROUNDS) return;
+    // The snapshot is written on PICK, as RoundPicker's own note argues: it
+    // records the round as it was when the author chose it.
+    setRounds([...offered, { id: roundId, ...(row ? { snapshot: snapshotOf(row) } : {}) }]);
+  };
+
+  const removeRound = (ri) => setRounds(offered.filter((_, i) => i !== ri));
+
+  /**
+   * `pickUntil` is REMOVED when cleared rather than stored as ''. The schema
+   * refuses an empty string (the regex wants YYYY-MM-DD) and absent is the
+   * value that means "closes when the round starts" — writing '' would be a
+   * save error for a field the author just emptied.
+   */
+  const patchRound = (ri, patch) =>
+    setRounds(
+      offered.map((r, i) => {
+        if (i !== ri) return r;
+        const next = { ...r, ...patch };
+        if (next.pickUntil === '' || next.pickUntil === undefined) delete next.pickUntil;
+        return next;
+      }),
+    );
+
+  /**
+   * An EXPLICIT action, never automatic. The stored order is what the applicant
+   * sees, and an author who arranged it deliberately must not have it rewritten
+   * by a save. A round with no readable dates sorts last rather than throwing
+   * the list into an arbitrary order.
+   */
+  const sortRoundsByDate = () =>
+    setRounds(
+      [...offered].sort((a, b) => {
+        const ka = roundFirstDayKey(a?.snapshot?.dates) ?? '9999-12-31';
+        const kb = roundFirstDayKey(b?.snapshot?.dates) ?? '9999-12-31';
+        return ka < kb ? -1 : ka > kb ? 1 : 0;
+      }),
+    );
 
   return (
     <div className="mb-2 rounded-9e-md border border-[var(--surface-border)] p-2">
@@ -1482,7 +1729,21 @@ function BundleItemRow({ item, index, total, courses, resolved, onPatch, onMove,
            * The Early Bird form does the same on its course select, for the
            * same reason.
            */
-          onPatch(index, { courseId: next, roundId: '', roundSnapshot: undefined })
+          {
+            /**
+             * ── ONE COURSE = ONE ITEM, REFUSED HERE RATHER THAN MERGED ────
+             * Picking a course another card already names writes NOTHING and
+             * says where to go instead. Refusing beats silently merging the
+             * two cards: the author chose this card's position, and a merge
+             * would move their rounds into a card somewhere else in the
+             * learning order.
+             *
+             * The check is on the OTHER items only, so re-picking this card's
+             * own course (a no-op) is not refused.
+             */
+            if (next && otherCourseIds.includes(next)) return;
+            onPatch(index, { courseId: next, rounds: [] });
+          }
         }
         courses={courses}
         label="คอร์ส"
@@ -1504,6 +1765,9 @@ function BundleItemRow({ item, index, total, courses, resolved, onPatch, onMove,
         only place anyone is told — see docs/ticket-bundle-unavailable-invisible.md
         for what is still missing.
       */}
+      {duplicateCourse && (
+        <Warn tone="red">หลักสูตรนี้มีอยู่แล้ว — เพิ่มรอบในการ์ดเดิม</Warn>
+      )}
       {courseMissing && (
         <Warn tone="red">
           ไม่พบคอร์สรหัสนี้ — การ์ดจะแสดงรหัสพร้อมคำเตือนแทนชื่อคอร์ส
@@ -1511,18 +1775,96 @@ function BundleItemRow({ item, index, total, courses, resolved, onPatch, onMove,
         </Warn>
       )}
 
-      <RoundPicker
-        value={item?.roundId}
-        rounds={rounds}
-        onChange={(roundId, roundSnapshot) => onPatch(index, { roundId, roundSnapshot })}
-        hint="รอบที่จะแสดงบนการ์ดนี้ — เลือกได้หลังจากระบุคอร์สแล้ว"
-      />
+      {/*
+        ── THE ROUNDS LIVE IN THIS CARD, ONE ROW EACH ─────────────────────────
+        This replaced a single `รอบอบรม` <select>. An item OFFERS several rounds
+        now and the applicant picks one, so the author's control is a list in
+        the course's own card rather than one more card per round.
+
+        ── THE OLD MODEL IS RETIRED, AND THAT IS A RULING NOT A TIDY-UP ──────
+        Before this, offering two rounds of a course meant adding the COURSE
+        twice as two items. That cannot coexist with `sequential`: the item
+        order is the learning order, so two items naming one course would say
+        the course must be taken after itself. It also made the bundle price
+        ambiguous — two items, one course, one seat actually sold.
+
+        So one course = one item, enforced in three places: the add control
+        refuses a course already present, `publishBlockers` refuses the
+        publish, and the hint that used to invite it is gone. MEASURED before
+        retiring it: across all 36 stored bundles, in every one of the three
+        places sections live, ZERO repeat a courseId — so no stored page is
+        retroactively blocked and there is nothing to merge.
+      */}
+      <FieldBlock
+        label="รอบที่เปิดให้เลือก"
+        hint={
+          courseId === ''
+            ? 'เลือกคอร์สก่อน แล้วจึงเพิ่มรอบได้'
+            : 'ผู้สมัครเลือกได้ 1 รอบต่อหลักสูตร — ลำดับที่แสดงคือลำดับที่ผู้สมัครเห็น'
+        }
+      >
+        <div>
+          {offered.map((round, ri) => (
+            <BundleRoundRow
+              key={`${round?.id ?? 'r'}-${ri}`}
+              round={round}
+              index={ri}
+              rounds={rounds}
+              onPatch={(patch) => patchRound(ri, patch)}
+              onRemove={() => removeRound(ri)}
+            />
+          ))}
+          {!offered.length && courseId !== '' && (
+            <Warn>ยังไม่ได้เลือกรอบ — เพิ่มอย่างน้อย 1 รอบ</Warn>
+          )}
+
+          {/*
+            The add control is a SELECT rather than a button, because picking
+            which round to add and adding it are one decision. Rounds already
+            in the list are excluded from it, which is what makes "the same
+            round twice" unreachable rather than merely discouraged.
+          */}
+          {courseId !== '' && offered.length < MAX_BUNDLE_ROUNDS && (
+            <select
+              data-testid="bundle-add-round"
+              value=""
+              onChange={(e) => addRound(e.target.value)}
+              className={INPUT_CLASS}
+              aria-label="เพิ่มรอบ"
+            >
+              <option value="">+ เพิ่มรอบ</option>
+              {addableRounds.map((row) => (
+                <option key={String(row?._id)} value={String(row?._id)}>
+                  {roundOptionLabel(row)}
+                </option>
+              ))}
+            </select>
+          )}
+          {courseId !== '' && offered.length >= MAX_BUNDLE_ROUNDS && (
+            <Warn>ครบ {MAX_BUNDLE_ROUNDS} รอบแล้ว — ลบรอบเดิมก่อนถ้าต้องการเพิ่ม</Warn>
+          )}
+          {courseId !== '' && !addableRounds.length && offered.length > 0 && offered.length < MAX_BUNDLE_ROUNDS && (
+            <Warn>ไม่มีรอบอื่นของคอร์สนี้ให้เพิ่มแล้ว</Warn>
+          )}
+
+          {offered.length > 1 && (
+            <button
+              type="button"
+              data-testid="bundle-sort-rounds"
+              onClick={sortRoundsByDate}
+              className="mt-1 rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-[11px] font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            >
+              เรียงตามวันที่
+            </button>
+          )}
+        </div>
+      </FieldBlock>
       {noRounds && (
         <Warn>ไม่พบรอบที่เปิดรับสมัครของคอร์สนี้ตอนนี้ — เลือกรอบไม่ได้จนกว่าจะมีรอบเปิด</Warn>
       )}
       {/* Same amendment, same reason as the course warning above: an item with
           no round is one the quotation guard refuses the whole package for. */}
-      {courseId !== '' && !String(item?.roundId ?? '').trim() && (
+      {courseId !== '' && offered.length === 0 && (
         <Warn>
           ยังไม่ได้เลือกรอบ — การ์ดนี้จะไม่แสดงวันที่และไม่มีปุ่มลงทะเบียน
           และแพ็กเกจนี้จะไม่รับลงทะเบียน
@@ -1534,6 +1876,39 @@ function BundleItemRow({ item, index, total, courses, resolved, onPatch, onMove,
 
 function PromotionBundleEditor({ content, patch, resolved, courses }) {
   const items = Array.isArray(content?.items) ? content.items : [];
+
+  /** The course codes named by every item EXCEPT `i` — the duplicate gate. */
+  const otherCourseIds = (i) =>
+    items
+      .map((it, j) => (j === i ? '' : String(it?.courseId ?? '').trim()))
+      .filter(Boolean);
+
+  /**
+   * Is the sequential chain impossible with the rounds that are open NOW?
+   *
+   * The live rows come from the canvas's own resolved map — the same fetch the
+   * round rows read their status from — keyed by round id so
+   * `bundleRegistrable` sees exactly what the public card will see. `undefined`
+   * resolved means the fetch is in flight, and the warning stays silent then:
+   * the tri-state discipline every other data-backed warning here follows.
+   */
+  const chainImpossible = (() => {
+    if (content?.sequential !== true) return false;
+    if (!Array.isArray(resolved) || !items.length) return false;
+    const liveStatusById = {};
+    for (const entry of resolved) {
+      for (const row of Array.isArray(entry?.rounds) ? entry.rounds : []) {
+        const id = String(row?._id ?? '');
+        if (id) liveStatusById[id] = { status: row?.status, dates: row?.dates };
+      }
+    }
+    return !bundleRegistrable({
+      items,
+      sequential: true,
+      liveStatusById,
+      today: siteTodayKey(),
+    });
+  })();
   const listPrice = content?.listPrice;
   const netPrice = content?.netPrice;
 
@@ -1569,7 +1944,7 @@ function PromotionBundleEditor({ content, patch, resolved, courses }) {
     // `newSectionId` is reused rather than twinned: what it does is mint a UUID
     // with a non-secure-context fallback, and a second minter for one job is
     // the drift this repo keeps removing.
-    setItems([...items, { id: newSectionId(), courseId: '', roundId: '' }]);
+    setItems([...items, { id: newSectionId(), courseId: '', rounds: [] }]);
 
   const moveItem = (i, dir) => {
     const to = dir === 'up' ? i - 1 : i + 1;
@@ -1661,7 +2036,70 @@ function PromotionBundleEditor({ content, patch, resolved, courses }) {
         />
       </Field>
 
-      <FieldBlock label="คอร์สในแพ็กเกจ" hint="ลำดับที่แสดงคือลำดับในรายการนี้ — คอร์สเดียวกันซ้ำได้ ถ้าเป็นคนละรอบ">
+      {/*
+        ── คอร์สต่อเนื่อง ──────────────────────────────────────────────────
+        Sits here, beside the other bundle-level switch, because it is a fact
+        about the whole package rather than about any one course.
+
+        `FieldBlock` + an inline `w-fit` label, NOT `Field` — the pattern the
+        border switch moved to. `Field` wraps its children in a block-level
+        `<label>`, and a `<label>` forwards a click on any non-interactive part
+        of itself to the first control inside, so the whole row becomes a hit
+        target. The switch directly above still has that; it is a separate fix
+        with a wider blast radius and is not this round's.
+
+        NO ORDER FIELD comes with it. The list below already has move up/down,
+        so the author sets the order the same way whether this is on or off —
+        and turning it on cannot reorder anything, which is what makes it safe
+        to flip on a bundle that already exists.
+      */}
+      <FieldBlock hint="เปิดแล้วผู้สมัครต้องเลือกรอบตามลำดับ และรอบของหลักสูตรถัดไปต้องเริ่มหลังหลักสูตรก่อนหน้าจบ">
+        <label className="w-fit cursor-pointer" data-testid="bundle-sequential-toggle-label">
+          <span className="mb-1.5 block text-xs font-bold text-9e-navy dark:text-white/90">
+            คอร์สต่อเนื่อง — ต้องเรียนตามลำดับ
+          </span>
+          <Toggle
+            checked={content?.sequential === true}
+            onChange={(v) => patch({ sequential: v === true })}
+            onLabel="ตามลำดับ"
+            offLabel="เลือกรอบใดก็ได้"
+          />
+        </label>
+      </FieldBlock>
+
+      {/*
+        ── THE HINT NO LONGER INVITES THE SAME COURSE TWICE ─────────────────
+        It read "คอร์สเดียวกันซ้ำได้ ถ้าเป็นคนละรอบ", which was the old way to
+        offer two rounds of one course. A course now carries its own rounds
+        list, and repeating it is refused — by the add control, by the course
+        picker in each card, and by publishBlockers. So the hint says only what
+        the order means.
+      */}
+      {/*
+        ── THE SEQUENTIAL CHAIN, AS A WARNING AND NOT A BLOCKER ─────────────
+        When คอร์สต่อเนื่อง is on, a bundle can be fully authored and still be
+        impossible: every course has open rounds, but no ordering of them fits
+        end-to-start. `bundleRegistrable` answers that, and the card will
+        auto-close on it.
+    
+        A WARNING rather than a publish blocker, and the line is the same one
+        publishReadiness draws: this depends on LIVE status and can fix itself
+        the moment a new round opens, with nobody touching the page. Refusing
+        the publish would make an author fight a condition they cannot edit.
+    
+        `siteTodayKey()` with no argument reads the clock, which is correct
+        here and nowhere near a stored decision: this is an editor hint, the
+        public card recomputes it per render, and the server recomputes it per
+        request.
+      */}
+      {chainImpossible && (
+        <Warn>
+          ตามลำดับแล้วยังจัดรอบให้ครบทุกหลักสูตรไม่ได้ด้วยรอบที่เปิดอยู่ตอนนี้ —
+          การ์ดจะยังไม่เปิดรับสมัครจนกว่าจะมีรอบที่ต่อกันได้ (เผยแพร่ได้ สถานะนี้เปลี่ยนเองเมื่อมีรอบใหม่)
+        </Warn>
+      )}
+
+      <FieldBlock label="คอร์สในแพ็กเกจ" hint="ลำดับที่แสดงคือลำดับการเรียน — ใช้ปุ่มขึ้น/ลงเพื่อจัดลำดับ">
         <div>
           {items.map((it, i) => (
             // Keyed by the item's OWN id — see BundleItemRow's header for why an
@@ -1673,6 +2111,7 @@ function PromotionBundleEditor({ content, patch, resolved, courses }) {
               total={items.length}
               courses={courses}
               resolved={Array.isArray(resolved) ? resolved[i] : undefined}
+              otherCourseIds={otherCourseIds(i)}
               onPatch={patchItem}
               onMove={moveItem}
               onRemove={removeItem}

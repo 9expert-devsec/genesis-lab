@@ -382,3 +382,44 @@ test('the walk survives junk in the tree and an empty id', () => {
   assert.equal(findSectionById([bundle()], ''), null, 'an empty id must match nothing');
   assert.equal(findSectionById([bundle()], undefined), null);
 });
+
+// ── a multi-round bundle fails closed until the picking flow exists ────────
+
+test('a MULTI-ROUND bundle resolves here — the fail-closed guard is gone', () => {
+  /**
+   * ── THIS TEST WAS THE INVERSE, AND THE INVERSION IS THE POINT ──────────
+   * Commit ed73c0b5 made this very case REFUSE, because the flow could not
+   * ask which round and would otherwise have booked round one silently. The
+   * route now requires a pick per item and validates each against live
+   * status, so the placeholder has been replaced by the check it stood in
+   * for — and that commit's own message said it must be deleted here.
+   *
+   * Asserted as a POSITIVE so the guard cannot quietly come back: a returning
+   * `unresolved_items` for a well-formed multi-round bundle reddens this.
+   * Which ROUND may be picked is not this module's question — it is
+   * `validateBundlePicks`', at the route, over live status.
+   */
+  const multi = { id: 'i1', courseId: 'MSE-L1', rounds: [{ id: 'r1' }, { id: 'r2' }] };
+  const out = resolveBundleRequest({
+    ...OK_ARGS,
+    page: page([bundle({ items: [multi] })]),
+    resolved: undefined, // the cheap path, where the guard used to sit
+  });
+  assert.equal(out.ok, true, 'a multi-round bundle is refused — the guard is back');
+});
+
+test('CONTROL: ONE offered round is accepted, in both the new and the legacy shape', () => {
+  // The 91 stored items are all single-round, so this is the path every
+  // existing bundle takes and it must be untouched.
+  for (const one of [
+    { id: 'i1', courseId: 'MSE-L1', rounds: [{ id: 'r1' }] },
+    { id: 'i1', courseId: 'MSE-L1', roundId: 'r1' },
+  ]) {
+    const out = resolveBundleRequest({
+      ...OK_ARGS,
+      page: page([bundle({ items: [one] })]),
+      resolved: undefined,
+    });
+    assert.equal(out.ok, true, `refused ${JSON.stringify(one)}`);
+  }
+});

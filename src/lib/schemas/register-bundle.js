@@ -76,6 +76,25 @@ export const bundleRegistrationSchema = z
     pageId:    z.string().min(1, 'ข้อมูลแพ็กเกจไม่ครบ'),
     sectionId: z.string().min(1, 'ข้อมูลแพ็กเกจไม่ครบ'),
 
+    /**
+     * ── WHICH ROUND THE APPLICANT PICKED, PER COURSE ────────────────────
+     * One entry per item. OPTIONAL at this boundary and required by the
+     * route, which is a deliberate split: a submission from a tab opened
+     * before the picking flow existed carries no picks, and for a bundle
+     * whose every course offers one round the route derives them. Making it
+     * required here would refuse those with a field error the customer
+     * cannot act on.
+     *
+     * The route checks everything that matters about these — one per item,
+     * each among that item's OFFERED rounds, each still pickable against
+     * live status. None of that is expressible here, and a schema that
+     * half-checked it would read as the whole check.
+     */
+    picks: z
+      .array(z.object({ itemId: z.string().min(1), roundId: z.string().min(1) }))
+      .max(40)
+      .optional(),
+
     coordinator:           coordinatorSchema,
     attendeesCount:        z.number().int().min(1).max(20).default(1),
     attendeesListProvided: z.boolean().default(false),

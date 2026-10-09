@@ -1,6 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The per-course pick control and its preselection rule.
+import { BundleRoundPicks, initialBundlePicks } from './BundleRoundPicks';
+// Submit is gated on the SAME function the server runs, never on a local
+// 'every item has something' count — see picksOk.
+import { validateBundlePicks } from '@/lib/pageBuilder/bundleRoundChoice';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -130,6 +136,22 @@ export function BundleWizard({
   basePath = '/registration/bundle',
   summary = null,
   /**
+   * ── THE PICK INPUTS, FROM THE SERVER ──────────────────────────────────
+   * The stored items, the live status map and today's Bangkok date. The pure
+   * core runs over them IN THE BROWSER so the option list re-decides itself
+   * as the applicant chooses — see BundleRoundPicks for why a precomputed
+   * list could not work under the sequence rules.
+   *
+   * 'today' comes from the server's siteTodayKey() rather than the device
+   * clock: a visitor whose laptop is a day out must not be shown a different
+   * set of deadlines from the one the server will enforce.
+   */
+  pickItems = null,
+  sequential = false,
+  liveStatusById = null,
+  today = '',
+  courseTitleByItemId = null,
+  /**
    * Where step 1's footer link goes, or NULL meaning render no link.
    *
    * Resolved on the server by `publicPageHref` from the page document this
@@ -163,7 +185,54 @@ export function BundleWizard({
    * is not available any more", which retrying cannot fix.
    */
   const [refused, setRefused] = useState(null);
+
+  /**
+   * itemId → roundId. Seeded with the single-pickable-round preselections,
+   * and only once hydrated: initialBundlePicks runs the same rules the
+   * options do, so seeding during SSR and again on mount would be two
+   * renders that disagree.
+   */
+  const [picks, setPicks] = useState({});
+  const [clearedPicks, setClearedPicks] = useState([]);
+  /** Per-item reasons from a 409, keyed by itemId. */
+  const [pickErrors, setPickErrors] = useState(null);
+  const [picksSeeded, setPicksSeeded] = useState(false);
   const [consented, setConsented] = useState(false);
+
+  /**
+   * Seed the preselections once, on the client, after hydration.
+   *
+   * A bundle with nothing to pick (no items threaded, i.e. a legacy render)
+   * seeds nothing and picksOk stays true — the server derives the picks for
+   * a single-round bundle, so an older open tab keeps working.
+   */
+  useEffect(() => {
+    if (picksSeeded || !Array.isArray(pickItems) || !pickItems.length) return;
+    setPicks(initialBundlePicks({ items: pickItems, sequential, liveStatusById, today }));
+    setPicksSeeded(true);
+  }, [picksSeeded, pickItems, sequential, liveStatusById, today]);
+
+  /**
+   * ── SUBMIT IS GATED ON THE SAME FUNCTION THE SERVER RUNS ───────────────
+   * validateBundlePicks, not a local 'every item has something' check. A
+   * count would pass a complete set that breaks the sequence, and the
+   * applicant would meet a 409 the form could have prevented.
+   *
+   * No items threaded → true. That is the legacy path, and it is the
+   * server's job to derive and check those picks, not this component's to
+   * block them.
+   */
+  const picksOk =
+    !Array.isArray(pickItems) || !pickItems.length
+      ? true
+      : validateBundlePicks({ items: pickItems, sequential, liveStatusById, picks, today }).ok;
+
+  const handlePicksChange = (next, cleared) => {
+    setPicks(next);
+    setClearedPicks(Array.isArray(cleared) ? cleared : []);
+    // A fresh choice supersedes whatever the server last refused.
+    setPickErrors(null);
+  };
 
   /**
    * A stored payload belongs to THIS bundle or it is discarded. The wizard
@@ -284,6 +353,15 @@ export function BundleWizard({
           ...formData,
           pageId,
           sectionId,
+          /**
+           * Sent only when this render actually has pick inputs. An older
+           * open tab posts WITHOUT the key, and the route derives the picks
+           * for a bundle whose every course offers one round — so omitting
+           * it is a supported shape rather than a malformed one.
+           */
+          ...(Array.isArray(pickItems) && pickItems.length
+            ? { picks: Object.entries(picks).map(([itemId, roundId]) => ({ itemId, roundId })) }
+            : {}),
           consent: consentFanOut(consented),
         }),
       });
@@ -306,6 +384,43 @@ export function BundleWizard({
         setCurrentStep(3);
         router.push(stepHref(3));
         window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      /**
+       * ── A 409 ON THE PICKS GOES BACK TO STEP 1, NOT TO A DEAD END ───────
+       * The world moved between opening the form and sending it: a round
+       * filled, an admin closed one, or a deadline passed at midnight. That
+       * is RECOVERABLE by choosing again, which makes it categorically
+       * different from `bundle_refused` — the panel below, where the whole
+       * promotion has gone and there is nothing to retry.
+       *
+       * So the applicant is returned to the pick step with the reason shown
+       * on each affected course, and EVERYTHING ELSE THEY TYPED IS KEPT:
+       * `formData` is untouched, so names, attendees, the invoice block and
+       * the notes survive. Clearing the form to report a round change would
+       * punish them for our staleness.
+       *
+       * The refused picks are also cleared from `picks`, so the applicant
+       * cannot submit the same rejected round again by pressing confirm
+       * twice — and the select shows the placeholder, which is the honest
+       * state: they have no valid choice for that course yet.
+       */
+      if (json?.error === 'bundle_picks_invalid') {
+        const errors = Array.isArray(json.errors) ? json.errors : [];
+        const byItem = {};
+        for (const e of errors) {
+          const id = String(e?.itemId ?? '').trim();
+          if (id) byItem[id] = String(e?.reason ?? '');
+        }
+        setPickErrors(byItem);
+        setPicks((prev) => {
+          const next = { ...prev };
+          for (const id of Object.keys(byItem)) delete next[id];
+          return next;
+        });
+        setClearedPicks([]);
+        setCurrentStep(1);
+        router.push(stepHref(1));
         return;
       }
       if (json?.error === 'bundle_refused') {
@@ -396,6 +511,27 @@ export function BundleWizard({
               also where the masterclass puts its own card at this breakpoint.
             */}
             <div className="mb-6 lg:hidden">{summary}</div>
+
+            {currentStep === 1 && hydrated && Array.isArray(pickItems) && pickItems.length > 0 && (
+              <div className="mb-6">
+                <BundleRoundPicks
+                  items={pickItems}
+                  sequential={sequential}
+                  liveStatusById={liveStatusById}
+                  today={today}
+                  picks={picks}
+                  onChange={handlePicksChange}
+                  cleared={clearedPicks}
+                  serverErrors={pickErrors}
+                  courseTitleByItemId={courseTitleByItemId}
+                />
+                {!picksOk && (
+                  <p data-testid="bundle-picks-incomplete" className="mt-2 text-xs font-bold text-amber-700">
+                    เลือกรอบให้ครบทุกหลักสูตรก่อนดำเนินการต่อ
+                  </p>
+                )}
+              </div>
+            )}
 
             {currentStep === 1 && hydrated && (
               <BundleStepForm

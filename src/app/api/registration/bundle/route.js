@@ -7,11 +7,24 @@ import RegisterPublic from '@/models/RegisterPublic';
 import { bundleRegistrationSchema } from '@/lib/schemas/register-bundle';
 import { getPublishedPageBuilderPageById } from '@/lib/actions/pageBuilder';
 import { resolveSectionData } from '@/lib/pageBuilder/resolveSectionData';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The one assembler of live round status for a bundle,
+// shared with the wizard; it applies the admin override layer the bundle path
+// was missing entirely.
+import { bundleLiveStatusById } from '@/lib/registration/bundleLiveRounds';
 import { resolveBundleRequest, isSilentRefusal } from '@/lib/registration/bundleRequest';
 import { buildBundleLegs, orderLegsMarkerLast } from '@/lib/registration/bundleLegs';
 import { buildAttendees, buildBundleTag } from '@/lib/registration/build-public';
 import { sendBundleRegistrationEmail } from '@/lib/email/template-senders/bundle-registration';
 import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. `pickedItemRound` turns a pick into the round the rows
+// and the mail both name; `offeredRoundsOf` is how a missing pick is derived
+// only when a course offers exactly one round.
+import { pickedItemRound, offeredRoundsOf } from '@/lib/pageBuilder/chosenRounds';
+// The authority on whether a set of picks may be written. The SAME function
+// the wizard gated its submit on — one rule, two callers.
+import { validateBundlePicks } from '@/lib/pageBuilder/bundleRoundChoice';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
@@ -119,9 +132,30 @@ export async function POST(req) {
   const cheap = resolveBundleRequest({ page, sectionId: data.sectionId });
   if (!cheap.ok) return refusal(cheap.reason);
 
-  const resolvedMap = await resolveSectionData([cheap.section]);
+  /**
+   * ── THE SERVER READS LIVE, AND IT IS THE AUTHORITY ────────────────────
+   * `revalidate: 0` for the schedules fetch. The wizard is already live, but
+   * a submission can arrive from a tab left open for an hour, from a
+   * bookmarked step URL, or from a script — so the decision cannot rest on
+   * anything the client saw. Courses and instructors keep their normal
+   * windows; a stale title costs nothing here.
+   */
+  const resolvedMap = await resolveSectionData([cheap.section], { revalidate: 0 });
   const resolved = resolvedMap?.[cheap.section.id];
+
+  /**
+   * `today` IS READ AT REQUEST TIME. A deadline that passed at midnight must
+   * refuse the request that arrives at 00:05, and the only clock that can
+   * decide that is this one.
+   */
   const todayKey = siteTodayKey();
+
+  /**
+   * Live status, admin overrides applied, through the SAME assembler the
+   * wizard used to build its option list. Two differently-built maps is how
+   * the wizard offers a round the server refuses.
+   */
+  const liveStatusById = await bundleLiveStatusById(resolved);
 
   const gate = resolveBundleRequest({
     page,
@@ -130,6 +164,64 @@ export async function POST(req) {
     todayKey,
   });
   if (!gate.ok) return refusal(gate.reason);
+
+  /**
+   * ── THE PICKS, DERIVED WHEN THEY CAN BE AND REQUIRED WHEN THEY CANNOT ──
+   *
+   * A payload may legitimately arrive without them: a tab opened before the
+   * picking flow existed, or a bookmarked step URL. For a bundle whose every
+   * course offers exactly ONE round there is nothing to choose, so the pick
+   * is derived and the request goes through exactly as it did before.
+   *
+   * For a course offering several, a missing pick is NOT derivable — taking
+   * the first would write a quotation for a round the customer never chose,
+   * which is the silent wrong answer this whole round exists to prevent. It
+   * is a 409 with `not_picked` against that course, which the wizard shows
+   * on the course itself.
+   */
+  const items = Array.isArray(gate.content.items) ? gate.content.items : [];
+  const sequential = gate.content.sequential === true;
+
+  const picks = {};
+  const sent = new Map(
+    (Array.isArray(data.picks) ? data.picks : []).map((p) => [String(p.itemId), String(p.roundId)]),
+  );
+  for (const item of items) {
+    const itemId = String(item?.id ?? '').trim();
+    if (!itemId) continue;
+    const offered = offeredRoundsOf(item);
+    if (sent.has(itemId)) { picks[itemId] = sent.get(itemId); continue; }
+    // Derived ONLY when unambiguous.
+    if (offered.length === 1) picks[itemId] = String(offered[0]?.id ?? '');
+  }
+
+  /**
+   * ── THE AUTHORITY. Same function the wizard gated submit on, over LIVE
+   * status fetched on this request and today's Bangkok date read on this
+   * request. The wizard can be an hour out of date or absent entirely; this
+   * cannot.
+   */
+  const verdict = validateBundlePicks({
+    items,
+    sequential,
+    liveStatusById,
+    picks,
+    today: todayKey,
+  });
+  if (!verdict.ok) {
+    console.warn(
+      '[bundle-reg] ✋ picks refused — nothing was written.',
+      '| page:', String(data.pageId),
+      '| section:', String(data.sectionId),
+      '| errors:', JSON.stringify(verdict.errors),
+    );
+    // 409: the world changed under a request that was well-formed. NOTHING
+    // is written — this returns before the transaction is opened at all.
+    return NextResponse.json(
+      { error: 'bundle_picks_invalid', errors: verdict.errors },
+      { status: 409 },
+    );
+  }
 
   const headersList = await headers();
   const ipAddress =
@@ -182,6 +274,9 @@ export async function POST(req) {
   const attendees = buildAttendees(data);
 
   const built = buildBundleLegs({
+    // The PICKED rounds. The rows and the mail both read through
+    // `pickedItemRound`, so they cannot name different rounds.
+    picks,
     items: gate.content.items,
     resolved,
     todayKey,
@@ -288,7 +383,7 @@ export async function POST(req) {
        * upload — the template gates the <img> on `{{#course_image}}`.
        */
       coverImage: page.promotionCover ?? '',
-      courses: emailCourses(gate.content, resolved, todayKey),
+      courses: emailCourses(gate.content, resolved, todayKey, picks),
       /**
        * TWO PRICE LABELS, AND NO DISCOUNT.
        *
@@ -352,13 +447,13 @@ export async function POST(req) {
  * the admin one would mail a customer a date string in a format they have not
  * seen anywhere else.
  */
-function emailCourses(content, resolved, todayKey) {
+function emailCourses(content, resolved, todayKey, picks) {
   const items = Array.isArray(content?.items) ? content.items : [];
   const entries = Array.isArray(resolved) ? resolved : [];
   const currentYear = siteCurrentYear();
   return items.map((item, i) => {
     const entry = entries[i] ?? null;
-    const round = chooseItemRound(entry?.rounds, item, todayKey);
+    const round = pickedItemRound(entry?.rounds, item, picks, todayKey);
     return {
       courseName: String(entry?.course?.course_name ?? '').trim(),
       courseId: String(entry?.courseId ?? item?.courseId ?? '').trim(),

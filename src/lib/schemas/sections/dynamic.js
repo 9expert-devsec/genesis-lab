@@ -1,5 +1,11 @@
 import { z } from 'zod';
 import { defineSection } from './base';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. The ONE normaliser for a bundle item's offered rounds,
+// shared with every reader; its note in chosenRounds.js explains why both the
+// preprocess and the readers need it. No cycle: chosenRounds imports only
+// lib/schedule/roundHasStarted and nothing from this schema tree.
+import { offeredRoundsOf } from '@/lib/pageBuilder/chosenRounds';
 
 /**
  * §5.4 DYNAMIC sections (MVP — 4). These render live upstream data (courses,
@@ -207,12 +213,85 @@ const bundleCoursesContent = z.object({
  * has no need of one, and a `.default({})` would write three empty keys into
  * every item that merely passes through a parse.
  */
-const bundleItemShape = z.object({
-  id:            z.string().min(1),
-  courseId:      z.string().default(''),
-  roundId:       z.string().default(''),
-  roundSnapshot: roundSnapshotShape.optional(),
-}); // NOT .passthrough() — an item's shape is closed; see roundSnapshotShape.
+/**
+ * ── ONE OFFERED ROUND ──────────────────────────────────────────────────────
+ *
+ * An item now OFFERS several rounds and the applicant picks one, so what used
+ * to be `roundId` + `roundSnapshot` on the item is a list of these.
+ *
+ * `snapshot` REUSES `roundSnapshotShape` verbatim — same three keys, same
+ * deliberate absence of `.passthrough()`, same prohibition on storing a
+ * `status`. Read that shape's note: a stored status would be a lie about a
+ * round nobody can fetch, and it matters more now than it did, because the
+ * pick rules ask about status on every render. `bundleRoundChoice` takes its
+ * status from the LIVE row only and treats a round with no live row as closed;
+ * a snapshot that could carry one would be a second, stale answer.
+ *
+ * ── `pickUntil`: THE AUTHOR'S OWN CUT-OFF, AND ONLY EVER EARLIER ──────────
+ * `YYYY-MM-DD`, regex-validated, optional. Absent means the round closes the
+ * day before it starts, which is the structural rule and the default.
+ *
+ * It can only ever close a round SOONER. A value later than the day before the
+ * round's first day is refused by the editor at the field and by
+ * `publishBlockers` at publish — and clamped at READ by
+ * `effectivePickDeadline`, so the rule holds even for a document nobody's
+ * editor ever touched. Nothing is silently rewritten; the stored string stays
+ * as the author typed it.
+ *
+ * `.optional()` with no default, the shape every other optional key in this
+ * file uses, and for the stated reason: a `.default('')` would write the key
+ * into every offered round that merely passes through a parse.
+ */
+const bundleOfferedRoundShape = z.object({
+  id:       z.string().min(1),
+  snapshot: roundSnapshotShape.optional(),
+  pickUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'ต้องเป็นวันที่แบบ YYYY-MM-DD').optional(),
+}); // NOT .passthrough() — closed, like the item and the snapshot.
+
+/**
+ * ── THE ITEM, AND THE LEGACY KEY IT MUST STILL READ ───────────────────────
+ *
+ * `rounds` replaces `roundId` + `roundSnapshot`. The editor writes the new
+ * shape only; the preprocess below is what lets the 91 items already stored
+ * (MEASURED across all three places a page's sections live — every one of them
+ * on the legacy shape, zero on the new one) keep rendering and registering.
+ *
+ * ── WHY A `z.preprocess` AND NOT A `.transform` OR A READ-SITE FALLBACK ───
+ * This object is CLOSED — no `.passthrough()` — so Zod strips `roundId` and
+ * `roundSnapshot` at the parse boundary. A `.transform` runs AFTER that strip
+ * and would find them already gone; a fallback at each read site would be the
+ * same rule written four times (renderer, resolver, request guard, route).
+ * `z.preprocess` is the one hook that sees the raw document, so the
+ * normalisation happens exactly once, before anything can read an item.
+ *
+ * It does NOT write: parsing a legacy document hands the readers the new shape
+ * while the stored bytes stay legacy until an author saves that section. So
+ * this is not a migration, and there is no migration to run.
+ *
+ * The legacy item carried no `pickUntil`, so the normalised round has none —
+ * which means it closes the day before it starts, exactly the behaviour the
+ * legacy card already had (`chooseItemRound` + the `started` test).
+ */
+const bundleItemShape = z.preprocess(
+  (raw) => {
+    if (!raw || typeof raw !== 'object') return raw;
+    // ONE definition, shared with every READER. `offeredRoundsOf` is in
+    // chosenRounds.js and its note explains why both moments are needed:
+    // nothing parses on read, so the preprocess alone would normalise for
+    // saves and leave every public surface looking at a legacy item.
+    //
+    // An item the author never finished yields an EMPTY list rather than a
+    // round with an empty id, which `min(1)` would refuse.
+    return { ...raw, rounds: offeredRoundsOf(raw) };
+  },
+  z.object({
+    id:       z.string().min(1),
+    courseId: z.string().default(''),
+    // Capped at 12. A list an author has to scroll is a list they cannot check,
+    // and the applicant's control is a single select per course.
+    rounds:   z.array(bundleOfferedRoundShape).max(12).default([]),
+  }), // NOT .passthrough() — an item's shape is closed; see roundSnapshotShape.
+);
 
 /**
  * ── `promotion_bundle` — ONE BUNDLE, AS A SECTION ──────────────────────────
@@ -346,6 +425,31 @@ const promotionBundleContent = z.object({
    * Read by: the renderer (button vs state message).
    */
   registrationOpen: z.boolean().default(true),
+
+  /**
+   * ── คอร์สต่อเนื่อง: THE ITEMS' ORDER BECOMES THE LEARNING ORDER ─────────
+   *
+   * Off by default. On, the applicant picks rounds in item order and each
+   * course's round must START strictly after the previous course's round ENDS
+   * — so the order of `items` stops being presentation and becomes a rule.
+   *
+   * NO SEPARATE ORDER FIELD, deliberately. The editor already has move up/down
+   * on the item rows, so the author sets the order the same way whether this is
+   * on or off, and there is no second ordering to keep in step with the first.
+   * Turning the switch on cannot reorder anything, which is why it is safe to
+   * flip on an existing bundle.
+   *
+   * `.default(false)` is safe HERE in a way it would not be inside `items`:
+   * this is one key on the section's own content, and `promotionBundleContent`
+   * is the type whose note above explains why defaults are chosen for what a
+   * new bundle should start as. A stored bundle reads it back absent, which is
+   * `false`, which is the behaviour it has today.
+   *
+   * Read by: `bundleRoundChoice`'s `sequential` argument (via the renderer, the
+   * wizard and the registration route), the renderer's order labels, and the
+   * editor's switch.
+   */
+  sequential: z.boolean().default(false),
 
   items: z.array(bundleItemShape).default([]),  // read by: the renderer's item cards; the resolver; the editor's list
 }).passthrough();
