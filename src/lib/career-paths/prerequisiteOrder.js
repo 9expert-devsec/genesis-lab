@@ -391,3 +391,139 @@ export function pruneTransferPicks(curriculum, picks, pastByCourse, todayKey) {
   }
   return { picks: out, dropped };
 }
+
+// ── Server: resolving a submitted registration ──────────────────
+
+const HYBRID_RESOLVED = /^hybrid \((classroom|ms teams)\)$/i;
+
+/**
+ * The server's whole judgement of a submitted `selectedCourses`, as one pure
+ * function so it can be tested without a network. Every pick is resolved to the
+ * LIVE round it names — a future round for an ordinary pick, a past round for a
+ * transfer — and is judged on that round alone. On success the courses come
+ * back with `dates`, `startDate`, `endDate`, `round` and `type` REWRITTEN from
+ * the live round: nothing the browser sent about a round's days is stored.
+ *
+ *   · ordinary pick whose round is not offered   → "… ไม่เปิดรับสมัครแล้ว"
+ *   · any transfer problem                       → transferViolations' message
+ *     (a transfer is never reported as "ไม่เปิดรับสมัครแล้ว")
+ *   · a group not satisfied
+ *   · a prerequisite pair broken (pairs with a transfer are skipped)
+ *
+ * `type` of an ordinary pick is the live round's type, except that a hybrid
+ * round keeps the payload's resolved sub-mode ("Hybrid (Classroom)" /
+ * "Hybrid (MS Teams)") — that is the learner's choice, not round data, and
+ * without it the group rule would read the pick as unresolved.
+ *
+ * @param {object} o
+ * @param {Array} o.curriculum            canonical (getCareerPathWithSchedules)
+ * @param {object} o.schedulesByCourse    future rounds, `{ _id, dates, type }`
+ * @param {object} o.pastByCourse         past rounds (getCareerPathPastSchedules)
+ * @param {Array} o.selectedCourses       the payload's rows
+ * @param {string} o.todayKey             Bangkok `YYYY-MM-DD`
+ * @param {(dates: string[]) => string} o.formatRound  the stored/printed label
+ * @returns {{ error: string } | { picks: object, selectedCourses: Array }}
+ */
+export function resolveSubmittedPicks({
+  curriculum,
+  schedulesByCourse,
+  pastByCourse,
+  selectedCourses,
+  todayKey,
+  formatRound,
+}) {
+  const codeByKey = new Map();
+  const nameOf = {};
+  for (const g of Array.isArray(curriculum) ? curriculum : []) {
+    for (const it of groupItems(g)) {
+      const code = itemCode(it);
+      if (!code) continue;
+      codeByKey.set(courseCodeKey(code), code);
+      nameOf[code] = String(it?.snap?.name ?? it?.externalName ?? code);
+    }
+  }
+  const label = (dates) => (typeof formatRound === 'function' ? formatRound(dates) : '');
+  const pastOf = new Map(
+    Object.entries(pastByCourse ?? {}).map(([c, rows]) => [courseCodeKey(c), Array.isArray(rows) ? rows : []])
+  );
+
+  const rows = Array.isArray(selectedCourses) ? selectedCourses : [];
+  const picks = {};
+  const live = []; // per row: { code, dates, type }
+
+  for (const sel of rows) {
+    const code = codeByKey.get(courseCodeKey(sel?.courseCode)) ?? null;
+
+    if (isTransfer(sel)) {
+      // Judged below by transferViolations; a code outside the path keeps its
+      // own spelling so the message can name it.
+      const key = code ?? String(sel?.courseCode ?? '');
+      picks[key] = { type: 'transfer', scheduleId: String(sel?.scheduleId ?? '') };
+      live.push({ code: key, transfer: true });
+      continue;
+    }
+
+    const round = code
+      ? (schedulesByCourse?.[code] ?? []).find(
+          (s) => String(s?._id ?? '') === String(sel?.scheduleId ?? '')
+        )
+      : null;
+    if (!round) {
+      const name = code ? nameOf[code] : sel?.courseName || sel?.courseCode || '';
+      return { error: `รอบ ${sel?.round || ''} ของ ${name} ไม่เปิดรับสมัครแล้ว กรุณาเลือกรอบใหม่` };
+    }
+    const dates = Array.isArray(round.dates) ? round.dates.map(String) : [];
+    const liveType = String(round.type ?? '').toLowerCase();
+    const type =
+      liveType === 'hybrid' && HYBRID_RESOLVED.test(String(sel?.type ?? ''))
+        ? String(sel.type)
+        : liveType;
+    picks[code] = { dates, type };
+    live.push({ code, dates, type });
+  }
+
+  const transferProblems = transferViolations(curriculum, picks, pastByCourse, todayKey);
+  if (transferProblems.length) return { error: transferProblems[0].message };
+  // Every transfer is now a known past round of a course in the path: take its
+  // days from that round.
+  for (const row of live) {
+    if (!row.transfer) continue;
+    const past = (pastOf.get(courseCodeKey(row.code)) ?? []).find(
+      (r) => String(r?.scheduleId ?? '') === picks[row.code].scheduleId
+    );
+    row.dates = Array.isArray(past?.dates) ? past.dates.map(String) : [];
+    row.type = 'transfer';
+    picks[row.code].dates = row.dates;
+  }
+
+  for (const g of Array.isArray(curriculum) ? curriculum : []) {
+    if (!isGroupSatisfied(g, picks)) {
+      return { error: `ยังเลือกรอบอบรมไม่ครบ${g?.title ? ` ในกลุ่ม "${g.title}"` : ''} กรุณาเลือกรอบใหม่` };
+    }
+  }
+
+  const broken = pairViolations(curriculum, picks)[0];
+  if (broken) {
+    return {
+      error:
+        `รอบของ ${nameOf[broken.dependent]} (${label(picks[broken.dependent].dates)}) ` +
+        `ต้องเริ่มหลัง ${nameOf[broken.prerequisite]} (${label(picks[broken.prerequisite].dates)}) จบแล้ว ` +
+        'กรุณาเลือกรอบใหม่',
+    };
+  }
+
+  return {
+    picks,
+    selectedCourses: rows.map((sel, i) => {
+      const { dates, type } = live[i];
+      return {
+        ...sel,
+        dates,
+        startDate: minDateOf(dates) ?? '',
+        endDate: maxDateOf(dates) ?? '',
+        round: label(dates),
+        type,
+      };
+    }),
+  };
+}
