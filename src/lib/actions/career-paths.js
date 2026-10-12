@@ -19,7 +19,8 @@ import CareerPath from '@/models/CareerPath';
 import { requireAdmin } from '@/lib/actions/auth';
 import { syncCareerPaths } from '@/lib/career-paths/syncCareerPaths';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
-import { getCourseByCode } from '@/lib/api/public-courses';
+import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
+import { canonicaliseCurriculumCodes } from '@/lib/career-paths/prerequisiteOrder';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 // ADDED beside the statement above rather than folded into it — the standing
@@ -569,8 +570,15 @@ export async function updateCareerPathCourses(id, payload = {}) {
  * course doesn't drop the whole batch.
  *
  *   Phase 1 — resolve each curriculum item's code → MSDB ObjectId via
- *             `getCourseByCode`. We need the ObjectId because
- *             `/schedules` accepts only `course=<oid>`, not codes.
+ *             `getCourseByCodeInsensitive`. We need the ObjectId because
+ *             `/schedules` accepts only `course=<oid>`, not codes. The
+ *             curriculum is synced from upstream and can carry a code in a
+ *             casing upstream no longer uses (`Power-Apps` vs `POWER-APPS`);
+ *             an exact lookup missed it and the course showed no rounds.
+ *
+ * The returned `curriculum` and `schedulesByCourse` are keyed by the
+ * CANONICAL resolved code (prerequisite codes included), so the pick step
+ * never has to reconcile two spellings. Nothing is written back to the doc.
  *   Phase 2 — fan out `listSchedulesByCourse(oid)` for each resolved
  *             course.
  *
@@ -600,15 +608,20 @@ export async function getCareerPathWithSchedules(slug) {
   // course was decommissioned upstream) — the client just renders
   // "ไม่มีรอบเปิดรับสมัคร" for those.
   const codeToOid = new Map();
+  const codeToCanonical = new Map();
   for (let i = 0; i < codesArr.length; i += CHUNK) {
     const chunk = codesArr.slice(i, i + CHUNK);
-    const results = await Promise.allSettled(chunk.map((c) => getCourseByCode(c)));
+    const results = await Promise.allSettled(
+      chunk.map((c) => getCourseByCodeInsensitive(c))
+    );
     results.forEach((r, idx) => {
       if (r.status === 'fulfilled' && r.value?._id) {
         codeToOid.set(chunk[idx], String(r.value._id));
+        if (r.value.course_id) codeToCanonical.set(chunk[idx], String(r.value.course_id));
       }
     });
   }
+  const canonicalOf = (code) => codeToCanonical.get(code) ?? code;
 
   // Phase 2: ObjectId → schedules[]. `listSchedulesByCourse` already
   // applies the upstream open/nearly_full + future-dates filter; we
@@ -621,7 +634,7 @@ export async function getCareerPathWithSchedules(slug) {
       chunk.map(([, oid]) => listSchedulesByCourse(oid, { limit: 20 }))
     );
     results.forEach((r, idx) => {
-      const [code] = chunk[idx];
+      const code = canonicalOf(chunk[idx][0]);
       if (r.status === 'fulfilled') {
         const items = r.value?.items ?? [];
         schedulesByCourse[code] = items.filter(
@@ -637,10 +650,14 @@ export async function getCareerPathWithSchedules(slug) {
   // empty — so the client can distinguish "course exists but no rounds"
   // from "course missing".
   for (const c of codesArr) {
-    if (!(c in schedulesByCourse)) schedulesByCourse[c] = [];
+    if (!(canonicalOf(c) in schedulesByCourse)) schedulesByCourse[canonicalOf(c)] = [];
   }
 
-  return { ...cp, schedulesByCourse };
+  return {
+    ...cp,
+    curriculum: canonicaliseCurriculumCodes(cp.curriculum, codeToCanonical),
+    schedulesByCourse,
+  };
 }
 
 /**
