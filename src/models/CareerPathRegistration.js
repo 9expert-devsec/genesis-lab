@@ -52,6 +52,10 @@ const SelectedCourseSchema = new mongoose.Schema(
     dates:      { type: [String], default: [] },
     type:       { type: String, default: '' },
     scheduleId: { type: String, default: '' },  // MSDB schedule _id, for traceability
+    // Transfer Module: true when the learner typed the attended round's days
+    // because it was not in the past-round list (no `scheduleId` then). Absent
+    // on every other row, and on rows stored before it existed.
+    transferManual: { type: Boolean, default: undefined },
   },
   { _id: false }
 );

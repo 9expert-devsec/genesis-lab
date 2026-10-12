@@ -140,13 +140,21 @@ export default async function RegistrationDetailPage({ params }) {
                   {isTransfer(c) ? `เคยอบรม ${courseRoundLabel(c)}` : courseRoundLabel(c)}
                 </div>
               </div>
-              <span
-                className={
-                  'rounded-full border px-2 py-0.5 text-[11px] font-medium ' +
-                  courseTypeBadge(c.type)
-                }
-              >
-                {courseTypeLabel(c.type)}
+              <span className="inline-flex flex-wrap items-center gap-1">
+                <span
+                  className={
+                    'rounded-full border px-2 py-0.5 text-[11px] font-medium ' +
+                    courseTypeBadge(c.type)
+                  }
+                >
+                  {courseTypeLabel(c.type)}
+                </span>
+                {/* A transfer round the learner typed — not matched to a real round. */}
+                {isTransfer(c) && c.transferManual === true && (
+                  <span className={'rounded-full border px-2 py-0.5 text-[11px] font-medium ' + FALLBACK_BADGE}>
+                    ระบุเอง
+                  </span>
+                )}
               </span>
             </li>
           ))}

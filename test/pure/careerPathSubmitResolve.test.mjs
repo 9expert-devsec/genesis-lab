@@ -123,13 +123,69 @@ test('an out-of-window transfer is refused with the out-of-window message', () =
   assert.equal(out.error, 'รอบอบรมนี้เกินระยะเวลาที่กำหนด จึงไม่สามารถใช้สิทธิ์ Transfer Module ได้');
 });
 
-test('three transfers are refused', () => {
+test('three transfers — every course — are refused', () => {
   const out = run([
     row('PYTHON-L1', 'p-l1-aug', { type: 'transfer' }),
     row('PYTHON-L2', 'p-l2-sep', { type: 'transfer' }),
     row('N8N-L1', 'p-n8n-jul', { type: 'transfer' }),
   ]);
-  assert.equal(out.error, 'ใช้สิทธิ์ Transfer ได้สูงสุด 2 หลักสูตร');
+  assert.equal(out.error, 'ต้องสมัครเรียนอย่างน้อย 1 หลักสูตร ไม่สามารถใช้สิทธิ์ Transfer ได้ครบทุกหลักสูตร');
+});
+
+// ── Manual transfers: typed days, judged and stored by the server ──────────
+
+const manualRow = (courseCode, startDate, endDate, extra = {}) =>
+  row(courseCode, null, { type: 'transfer', transferManual: true, startDate, endDate, ...extra });
+
+test('a manual transfer is stored with its days rebuilt; a tampered round label is ignored', () => {
+  const out = run([
+    manualRow('PYTHON-L1', '2026-09-14', '2026-09-16', { round: 'ตั้งแต่ปี 2020', dates: d('2026-10-01') }),
+    row('PYTHON-L2', 'f-l2-early'), // the pair is skipped — L1 is a transfer
+    row('N8N-L1', 'f-n8n-hyb', { type: 'Hybrid (MS Teams)' }),
+  ]);
+  assert.equal(out.error, undefined);
+  const [l1, l2] = out.selectedCourses;
+  assert.equal(l1.type, 'transfer');
+  assert.equal(l1.transferManual, true);
+  assert.equal(l1.scheduleId, '');
+  assert.deepEqual(l1.dates, ['2026-09-14', '2026-09-15', '2026-09-16']);
+  assert.equal(l1.startDate, '2026-09-14');
+  assert.equal(l1.endDate, '2026-09-16');
+  assert.equal(l1.round, 'R(2026-09-14,2026-09-15,2026-09-16)');
+  // Only a manual transfer carries the flag.
+  assert.equal(l2.transferManual, undefined);
+});
+
+test('a manual transfer outside the window, or too long, is refused', () => {
+  const rest = [row('PYTHON-L2', 'f-l2-nov'), row('N8N-L1', 'f-n8n-hyb', { type: 'Hybrid (Classroom)' })];
+  assert.equal(
+    run([manualRow('PYTHON-L1', '2025-10-09', '2025-10-11'), ...rest]).error,
+    'รอบอบรมนี้เกินระยะเวลาที่กำหนด จึงไม่สามารถใช้สิทธิ์ Transfer Module ได้'
+  );
+  assert.equal(
+    run([manualRow('PYTHON-L1', '2026-09-01', '2026-09-08'), ...rest]).error,
+    'ช่วงวันที่อบรมยาวเกินไป กรุณาตรวจสอบอีกครั้ง'
+  );
+});
+
+test('a manual transfer counts toward the limit', () => {
+  const out = run([
+    manualRow('PYTHON-L1', '2026-09-14', '2026-09-16'),
+    row('PYTHON-L2', 'p-l2-sep', { type: 'transfer' }),
+    manualRow('N8N-L1', '2026-07-01', '2026-07-02'),
+  ]);
+  assert.match(out.error, /ต้องสมัครเรียนอย่างน้อย 1 หลักสูตร/);
+});
+
+test('a transferManual flag on an ordinary pick is not stored', () => {
+  const out = run([
+    row('PYTHON-L1', 'f-l1-nov', { transferManual: true }),
+    row('PYTHON-L2', 'f-l2-nov'),
+    row('N8N-L1', 'f-n8n-hyb', { type: 'Hybrid (Classroom)' }),
+  ]);
+  assert.equal(out.error, undefined);
+  assert.equal(out.selectedCourses[0].transferManual, undefined);
+  assert.equal(out.selectedCourses[0].scheduleId, 'f-l1-nov');
 });
 
 test('two transfers plus a future pick stand, and a missing course still fails the group', () => {

@@ -56,8 +56,10 @@ function serialize(v) {
  *
  *   · an ordinary pick: a FUTURE round still offered (getCareerPathWithSchedules)
  *   · a transfer (`type: 'transfer'`): a PAST round of a course in the path,
- *     ended, inside the one-year window, at most two (getCareerPathPastSchedules,
- *     loaded only when the payload has a transfer)
+ *     ended, inside the one-year window (getCareerPathPastSchedules, loaded
+ *     only when the payload has a transfer) — or, flagged `transferManual`, two
+ *     typed days judged by manualTransferRoundError; never every course
+ *     transferred (maxTransfers)
  *   · every group satisfied, every prerequisite pair in order (transfers exempt)
  *
  * Returns `{ error }` with a Thai sentence to refuse with, or `{ selectedCourses }`

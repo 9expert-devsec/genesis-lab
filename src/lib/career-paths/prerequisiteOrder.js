@@ -262,18 +262,63 @@ export function roundBlocker(curriculum, picks, code, dates) {
 //
 //   · the round has ENDED — its last day is before today;
 //   · its last day is on/after today − 1 year (inclusive, Bangkok day keys);
-//   · at most MAX_TRANSFERS per registration.
+//   · at most `maxTransfers(curriculum)` per registration, and at least one
+//     picked course is NOT a transfer.
 //
 // Every ended round counts as attended; a cancelled round cannot be told apart
 // upstream and is not special-cased.
-
-export const MAX_TRANSFERS = 2;
+//
+// A MANUAL transfer (`transferManual: true`, `scheduleId: null`) is one whose
+// round the learner typed as two days because it was not in the past-round
+// list. It is judged by `manualTransferRoundError` on those days instead of a
+// past-round lookup, and is otherwise an ordinary transfer.
 
 export const TRANSFER_OUT_OF_WINDOW_MESSAGE =
   'รอบอบรมนี้เกินระยะเวลาที่กำหนด จึงไม่สามารถใช้สิทธิ์ Transfer Module ได้';
 
+/** The pick step's hint once no further transfer is possible. */
+export const TRANSFER_LIMIT_HINT = 'ต้องสมัครเรียนอย่างน้อย 1 หลักสูตร';
+
+/** The server's refusal of a selection with too many transfers. */
+export const TRANSFER_LIMIT_MESSAGE =
+  'ต้องสมัครเรียนอย่างน้อย 1 หลักสูตร ไม่สามารถใช้สิทธิ์ Transfer ได้ครบทุกหลักสูตร';
+
 export function isTransfer(pick) {
   return String(pick?.type ?? '').toLowerCase() === 'transfer';
+}
+
+export function isManualTransfer(pick) {
+  return isTransfer(pick) && pick?.transferManual === true;
+}
+
+/**
+ * How many transfers a registration may hold: one fewer than the smallest
+ * complete selection (every Fixed course + each Choice group's `chooseMin`),
+ * so at least one course is always actually attended. Never below 0.
+ */
+export function maxTransfers(curriculum) {
+  let n = 0;
+  for (const g of Array.isArray(curriculum) ? curriculum : []) {
+    if (isChoiceGroup(g)) n += Math.max(1, Number(g?.chooseMin) || 1);
+    else n += groupItems(g).length;
+  }
+  return Math.max(0, n - 1);
+}
+
+/** Is at least one pick in `picks` something other than a transfer? */
+export function hasNonTransferPick(picks) {
+  return Object.values(picks ?? {}).some((p) => p && !isTransfer(p));
+}
+
+/**
+ * The per-selection transfer limit: over `maxTransfers`, or transfers and
+ * nothing else. `null` when the selection stands (or holds no transfer).
+ */
+export function transferLimitError(curriculum, picks) {
+  const n = Object.values(picks ?? {}).filter(isTransfer).length;
+  if (n === 0) return null;
+  if (n > maxTransfers(curriculum) || !hasNonTransferPick(picks)) return TRANSFER_LIMIT_MESSAGE;
+  return null;
 }
 
 /**
@@ -312,19 +357,69 @@ export function transferRoundAllowed(dates, todayKey) {
   return end < todayKey && end >= start;
 }
 
+// ── Manual transfer rounds ───────────────────────────────────────
+
+/** The longest round a learner may type: 7 training days, i.e. end − start ≤ 6. */
+export const MANUAL_TRANSFER_MAX_SPAN_DAYS = 6;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** A real calendar day as `YYYY-MM-DD` → its UTC midnight ms; else `null`. */
+function dayKeyMs(key) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key ?? ''));
+  if (!m) return null;
+  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return new Date(ms).toISOString().slice(0, 10) === key ? ms : null;
+}
+
+/** `key` moved by whole days, as a `YYYY-MM-DD` day key. `null` for a malformed key. */
+export function shiftDaysKey(key, days) {
+  const ms = dayKeyMs(key);
+  return ms === null ? null : new Date(ms + days * DAY_MS).toISOString().slice(0, 10);
+}
+
+/** Every day from `start` to `end` inclusive, as `YYYY-MM-DD`; `[]` when either is malformed or start > end. */
+export function dayRangeKeys(start, end) {
+  const a = dayKeyMs(start);
+  const b = dayKeyMs(end);
+  if (a === null || b === null || a > b) return [];
+  const out = [];
+  for (let t = a; t <= b; t += DAY_MS) out.push(new Date(t).toISOString().slice(0, 10));
+  return out;
+}
+
+/**
+ * Why a typed round (first / last day, `YYYY-MM-DD`) cannot be transferred
+ * today, as a Thai sentence — or `null` when it can. Shared by the pick step's
+ * form and the server.
+ */
+export function manualTransferRoundError(start, end, todayKey) {
+  if (!start || !end) return 'กรุณาระบุวันเริ่มอบรมและวันสุดท้ายของการอบรม';
+  const a = dayKeyMs(start);
+  const b = dayKeyMs(end);
+  if (a === null || b === null) return 'รูปแบบวันที่ไม่ถูกต้อง';
+  if (a > b) return 'วันเริ่มอบรมต้องไม่อยู่หลังวันสุดท้ายของการอบรม';
+  if (!(end < todayKey)) return 'รอบอบรมต้องจบก่อนวันนี้ จึงจะใช้สิทธิ์ Transfer Module ได้';
+  const windowStart = transferWindowStart(todayKey);
+  if (!windowStart || end < windowStart) return TRANSFER_OUT_OF_WINDOW_MESSAGE;
+  if ((b - a) / DAY_MS > MANUAL_TRANSFER_MAX_SPAN_DAYS) return 'ช่วงวันที่อบรมยาวเกินไป กรุณาตรวจสอบอีกครั้ง';
+  return null;
+}
+
 /**
  * Server check of every transfer in `picks`. `pastByCourse` is the past-round
  * loader's output keyed by canonical course code; the pick's own dates are NOT
- * judged — only the past round its `scheduleId` names.
+ * judged — only the past round its `scheduleId` names. A manual transfer has no
+ * past round: its `startDate` / `endDate` are judged by
+ * `manualTransferRoundError` instead.
  *
  * @returns {Array<{ code: string | null, message: string }>}  empty when they stand
  */
 export function transferViolations(curriculum, picks, pastByCourse, todayKey) {
   const out = [];
   const transfers = Object.entries(picks ?? {}).filter(([, pick]) => isTransfer(pick));
-  if (transfers.length > MAX_TRANSFERS) {
-    out.push({ code: null, message: `ใช้สิทธิ์ Transfer ได้สูงสุด ${MAX_TRANSFERS} หลักสูตร` });
-  }
+  const limit = transferLimitError(curriculum, picks);
+  if (limit) out.push({ code: null, message: limit });
 
   const inPath = new Set();
   for (const g of Array.isArray(curriculum) ? curriculum : []) {
@@ -343,6 +438,11 @@ export function transferViolations(curriculum, picks, pastByCourse, todayKey) {
         code,
         message: `หลักสูตร ${code} ไม่อยู่ใน Career Path นี้ จึงไม่สามารถใช้สิทธิ์ Transfer Module ได้`,
       });
+      continue;
+    }
+    if (isManualTransfer(pick)) {
+      const message = manualTransferRoundError(pick.startDate, pick.endDate, todayKey);
+      if (message) out.push({ code, message });
       continue;
     }
     const round = (pastOf.get(courseCodeKey(code)) ?? []).find(
@@ -367,9 +467,11 @@ export function transferViolations(curriculum, picks, pastByCourse, todayKey) {
 /**
  * Restore-time pruning of stored transfer picks (the pick step's draft). A
  * transfer survives only while its `scheduleId` is still one of that course's
- * past rounds AND that round is still inside the window; past MAX_TRANSFERS,
- * the first ones in CURRICULUM ORDER are kept. Non-transfer picks are returned
- * untouched — they have their own restore rules.
+ * past rounds AND that round is still inside the window — a manual transfer,
+ * while `manualTransferRoundError` still passes for today; past
+ * `maxTransfers`, the first ones in CURRICULUM ORDER are kept, and when every
+ * remaining pick is a transfer the last one in course order goes too.
+ * Non-transfer picks are returned untouched — they have their own restore rules.
  *
  * @returns {{ picks: object, dropped: boolean }}  a new picks object
  */
@@ -389,20 +491,35 @@ export function pruneTransferPicks(curriculum, picks, pastByCourse, todayKey) {
 
   const out = { ...(picks ?? {}) };
   let dropped = false;
-  let kept = 0;
+  const limit = maxTransfers(curriculum);
+  const kept = [];
   const transferCodes = Object.keys(out)
     .filter((c) => isTransfer(out[c]))
     .sort((a, b) => rank(a) - rank(b));
   for (const code of transferCodes) {
-    const round = (pastOf.get(courseCodeKey(code)) ?? []).find(
-      (r) => String(r?.scheduleId ?? '') === String(out[code]?.scheduleId ?? '')
-    );
-    if (!round || !transferRoundAllowed(round.dates, todayKey) || kept >= MAX_TRANSFERS) {
+    const pick = out[code];
+    let ok;
+    if (isManualTransfer(pick)) {
+      ok = manualTransferRoundError(pick.startDate, pick.endDate, todayKey) === null;
+    } else {
+      const round = (pastOf.get(courseCodeKey(code)) ?? []).find(
+        (r) => String(r?.scheduleId ?? '') === String(pick?.scheduleId ?? '')
+      );
+      ok = Boolean(round) && transferRoundAllowed(round.dates, todayKey);
+    }
+    if (!ok || kept.length >= limit) {
       delete out[code];
       dropped = true;
     } else {
-      kept += 1;
+      kept.push(code);
     }
+  }
+  // Only a COMPLETE selection is judged here: a half-made draft holding just a
+  // transfer is still on its way to a non-transfer pick.
+  const complete = (Array.isArray(curriculum) ? curriculum : []).every((g) => isGroupSatisfied(g, out));
+  if (kept.length && complete && !hasNonTransferPick(out)) {
+    delete out[kept[kept.length - 1]];
+    dropped = true;
   }
   return { picks: out, dropped };
 }
@@ -473,8 +590,16 @@ export function resolveSubmittedPicks({
       // Judged below by transferViolations; a code outside the path keeps its
       // own spelling so the message can name it.
       const key = code ?? String(sel?.courseCode ?? '');
-      picks[key] = { type: 'transfer', scheduleId: String(sel?.scheduleId ?? '') };
-      live.push({ code: key, transfer: true });
+      picks[key] =
+        sel?.transferManual === true
+          ? {
+              type: 'transfer',
+              transferManual: true,
+              startDate: String(sel?.startDate ?? ''),
+              endDate: String(sel?.endDate ?? ''),
+            }
+          : { type: 'transfer', scheduleId: String(sel?.scheduleId ?? '') };
+      live.push({ code: key, transfer: true, manual: sel?.transferManual === true });
       continue;
     }
 
@@ -500,13 +625,18 @@ export function resolveSubmittedPicks({
   const transferProblems = transferViolations(curriculum, picks, pastByCourse, todayKey);
   if (transferProblems.length) return { error: transferProblems[0].message };
   // Every transfer is now a known past round of a course in the path: take its
-  // days from that round.
+  // days from that round. A manual transfer's days are every day of its
+  // (already validated) typed range.
   for (const row of live) {
     if (!row.transfer) continue;
-    const past = (pastOf.get(courseCodeKey(row.code)) ?? []).find(
-      (r) => String(r?.scheduleId ?? '') === picks[row.code].scheduleId
-    );
-    row.dates = Array.isArray(past?.dates) ? past.dates.map(String) : [];
+    if (row.manual) {
+      row.dates = dayRangeKeys(picks[row.code].startDate, picks[row.code].endDate);
+    } else {
+      const past = (pastOf.get(courseCodeKey(row.code)) ?? []).find(
+        (r) => String(r?.scheduleId ?? '') === picks[row.code].scheduleId
+      );
+      row.dates = Array.isArray(past?.dates) ? past.dates.map(String) : [];
+    }
     row.type = 'transfer';
     picks[row.code].dates = row.dates;
   }
@@ -530,7 +660,7 @@ export function resolveSubmittedPicks({
   return {
     picks,
     selectedCourses: rows.map((sel, i) => {
-      const { dates, type } = live[i];
+      const { dates, type, manual } = live[i];
       return {
         ...sel,
         dates,
@@ -540,6 +670,9 @@ export function resolveSubmittedPicks({
         endDate: bangkokDayKey(maxDateOf(dates)) ?? '',
         round: label(dates),
         type,
+        // Only a manual transfer carries the flag (and no round id); a flag on
+        // any other row is the payload's, and is not stored.
+        ...(manual ? { scheduleId: '', transferManual: true } : { transferManual: undefined }),
       };
     }),
   };

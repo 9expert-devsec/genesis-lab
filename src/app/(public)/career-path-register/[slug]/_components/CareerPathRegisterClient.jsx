@@ -64,9 +64,16 @@ import {
   pairViolations,
   roundBlocker,
   isTransfer,
-  MAX_TRANSFERS,
+  isManualTransfer,
+  maxTransfers,
+  transferLimitError,
   transferRoundAllowed,
+  transferWindowStart,
   pruneTransferPicks,
+  manualTransferRoundError,
+  dayRangeKeys,
+  shiftDaysKey,
+  TRANSFER_LIMIT_HINT,
   TRANSFER_OUT_OF_WINDOW_MESSAGE,
 } from '@/lib/career-paths/prerequisiteOrder';
 
@@ -80,10 +87,14 @@ import {
  * What the "!" beside a course's Transfer button explains. A constant so Sales
  * can reword it without anyone touching the popover; line breaks are kept.
  */
-export const TRANSFER_EXPLAINER = `Transfer Module คือสิทธิ์สำหรับผู้ที่เคยเข้าอบรมหลักสูตรใน Career Path นี้มาแล้ว สามารถนำหลักสูตรที่เคยเรียนมาใช้แทนการเรียนซ้ำ และหักค่าใช้จ่ายของหลักสูตรนั้นออกจากค่าลงทะเบียน
-• ใช้ได้กับรอบอบรมที่จบภายใน 1 ปีก่อนวันสมัคร
-• ใช้สิทธิ์ได้สูงสุด 2 หลักสูตร
-• ทีมขายจะตรวจสอบประวัติการอบรมและแจ้งค่าใช้จ่ายให้อีกครั้ง`;
+export const TRANSFER_EXPLAINER = `Transfer Module สิทธิ์สำหรับผู้ที่เคยอบรม Public Training ในหลักสูตรภายใต้ Career Path นี้
+สามารถใช้สิทธิ์ยกเว้นการเรียนหลักสูตรเดิมและหักค่าลงทะเบียนหลักสูตรเดิมออกจากค่าใช้จ่าย โดยมีเงื่อนไขดังนี้
+- หลักสูตรที่เคยเรียนต้องเรียนจบมาแล้วไม่เกิน 1 ปี นับจากวันที่สมัคร Career Path
+- ต้องเป็นผู้เรียนท่านเดิมและมาจากบริษัทเดิม
+- ทีมขายจะตรวจสอบประวัติการอบรมและแจ้งค่าใช้จ่ายอีกครั้ง`;
+
+/** What the customer sees as a transfer's format — Sales confirms it later. */
+const TRANSFER_CUSTOMER_LABEL = 'รอตรวจสอบสิทธิ์ Transfer';
 
 const DRAFT_KEY_PREFIX = 'career-path-register-v1:';
 const RESULT_KEY_PREFIX = 'career-path-register-result-v1:';
@@ -489,8 +500,9 @@ export function CareerPathRegisterClient({
       else droppedPick = true;
     }
     // A stored transfer survives while its past round is still listed and
-    // still inside the window; past MAX_TRANSFERS the first in course order
-    // are kept.
+    // still inside the window (a manual one, while its typed days still pass);
+    // past maxTransfers the first in course order are kept, and a complete
+    // selection of transfers only loses its last.
     const prunedTransfers = pruneTransferPicks(
       curriculum,
       restoredSelected,
@@ -618,10 +630,10 @@ export function CareerPathRegisterClient({
 
   // Transfer Module: pick a PAST round the learner attended. It REPLACES the
   // course's future pick (if any) and goes through the same group handling as
-  // any pick. Refused past MAX_TRANSFERS unless this course is already one.
+  // any pick. Refused at the limit unless this course is already one.
   function pickTransfer(group, item, past) {
     const code = itemCode(item);
-    if (transferCount >= MAX_TRANSFERS && !isTransfer(selected[code])) return;
+    if (transferCount >= transferLimit && !isTransfer(selected[code])) return;
     if (!transferRoundAllowed(past?.dates, todayKey)) return;
     const dates = Array.isArray(past.dates) ? past.dates : [];
     applyPick(group, code, {
@@ -632,6 +644,27 @@ export function CareerPathRegisterClient({
       type: 'transfer',
       startDate: minDateOf(dates) ?? '',
       endDate:   maxDateOf(dates) ?? '',
+      round:     formatThaiRange(dates),
+    });
+  }
+
+  // A transfer of a round the learner typed (first / last day) because it was
+  // not in the past-round list. Same limit and group handling as pickTransfer;
+  // no round id — the server re-judges the two days alone.
+  function pickManualTransfer(group, item, start, end) {
+    const code = itemCode(item);
+    if (transferCount >= transferLimit && !isTransfer(selected[code])) return;
+    if (manualTransferRoundError(start, end, todayKey)) return;
+    const dates = dayRangeKeys(start, end);
+    applyPick(group, code, {
+      courseName: itemName(item),
+      courseCode: code,
+      scheduleId: null,
+      transferManual: true,
+      dates,
+      type: 'transfer',
+      startDate: start,
+      endDate:   end,
       round:     formatThaiRange(dates),
     });
   }
@@ -751,13 +784,19 @@ export function CareerPathRegisterClient({
 
   const transferPicks = Object.values(selected).filter(isTransfer);
   const transferCount = transferPicks.length;
+  // At least one course must be one the learner actually attends.
+  const transferLimit = useMemo(() => maxTransfers(curriculum), [curriculum]);
 
   const canProceed =
     curriculum.length > 0 &&
     curriculum.every((g) => isGroupSatisfied(g, selected)) &&
     pairViolations(curriculum, selected).length === 0 &&
-    transferCount <= MAX_TRANSFERS &&
-    transferPicks.every((p) => transferRoundAllowed(p.dates, todayKey));
+    transferLimitError(curriculum, selected) === null &&
+    transferPicks.every((p) =>
+      isManualTransfer(p)
+        ? manualTransferRoundError(p.startDate, p.endDate, todayKey) === null
+        : transferRoundAllowed(p.dates, todayKey)
+    );
 
   // ── step transitions ───────────────────────────────────────
 
@@ -801,6 +840,8 @@ export function CareerPathRegisterClient({
             dates:      Array.isArray(sel.dates) ? sel.dates : [],
             type:       sel.type,
             scheduleId: sel.scheduleId,
+            // A typed transfer round: the server judges startDate / endDate.
+            ...(isManualTransfer(sel) ? { transferManual: true } : {}),
           });
         }
       }
@@ -945,7 +986,9 @@ export function CareerPathRegisterClient({
               pastSchedulesByCourse={pastSchedulesByCourse}
               todayKey={todayKey}
               transferCount={transferCount}
+              transferLimit={transferLimit}
               onTransfer={pickTransfer}
+              onManualTransfer={pickManualTransfer}
               onCancelTransfer={cancelTransfer}
               total={total}
               selectedCount={selectedCount}
@@ -1036,7 +1079,7 @@ function Stepper({ step }) {
 
 /** Transfer button + "!" explainer, beside the course name on its card. */
 function TransferHeaderAction({ transferred, open, disabled, full, onToggle }) {
-  const fullHint = `ใช้สิทธิ์ Transfer ครบ ${MAX_TRANSFERS} หลักสูตรแล้ว`;
+  const fullHint = TRANSFER_LIMIT_HINT;
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
       {!transferred && (
@@ -1122,8 +1165,24 @@ function TransferExplainer() {
  * The past-round picker, inside the course card. Same chips as the future
  * rounds; one outside the window is greyed, and a tap on it shows why (a
  * disabled button takes no tap, so a transparent button sits over it).
+ * "กรอกรอบอบรมเอง" opens ManualTransferRound in its place.
  */
-function TransferPicker({ rounds, todayKey, showNotice, onBlocked, onPick }) {
+function TransferPicker({ rounds, todayKey, showNotice, onBlocked, onPick, onManual }) {
+  const [manualOpen, setManualOpen] = useState(false);
+  if (manualOpen) {
+    return (
+      <div
+        data-transfer-picker=""
+        className="mt-3 rounded-lg border border-9e-action/30 bg-white p-3 dark:bg-[#0D1B2A]"
+      >
+        <ManualTransferRound
+          todayKey={todayKey}
+          onApply={onManual}
+          onCancel={() => setManualOpen(false)}
+        />
+      </div>
+    );
+  }
   return (
     <div
       data-transfer-picker=""
@@ -1174,9 +1233,95 @@ function TransferPicker({ rounds, todayKey, showNotice, onBlocked, onPick }) {
           )}
         </>
       )}
-      <p className={cn('text-[11px] text-9e-slate-dp-50', rounds.length > 0 && 'mt-2')}>
-        ไม่พบรอบที่เคยเรียน? ระบุในหมายเหตุ ทีมขายจะตรวจสอบให้
+      <button
+        type="button"
+        onClick={() => setManualOpen(true)}
+        className={cn(
+          'text-[11px] font-medium text-9e-action underline underline-offset-2 hover:text-9e-brand',
+          rounds.length > 0 && 'mt-2'
+        )}
+      >
+        ไม่พบรอบที่เคยเรียน? กรอกรอบอบรมเอง
+      </button>
+    </div>
+  );
+}
+
+/**
+ * A round the learner attended but the list does not have: first and last
+ * day only, previewed as the site's round label. The inputs cannot reach past
+ * yesterday or before the window; manualTransferRoundError (shared with the
+ * server) catches the rest.
+ */
+function ManualTransferRound({ todayKey, onApply, onCancel }) {
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const startId = useId();
+  const endId = useId();
+  const minDay = transferWindowStart(todayKey) ?? undefined;
+  const maxDay = shiftDaysKey(todayKey, -1) ?? undefined;
+  const error = start && end ? manualTransferRoundError(start, end, todayKey) : null;
+  const preview = start && end && !error ? formatThaiRange(dayRangeKeys(start, end)) : '';
+
+  return (
+    <div data-transfer-manual="">
+      <p className="mb-2 text-xs font-semibold text-9e-navy dark:text-white">
+        กรอกรอบที่เคยเข้าอบรม
       </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label htmlFor={startId} className="text-[11px] text-9e-slate-dp-50">
+          วันเริ่มอบรม
+          <input
+            id={startId}
+            type="date"
+            value={start}
+            min={minDay}
+            max={maxDay}
+            onChange={(e) => setStart(e.target.value)}
+            className={cn(inputClass, 'mt-1')}
+          />
+        </label>
+        <label htmlFor={endId} className="text-[11px] text-9e-slate-dp-50">
+          วันสุดท้ายของการอบรม
+          <input
+            id={endId}
+            type="date"
+            value={end}
+            min={start || minDay}
+            max={maxDay}
+            onChange={(e) => setEnd(e.target.value)}
+            className={cn(inputClass, 'mt-1')}
+          />
+        </label>
+      </div>
+      {preview && (
+        <p className="mt-2 text-sm font-medium text-9e-navy dark:text-white">= {preview}</p>
+      )}
+      {error && (
+        <p
+          role="alert"
+          className="mt-2 rounded-9e-sm bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 dark:bg-[#111d2c] dark:text-amber-400"
+        >
+          ⚠️ {error}
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={!start || !end || Boolean(error)}
+          onClick={() => onApply(start, end)}
+          className="rounded-9e-md bg-9e-action px-3 py-1.5 text-xs font-bold text-white hover:bg-9e-brand disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          ยืนยันรอบนี้
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#111d2c]"
+        >
+          ยกเลิก
+        </button>
+      </div>
     </div>
   );
 }
@@ -1205,7 +1350,8 @@ function Step1Courses({
   curriculum, schedulesByCourse, selected, eligibility, codeToName,
   hybridChoice, onHybridChoice,
   onPick, total, selectedCount, canProceed, onNext,
-  pastSchedulesByCourse, todayKey, transferCount, onTransfer, onCancelTransfer,
+  pastSchedulesByCourse, todayKey, transferCount, transferLimit, onTransfer,
+  onManualTransfer, onCancelTransfer,
 }) {
   // Transfer Module UI state: the course whose past-round picker is open, and
   // the course whose out-of-window notice is showing. One of each at a time.
@@ -1300,7 +1446,8 @@ function Step1Courses({
                 const pastRounds = Array.isArray(pastSchedulesByCourse?.[code])
                   ? pastSchedulesByCourse[code]
                   : [];
-                const transfersFull = transferCount >= MAX_TRANSFERS && !transferred;
+                // One more transfer would leave no course to actually attend.
+                const transfersFull = transferCount >= transferLimit && !transferred;
                 const pickerOpen = transferOpen === code && !transferred;
 
                 /*
@@ -1347,6 +1494,11 @@ function Step1Courses({
                           onBlocked={() => setTransferNotice(code)}
                           onPick={(past) => {
                             onTransfer(group, item, past);
+                            setTransferOpen(null);
+                            setTransferNotice(null);
+                          }}
+                          onManual={(start, end) => {
+                            onManualTransfer(group, item, start, end);
                             setTransferOpen(null);
                             setTransferNotice(null);
                           }}
@@ -1743,7 +1895,7 @@ export function Step3Preview({
                   badgeForType(s.type)
                 )}
               >
-                {isTransfer(s) ? 'Transfer' : displayType(s.type)}
+                {isTransfer(s) ? TRANSFER_CUSTOMER_LABEL : displayType(s.type)}
               </span>
             </li>
           ))}
@@ -2041,7 +2193,7 @@ function SelectedCoursesSummary({ selected, curriculum }) {
                         badgeForType(s.type)
                       )}
                     >
-                      {isTransfer(s) ? 'Transfer' : displayType(s.type)}
+                      {isTransfer(s) ? TRANSFER_CUSTOMER_LABEL : displayType(s.type)}
                     </span>
                   </td>
                 </tr>
