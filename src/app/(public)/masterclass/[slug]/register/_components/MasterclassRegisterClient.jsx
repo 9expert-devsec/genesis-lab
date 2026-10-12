@@ -610,6 +610,18 @@ export function MasterclassRegisterClient({ course, batch }) {
     } catch {}
   }, [formState, getValues]);
 
+  // A finished registration consumes its draft. `result` is only ever set on
+  // success (quote, sync card, polled card, PromptPay), so this covers every
+  // in-place success path — a second registration in this tab starts empty
+  // instead of pre-filled with the previous person's details. The 3DS card
+  // path leaves this page for /masterclass/payment/complete and is NOT covered.
+  useEffect(() => {
+    if (!result) return;
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {}
+  }, [result]);
+
   // ── PromptPay polling ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!qrCharge?.pending || !registrationId) return undefined;
