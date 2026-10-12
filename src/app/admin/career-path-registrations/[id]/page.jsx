@@ -7,6 +7,8 @@ import { RegistrationStatusSelect } from '../_components/RegistrationStatusSelec
 import { RecordHistory } from '@/components/audit/RecordHistory';
 import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { typedAttendeeRows } from '@/lib/registration/careerPathRoster';
+import { isTransfer } from '@/lib/career-paths/prerequisiteOrder';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'รายละเอียดการลงทะเบียน' };
@@ -89,16 +91,21 @@ export default async function RegistrationDetailPage({ params }) {
                   {c.courseName}
                 </div>
                 <div className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                  {c.round} · {c.startDate || '—'} – {c.endDate || '—'}
+                  {/* Transfer Module: the round ATTENDED, not one to come. */}
+                  {isTransfer(c)
+                    ? `เคยอบรม ${c.dates?.length ? formatRoundDays(c.dates, { showMonth: true, showYear: true }) : c.round || '—'}`
+                    : <>{c.round} · {c.startDate || '—'} – {c.endDate || '—'}</>}
                 </div>
               </div>
               <span
                 className={
                   'rounded-full border px-2 py-0.5 text-[11px] font-medium ' +
-                  (TYPE_BADGE[c.type] ?? 'bg-gray-100 text-gray-700 border-gray-200')
+                  (isTransfer(c)
+                    ? 'bg-9e-action/10 text-9e-action border-9e-action/30'
+                    : TYPE_BADGE[c.type] ?? 'bg-gray-100 text-gray-700 border-gray-200')
                 }
               >
-                {c.type}
+                {isTransfer(c) ? 'Transfer' : c.type}
               </span>
             </li>
           ))}
