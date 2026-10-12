@@ -32,6 +32,7 @@ import {
   ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Loader2, Lock,
 } from 'lucide-react';
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
+import { ThaiDateField } from '@/components/registration/ThaiDateField';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo. THE ROUND PICKER, now shared with the bundle quotation
 // wizard: this file's own course card and round chip, lifted out unchanged.
@@ -1256,8 +1257,6 @@ function TransferPicker({ rounds, todayKey, showNotice, onBlocked, onPick, onMan
 function ManualTransferRound({ todayKey, onApply, onCancel }) {
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
-  const startId = useId();
-  const endId = useId();
   const minDay = transferWindowStart(todayKey) ?? undefined;
   const maxDay = shiftDaysKey(todayKey, -1) ?? undefined;
   const error = start && end ? manualTransferRoundError(start, end, todayKey) : null;
@@ -1268,31 +1267,24 @@ function ManualTransferRound({ todayKey, onApply, onCancel }) {
       <p className="mb-2 text-xs font-semibold text-9e-navy dark:text-white">
         กรอกรอบที่เคยเข้าอบรม
       </p>
+      {/* Thai DD/MM/พ.ศ. pickers, not <input type="date"> — the native one
+          follows the browser's locale (MM/DD/YYYY on en-US). Values stay
+          Gregorian YYYY-MM-DD; each side's range is bounded by the other. */}
       <div className="grid gap-2 sm:grid-cols-2">
-        <label htmlFor={startId} className="text-[11px] text-9e-slate-dp-50">
-          วันเริ่มอบรม
-          <input
-            id={startId}
-            type="date"
-            value={start}
-            min={minDay}
-            max={maxDay}
-            onChange={(e) => setStart(e.target.value)}
-            className={cn(inputClass, 'mt-1')}
-          />
-        </label>
-        <label htmlFor={endId} className="text-[11px] text-9e-slate-dp-50">
-          วันสุดท้ายของการอบรม
-          <input
-            id={endId}
-            type="date"
-            value={end}
-            min={start || minDay}
-            max={maxDay}
-            onChange={(e) => setEnd(e.target.value)}
-            className={cn(inputClass, 'mt-1')}
-          />
-        </label>
+        <ThaiDateField
+          label="วันเริ่มอบรม"
+          value={start}
+          min={minDay}
+          max={end || maxDay}
+          onChange={setStart}
+        />
+        <ThaiDateField
+          label="วันสุดท้ายของการอบรม"
+          value={end}
+          min={start || minDay}
+          max={maxDay}
+          onChange={setEnd}
+        />
       </div>
       {preview && (
         <p className="mt-2 text-sm font-medium text-9e-navy dark:text-white">= {preview}</p>
