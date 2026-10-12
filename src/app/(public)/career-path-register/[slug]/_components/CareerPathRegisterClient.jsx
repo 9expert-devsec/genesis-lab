@@ -992,7 +992,11 @@ function Stepper({ step }) {
     { n: 3, label: 'เสร็จสิ้น' },
   ];
   return (
-    <ol className="my-6 flex items-center gap-2 text-sm">
+    // Centred by its BOX (`mx-auto w-fit`), not by `justify-center`: on a
+    // narrow phone the row can be wider than the column, and a centred flex
+    // row then spills off BOTH edges, leaving the first step out of reach.
+    // `max-w-full` keeps today's behaviour there — it overflows to the right.
+    <ol className="mx-auto my-6 flex w-fit max-w-full items-center gap-2 text-sm">
       {steps.map((s, i) => (
         <li key={s.n} className="flex items-center gap-2">
           <span
