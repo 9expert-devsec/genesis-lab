@@ -308,7 +308,7 @@ export function MasterclassDetailClient({
 
                 {earliestOpenBatch ? (
                   <Link
-                    href={`/masterclass/${course.slug}/register?batch=${earliestOpenBatch._id}`}
+                    href={`/masterclass/${course.slug}/register/step-1?batch=${earliestOpenBatch._id}`}
                     className="mt-2 inline-block rounded-full bg-9e-action px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-9e-brand"
                   >
                     ลงทะเบียน
@@ -523,7 +523,7 @@ export function MasterclassDetailClient({
                     )}
                     {batch.status === "open" ? (
                       <Link
-                        href={`/masterclass/${course.slug}/register?batch=${batch._id}`}
+                        href={`/masterclass/${course.slug}/register/step-1?batch=${batch._id}`}
                         className="rounded-full min-w-48 text-center bg-9e-action px-8 py-3 text-base font-bold text-white transition-colors hover:bg-9e-brand dark:bg-9e-action dark:hover:bg-9e-brand"
                       >
                         ลงทะเบียน
