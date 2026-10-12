@@ -17,6 +17,15 @@ import { sendCareerPathRegistrationEmail } from '@/lib/email/template-senders/ca
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo.
 import { searchTermPattern } from '@/lib/searchTerm';
+import { getCareerPathWithSchedules } from '@/lib/actions/career-paths';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+import {
+  courseCodeKey,
+  groupItems,
+  isGroupSatisfied,
+  itemCode,
+  pairViolations,
+} from '@/lib/career-paths/prerequisiteOrder';
 
 const ADMIN_PATH = '/admin/career-path-registrations';
 
@@ -38,8 +47,77 @@ function serialize(v) {
   return v == null ? v : JSON.parse(JSON.stringify(v));
 }
 
+/**
+ * THE SERVER RE-CHECK of the picks, before anything is written.
+ *
+ * The pick step enforces these rules, but this action is callable with any
+ * payload, and every date in that payload came from the browser. So each pick
+ * is resolved to the LIVE round by id — through the same loader the public
+ * page uses — and only the live dates are judged. Returns a Thai sentence
+ * naming the course/round to refuse with, or null when the picks stand.
+ *
+ *   · a round no longer offered (closed, filled, started, or not this path's)
+ *   · a group not satisfied (the same rule as the pick step's Next button)
+ *   · a prerequisite pair broken (lib/career-paths/prerequisiteOrder)
+ *
+ * Codes are matched without regard to case, as everywhere in that module.
+ */
+async function refusePicks(data) {
+  const cp = await getCareerPathWithSchedules(data?.careerSlug);
+  if (!cp) return 'ไม่พบ Career Path นี้ กรุณาลองใหม่อีกครั้ง';
+
+  const curriculum = Array.isArray(cp.curriculum) ? cp.curriculum : [];
+  const codeByKey = new Map();
+  const nameOf = {};
+  for (const g of curriculum) {
+    for (const it of groupItems(g)) {
+      const code = itemCode(it);
+      if (!code) continue;
+      codeByKey.set(courseCodeKey(code), code);
+      nameOf[code] = String(it?.snap?.name ?? it?.externalName ?? code);
+    }
+  }
+
+  const picks = {};
+  for (const sel of Array.isArray(data?.selectedCourses) ? data.selectedCourses : []) {
+    const code = codeByKey.get(courseCodeKey(sel?.courseCode));
+    const live = code
+      ? (cp.schedulesByCourse?.[code] ?? []).find(
+          (s) => String(s?._id ?? '') === String(sel?.scheduleId ?? '')
+        )
+      : null;
+    if (!live) {
+      const name = code ? nameOf[code] : sel?.courseName || sel?.courseCode || '';
+      return `รอบ ${sel?.round || ''} ของ ${name} ไม่เปิดรับสมัครแล้ว กรุณาเลือกรอบใหม่`;
+    }
+    // `type` only decides whether a hybrid pick was resolved — the same
+    // question the pick step's group rule asks.
+    picks[code] = { dates: Array.isArray(live.dates) ? live.dates : [], type: sel?.type };
+  }
+
+  for (const g of curriculum) {
+    if (!isGroupSatisfied(g, picks)) {
+      return `ยังเลือกรอบอบรมไม่ครบ${g?.title ? ` ในกลุ่ม "${g.title}"` : ''} กรุณาเลือกรอบใหม่`;
+    }
+  }
+
+  const broken = pairViolations(curriculum, picks)[0];
+  if (broken) {
+    const round = (code) => formatRoundDays(picks[code].dates, { showMonth: true, showYear: true });
+    return (
+      `รอบของ ${nameOf[broken.dependent]} (${round(broken.dependent)}) ` +
+      `ต้องเริ่มหลัง ${nameOf[broken.prerequisite]} (${round(broken.prerequisite)}) จบแล้ว ` +
+      'กรุณาเลือกรอบใหม่'
+    );
+  }
+
+  return null;
+}
+
 export async function createCareerPathRegistration(data) {
   await dbConnect();
+  const refused = await refusePicks(data);
+  if (refused) return { ok: false, error: refused };
   const doc = await CareerPathRegistration.create(data);
   revalidatePath(ADMIN_PATH);
 
