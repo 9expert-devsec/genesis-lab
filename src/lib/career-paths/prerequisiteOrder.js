@@ -203,6 +203,10 @@ export function pairViolations(curriculum, picks) {
   return prerequisitePairs(curriculum).filter(({ dependent, prerequisite }) => {
     const d = pickOf(dependent);
     const p = pickOf(prerequisite);
+    // A transfer on EITHER side takes the pair out of the rule: a transferred
+    // prerequisite is already satisfied, and a transferred dependent is not
+    // checked against its own prerequisites.
+    if (isTransfer(d) || isTransfer(p)) return false;
     return d && p && !pairHolds(d.dates, p.dates);
   });
 }
@@ -214,6 +218,8 @@ export function pairViolations(curriculum, picks) {
  *   needs: 'after'  — `code` is the dependent; it must start after `code`'s blocker ends
  *   needs: 'before' — `code` is the prerequisite; it must end before the blocker starts
  *
+ * A counterpart picked as a transfer never blocks (see `pairViolations`).
+ *
  * @returns {{ code: string, needs: 'after' | 'before' } | null}
  */
 export function roundBlocker(curriculum, picks, code, dates) {
@@ -222,11 +228,123 @@ export function roundBlocker(curriculum, picks, code, dates) {
   for (const { dependent, prerequisite } of prerequisitePairs(curriculum)) {
     if (courseCodeKey(dependent) === self) {
       const p = pickOf(prerequisite);
-      if (p && !pairHolds(dates, p.dates)) return { code: prerequisite, needs: 'after' };
+      if (p && !isTransfer(p) && !pairHolds(dates, p.dates)) return { code: prerequisite, needs: 'after' };
     } else if (courseCodeKey(prerequisite) === self) {
       const d = pickOf(dependent);
-      if (d && !pairHolds(d.dates, dates)) return { code: dependent, needs: 'before' };
+      if (d && !isTransfer(d) && !pairHolds(d.dates, dates)) return { code: dependent, needs: 'before' };
     }
   }
   return null;
+}
+
+// ── Transfer Module ──────────────────────────────────────────────
+//
+// A learner who already attended a course in the path may TRANSFER it instead
+// of picking a future round. A transfer is an ordinary entry in the picks with
+// `type: 'transfer'`, `scheduleId` = the PAST round attended and that round's
+// dates. It counts as picked for the group rules (`isPickResolved` — its type
+// is not 'hybrid'), it is outside every prerequisite pair, and it is judged by:
+//
+//   · the round has ENDED — its last day is before today;
+//   · its last day is on/after today − 1 year (inclusive, Bangkok day keys);
+//   · at most MAX_TRANSFERS per registration.
+//
+// Every ended round counts as attended; a cancelled round cannot be told apart
+// upstream and is not special-cased.
+
+export const MAX_TRANSFERS = 2;
+
+export const TRANSFER_OUT_OF_WINDOW_MESSAGE =
+  'รอบอบรมนี้เกินระยะเวลาที่กำหนด จึงไม่สามารถใช้สิทธิ์ Transfer Module ได้';
+
+export function isTransfer(pick) {
+  return String(pick?.type ?? '').toLowerCase() === 'transfer';
+}
+
+/**
+ * `todayKey` moved by whole years, as a `YYYY-MM-DD` day key. A Feb 29 that
+ * lands on a non-leap year becomes Feb 28. `null` for a malformed key.
+ */
+export function shiftYearsKey(todayKey, years) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(todayKey ?? ''));
+  if (!m) return null;
+  const y = Number(m[1]) + years;
+  let day = m[3];
+  if (m[2] === '02' && day === '29') {
+    const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+    if (!leap) day = '28';
+  }
+  return `${y}-${m[2]}-${day}`;
+}
+
+/** The earliest LAST day a transferable round may have: today − 1 year, inclusive. */
+export function transferWindowStart(todayKey) {
+  return shiftYearsKey(todayKey, -1);
+}
+
+/**
+ * May a past round with these dates be transferred today? False for a round
+ * with no dates, one that has not ended (last day today or later), or one that
+ * ended before the window.
+ *
+ * @param {string[]} dates
+ * @param {string} todayKey  `siteTodayKey()` — Bangkok
+ */
+export function transferRoundAllowed(dates, todayKey) {
+  const end = roundEndDay(dates);
+  const start = transferWindowStart(todayKey);
+  if (!end || !start) return false;
+  return end < todayKey && end >= start;
+}
+
+/**
+ * Server check of every transfer in `picks`. `pastByCourse` is the past-round
+ * loader's output keyed by canonical course code; the pick's own dates are NOT
+ * judged — only the past round its `scheduleId` names.
+ *
+ * @returns {Array<{ code: string | null, message: string }>}  empty when they stand
+ */
+export function transferViolations(curriculum, picks, pastByCourse, todayKey) {
+  const out = [];
+  const transfers = Object.entries(picks ?? {}).filter(([, pick]) => isTransfer(pick));
+  if (transfers.length > MAX_TRANSFERS) {
+    out.push({ code: null, message: `ใช้สิทธิ์ Transfer ได้สูงสุด ${MAX_TRANSFERS} หลักสูตร` });
+  }
+
+  const inPath = new Set();
+  for (const g of Array.isArray(curriculum) ? curriculum : []) {
+    for (const it of groupItems(g)) {
+      const c = itemCode(it);
+      if (c) inPath.add(courseCodeKey(c));
+    }
+  }
+  const pastOf = new Map(
+    Object.entries(pastByCourse ?? {}).map(([c, rows]) => [courseCodeKey(c), Array.isArray(rows) ? rows : []])
+  );
+
+  for (const [code, pick] of transfers) {
+    if (!inPath.has(courseCodeKey(code))) {
+      out.push({
+        code,
+        message: `หลักสูตร ${code} ไม่อยู่ใน Career Path นี้ จึงไม่สามารถใช้สิทธิ์ Transfer Module ได้`,
+      });
+      continue;
+    }
+    const round = (pastOf.get(courseCodeKey(code)) ?? []).find(
+      (r) => String(r?.scheduleId ?? '') === String(pick?.scheduleId ?? '')
+    );
+    if (!round) {
+      out.push({ code, message: `ไม่พบรอบอบรมที่เลือกสำหรับ Transfer Module ของ ${code} กรุณาเลือกรอบใหม่` });
+      continue;
+    }
+    const end = roundEndDay(round.dates);
+    if (!end || !(end < todayKey)) {
+      out.push({ code, message: `รอบอบรมของ ${code} ยังไม่จบ จึงไม่สามารถใช้สิทธิ์ Transfer Module ได้` });
+      continue;
+    }
+    if (!transferRoundAllowed(round.dates, todayKey)) {
+      out.push({ code, message: TRANSFER_OUT_OF_WINDOW_MESSAGE });
+    }
+  }
+  return out;
 }
