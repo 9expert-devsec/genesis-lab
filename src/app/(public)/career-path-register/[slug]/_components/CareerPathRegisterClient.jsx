@@ -22,8 +22,9 @@
  * schedules come in via `schedulesByCourse[courseCode]`.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -52,6 +53,34 @@ import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 import { cn } from '@/lib/utils';
 
 // ── Constants ───────────────────────────────────────────────────
+
+// Each step is its own route (`/career-path-register/[slug]/step-1..4`), so a
+// step change remounts this component and clears React state. Picks + form live
+// in a draft, the success screen in a result — both scoped by slug so two
+// career paths open in one tab never share either.
+const DRAFT_KEY_PREFIX = 'career-path-register-v1:';
+const RESULT_KEY_PREFIX = 'career-path-register-result-v1:';
+
+function readSession(key) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSession(key, value) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+
+function removeSession(key) {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {}
+}
 
 /**
  * The two palette tables MOVED to components/registration/RoundPickCard, with
@@ -393,7 +422,12 @@ function computeItemEligibility(curriculum, selected, codeToName) {
 
 // ── Main component ─────────────────────────────────────────────
 
-export function CareerPathRegisterClient({ careerPath }) {
+export function CareerPathRegisterClient({ careerPath, slug, step: urlStep = 1 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const draftKey = `${DRAFT_KEY_PREFIX}${slug}`;
+  const resultKey = `${RESULT_KEY_PREFIX}${slug}`;
+
   const curriculum = useMemo(
     () => (Array.isArray(careerPath?.curriculum) ? careerPath.curriculum : []),
     [careerPath]
@@ -410,19 +444,117 @@ export function CareerPathRegisterClient({ careerPath }) {
   // `selected` so re-clicking a hybrid round preserves whichever sub-
   // mode the user already chose.
   const [hybridChoice, setHybridChoice] = useState({});
-  // step values:
-  //   0 — course selection (pre-step, no number)
-  //   1 — personal info
-  //   2 — preview / confirm
-  //   3 — thank-you (handled by `result` panel)
-  const [step, setStep] = useState(0);
+  // step values — derived from the route, `/step-N` is `N - 1` here so the
+  // render below and the on-screen Stepper read exactly as they always did:
+  //   0 — course selection (pre-step, no number)   /step-1
+  //   1 — personal info                            /step-2
+  //   2 — preview / confirm                        /step-3
+  //   3 — thank-you (handled by `result` panel)    /step-4
+  const step = urlStep - 1;
   const [formData, setFormData] = useState(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [result, setResult] = useState(null);
+  const [hydrated, setHydrated] = useState(false);
+  // A submit in flight or done — blocks a second createCareerPathRegistration
+  // from a double click before `submitting` has re-rendered the button.
+  const submitLockRef = useRef(false);
 
   const codeToName = useMemo(() => buildCodeToName(curriculum), [curriculum]);
+
+  // Build a step URL that keeps every query param.
+  const stepHref = useCallback(
+    (n) => {
+      const q = new URLSearchParams(searchParams.toString()).toString();
+      return `/career-path-register/${slug}/step-${n}${q ? `?${q}` : ''}`;
+    },
+    [searchParams, slug],
+  );
+
+  // On mount, rehydrate from sessionStorage. A later step whose data is missing
+  // or no longer valid is sent to the earliest step that still is, with the
+  // query kept; `hydrated` stays false so nothing renders before the replace.
+  useEffect(() => {
+    if (urlStep === 4) {
+      const done = readSession(resultKey);
+      if (!done?.result) {
+        router.replace(stepHref(1));
+        return;
+      }
+      setResult(done.result);
+      setFormData(done.formData ?? null);
+      setHydrated(true);
+      return;
+    }
+
+    if (urlStep === 1) {
+      // A fresh start — the previous registration's receipt is done with.
+      removeSession(resultKey);
+    }
+
+    const draft = readSession(draftKey);
+
+    // A stored pick survives only while its course is still in the curriculum
+    // and its round is still offered (schedulesByCourse is re-fetched live on
+    // every render of this route — rounds close and fill between visits).
+    const offered = new Set();
+    for (const g of curriculum) {
+      for (const it of groupItems(g)) {
+        const code = itemCode(it);
+        for (const s of schedulesByCourse[code] ?? []) {
+          offered.add(`${code}|${String(s?._id ?? '')}`);
+        }
+      }
+    }
+    const restoredSelected = {};
+    let droppedPick = false;
+    for (const [code, sel] of Object.entries(draft?.selected ?? {})) {
+      if (offered.has(`${code}|${sel?.scheduleId}`)) restoredSelected[code] = sel;
+      else droppedPick = true;
+    }
+    const keptIds = new Set(Object.values(restoredSelected).map((s) => s.scheduleId));
+    const restoredHybrid = {};
+    for (const [sid, val] of Object.entries(draft?.hybridChoice ?? {})) {
+      if (keptIds.has(sid)) restoredHybrid[sid] = val;
+    }
+    const restoredForm = draft?.formData ?? null;
+
+    if (droppedPick) {
+      writeSession(draftKey, {
+        selected: restoredSelected,
+        hybridChoice: restoredHybrid,
+        formData: restoredForm,
+      });
+    }
+
+    const picksOk =
+      !droppedPick &&
+      curriculum.length > 0 &&
+      curriculum.every((g) => isGroupSatisfied(g, restoredSelected));
+    if (urlStep >= 2 && !picksOk) {
+      router.replace(stepHref(1));
+      return;
+    }
+    if (urlStep === 3 && !restoredForm) {
+      router.replace(stepHref(2));
+      return;
+    }
+
+    setSelected(restoredSelected);
+    setHybridChoice(restoredHybrid);
+    setFormData(restoredForm);
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the draft current while the user picks, so a refresh on step 1 keeps
+  // every pick (step transitions save it too). Never once a result exists —
+  // the draft is consumed on success.
+  useEffect(() => {
+    if (!hydrated || result) return;
+    writeSession(draftKey, { selected, hybridChoice, formData });
+  }, [hydrated, result, selected, hybridChoice, formData, draftKey]);
 
   // Prune hybridChoice when its schedule is no longer referenced by any
   // `selected` entry — covers toggle-off, switching rounds, and the
@@ -586,19 +718,25 @@ export function CareerPathRegisterClient({ careerPath }) {
 
   // ── step transitions ───────────────────────────────────────
 
+  // Every transition saves the draft before it navigates: the next step is a
+  // fresh mount that rebuilds itself from storage.
   function handleStep1Next() {
     if (!canProceed) return;
-    setStep(1);
+    writeSession(draftKey, { selected, hybridChoice, formData });
+    router.push(stepHref(2));
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function handleStep2Next(data) {
     setFormData(data);
-    setStep(2);
+    writeSession(draftKey, { selected, hybridChoice, formData: data });
+    router.push(stepHref(3));
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function handleConfirm() {
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -686,12 +824,23 @@ export function CareerPathRegisterClient({ careerPath }) {
         // success screen, and that line is gone; state whose last reader has
         // been deleted is how a value comes back looking like it was always
         // needed. The document's `_id` is unchanged — this is client state.
-        setResult({ submitted: true });
+        //
+        // The draft is consumed (a second registration in this tab starts
+        // empty, and Back to /step-3 finds nothing to resubmit); the result is
+        // stored so /step-4 — and a refresh of it — can show the panel. The
+        // lock stays held: this mount is done submitting.
+        const done = { submitted: true };
+        removeSession(draftKey);
+        writeSession(resultKey, { result: done, formData: { contactEmail: formData.contactEmail } });
+        setResult(done);
+        router.push(stepHref(4));
         if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
+        submitLockRef.current = false;
         setSubmitError(res?.error || 'ส่งข้อมูลไม่สำเร็จ');
       }
     } catch (err) {
+      submitLockRef.current = false;
       setSubmitError(err?.message ?? 'ส่งข้อมูลไม่สำเร็จ');
     } finally {
       setSubmitting(false);
@@ -725,7 +874,11 @@ export function CareerPathRegisterClient({ careerPath }) {
         </div>
       )}
 
-      {result ? (
+      {!hydrated ? (
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-9e-action" />
+        </div>
+      ) : result ? (
         <CompletePanel email={formData?.contactEmail} />
       ) : (
         <>
@@ -756,7 +909,7 @@ export function CareerPathRegisterClient({ careerPath }) {
               defaultValues={formData}
               selected={selected}
               curriculum={curriculum}
-              onBack={() => setStep(0)}
+              onBack={() => router.push(stepHref(1))}
               onSubmit={handleStep2Next}
             />
           )}
@@ -766,7 +919,7 @@ export function CareerPathRegisterClient({ careerPath }) {
               curriculum={curriculum}
               selected={selected}
               data={formData}
-              onBack={() => setStep(1)}
+              onBack={() => router.push(stepHref(2))}
               onConfirm={handleConfirm}
               submitting={submitting}
               error={submitError}

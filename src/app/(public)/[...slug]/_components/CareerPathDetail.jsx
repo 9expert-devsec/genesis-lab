@@ -506,13 +506,13 @@ function PriceSummary({ careerPath }) {
   const signup = careerPath.links?.signupUrl;
 
   // api_slug is like "prompt-engineer-career-path" → strip the suffix
-  // to land on the local register route /career-path-register/<slug>.
+  // to land on the local register route /career-path-register/<slug>/step-1.
   const registerSlug = careerPath.api_slug
     ? careerPath.api_slug.replace(/-career-path$/, "")
     : "";
   const localRegisterUrl =
     careerPath.registrationOpen && registerSlug
-      ? `/career-path-register/${registerSlug}`
+      ? `/career-path-register/${registerSlug}/step-1`
       : null;
 
   // Prefer local registration when open; otherwise fall back to the
