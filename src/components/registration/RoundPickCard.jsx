@@ -195,6 +195,9 @@ export function RoundPickChip({
  *   deadline through it.
  * @param {string} [o.testId]      `data-testid` for the caller's own tests
  * @param {Record<string,string>} [o.dataAttrs] extra data-* for the caller
+ * @param {ReactNode} [o.headerAction] drawn beside the course name — career-
+ *   path's Transfer / "!" buttons. NOT PASSED, the header is the bare `<h3>`
+ *   it always was, so the bundle's markup is byte-for-byte unchanged.
  */
 export function RoundPickCourseCard({
   name,
@@ -206,6 +209,7 @@ export function RoundPickCourseCard({
   notices = null,
   testId,
   dataAttrs = null,
+  headerAction = null,
   children,
 }) {
   return (
@@ -229,7 +233,14 @@ export function RoundPickCourseCard({
       )}
     >
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-9e-navy dark:text-white">{name}</h3>
+        {headerAction ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold text-9e-navy dark:text-white">{name}</h3>
+            {headerAction}
+          </div>
+        ) : (
+          <h3 className="text-sm font-semibold text-9e-navy dark:text-white">{name}</h3>
+        )}
         {/*
           UNCONDITIONAL, and that is the byte-identity rule rather than a
           preference: career-path renders this span whatever `itemCode` returns,
