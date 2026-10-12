@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveSubmittedPicks } from '@/lib/career-paths/prerequisiteOrder';
+import { bangkokDayKey, resolveSubmittedPicks } from '@/lib/career-paths/prerequisiteOrder';
 
 /**
  * THE SERVER'S JUDGEMENT OF A SUBMITTED CAREER-PATH REGISTRATION
@@ -71,8 +71,8 @@ test('a transfer resolves to its past round, and the tampered payload dates are 
   const [l1, l2, n8n] = out.selectedCourses;
   assert.equal(l1.type, 'transfer');
   assert.deepEqual(l1.dates, PAST['PYTHON-L1'][0].dates);
-  assert.equal(l1.startDate, '2026-08-03T00:00:00.000Z');
-  assert.equal(l1.endDate, '2026-08-05T00:00:00.000Z');
+  assert.equal(l1.startDate, '2026-08-03');
+  assert.equal(l1.endDate, '2026-08-05');
   assert.equal(l1.round, 'R(2026-08-03,2026-08-04,2026-08-05)');
   assert.equal(l1.scheduleId, 'p-l1-aug');
   // Future picks: live dates and live type, never the payload's.
@@ -157,4 +157,44 @@ test('an unresolved hybrid sub-mode stays unresolved and fails the group', () =>
 test('an ordinary pick whose round is not offered is still "ไม่เปิดรับสมัครแล้ว"', () => {
   const out = run([row('PYTHON-L1', 'gone'), row('PYTHON-L2', 'f-l2-nov'), row('N8N-L1', 'f-n8n-hyb')]);
   assert.match(out.error, /ไม่เปิดรับสมัครแล้ว/);
+});
+
+test('stored startDate / endDate are Bangkok YYYY-MM-DD days, never upstream datetimes', () => {
+  const out = run([
+    row('PYTHON-L1', 'f-l1-nov'),
+    row('PYTHON-L2', 'f-l2-nov'),
+    row('N8N-L1', 'f-n8n-hyb', { type: 'Hybrid (Classroom)' }),
+  ]);
+  assert.equal(out.error, undefined);
+  for (const c of out.selectedCourses) {
+    assert.match(c.startDate, /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(c.endDate, /^\d{4}-\d{2}-\d{2}$/);
+  }
+  assert.deepEqual(
+    out.selectedCourses.map((c) => [c.startDate, c.endDate]),
+    [['2026-11-09', '2026-11-11'], ['2026-11-23', '2026-11-25'], ['2026-11-26', '2026-11-27']]
+  );
+  // `dates` keeps upstream's own strings.
+  assert.deepEqual(out.selectedCourses[0].dates, FUTURE['PYTHON-L1'][0].dates);
+});
+
+test('bangkokDayKey reads the Bangkok calendar day', () => {
+  assert.equal(bangkokDayKey('2026-11-09T00:00:00.000Z'), '2026-11-09');
+  // 17:00Z is already the next day in Bangkok.
+  assert.equal(bangkokDayKey('2026-11-08T17:00:00.000Z'), '2026-11-09');
+  assert.equal(bangkokDayKey('2026-11-09'), '2026-11-09');
+  assert.equal(bangkokDayKey(''), null);
+  assert.equal(bangkokDayKey('not a date'), null);
+});
+
+test('stored type keeps the vocabulary the pick step has always sent', () => {
+  // The client lower-cases a round's type (classroom / online), keeps the
+  // learner's hybrid choice in title case, and writes 'transfer'. Upstream
+  // sends 'Classroom' / 'Online' / 'hybrid' — the stored row matches the client.
+  const out = run([
+    row('PYTHON-L1', 'p-l1-aug', { type: 'transfer' }),
+    row('PYTHON-L2', 'f-l2-nov', { type: 'Online' }),
+    row('N8N-L1', 'f-n8n-hyb', { type: 'Hybrid (MS Teams)' }),
+  ]);
+  assert.deepEqual(out.selectedCourses.map((c) => c.type), ['transfer', 'online', 'Hybrid (MS Teams)']);
 });

@@ -54,6 +54,21 @@ export function roundEndDay(dates) {
   return m ? String(m).slice(0, 10) : null;
 }
 
+/**
+ * One date as a Bangkok `YYYY-MM-DD` day, for the stored `startDate` /
+ * `endDate` of a registration row — a readable day, not upstream's datetime.
+ * Bangkok has no DST, so a fixed +07:00 is exact. A bare day string passes
+ * through; anything unparseable is `null`.
+ */
+const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
+export function bangkokDayKey(value) {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  if (value === null || value === undefined || value === '') return null;
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(d.getTime() + BANGKOK_OFFSET_MS).toISOString().slice(0, 10);
+}
+
 /** The comparison key for a course code: exact except for case. */
 export function courseCodeKey(code) {
   return String(code ?? '').toLowerCase();
@@ -519,8 +534,10 @@ export function resolveSubmittedPicks({
       return {
         ...sel,
         dates,
-        startDate: minDateOf(dates) ?? '',
-        endDate: maxDateOf(dates) ?? '',
+        // Bangkok day strings, not upstream's datetimes — `dates` keeps the raw
+        // list for anything that needs the days themselves.
+        startDate: bangkokDayKey(minDateOf(dates)) ?? '',
+        endDate: bangkokDayKey(maxDateOf(dates)) ?? '',
         round: label(dates),
         type,
       };
