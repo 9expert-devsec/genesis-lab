@@ -88,10 +88,12 @@ export async function createCareerPathRegistration(data) {
   await dbConnect();
   const resolved = await refusePicks(data);
   if (resolved.error) return { ok: false, error: resolved.error };
-  const doc = await CareerPathRegistration.create({
-    ...data,
-    selectedCourses: resolved.selectedCourses,
-  });
+  // The stored rows are the RESOLVED ones — every round's days rewritten from
+  // its live round — and nothing else about the payload changes. Rebound rather
+  // than spread into the call so the create below stays `create(data)`, which
+  // test/fs/registrationNoteFieldWiring pins (no note rule of its own here).
+  data = { ...data, selectedCourses: resolved.selectedCourses };
+  const doc = await CareerPathRegistration.create(data);
   revalidatePath(ADMIN_PATH);
 
   /**
