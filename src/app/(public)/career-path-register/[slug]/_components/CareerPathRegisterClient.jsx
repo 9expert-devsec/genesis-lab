@@ -51,6 +51,19 @@ import { createCareerPathRegistration } from '@/lib/actions/career-path-registra
 import { isValidThaiPhone } from '@/lib/registration/thaiPhone';
 import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 import { cn } from '@/lib/utils';
+import {
+  itemCode,
+  isChoiceGroup,
+  groupItems,
+  isPickResolved,
+  isGroupSatisfied,
+  sortedDates,
+  minDateOf,
+  maxDateOf,
+  isAfter,
+  pairViolations,
+  roundBlocker,
+} from '@/lib/career-paths/prerequisiteOrder';
 
 // ── Constants ───────────────────────────────────────────────────
 
@@ -102,28 +115,9 @@ const inputClass =
   'w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy placeholder:text-9e-slate-dp-50 focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:bg-[#0D1B2A] dark:text-white';
 
 // ── Date helpers ────────────────────────────────────────────────
-
-function sortedDates(dates) {
-  if (!Array.isArray(dates) || dates.length === 0) return [];
-  return [...dates].filter(Boolean).sort();
-}
-
-function minDateOf(dates) {
-  const s = sortedDates(dates);
-  return s.length ? s[0] : null;
-}
-
-function maxDateOf(dates) {
-  const s = sortedDates(dates);
-  return s.length ? s[s.length - 1] : null;
-}
-
-// ISO `YYYY-MM-DD` strings sort lexicographically — same order as time,
-// so `'2026-05-23' > '2026-05-22'` does the right thing.
-function isAfter(a, b) {
-  if (!a || !b) return false;
-  return a > b;
-}
+// `sortedDates` / `minDateOf` / `maxDateOf` / `isAfter` MOVED to
+// lib/career-paths/prerequisiteOrder (imported above) — the server re-check
+// reads round spans through the same functions.
 
 function formatThaiRange(dates) {
   const s = sortedDates(dates);
@@ -297,21 +291,12 @@ const EMPTY_INVOICE = {
 };
 
 // ── Curriculum helpers ──────────────────────────────────────────
-
-function itemCode(item) {
-  return String(item?.snap?.code ?? item?.course_id ?? '');
-}
+// `itemCode`, `isChoiceGroup`, `groupItems`, `isPickResolved` and
+// `isGroupSatisfied` MOVED to lib/career-paths/prerequisiteOrder (imported
+// above) — the server re-check applies the same group rules.
 
 function itemName(item) {
   return String(item?.snap?.name ?? item?.externalName ?? itemCode(item) ?? '');
-}
-
-function isChoiceGroup(group) {
-  return String(group?.kind ?? '').toLowerCase() === 'choice';
-}
-
-function groupItems(group) {
-  return Array.isArray(group?.items) ? group.items : [];
 }
 
 // Total required count across all groups — what the bottom counter
@@ -324,26 +309,6 @@ function totalRequired(curriculum) {
     else n += items.length;
   }
   return n;
-}
-
-// Hybrid picks are stored with `type: 'hybrid'` until the user resolves
-// them to Classroom or MS Teams (at which point `type` becomes
-// "Hybrid (Classroom)" / "Hybrid (MS Teams)"). Unresolved picks must
-// not count toward group completion.
-function isPickResolved(sel) {
-  return Boolean(sel) && String(sel?.type ?? '').toLowerCase() !== 'hybrid';
-}
-
-// A group is "satisfied" when its own selection threshold is met. Used
-// to decide whether the NEXT group's overlay should unlock.
-function isGroupSatisfied(group, selected) {
-  const items = groupItems(group);
-  if (items.length === 0) return true; // nothing to pick, treat as done
-  const picks = items.filter((it) => isPickResolved(selected[itemCode(it)])).length;
-  if (isChoiceGroup(group)) {
-    return picks >= Math.max(1, Number(group?.chooseMin) || 1);
-  }
-  return picks === items.length;
 }
 
 // `eligible`        — prior groups all satisfied
@@ -389,35 +354,19 @@ function buildCodeToName(curriculum) {
 // item). Independent of the group-order rule — a course in group 1 can
 // require another course in group 1.
 //
-// Returns: { [courseCode]: { locked: bool, reason: string | null,
-//                            missing: string[] } }
-function computeItemEligibility(curriculum, selected, codeToName) {
-  const out = {};
-  for (const g of curriculum) {
-    for (const it of groupItems(g)) {
-      const code = itemCode(it);
-      if (!code) continue;
-      const prereqs = Array.isArray(it?.prerequisites)
-        ? it.prerequisites.map(String)
-        : [];
-      if (prereqs.length === 0) {
-        out[code] = { locked: false, reason: null, missing: [] };
-        continue;
-      }
-      const missing = prereqs.filter((c) => !selected[c]);
-      if (missing.length === 0) {
-        out[code] = { locked: false, reason: null, missing: [] };
-      } else {
-        const names = missing.map((c) => codeToName[c] ?? c);
-        out[code] = {
-          locked: true,
-          reason: `กรุณาเลือก ${names.join(', ')} ก่อน`,
-          missing,
-        };
-      }
-    }
-  }
-  return out;
+// They are an ORDER between two picks, not a "pick this first" gate: the
+// rule lives in lib/career-paths/prerequisiteOrder (shared with the server
+// re-check), and an unpicked prerequisite imposes nothing. This turns a
+// `roundBlocker` result into the sentence a greyed round / locked card shows,
+// naming the blocking pick and its round.
+function pairBlockReason(block, selected, codeToName) {
+  if (!block) return null;
+  const name = codeToName[block.code] ?? block.code;
+  const sel = selected[block.code];
+  const round = sel?.round ?? formatThaiRange(sel?.dates);
+  return block.needs === 'after'
+    ? `ต้องเริ่มหลัง ${name} (${round})`
+    : `ต้องจบก่อน ${name} (${round})`;
 }
 
 // ── Main component ─────────────────────────────────────────────
@@ -513,7 +462,15 @@ export function CareerPathRegisterClient({ careerPath, slug, step: urlStep = 1 }
       if (offered.has(`${code}|${sel?.scheduleId}`)) restoredSelected[code] = sel;
       else droppedPick = true;
     }
-    const keptIds = new Set(Object.values(restoredSelected).map((s) => s.scheduleId));
+    // A draft saved before the prerequisite-order rule (or against rounds
+    // that have since moved) can hold a pair that breaks it. Drop the
+    // DEPENDENT of each broken pair until none is left — the prerequisite
+    // pick is the one the customer has to take first, so it is the one kept.
+    for (let broken = pairViolations(curriculum, restoredSelected); broken.length; broken = pairViolations(curriculum, restoredSelected)) {
+      delete restoredSelected[broken[0].dependent];
+      droppedPick = true;
+    }
+    const keptIds =new Set(Object.values(restoredSelected).map((s) => s.scheduleId));
     const restoredHybrid = {};
     for (const [sid, val] of Object.entries(draft?.hybridChoice ?? {})) {
       if (keptIds.has(sid)) restoredHybrid[sid] = val;
@@ -528,6 +485,7 @@ export function CareerPathRegisterClient({ careerPath, slug, step: urlStep = 1 }
       });
     }
 
+    // `droppedPick` already covers a broken prerequisite pair (dropped above).
     const picksOk =
       !droppedPick &&
       curriculum.length > 0 &&
@@ -596,11 +554,6 @@ export function CareerPathRegisterClient({ careerPath, slug, step: urlStep = 1 }
   const eligibility = useMemo(
     () => computeGroupEligibility(curriculum, selected),
     [curriculum, selected]
-  );
-
-  const itemEligibility = useMemo(
-    () => computeItemEligibility(curriculum, selected, codeToName),
-    [curriculum, selected, codeToName]
   );
 
   // ── selection mutation ──────────────────────────────────────
@@ -676,16 +629,17 @@ export function CareerPathRegisterClient({ careerPath, slug, step: urlStep = 1 }
               changed = true;
               continue;
             }
-            // Item-level prereqs: drop if any required course is no
-            // longer selected. (Same loop iteration so cascading drops
-            // converge before we exit.)
-            const itemPrereqs = Array.isArray(item2?.prerequisites)
-              ? item2.prerequisites.map(String)
-              : [];
-            if (itemPrereqs.some((p) => !next[p])) {
-              delete next[c2];
-              changed = true;
-            }
+          }
+        }
+        // Prerequisite pairs: a pick that now breaks a pair with another
+        // pick loses that OTHER pick — the one just made is what the user
+        // asked for. An unpicked prerequisite imposes nothing, so nothing
+        // is dropped for being "picked before its prerequisite".
+        for (const { dependent, prerequisite } of pairViolations(curriculum, next)) {
+          const other = dependent === code ? prerequisite : dependent;
+          if (next[other]) {
+            delete next[other];
+            changed = true;
           }
         }
       }
@@ -714,7 +668,10 @@ export function CareerPathRegisterClient({ careerPath, slug, step: urlStep = 1 }
     return n;
   }, [curriculum, selected]);
 
-  const canProceed = curriculum.length > 0 && curriculum.every((g) => isGroupSatisfied(g, selected));
+  const canProceed =
+    curriculum.length > 0 &&
+    curriculum.every((g) => isGroupSatisfied(g, selected)) &&
+    pairViolations(curriculum, selected).length === 0;
 
   // ── step transitions ───────────────────────────────────────
 
@@ -893,7 +850,7 @@ export function CareerPathRegisterClient({ careerPath, slug, step: urlStep = 1 }
               schedulesByCourse={schedulesByCourse}
               selected={selected}
               eligibility={eligibility}
-              itemEligibility={itemEligibility}
+              codeToName={codeToName}
               hybridChoice={hybridChoice}
               onHybridChoice={handleHybridChoice}
               onPick={pickSchedule}
@@ -977,7 +934,7 @@ function Stepper({ step }) {
 // ── Step 1: Curriculum-driven course selection ─────────────────
 
 function Step1Courses({
-  curriculum, schedulesByCourse, selected, eligibility, itemEligibility,
+  curriculum, schedulesByCourse, selected, eligibility, codeToName,
   hybridChoice, onHybridChoice,
   onPick, total, selectedCount, canProceed, onNext,
 }) {
@@ -1045,7 +1002,17 @@ function Step1Courses({
                   ? schedulesByCourse[code]
                   : [];
                 const myPick = selected[code]?.scheduleId ?? null;
-                const itemLock = itemEligibility?.[code] ?? { locked: false, reason: null };
+                // Prerequisite-pair verdict per round, against every OTHER
+                // pick (lib/career-paths/prerequisiteOrder). When it greys
+                // every round, the card names the blocking pick.
+                const pairBlocks = new Map(
+                  schedules.map((s) => [s._id, roundBlocker(curriculum, selected, code, s.dates)])
+                );
+                const allPairBlocked =
+                  schedules.length > 0 && schedules.every((s) => pairBlocks.get(s._id));
+                const cardLockReason = allPairBlocked
+                  ? pairBlockReason(pairBlocks.get(schedules[0]._id), selected, codeToName)
+                  : '';
 
                 // For Choice with max>1: disable adding new items beyond max
                 // (re-selecting on an already-picked item is allowed).
@@ -1062,7 +1029,7 @@ function Step1Courses({
                   screen renders as it did apart from the `data-round-pick-*`
                   markers the shared component carries.
 
-                  THE RULES DID NOT MOVE. `itemLock`, `eligible`, `dateOk` and
+                  THE RULES DID NOT MOVE. `pairBlocks`, `eligible`, `dateOk` and
                   `choiceFull` are still decided here, over this flow's groups and
                   the last day of the previous course, and only their verdict is
                   handed down. The shared component owns no rules at all.
@@ -1072,7 +1039,7 @@ function Step1Courses({
                     key={`${code}-${ii}`}
                     name={name}
                     code={code}
-                    lockReason={itemLock.locked ? itemLock.reason : ''}
+                    lockReason={cardLockReason}
                     hasRounds={schedules.length > 0}
                     notices={
                       /*
@@ -1127,7 +1094,8 @@ function Step1Courses({
                       const isSelected = myPick === sched._id;
                       const start = minDateOf(sched.dates);
                       const dateOk = !latestPriorDate || isAfter(start, latestPriorDate);
-                      const isEnabled = eligible && dateOk && !choiceFull && !itemLock.locked;
+                      const pairBlock = pairBlocks.get(sched._id);
+                      const isEnabled = eligible && dateOk && !choiceFull && !pairBlock;
 
                       return (
                         <RoundPickChip
@@ -1138,8 +1106,8 @@ function Step1Courses({
                           enabled={isEnabled}
                           nearlyFull={sched.status === 'nearly_full'}
                           title={
-                            itemLock.locked
-                              ? itemLock.reason
+                            pairBlock
+                              ? pairBlockReason(pairBlock, selected, codeToName)
                               : !eligible
                                 ? 'กรุณาเลือกรอบอบรมของกลุ่มก่อนหน้าก่อน'
                                 : !dateOk
