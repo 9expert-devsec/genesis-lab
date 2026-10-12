@@ -348,3 +348,46 @@ export function transferViolations(curriculum, picks, pastByCourse, todayKey) {
   }
   return out;
 }
+
+/**
+ * Restore-time pruning of stored transfer picks (the pick step's draft). A
+ * transfer survives only while its `scheduleId` is still one of that course's
+ * past rounds AND that round is still inside the window; past MAX_TRANSFERS,
+ * the first ones in CURRICULUM ORDER are kept. Non-transfer picks are returned
+ * untouched — they have their own restore rules.
+ *
+ * @returns {{ picks: object, dropped: boolean }}  a new picks object
+ */
+export function pruneTransferPicks(curriculum, picks, pastByCourse, todayKey) {
+  const order = new Map();
+  let i = 0;
+  for (const g of Array.isArray(curriculum) ? curriculum : []) {
+    for (const it of groupItems(g)) {
+      const c = itemCode(it);
+      if (c && !order.has(courseCodeKey(c))) order.set(courseCodeKey(c), i++);
+    }
+  }
+  const pastOf = new Map(
+    Object.entries(pastByCourse ?? {}).map(([c, rows]) => [courseCodeKey(c), Array.isArray(rows) ? rows : []])
+  );
+  const rank = (c) => order.get(courseCodeKey(c)) ?? Number.POSITIVE_INFINITY;
+
+  const out = { ...(picks ?? {}) };
+  let dropped = false;
+  let kept = 0;
+  const transferCodes = Object.keys(out)
+    .filter((c) => isTransfer(out[c]))
+    .sort((a, b) => rank(a) - rank(b));
+  for (const code of transferCodes) {
+    const round = (pastOf.get(courseCodeKey(code)) ?? []).find(
+      (r) => String(r?.scheduleId ?? '') === String(out[code]?.scheduleId ?? '')
+    );
+    if (!round || !transferRoundAllowed(round.dates, todayKey) || kept >= MAX_TRANSFERS) {
+      delete out[code];
+      dropped = true;
+    } else {
+      kept += 1;
+    }
+  }
+  return { picks: out, dropped };
+}

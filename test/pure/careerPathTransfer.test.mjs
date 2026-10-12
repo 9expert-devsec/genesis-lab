@@ -147,3 +147,33 @@ test('an all-normal pair still violates as before', () => {
     needs: 'after',
   });
 });
+
+test('pruneTransferPicks drops a vanished or out-of-window transfer and keeps the first 2 by course order', async () => {
+  const { pruneTransferPicks } = await import('@/lib/career-paths/prerequisiteOrder');
+  const normal = { type: 'classroom', scheduleId: 'future-1', dates: d('2026-11-09') };
+
+  // Round vanished from the past list.
+  let r = pruneTransferPicks(PATH, { 'PYTHON-L1': transfer('gone'), 'PYTHON-L2': normal }, PAST, TODAY);
+  assert.equal(r.dropped, true);
+  assert.deepEqual(Object.keys(r.picks), ['PYTHON-L2']);
+  assert.equal(r.picks['PYTHON-L2'], normal);
+
+  // Still listed, but outside the window now.
+  r = pruneTransferPicks(PATH, { 'PYTHON-L1': transfer('p1-old') }, PAST, TODAY);
+  assert.deepEqual(r, { picks: {}, dropped: true });
+
+  // Three stored transfers: the last in curriculum order goes, whatever the
+  // key order of the stored object.
+  r = pruneTransferPicks(
+    PATH,
+    { 'N8N-L1': transfer('n8n-recent'), 'PYTHON-L2': transfer('p2-recent'), 'PYTHON-L1': transfer('p1-recent') },
+    PAST,
+    TODAY
+  );
+  assert.equal(r.dropped, true);
+  assert.deepEqual(Object.keys(r.picks).sort(), ['PYTHON-L1', 'PYTHON-L2']);
+
+  // Nothing to prune.
+  r = pruneTransferPicks(PATH, { 'PYTHON-L1': transfer('p1-recent'), 'PYTHON-L2': normal }, PAST, TODAY);
+  assert.equal(r.dropped, false);
+});

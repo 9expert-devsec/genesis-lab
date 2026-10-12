@@ -1,7 +1,9 @@
 import {
   getCareerPathForRegistration,
+  getCareerPathPastSchedules,
   getCareerPathWithSchedules,
 } from '@/lib/actions/career-paths';
+import { siteTodayKey } from '@/lib/articlePublishTime';
 import { CareerPathRegisterClient } from './_components/CareerPathRegisterClient';
 
 /** Shared metadata for the step routes — same title on every step, per-step canonical. */
@@ -49,5 +51,19 @@ export async function CareerPathRegisterContent({ params, step }) {
     );
   }
 
-  return <CareerPathRegisterClient careerPath={cp} slug={slug} step={step} />;
+  // The Transfer Module's past rounds. Not needed on the receipt step, which
+  // restores everything it shows from storage. `todayKey` is passed down so the
+  // client judges the transfer window against the same Bangkok day the loader
+  // flagged `transferable` with, not the visitor's clock.
+  const pastSchedulesByCourse = step === 4 ? {} : await getCareerPathPastSchedules(cp);
+
+  return (
+    <CareerPathRegisterClient
+      careerPath={cp}
+      pastSchedulesByCourse={pastSchedulesByCourse}
+      todayKey={siteTodayKey()}
+      slug={slug}
+      step={step}
+    />
+  );
 }
