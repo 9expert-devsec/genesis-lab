@@ -1832,6 +1832,66 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
   }
 }
 
+/* ── SEAM LAYER 4 — the long fade OUT, into ProgramSelector ──────────
+   ProgramSelector must start on its own flat background with nothing
+   reaching into it, so the whole transition happens HERE, inside this
+   section's bottom padding: an opaque ramp from the section's base to
+   the next section's background, ending exactly at this section's
+   bottom edge.
+
+   --section-fade-height   the ramp's height: 96px below md, 160px from
+                           md up. It is ALSO this section's
+                           padding-bottom (set on .fc-surface below), so
+                           the ramp always starts under the cards — tune
+                           this one value and both move together.
+
+   --fc-fade-to is the NEXT section's background, read from the SAME
+   tokens ProgramSelector uses (`bg-9e-ice dark:bg-9e-card`) — never a
+   hard-coded white. In dark mode it becomes a near-seamless dark → dark.
+
+   Stops follow smoothstep (3t² − 2t³), the ease-in-out curve, every 10%,
+   so the ramp has no visible bands and no hard start or end. Every stop
+   is an OPAQUE color-mix of the two colours — no alpha anywhere, so it
+   never composites over anything and there is no `transparent` to grey
+   it. */
+.fc-surface {
+  --section-fade-height: 96px;
+  padding-bottom: var(--section-fade-height);
+}
+
+@media (min-width: 768px) {
+  .fc-surface {
+    --section-fade-height: 160px;
+  }
+}
+
+.fc-fade-out {
+  --fc-fade-from: rgb(var(--9e-fc-base-rgb));
+  --fc-fade-to: theme('colors.9e.ice');
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: var(--section-fade-height);
+  background-image: linear-gradient(
+    to bottom,
+    var(--fc-fade-from) 0%,
+    color-mix(in srgb, var(--fc-fade-to) 2.8%, var(--fc-fade-from)) 10%,
+    color-mix(in srgb, var(--fc-fade-to) 10.4%, var(--fc-fade-from)) 20%,
+    color-mix(in srgb, var(--fc-fade-to) 21.6%, var(--fc-fade-from)) 30%,
+    color-mix(in srgb, var(--fc-fade-to) 35.2%, var(--fc-fade-from)) 40%,
+    color-mix(in srgb, var(--fc-fade-to) 50%, var(--fc-fade-from)) 50%,
+    color-mix(in srgb, var(--fc-fade-to) 64.8%, var(--fc-fade-from)) 60%,
+    color-mix(in srgb, var(--fc-fade-to) 78.4%, var(--fc-fade-from)) 70%,
+    color-mix(in srgb, var(--fc-fade-to) 89.6%, var(--fc-fade-from)) 80%,
+    color-mix(in srgb, var(--fc-fade-to) 97.2%, var(--fc-fade-from)) 90%,
+    var(--fc-fade-to) 100%
+  );
+}
+
+.dark .fc-fade-out {
+  --fc-fade-to: theme('colors.9e.card');
+}
+
 /* ── THE FILMSTRIP'S EDGE FADES ─────────────────────────────────────────────
    Two overlays on the strip's leading and trailing edges, so a card that is
    half out of view reads as "there is more this way" instead of as a card that

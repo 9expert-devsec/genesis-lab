@@ -7,7 +7,6 @@ import {
   warnFeatureContentMisses,
 } from "@/lib/home/featureContentRefs";
 import { FeaturedContentSlider } from "./FeaturedContentSlider";
-import { HorizonDivider } from "./HorizonDivider";
 
 /**
  * Home "Feature Content" — the dark band directly under the hero.
@@ -120,19 +119,19 @@ export async function FeatureContentSection({ banners = [] }) {
       // and a "no two on one page" rule (see tailwind.config.js), enforced by
       // test/pure/zIndexStack.
       //
-      // `pb-12` matches the other Home sections; from md it is `pb-20` so it
-      // clears the HorizonDivider's 64px arc (28px below md fits inside
-      // pb-12). Keep it ≥ --horizon-depth if that is tuned. There is no `pt-*`
-      // here: the top padding is the overlap plus that same 3rem and lives in
-      // .fc-surface, because it must move with the negative margin.
+      // No `pt-*` or `pb-*` here. The top padding is the overlap plus 3rem
+      // and lives in .fc-surface, because it must move with the negative
+      // margin; the bottom padding is --section-fade-height, also in
+      // .fc-surface, because it must move with the fade (.fc-fade-out).
       //
       // NO overflow-hidden. See the note above.
-      className="fc-surface pointer-events-none relative z-20 w-full px-4 pb-12 md:pb-20 lg:px-6"
+      className="fc-surface pointer-events-none relative z-20 w-full px-4 lg:px-6"
     >
       <div aria-hidden="true" className="fc-aurora pointer-events-none" />
 
-      {/* Corner fill = ProgramSelector's own bg tokens, as fill-*. */}
-      <HorizonDivider fillClassName="fill-9e-ice dark:fill-9e-card" />
+      {/* The long fade into ProgramSelector, in this section's bottom
+          padding — below the cards, never over them. */}
+      <div aria-hidden="true" className="fc-fade-out pointer-events-none" />
 
       {/* Pointer events come back ON here — and this box starts below the
           overlap band, so it never sits over the hero. `relative` so it
