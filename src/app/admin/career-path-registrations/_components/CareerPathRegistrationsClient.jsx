@@ -12,6 +12,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Eye, Search, Trash2 } from 'lucide-react';
+import { isTransfer } from '@/lib/career-paths/prerequisiteOrder';
 import {
   deleteCareerPathRegistration,
   updateRegistrationStatus,
@@ -195,6 +196,15 @@ export function CareerPathRegistrationsClient({ registrations: initial, total })
                     </td>
                     <td className="px-3 py-3 text-center">
                       {Array.isArray(r.selectedCourses) ? r.selectedCourses.length : 0}
+                      {(() => {
+                        // Transfer Module: how many of those courses were transferred.
+                        const n = (r.selectedCourses ?? []).filter(isTransfer).length;
+                        return n > 0 ? (
+                          <span className="ml-1.5 inline-flex rounded-full border border-9e-action/30 bg-9e-action/10 px-1.5 py-0.5 text-[10px] font-medium text-9e-action">
+                            Transfer {n}
+                          </span>
+                        ) : null;
+                      })()}
                     </td>
                     <td className="px-3 py-3 text-center">
                       {r.attendeeCount ?? 1}

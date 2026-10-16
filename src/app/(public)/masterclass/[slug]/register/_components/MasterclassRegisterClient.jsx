@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import {
   Loader2,
@@ -39,6 +40,13 @@ import { TermsModal } from "@/components/payment/TermsModal";
 import { trackPurchase, trackFormSubmitLead } from "@/lib/analytics/conversions";
 
 const STORAGE_KEY = "masterclass-register-v1";
+// Each step is its own route, so the success result has to survive the
+// step-2 → step-3 remount (and a refresh on step 3) in storage, like the
+// public wizard's RESULT_KEY.
+const RESULT_KEY = "masterclass-register-result-v1";
+// Per-registration "purchase already sent" flag. The useRef guard alone resets
+// on every mount, and step 3 can now be refreshed.
+const PURCHASE_TRACKED_PREFIX = "masterclass-register-purchase-tracked:";
 
 const STEPS = ["กรอกข้อมูล", "ตรวจสอบและดำเนินการ", "สำเร็จ"];
 
@@ -459,8 +467,9 @@ function LicenseChoices({ choices, value, onChange, globalAcked = false }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function MasterclassRegisterClient({ course, batch }) {
-  const [step, setStep] = useState(1);
+export function MasterclassRegisterClient({ course, batch, step = 1 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [hydrated, setHydrated] = useState(false);
   const [formState, setFormState] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
@@ -508,6 +517,18 @@ export function MasterclassRegisterClient({ course, batch }) {
   // Anchor for the QR/Card payment panel itself (status widget "scroll to" target).
   const paymentPanelRef = useRef(null);
 
+  // Build a step URL that keeps every query param. `batch` is always set to the
+  // resolved batch: a bare /register URL falls back to the first open batch,
+  // and pinning it here means a later step can never resolve a different one.
+  const stepHref = useCallback(
+    (n) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("batch", String(batch._id));
+      return `/masterclass/${course.slug}/register/step-${n}?${params.toString()}`;
+    },
+    [searchParams, batch._id, course.slug],
+  );
+
   const toggleSection = useCallback((key) => {
     setOpenSections((p) => ({ ...p, [key]: !p[key] }));
   }, []);
@@ -541,17 +562,51 @@ export function MasterclassRegisterClient({ course, batch }) {
   );
 
   // ── hydration + sessionStorage restore ──────────────────────────────────────
+  // Each step is its own route, so moving between steps remounts this component
+  // and clears React state — the draft and the success result live in storage.
+  // A step whose data is missing (refresh in a new tab, deep link) is sent back
+  // to step 1 with the query kept; `hydrated` stays false so nothing renders
+  // before the replace lands.
   useEffect(() => {
-    setHydrated(true);
+    if (step === 3) {
+      let done = null;
+      try {
+        const raw = sessionStorage.getItem(RESULT_KEY);
+        if (raw) done = JSON.parse(raw);
+      } catch {}
+      if (!done?.result || done.batchId !== String(batch._id)) {
+        router.replace(stepHref(1));
+        return;
+      }
+      setResult(done.result);
+      setFormState({ ...EMPTY_FORM, ...done.formState });
+      setRegistrationId(done.registrationId ?? null);
+      setHydrated(true);
+      return;
+    }
+
+    let saved = null;
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        if (saved?.formState)
-          setFormState({ ...EMPTY_FORM, ...saved.formState });
-        if (saved?.invoice) reset({ invoice: saved.invoice });
-      }
+      if (raw) saved = JSON.parse(raw);
     } catch {}
+
+    // Step 2 needs a draft that passed step 1 FOR THIS BATCH. The draft is
+    // only written by handleStep1Next, so its presence means step 1 validated.
+    if (step === 2 && saved?.batchId !== String(batch._id)) {
+      router.replace(stepHref(1));
+      return;
+    }
+    if (step === 1) {
+      // A fresh start — the previous registration's receipt is done with.
+      try {
+        sessionStorage.removeItem(RESULT_KEY);
+      } catch {}
+    }
+
+    if (saved?.formState) setFormState({ ...EMPTY_FORM, ...saved.formState });
+    if (saved?.invoice) reset({ invoice: saved.invoice });
+    setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -605,10 +660,45 @@ export function MasterclassRegisterClient({ course, batch }) {
     try {
       sessionStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ formState, invoice: getValues("invoice") }),
+        JSON.stringify({
+          formState,
+          invoice: getValues("invoice"),
+          batchId: String(batch._id),
+        }),
       );
     } catch {}
-  }, [formState, getValues]);
+  }, [formState, getValues, batch._id]);
+
+  // A finished registration consumes its draft. `result` is only ever set on
+  // success (quote, sync card, polled card, PromptPay), so this covers every
+  // in-place success path — a second registration in this tab starts empty
+  // instead of pre-filled with the previous person's details. The 3DS card
+  // path leaves this page for /masterclass/payment/complete and is NOT covered.
+  //
+  // It is also the ONE place a fresh success moves to the step-3 route: the
+  // result is stored first so the remounted step 3 (and a refresh of it) can
+  // render it. On step 3 itself `result` was just restored from that storage,
+  // so there is nothing to save and nowhere to go.
+  useEffect(() => {
+    if (!result) return;
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {}
+    if (step === 3) return;
+    try {
+      sessionStorage.setItem(
+        RESULT_KEY,
+        JSON.stringify({
+          result,
+          formState,
+          registrationId,
+          batchId: String(batch._id),
+        }),
+      );
+    } catch {}
+    router.push(stepHref(3));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result]);
 
   // ── PromptPay polling ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -635,7 +725,6 @@ export function MasterclassRegisterClient({ course, batch }) {
             requestInvoice:
               Boolean(formState.request_invoice) || wantsDoc === true,
           });
-          setStep(3);
         }
       } catch {}
       if (elapsed >= MAX) {
@@ -672,7 +761,6 @@ export function MasterclassRegisterClient({ course, batch }) {
             requestInvoice:
               Boolean(formState.request_invoice) || wantsDoc === true,
           });
-          setStep(3);
           window.scrollTo({ top: 0, behavior: "smooth" });
         } else if (d.paymentStatus === "failed") {
           // Charge declined (e.g. insufficient funds) — surface immediately
@@ -715,6 +803,17 @@ export function MasterclassRegisterClient({ course, batch }) {
     // stable per-registration fallback so transaction_id is never empty (Ads
     // dedupes conversions on transaction_id).
     const transactionId = result.referenceNumber || registrationId;
+
+    // Step 3 is a route that can be refreshed, and a refresh re-mounts with a
+    // fresh ref — so the once-per-registration promise is kept in storage too.
+    const trackedKey = `${PURCHASE_TRACKED_PREFIX}${transactionId}`;
+    try {
+      if (sessionStorage.getItem(trackedKey)) {
+        purchaseTracked.current = true;
+        return;
+      }
+      sessionStorage.setItem(trackedKey, "1");
+    } catch {}
 
     purchaseTracked.current = true;
     trackPurchase({
@@ -883,7 +982,7 @@ export function MasterclassRegisterClient({ course, batch }) {
     }
 
     persist();
-    setStep(2);
+    router.push(stepHref(2));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -1051,7 +1150,6 @@ export function MasterclassRegisterClient({ course, batch }) {
         referenceNumber: reg.referenceNumber,
         requestInvoice: Boolean(formState.request_invoice) || quoteNeedsInvoice,
       });
-      setStep(3);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       setSubmitError(err?.message ?? "ลงทะเบียนไม่สำเร็จ");
@@ -1102,7 +1200,6 @@ export function MasterclassRegisterClient({ course, batch }) {
         method: "credit_card",
         requestInvoice: Boolean(formState.request_invoice) || wantsDoc === true,
       });
-      setStep(3);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       setPayError(err?.message ?? "การชำระเงินไม่สำเร็จ");
@@ -2474,7 +2571,7 @@ export function MasterclassRegisterClient({ course, batch }) {
                 <button
                   type="button"
                   onClick={() => {
-                    setStep(1);
+                    router.push(stepHref(1));
                     setMethod(null);
                     setChannel(null);
                     setQrCharge(null);
@@ -2509,7 +2606,7 @@ export function MasterclassRegisterClient({ course, batch }) {
             method={method}
             onConfirm={handleStep2Confirm}
             onBack={() => {
-              setStep(1);
+              router.push(stepHref(1));
               setMethod(null);
               setChannel(null);
               setQrCharge(null);
@@ -2521,8 +2618,10 @@ export function MasterclassRegisterClient({ course, batch }) {
           />
         )}
 
-        {/* ── STEP 3 — Success ── */}
-        {step === 3 && (
+        {/* ── STEP 3 — Success ──
+            `|| result` covers the moment between a fresh success on step 2 and
+            the step-3 route mounting, so the screen never goes blank. */}
+        {(step === 3 || result) && (
           <div className="mx-auto max-w-md py-16 text-center">
             {/* Icon */}
             <CheckCircle2 size={56} className="mx-auto text-green-500" />

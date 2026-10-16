@@ -19,8 +19,22 @@ import CareerPath from '@/models/CareerPath';
 import { requireAdmin } from '@/lib/actions/auth';
 import { syncCareerPaths } from '@/lib/career-paths/syncCareerPaths';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
-import { getCourseByCode } from '@/lib/api/public-courses';
-import { listSchedulesByCourse } from '@/lib/api/schedules';
+import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
+import {
+  canonicaliseCurriculumCodes,
+  maxDateOf,
+  minDateOf,
+  roundEndDay,
+  shiftYearsKey,
+  transferRoundAllowed,
+} from '@/lib/career-paths/prerequisiteOrder';
+import {
+  ADMIN_SCHEDULE_STATUSES,
+  listSchedules,
+  listSchedulesByCourse,
+} from '@/lib/api/schedules';
+import { siteTodayKey } from '@/lib/articlePublishTime';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo. The save guard for links.outlineUrl reads the same rule
@@ -569,8 +583,15 @@ export async function updateCareerPathCourses(id, payload = {}) {
  * course doesn't drop the whole batch.
  *
  *   Phase 1 — resolve each curriculum item's code → MSDB ObjectId via
- *             `getCourseByCode`. We need the ObjectId because
- *             `/schedules` accepts only `course=<oid>`, not codes.
+ *             `getCourseByCodeInsensitive`. We need the ObjectId because
+ *             `/schedules` accepts only `course=<oid>`, not codes. The
+ *             curriculum is synced from upstream and can carry a code in a
+ *             casing upstream no longer uses (`Power-Apps` vs `POWER-APPS`);
+ *             an exact lookup missed it and the course showed no rounds.
+ *
+ * The returned `curriculum` and `schedulesByCourse` are keyed by the
+ * CANONICAL resolved code (prerequisite codes included), so the pick step
+ * never has to reconcile two spellings. Nothing is written back to the doc.
  *   Phase 2 — fan out `listSchedulesByCourse(oid)` for each resolved
  *             course.
  *
@@ -600,15 +621,20 @@ export async function getCareerPathWithSchedules(slug) {
   // course was decommissioned upstream) — the client just renders
   // "ไม่มีรอบเปิดรับสมัคร" for those.
   const codeToOid = new Map();
+  const codeToCanonical = new Map();
   for (let i = 0; i < codesArr.length; i += CHUNK) {
     const chunk = codesArr.slice(i, i + CHUNK);
-    const results = await Promise.allSettled(chunk.map((c) => getCourseByCode(c)));
+    const results = await Promise.allSettled(
+      chunk.map((c) => getCourseByCodeInsensitive(c))
+    );
     results.forEach((r, idx) => {
       if (r.status === 'fulfilled' && r.value?._id) {
         codeToOid.set(chunk[idx], String(r.value._id));
+        if (r.value.course_id) codeToCanonical.set(chunk[idx], String(r.value.course_id));
       }
     });
   }
+  const canonicalOf = (code) => codeToCanonical.get(code) ?? code;
 
   // Phase 2: ObjectId → schedules[]. `listSchedulesByCourse` already
   // applies the upstream open/nearly_full + future-dates filter; we
@@ -621,7 +647,7 @@ export async function getCareerPathWithSchedules(slug) {
       chunk.map(([, oid]) => listSchedulesByCourse(oid, { limit: 20 }))
     );
     results.forEach((r, idx) => {
-      const [code] = chunk[idx];
+      const code = canonicalOf(chunk[idx][0]);
       if (r.status === 'fulfilled') {
         const items = r.value?.items ?? [];
         schedulesByCourse[code] = items.filter(
@@ -637,10 +663,123 @@ export async function getCareerPathWithSchedules(slug) {
   // empty — so the client can distinguish "course exists but no rounds"
   // from "course missing".
   for (const c of codesArr) {
-    if (!(c in schedulesByCourse)) schedulesByCourse[c] = [];
+    if (!(canonicalOf(c) in schedulesByCourse)) schedulesByCourse[canonicalOf(c)] = [];
   }
 
-  return { ...cp, schedulesByCourse };
+  return {
+    ...cp,
+    curriculum: canonicaliseCurriculumCodes(cp.curriculum, codeToCanonical),
+    schedulesByCourse,
+  };
+}
+
+/**
+ * PAST rounds of every course in a career path — the Transfer Module's source.
+ *
+ * A learner who already attended a course may transfer it instead of picking a
+ * future round; the round they name must be a real past round of that course.
+ * Not wired to any page or action yet.
+ *
+ *   · Courses resolve exactly as in `getCareerPathWithSchedules` — case-
+ *     insensitively, keyed by the CANONICAL resolved code — and rounds are
+ *     looked up by the course's CURRENT ObjectId, which already covers renamed
+ *     codes (a rename rewrites `course_id` on the same upstream document).
+ *   · ONE `/schedules` range read for the whole path: `courses` takes a
+ *     comma-joined id list (upstream `course: {$in}`; measured 2026-10-12).
+ *     `status: 'all'` because a past round's status says nothing about whether
+ *     it ran — every ENDED round counts as attended.
+ *   · Two years back, so rounds outside the one-year transfer window can still
+ *     be shown, disabled. `transferable` is the window verdict
+ *     (`transferRoundAllowed`), against Bangkok's today.
+ *   · Only rounds whose LAST day is before today. Newest first.
+ *
+ * Upstream history starts in late 2025 (nothing before 2025-10, eight rounds in
+ * Oct–Dec 2025), so a round attended before that is not here to be named.
+ *
+ * @param {Array|{curriculum: Array}} curriculumOrPath
+ * @returns {Promise<Record<string, Array<{ scheduleId: string, dates: string[],
+ *   startDate: string, endDate: string, round: string, type: string,
+ *   transferable: boolean }>>>}  keyed by canonical course code
+ */
+export async function getCareerPathPastSchedules(curriculumOrPath) {
+  const curriculum = Array.isArray(curriculumOrPath)
+    ? curriculumOrPath
+    : Array.isArray(curriculumOrPath?.curriculum)
+      ? curriculumOrPath.curriculum
+      : [];
+
+  const codes = new Set();
+  for (const group of curriculum) {
+    for (const item of Array.isArray(group?.items) ? group.items : []) {
+      const code = item?.snap?.code ?? item?.course_id ?? '';
+      if (code) codes.add(String(code));
+    }
+  }
+  if (codes.size === 0) return {};
+
+  const CHUNK = 10;
+  const codesArr = [...codes];
+
+  // Same resolution as getCareerPathWithSchedules: code → ObjectId + canonical
+  // code, case-insensitively. A code that does not resolve gets an empty list.
+  const oidToCanonical = new Map();
+  const pastSchedulesByCourse = {};
+  for (let i = 0; i < codesArr.length; i += CHUNK) {
+    const chunk = codesArr.slice(i, i + CHUNK);
+    const results = await Promise.allSettled(
+      chunk.map((c) => getCourseByCodeInsensitive(c))
+    );
+    results.forEach((r, idx) => {
+      const course = r.status === 'fulfilled' ? r.value : null;
+      const canonical = course?.course_id ? String(course.course_id) : chunk[idx];
+      if (course?._id) oidToCanonical.set(String(course._id), canonical);
+      pastSchedulesByCourse[canonical] ??= [];
+    });
+  }
+
+  const todayKey = siteTodayKey();
+  const from = shiftYearsKey(todayKey, -2);
+  const oids = [...oidToCanonical.keys()];
+  const ID_CHUNK = 20;
+  for (let i = 0; i < oids.length; i += ID_CHUNK) {
+    let rows = [];
+    try {
+      const res = await listSchedules({
+        courses: oids.slice(i, i + ID_CHUNK),
+        from,
+        to: todayKey,
+        status: ADMIN_SCHEDULE_STATUSES,
+      });
+      rows = res?.items ?? [];
+    } catch (err) {
+      // One failed read leaves those courses with no past rounds rather than
+      // failing the page — the same tolerance as the future-round loader.
+      console.error('[getCareerPathPastSchedules] /schedules failed:', err?.message);
+    }
+    for (const s of rows) {
+      const canonical = oidToCanonical.get(String(s?.course?._id ?? s?.course ?? ''));
+      if (!canonical) continue;
+      const dates = Array.isArray(s?.dates) ? s.dates.filter(Boolean).map(String) : [];
+      const end = roundEndDay(dates);
+      if (!end || !(end < todayKey)) continue;
+      pastSchedulesByCourse[canonical].push({
+        scheduleId: String(s._id ?? ''),
+        dates,
+        startDate: minDateOf(dates) ?? '',
+        endDate: maxDateOf(dates) ?? '',
+        round: formatRoundDays(dates, { showMonth: true, showYear: true }),
+        type: String(s?.type ?? ''),
+        transferable: transferRoundAllowed(dates, todayKey),
+      });
+    }
+  }
+
+  for (const code of Object.keys(pastSchedulesByCourse)) {
+    pastSchedulesByCourse[code].sort((a, b) =>
+      String(b.endDate).localeCompare(String(a.endDate))
+    );
+  }
+  return pastSchedulesByCourse;
 }
 
 /**

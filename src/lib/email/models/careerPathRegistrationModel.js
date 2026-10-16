@@ -259,6 +259,11 @@ export const CAREERPATH_MODE_LABEL = {
   'online': 'Online ผ่าน Microsoft Teams',
   'hybrid (classroom)': 'Classroom',
   'hybrid (ms teams)': 'Online ผ่าน Microsoft Teams',
+  // Transfer Module: a course the learner already attended. `course_date` for
+  // the row stays the ATTENDED round's days — that is what the stored `dates`
+  // hold for a transfer — so the template needs no change. Worded as pending:
+  // Sales confirms the right after the registration arrives.
+  'transfer': 'รอตรวจสอบสิทธิ์ Transfer',
 };
 
 export function careerPathTrainingTypeLabel(type) {

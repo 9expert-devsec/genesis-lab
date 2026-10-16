@@ -1,100 +1,55 @@
+import Image from 'next/image';
 import Link from 'next/link';
-import { Rocket, ArrowRight, GraduationCap } from 'lucide-react';
-import FloatingDots from '@/components/about/FloatingDots';
 
-const TRUST_CHIPS = [
-  'ออกแบบเฉพาะองค์กร',
-  'วิทยากรมืออาชีพ',
-  'มีใบประกาศนียบัตร',
-];
-
+/**
+ * Always dark, in both themes, over the classroom artwork. `bg-9e-navy` is the
+ * fallback if the image fails. Not `priority` — this band is at the bottom of
+ * the page. On phones the crop slides right to keep the classroom in frame, and
+ * a navy scrim sits under the text there because the classroom then lands
+ * behind it.
+ */
 export default function ContactCTA() {
   return (
-    <section className="relative overflow-hidden bg-[#060e1a] py-28">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[rgba(0,92,255,0.18)] blur-[120px]"
+    <section className="relative isolate overflow-hidden bg-9e-navy text-white">
+      <Image
+        src="/contact-img/contact-inhouse.webp"
+        alt=""
+        fill
+        sizes="100vw"
+        quality={80}
+        className="-z-10 object-cover object-[80%_center] lg:object-[right_center]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-40"
-        style={{
-          backgroundImage:
-            'radial-gradient(rgba(72,176,255,0.18) 1px, transparent 1px)',
-          backgroundSize: '32px 32px',
-        }}
-      />
-      <FloatingDots />
-
-      <div
-        aria-hidden
-        className="pointer-events-none absolute left-6 top-6 h-32 w-32 border-l-2 border-t-2 border-[rgba(0,92,255,0.3)]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute bottom-6 right-6 h-32 w-32 border-b-2 border-r-2 border-[rgba(0,92,255,0.3)]"
+        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-9e-navy/90 via-9e-navy/70 to-9e-navy/30 lg:from-9e-navy/50 lg:via-transparent lg:to-transparent"
       />
 
-      <div className="relative z-10 mx-auto max-w-[900px] px-4 text-center lg:px-6">
-        {/* <div
-          className="mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-full shadow-[0_25px_50px_-12px_rgba(0,92,255,0.6)]"
-          style={{
-            backgroundImage:
-              'linear-gradient(135deg,#005CFF 0%,#2486FF 100%)',
-          }}
-        >
-          <Rocket className="h-11 w-11 text-white" strokeWidth={2} />
-        </div> */}
-
-        {/* <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[rgba(0,92,255,0.3)] bg-[rgba(0,92,255,0.05)] px-4 py-1.5">
-          <GraduationCap className="h-4 w-4 text-[#48B0FF]" />
-          <span className="text-sm uppercase tracking-[0.7px] text-[#48B0FF]">
-            อบรมเฉพาะองค์กร
-          </span>
-        </div> */}
-
-        <h2 className="text-4xl font-extrabold leading-normal text-white md:text-6xl">
-          <span className="block">สนใจอบรมภายในองค์กร?</span>
-          <span className="block bg-[linear-gradient(90deg,#48B0FF_0%,#005CFF_50%,#48B0FF_100%)] bg-clip-text text-transparent">
-            In-house Training
-          </span>
+      <div className="mx-auto flex max-w-[1200px] flex-col justify-center px-4 py-16 sm:py-20 lg:min-h-[350px] lg:px-6">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-9e-air">
+          IN-HOUSE TRAINING
+        </p>
+        <h2 className="mt-3 text-3xl font-bold leading-snug md:text-4xl">
+          สนใจอบรมภายในองค์กร?
         </h2>
-
-        <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-[#99a1af] md:text-lg">
+        <p className="mt-4 max-w-xl text-base leading-relaxed text-9e-ice/90 md:text-lg lg:max-w-3xl">
           ออกแบบหลักสูตรเฉพาะสำหรับองค์กรของคุณ วิทยากรมืออาชีพ
           พร้อมใบประกาศนียบัตร
         </p>
 
-        <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
           <Link
             href="/registration/in-house"
-            className="group relative inline-flex w-full items-center justify-center overflow-hidden rounded-full bg-gradient-to-r from-[#005CFF] to-[#2486FF] px-10 py-4 text-base font-semibold text-white shadow-[0_25px_50px_-12px_rgba(0,92,255,0.5)] transition-all duration-300 sm:w-auto sm:text-lg"
+            className="inline-flex items-center justify-center rounded-full bg-9e-action px-8 py-3.5 text-base font-semibold text-white transition-colors hover:bg-[#004BD1]"
           >
-            <span
-              aria-hidden
-              className="pointer-events-none absolute -inset-1 rounded-full border-2 border-[rgba(72,176,255,0.3)]"
-            />
-            <span className="relative z-10 flex items-center gap-2">
-              สอบถาม In-house
-              <ArrowRight className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
-            </span>
+            สอบถาม In-house Training →
           </Link>
           <Link
             href="/training-course"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#D4F73F]/60 px-10 py-4 text-base font-semibold text-[#D4F73F] transition-all duration-300 hover:border-[#D4F73F] hover:bg-[#D4F73F]/10 sm:w-auto sm:text-lg"
+            className="inline-flex items-center justify-center rounded-full border-2 border-white/70 px-8 py-3 text-base font-semibold text-white transition-colors hover:border-white hover:bg-white/10"
           >
-            ดูหลักสูตรทั้งหมด
+            ดูหลักสูตรทั้งหมด →
           </Link>
         </div>
-
-        {/* <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row sm:gap-8">
-          {TRUST_CHIPS.map((item) => (
-            <div key={item} className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#005CFF] shadow-[0_0_10px_rgba(0,92,255,0.8)]" />
-              <span className="text-sm text-[#99a1af]">{item}</span>
-            </div>
-          ))}
-        </div> */}
       </div>
     </section>
   );

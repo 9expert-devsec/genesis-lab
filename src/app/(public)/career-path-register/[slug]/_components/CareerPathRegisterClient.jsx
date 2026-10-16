@@ -22,8 +22,9 @@
  * schedules come in via `schedulesByCourse[courseCode]`.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -31,6 +32,7 @@ import {
   ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Loader2, Lock,
 } from 'lucide-react';
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
+import { ThaiDateField } from '@/components/registration/ThaiDateField';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo. THE ROUND PICKER, now shared with the bundle quotation
 // wizard: this file's own course card and round chip, lifted out unchanged.
@@ -50,8 +52,74 @@ import { createCareerPathRegistration } from '@/lib/actions/career-path-registra
 import { isValidThaiPhone } from '@/lib/registration/thaiPhone';
 import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 import { cn } from '@/lib/utils';
+import {
+  itemCode,
+  isChoiceGroup,
+  groupItems,
+  isPickResolved,
+  isGroupSatisfied,
+  sortedDates,
+  minDateOf,
+  maxDateOf,
+  isAfter,
+  pairViolations,
+  roundBlocker,
+  isTransfer,
+  isManualTransfer,
+  maxTransfers,
+  transferLimitError,
+  transferRoundAllowed,
+  transferWindowStart,
+  pruneTransferPicks,
+  manualTransferRoundError,
+  dayRangeKeys,
+  shiftDaysKey,
+  TRANSFER_LIMIT_HINT,
+  TRANSFER_OUT_OF_WINDOW_MESSAGE,
+} from '@/lib/career-paths/prerequisiteOrder';
 
 // ── Constants ───────────────────────────────────────────────────
+
+// Each step is its own route (`/career-path-register/[slug]/step-1..4`), so a
+// step change remounts this component and clears React state. Picks + form live
+// in a draft, the success screen in a result — both scoped by slug so two
+// career paths open in one tab never share either.
+/**
+ * What the "!" beside a course's Transfer button explains. A constant so Sales
+ * can reword it without anyone touching the popover; line breaks are kept.
+ */
+export const TRANSFER_EXPLAINER = `Transfer Module สิทธิ์สำหรับผู้ที่เคยอบรม Public Training ในหลักสูตรภายใต้ Career Path นี้
+สามารถใช้สิทธิ์ยกเว้นการเรียนหลักสูตรเดิมและหักค่าลงทะเบียนหลักสูตรเดิมออกจากค่าใช้จ่าย โดยมีเงื่อนไขดังนี้
+- หลักสูตรที่เคยเรียนต้องเรียนจบมาแล้วไม่เกิน 1 ปี นับจากวันที่สมัคร Career Path
+- ต้องเป็นผู้เรียนท่านเดิมและมาจากบริษัทเดิม
+- ทีมขายจะตรวจสอบประวัติการอบรมและแจ้งค่าใช้จ่ายอีกครั้ง`;
+
+/** What the customer sees as a transfer's format — Sales confirms it later. */
+const TRANSFER_CUSTOMER_LABEL = 'รอตรวจสอบสิทธิ์ Transfer';
+
+const DRAFT_KEY_PREFIX = 'career-path-register-v1:';
+const RESULT_KEY_PREFIX = 'career-path-register-result-v1:';
+
+function readSession(key) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSession(key, value) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+
+function removeSession(key) {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {}
+}
 
 /**
  * The two palette tables MOVED to components/registration/RoundPickCard, with
@@ -73,28 +141,9 @@ const inputClass =
   'w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy placeholder:text-9e-slate-dp-50 focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:bg-[#0D1B2A] dark:text-white';
 
 // ── Date helpers ────────────────────────────────────────────────
-
-function sortedDates(dates) {
-  if (!Array.isArray(dates) || dates.length === 0) return [];
-  return [...dates].filter(Boolean).sort();
-}
-
-function minDateOf(dates) {
-  const s = sortedDates(dates);
-  return s.length ? s[0] : null;
-}
-
-function maxDateOf(dates) {
-  const s = sortedDates(dates);
-  return s.length ? s[s.length - 1] : null;
-}
-
-// ISO `YYYY-MM-DD` strings sort lexicographically — same order as time,
-// so `'2026-05-23' > '2026-05-22'` does the right thing.
-function isAfter(a, b) {
-  if (!a || !b) return false;
-  return a > b;
-}
+// `sortedDates` / `minDateOf` / `maxDateOf` / `isAfter` MOVED to
+// lib/career-paths/prerequisiteOrder (imported above) — the server re-check
+// reads round spans through the same functions.
 
 function formatThaiRange(dates) {
   const s = sortedDates(dates);
@@ -268,21 +317,12 @@ const EMPTY_INVOICE = {
 };
 
 // ── Curriculum helpers ──────────────────────────────────────────
-
-function itemCode(item) {
-  return String(item?.snap?.code ?? item?.course_id ?? '');
-}
+// `itemCode`, `isChoiceGroup`, `groupItems`, `isPickResolved` and
+// `isGroupSatisfied` MOVED to lib/career-paths/prerequisiteOrder (imported
+// above) — the server re-check applies the same group rules.
 
 function itemName(item) {
   return String(item?.snap?.name ?? item?.externalName ?? itemCode(item) ?? '');
-}
-
-function isChoiceGroup(group) {
-  return String(group?.kind ?? '').toLowerCase() === 'choice';
-}
-
-function groupItems(group) {
-  return Array.isArray(group?.items) ? group.items : [];
 }
 
 // Total required count across all groups — what the bottom counter
@@ -297,28 +337,10 @@ function totalRequired(curriculum) {
   return n;
 }
 
-// Hybrid picks are stored with `type: 'hybrid'` until the user resolves
-// them to Classroom or MS Teams (at which point `type` becomes
-// "Hybrid (Classroom)" / "Hybrid (MS Teams)"). Unresolved picks must
-// not count toward group completion.
-function isPickResolved(sel) {
-  return Boolean(sel) && String(sel?.type ?? '').toLowerCase() !== 'hybrid';
-}
-
-// A group is "satisfied" when its own selection threshold is met. Used
-// to decide whether the NEXT group's overlay should unlock.
-function isGroupSatisfied(group, selected) {
-  const items = groupItems(group);
-  if (items.length === 0) return true; // nothing to pick, treat as done
-  const picks = items.filter((it) => isPickResolved(selected[itemCode(it)])).length;
-  if (isChoiceGroup(group)) {
-    return picks >= Math.max(1, Number(group?.chooseMin) || 1);
-  }
-  return picks === items.length;
-}
-
 // `eligible`        — prior groups all satisfied
-// `latestPriorDate` — max(end-date) across all selections in prior groups
+// `latestPriorDate` — max(end-date) across all selections in prior groups,
+//                     TRANSFERS EXCLUDED: a transferred course was attended in
+//                     the past and imposes no date on later groups.
 function computeGroupEligibility(curriculum, selected) {
   const out = [];
   let priorOk = true;
@@ -332,7 +354,7 @@ function computeGroupEligibility(curriculum, selected) {
     const g = curriculum[i];
     for (const item of groupItems(g)) {
       const sel = selected[itemCode(item)];
-      if (!sel) continue;
+      if (!sel || isTransfer(sel)) continue;
       const endStr = maxDateOf(sel.dates);
       if (endStr && (!latestPriorDate || endStr > latestPriorDate)) {
         latestPriorDate = endStr;
@@ -360,40 +382,38 @@ function buildCodeToName(curriculum) {
 // item). Independent of the group-order rule — a course in group 1 can
 // require another course in group 1.
 //
-// Returns: { [courseCode]: { locked: bool, reason: string | null,
-//                            missing: string[] } }
-function computeItemEligibility(curriculum, selected, codeToName) {
-  const out = {};
-  for (const g of curriculum) {
-    for (const it of groupItems(g)) {
-      const code = itemCode(it);
-      if (!code) continue;
-      const prereqs = Array.isArray(it?.prerequisites)
-        ? it.prerequisites.map(String)
-        : [];
-      if (prereqs.length === 0) {
-        out[code] = { locked: false, reason: null, missing: [] };
-        continue;
-      }
-      const missing = prereqs.filter((c) => !selected[c]);
-      if (missing.length === 0) {
-        out[code] = { locked: false, reason: null, missing: [] };
-      } else {
-        const names = missing.map((c) => codeToName[c] ?? c);
-        out[code] = {
-          locked: true,
-          reason: `กรุณาเลือก ${names.join(', ')} ก่อน`,
-          missing,
-        };
-      }
-    }
-  }
-  return out;
+// They are an ORDER between two picks, not a "pick this first" gate: the
+// rule lives in lib/career-paths/prerequisiteOrder (shared with the server
+// re-check), and an unpicked prerequisite imposes nothing. This turns a
+// `roundBlocker` result into the sentence a greyed round / locked card shows,
+// naming the blocking pick and its round.
+function pairBlockReason(block, selected, codeToName) {
+  if (!block) return null;
+  const name = codeToName[block.code] ?? block.code;
+  const sel = selected[block.code];
+  const round = sel?.round ?? formatThaiRange(sel?.dates);
+  return block.needs === 'after'
+    ? `ต้องเริ่มหลัง ${name} (${round})`
+    : `ต้องจบก่อน ${name} (${round})`;
 }
 
 // ── Main component ─────────────────────────────────────────────
 
-export function CareerPathRegisterClient({ careerPath }) {
+export function CareerPathRegisterClient({
+  careerPath,
+  // Transfer Module: past rounds per canonical course code (see
+  // getCareerPathPastSchedules) and Bangkok's today, the day the window is
+  // judged against — the server's, not the visitor's clock.
+  pastSchedulesByCourse = {},
+  todayKey = '',
+  slug,
+  step: urlStep = 1,
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const draftKey = `${DRAFT_KEY_PREFIX}${slug}`;
+  const resultKey = `${RESULT_KEY_PREFIX}${slug}`;
+
   const curriculum = useMemo(
     () => (Array.isArray(careerPath?.curriculum) ? careerPath.curriculum : []),
     [careerPath]
@@ -410,19 +430,139 @@ export function CareerPathRegisterClient({ careerPath }) {
   // `selected` so re-clicking a hybrid round preserves whichever sub-
   // mode the user already chose.
   const [hybridChoice, setHybridChoice] = useState({});
-  // step values:
-  //   0 — course selection (pre-step, no number)
-  //   1 — personal info
-  //   2 — preview / confirm
-  //   3 — thank-you (handled by `result` panel)
-  const [step, setStep] = useState(0);
+  // step values — derived from the route, `/step-N` is `N - 1` here so the
+  // render below and the on-screen Stepper read exactly as they always did:
+  //   0 — course selection (pre-step, no number)   /step-1
+  //   1 — personal info                            /step-2
+  //   2 — preview / confirm                        /step-3
+  //   3 — thank-you (handled by `result` panel)    /step-4
+  const step = urlStep - 1;
   const [formData, setFormData] = useState(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [result, setResult] = useState(null);
+  const [hydrated, setHydrated] = useState(false);
+  // A submit in flight or done — blocks a second createCareerPathRegistration
+  // from a double click before `submitting` has re-rendered the button.
+  const submitLockRef = useRef(false);
 
   const codeToName = useMemo(() => buildCodeToName(curriculum), [curriculum]);
+
+  // Build a step URL that keeps every query param.
+  const stepHref = useCallback(
+    (n) => {
+      const q = new URLSearchParams(searchParams.toString()).toString();
+      return `/career-path-register/${slug}/step-${n}${q ? `?${q}` : ''}`;
+    },
+    [searchParams, slug],
+  );
+
+  // On mount, rehydrate from sessionStorage. A later step whose data is missing
+  // or no longer valid is sent to the earliest step that still is, with the
+  // query kept; `hydrated` stays false so nothing renders before the replace.
+  useEffect(() => {
+    if (urlStep === 4) {
+      const done = readSession(resultKey);
+      if (!done?.result) {
+        router.replace(stepHref(1));
+        return;
+      }
+      setResult(done.result);
+      setFormData(done.formData ?? null);
+      setHydrated(true);
+      return;
+    }
+
+    if (urlStep === 1) {
+      // A fresh start — the previous registration's receipt is done with.
+      removeSession(resultKey);
+    }
+
+    const draft = readSession(draftKey);
+
+    // A stored pick survives only while its course is still in the curriculum
+    // and its round is still offered (schedulesByCourse is re-fetched live on
+    // every render of this route — rounds close and fill between visits).
+    const offered = new Set();
+    for (const g of curriculum) {
+      for (const it of groupItems(g)) {
+        const code = itemCode(it);
+        for (const s of schedulesByCourse[code] ?? []) {
+          offered.add(`${code}|${String(s?._id ?? '')}`);
+        }
+      }
+    }
+    let restoredSelected = {};
+    let droppedPick = false;
+    for (const [code, sel] of Object.entries(draft?.selected ?? {})) {
+      // Transfers are judged against the PAST rounds below, not this list.
+      if (isTransfer(sel) || offered.has(`${code}|${sel?.scheduleId}`)) restoredSelected[code] = sel;
+      else droppedPick = true;
+    }
+    // A stored transfer survives while its past round is still listed and
+    // still inside the window (a manual one, while its typed days still pass);
+    // past maxTransfers the first in course order are kept, and a complete
+    // selection of transfers only loses its last.
+    const prunedTransfers = pruneTransferPicks(
+      curriculum,
+      restoredSelected,
+      pastSchedulesByCourse,
+      todayKey
+    );
+    restoredSelected = prunedTransfers.picks;
+    if (prunedTransfers.dropped) droppedPick = true;
+    // A draft saved before the prerequisite-order rule (or against rounds
+    // that have since moved) can hold a pair that breaks it. Drop the
+    // DEPENDENT of each broken pair until none is left — the prerequisite
+    // pick is the one the customer has to take first, so it is the one kept.
+    for (let broken = pairViolations(curriculum, restoredSelected); broken.length; broken = pairViolations(curriculum, restoredSelected)) {
+      delete restoredSelected[broken[0].dependent];
+      droppedPick = true;
+    }
+    const keptIds =new Set(Object.values(restoredSelected).map((s) => s.scheduleId));
+    const restoredHybrid = {};
+    for (const [sid, val] of Object.entries(draft?.hybridChoice ?? {})) {
+      if (keptIds.has(sid)) restoredHybrid[sid] = val;
+    }
+    const restoredForm = draft?.formData ?? null;
+
+    if (droppedPick) {
+      writeSession(draftKey, {
+        selected: restoredSelected,
+        hybridChoice: restoredHybrid,
+        formData: restoredForm,
+      });
+    }
+
+    // `droppedPick` already covers a broken prerequisite pair (dropped above).
+    const picksOk =
+      !droppedPick &&
+      curriculum.length > 0 &&
+      curriculum.every((g) => isGroupSatisfied(g, restoredSelected));
+    if (urlStep >= 2 && !picksOk) {
+      router.replace(stepHref(1));
+      return;
+    }
+    if (urlStep === 3 && !restoredForm) {
+      router.replace(stepHref(2));
+      return;
+    }
+
+    setSelected(restoredSelected);
+    setHybridChoice(restoredHybrid);
+    setFormData(restoredForm);
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the draft current while the user picks, so a refresh on step 1 keeps
+  // every pick (step transitions save it too). Never once a result exists —
+  // the draft is consumed on success.
+  useEffect(() => {
+    if (!hydrated || result) return;
+    writeSession(draftKey, { selected, hybridChoice, formData });
+  }, [hydrated, result, selected, hybridChoice, formData, draftKey]);
 
   // Prune hybridChoice when its schedule is no longer referenced by any
   // `selected` entry — covers toggle-off, switching rounds, and the
@@ -466,11 +606,6 @@ export function CareerPathRegisterClient({ careerPath }) {
     [curriculum, selected]
   );
 
-  const itemEligibility = useMemo(
-    () => computeItemEligibility(curriculum, selected, codeToName),
-    [curriculum, selected, codeToName]
-  );
-
   // ── selection mutation ──────────────────────────────────────
 
   function pickSchedule(group, item, schedule) {
@@ -491,6 +626,61 @@ export function CareerPathRegisterClient({ careerPath }) {
       round:     formatThaiRange(dates),
     };
 
+    applyPick(group, code, entry);
+  }
+
+  // Transfer Module: pick a PAST round the learner attended. It REPLACES the
+  // course's future pick (if any) and goes through the same group handling as
+  // any pick. Refused at the limit unless this course is already one.
+  function pickTransfer(group, item, past) {
+    const code = itemCode(item);
+    if (transferCount >= transferLimit && !isTransfer(selected[code])) return;
+    if (!transferRoundAllowed(past?.dates, todayKey)) return;
+    const dates = Array.isArray(past.dates) ? past.dates : [];
+    applyPick(group, code, {
+      courseName: itemName(item),
+      courseCode: code,
+      scheduleId: String(past.scheduleId ?? ''),
+      dates,
+      type: 'transfer',
+      startDate: minDateOf(dates) ?? '',
+      endDate:   maxDateOf(dates) ?? '',
+      round:     formatThaiRange(dates),
+    });
+  }
+
+  // A transfer of a round the learner typed (first / last day) because it was
+  // not in the past-round list. Same limit and group handling as pickTransfer;
+  // no round id — the server re-judges the two days alone.
+  function pickManualTransfer(group, item, start, end) {
+    const code = itemCode(item);
+    if (transferCount >= transferLimit && !isTransfer(selected[code])) return;
+    if (manualTransferRoundError(start, end, todayKey)) return;
+    const dates = dayRangeKeys(start, end);
+    applyPick(group, code, {
+      courseName: itemName(item),
+      courseCode: code,
+      scheduleId: null,
+      transferManual: true,
+      dates,
+      type: 'transfer',
+      startDate: start,
+      endDate:   end,
+      round:     formatThaiRange(dates),
+    });
+  }
+
+  // "ยกเลิก Transfer" — the course goes back to having no pick at all.
+  function cancelTransfer(code) {
+    setSelected((cur) => {
+      if (!isTransfer(cur[code])) return cur;
+      const next = { ...cur };
+      delete next[code];
+      return settlePicks(next, code);
+    });
+  }
+
+  function applyPick(group, code, entry) {
     setSelected((cur) => {
       const next = { ...cur };
 
@@ -521,45 +711,56 @@ export function CareerPathRegisterClient({ careerPath }) {
         next[code] = entry;
       }
 
-      // Drop downstream selections that are now invalid (their prior
-      // group is no longer satisfied, OR their start date is now <=
-      // the new latest prior date). Loop until stable.
-      let changed = true;
-      while (changed) {
-        changed = false;
-        const elig = computeGroupEligibility(curriculum, next);
-        for (let gi = 0; gi < curriculum.length; gi++) {
-          const { eligible, latestPriorDate } = elig[gi];
-          for (const item2 of groupItems(curriculum[gi])) {
-            const c2 = itemCode(item2);
-            const sel = next[c2];
-            if (!sel) continue;
-            if (!eligible) {
-              delete next[c2];
-              changed = true;
-              continue;
-            }
-            if (latestPriorDate && !isAfter(sel.startDate, latestPriorDate)) {
-              delete next[c2];
-              changed = true;
-              continue;
-            }
-            // Item-level prereqs: drop if any required course is no
-            // longer selected. (Same loop iteration so cascading drops
-            // converge before we exit.)
-            const itemPrereqs = Array.isArray(item2?.prerequisites)
-              ? item2.prerequisites.map(String)
-              : [];
-            if (itemPrereqs.some((p) => !next[p])) {
-              delete next[c2];
-              changed = true;
-            }
+      return settlePicks(next, code);
+    });
+  }
+
+  // Drop downstream selections that are now invalid (their prior group is no
+  // longer satisfied, OR their start date is now <= the new latest prior
+  // date), then any pick that breaks a prerequisite pair with `code`'s. Loop
+  // until stable. Mutates and returns `next`.
+  //
+  // A TRANSFER is exempt from the date rule — it was attended in the past —
+  // but not from the group lock: a later group still needs its earlier groups
+  // satisfied, transferred or not. Pairs already skip transfers.
+  function settlePicks(next, code) {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const elig = computeGroupEligibility(curriculum, next);
+      for (let gi = 0; gi < curriculum.length; gi++) {
+        const { eligible, latestPriorDate } = elig[gi];
+        for (const item2 of groupItems(curriculum[gi])) {
+          const c2 = itemCode(item2);
+          const sel = next[c2];
+          if (!sel) continue;
+          if (!eligible) {
+            delete next[c2];
+            changed = true;
+            continue;
+          }
+          if (isTransfer(sel)) continue;
+          if (latestPriorDate && !isAfter(sel.startDate, latestPriorDate)) {
+            delete next[c2];
+            changed = true;
+            continue;
           }
         }
       }
+      // Prerequisite pairs: a pick that now breaks a pair with another
+      // pick loses that OTHER pick — the one just made is what the user
+      // asked for. An unpicked prerequisite imposes nothing, so nothing
+      // is dropped for being "picked before its prerequisite".
+      for (const { dependent, prerequisite } of pairViolations(curriculum, next)) {
+        const other = dependent === code ? prerequisite : dependent;
+        if (next[other]) {
+          delete next[other];
+          changed = true;
+        }
+      }
+    }
 
-      return next;
-    });
+    return next;
   }
 
   // ── progress ───────────────────────────────────────────────
@@ -582,23 +783,43 @@ export function CareerPathRegisterClient({ careerPath }) {
     return n;
   }, [curriculum, selected]);
 
-  const canProceed = curriculum.length > 0 && curriculum.every((g) => isGroupSatisfied(g, selected));
+  const transferPicks = Object.values(selected).filter(isTransfer);
+  const transferCount = transferPicks.length;
+  // At least one course must be one the learner actually attends.
+  const transferLimit = useMemo(() => maxTransfers(curriculum), [curriculum]);
+
+  const canProceed =
+    curriculum.length > 0 &&
+    curriculum.every((g) => isGroupSatisfied(g, selected)) &&
+    pairViolations(curriculum, selected).length === 0 &&
+    transferLimitError(curriculum, selected) === null &&
+    transferPicks.every((p) =>
+      isManualTransfer(p)
+        ? manualTransferRoundError(p.startDate, p.endDate, todayKey) === null
+        : transferRoundAllowed(p.dates, todayKey)
+    );
 
   // ── step transitions ───────────────────────────────────────
 
+  // Every transition saves the draft before it navigates: the next step is a
+  // fresh mount that rebuilds itself from storage.
   function handleStep1Next() {
     if (!canProceed) return;
-    setStep(1);
+    writeSession(draftKey, { selected, hybridChoice, formData });
+    router.push(stepHref(2));
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function handleStep2Next(data) {
     setFormData(data);
-    setStep(2);
+    writeSession(draftKey, { selected, hybridChoice, formData: data });
+    router.push(stepHref(3));
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function handleConfirm() {
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -620,6 +841,8 @@ export function CareerPathRegisterClient({ careerPath }) {
             dates:      Array.isArray(sel.dates) ? sel.dates : [],
             type:       sel.type,
             scheduleId: sel.scheduleId,
+            // A typed transfer round: the server judges startDate / endDate.
+            ...(isManualTransfer(sel) ? { transferManual: true } : {}),
           });
         }
       }
@@ -686,12 +909,25 @@ export function CareerPathRegisterClient({ careerPath }) {
         // success screen, and that line is gone; state whose last reader has
         // been deleted is how a value comes back looking like it was always
         // needed. The document's `_id` is unchanged — this is client state.
+        //
+        // The draft is consumed (a second registration in this tab starts
+        // empty, and Back to /step-3 finds nothing to resubmit); the result is
+        // stored so /step-4 — and a refresh of it — can show the panel. The
+        // lock stays held: this mount is done submitting.
+        removeSession(draftKey);
+        writeSession(resultKey, {
+          result: { submitted: true },
+          formData: { contactEmail: formData.contactEmail },
+        });
         setResult({ submitted: true });
+        router.push(stepHref(4));
         if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
+        submitLockRef.current = false;
         setSubmitError(res?.error || 'ส่งข้อมูลไม่สำเร็จ');
       }
     } catch (err) {
+      submitLockRef.current = false;
       setSubmitError(err?.message ?? 'ส่งข้อมูลไม่สำเร็จ');
     } finally {
       setSubmitting(false);
@@ -725,7 +961,11 @@ export function CareerPathRegisterClient({ careerPath }) {
         </div>
       )}
 
-      {result ? (
+      {!hydrated ? (
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-9e-action" />
+        </div>
+      ) : result ? (
         <CompletePanel email={formData?.contactEmail} />
       ) : (
         <>
@@ -740,10 +980,17 @@ export function CareerPathRegisterClient({ careerPath }) {
               schedulesByCourse={schedulesByCourse}
               selected={selected}
               eligibility={eligibility}
-              itemEligibility={itemEligibility}
+              codeToName={codeToName}
               hybridChoice={hybridChoice}
               onHybridChoice={handleHybridChoice}
               onPick={pickSchedule}
+              pastSchedulesByCourse={pastSchedulesByCourse}
+              todayKey={todayKey}
+              transferCount={transferCount}
+              transferLimit={transferLimit}
+              onTransfer={pickTransfer}
+              onManualTransfer={pickManualTransfer}
+              onCancelTransfer={cancelTransfer}
               total={total}
               selectedCount={selectedCount}
               canProceed={canProceed}
@@ -756,7 +1003,7 @@ export function CareerPathRegisterClient({ careerPath }) {
               defaultValues={formData}
               selected={selected}
               curriculum={curriculum}
-              onBack={() => setStep(0)}
+              onBack={() => router.push(stepHref(1))}
               onSubmit={handleStep2Next}
             />
           )}
@@ -766,7 +1013,7 @@ export function CareerPathRegisterClient({ careerPath }) {
               curriculum={curriculum}
               selected={selected}
               data={formData}
-              onBack={() => setStep(1)}
+              onBack={() => router.push(stepHref(2))}
               onConfirm={handleConfirm}
               submitting={submitting}
               error={submitError}
@@ -789,7 +1036,11 @@ function Stepper({ step }) {
     { n: 3, label: 'เสร็จสิ้น' },
   ];
   return (
-    <ol className="my-6 flex items-center gap-2 text-sm">
+    // Centred by its BOX (`mx-auto w-fit`), not by `justify-center`: on a
+    // narrow phone the row can be wider than the column, and a centred flex
+    // row then spills off BOTH edges, leaving the first step out of reach.
+    // `max-w-full` keeps today's behaviour there — it overflows to the right.
+    <ol className="mx-auto my-6 flex w-fit max-w-full items-center gap-2 text-sm">
       {steps.map((s, i) => (
         <li key={s.n} className="flex items-center gap-2">
           <span
@@ -821,13 +1072,284 @@ function Stepper({ step }) {
   );
 }
 
+// ── Transfer Module ─────────────────────────────────────────────
+//
+// A learner who already attended a course in this path may TRANSFER it: name
+// the past round instead of picking a future one. The rules live in
+// lib/career-paths/prerequisiteOrder; these are only the controls.
+
+/** Transfer button + "!" explainer, beside the course name on its card. */
+function TransferHeaderAction({ transferred, open, disabled, full, onToggle }) {
+  const fullHint = TRANSFER_LIMIT_HINT;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      {!transferred && (
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={disabled}
+          aria-expanded={open}
+          title={full ? fullHint : undefined}
+          className="rounded-full border border-9e-action/40 px-2.5 py-0.5 text-[11px] font-semibold text-9e-action hover:bg-9e-action/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Transfer
+        </button>
+      )}
+      <TransferExplainer />
+      {full && !transferred && (
+        <span className="text-[11px] text-9e-slate-dp-50">{fullHint}</span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * The "!" — TRANSFER_EXPLAINER in a popover. A bottom sheet on a phone, a
+ * popover under the icon from `sm` up. Closes on a tap outside, on Escape and
+ * on its own ปิด button.
+ */
+function TransferExplainer() {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const panelId = useId();
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (!wrapRef.current?.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <span ref={wrapRef} className="relative inline-flex">
+      <button
+        type="button"
+        aria-label="Transfer Module คืออะไร"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-6 w-6 items-center justify-center rounded-full border border-9e-action/40 text-[11px] font-bold text-9e-action hover:bg-9e-action/10"
+      >
+        !
+      </button>
+      {open && (
+        <div
+          id={panelId}
+          role="dialog"
+          aria-label="Transfer Module"
+          className="fixed inset-x-4 bottom-4 z-50 rounded-9e-md border border-[var(--surface-border)] bg-white p-4 text-xs leading-relaxed text-9e-navy shadow-lg dark:bg-[#0D1B2A] dark:text-white sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-full sm:mt-2 sm:w-80"
+        >
+          <p className="whitespace-pre-line">{TRANSFER_EXPLAINER}</p>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="mt-3 rounded-9e-sm border border-[var(--surface-border)] px-3 py-1 text-xs font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#111d2c]"
+          >
+            ปิด
+          </button>
+        </div>
+      )}
+    </span>
+  );
+}
+
+/**
+ * The past-round picker, inside the course card. Same chips as the future
+ * rounds; one outside the window is greyed, and a tap on it shows why (a
+ * disabled button takes no tap, so a transparent button sits over it).
+ * "กรอกรอบอบรมเอง" opens ManualTransferRound in its place.
+ */
+function TransferPicker({ rounds, todayKey, showNotice, onBlocked, onPick, onManual }) {
+  const [manualOpen, setManualOpen] = useState(false);
+  if (manualOpen) {
+    return (
+      <div
+        data-transfer-picker=""
+        className="mt-3 rounded-lg border border-9e-action/30 bg-white p-3 dark:bg-[#0D1B2A]"
+      >
+        <ManualTransferRound
+          todayKey={todayKey}
+          onApply={onManual}
+          onCancel={() => setManualOpen(false)}
+        />
+      </div>
+    );
+  }
+  return (
+    <div
+      data-transfer-picker=""
+      className="mt-3 rounded-lg border border-9e-action/30 bg-white p-3 dark:bg-[#0D1B2A]"
+    >
+      {rounds.length > 0 && (
+        <>
+          <p className="mb-2 text-xs font-semibold text-9e-navy dark:text-white">
+            เลือกรอบที่เคยเข้าอบรม
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {rounds.map((r) => {
+              const label = formatThaiRange(r.dates);
+              const allowed = transferRoundAllowed(r.dates, todayKey);
+              const chip = (
+                <RoundPickChip
+                  key={r.scheduleId}
+                  roundId={r.scheduleId}
+                  dateLabel={label}
+                  type={r.type}
+                  enabled={allowed}
+                  title={allowed ? undefined : TRANSFER_OUT_OF_WINDOW_MESSAGE}
+                  srReason={allowed ? '' : TRANSFER_OUT_OF_WINDOW_MESSAGE}
+                  onClick={() => onPick(r)}
+                />
+              );
+              if (allowed) return chip;
+              return (
+                <span key={r.scheduleId} className="relative inline-flex">
+                  {chip}
+                  <button
+                    type="button"
+                    aria-label={`${label} — ${TRANSFER_OUT_OF_WINDOW_MESSAGE}`}
+                    onClick={onBlocked}
+                    className="absolute inset-0 cursor-not-allowed rounded-9e-md"
+                  />
+                </span>
+              );
+            })}
+          </div>
+          {showNotice && (
+            <p
+              role="alert"
+              className="mt-2 rounded-9e-sm bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 dark:bg-[#111d2c] dark:text-amber-400"
+            >
+              ⚠️ {TRANSFER_OUT_OF_WINDOW_MESSAGE}
+            </p>
+          )}
+        </>
+      )}
+      <button
+        type="button"
+        onClick={() => setManualOpen(true)}
+        className={cn(
+          'text-[11px] font-medium text-9e-action underline underline-offset-2 hover:text-9e-brand',
+          rounds.length > 0 && 'mt-2'
+        )}
+      >
+        ไม่พบรอบที่เคยเรียน? กรอกรอบอบรมเอง
+      </button>
+    </div>
+  );
+}
+
+/**
+ * A round the learner attended but the list does not have: first and last
+ * day only, previewed as the site's round label. The inputs cannot reach past
+ * yesterday or before the window; manualTransferRoundError (shared with the
+ * server) catches the rest.
+ */
+function ManualTransferRound({ todayKey, onApply, onCancel }) {
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const minDay = transferWindowStart(todayKey) ?? undefined;
+  const maxDay = shiftDaysKey(todayKey, -1) ?? undefined;
+  const error = start && end ? manualTransferRoundError(start, end, todayKey) : null;
+  const preview = start && end && !error ? formatThaiRange(dayRangeKeys(start, end)) : '';
+
+  return (
+    <div data-transfer-manual="">
+      <p className="mb-2 text-xs font-semibold text-9e-navy dark:text-white">
+        กรอกรอบที่เคยเข้าอบรม
+      </p>
+      {/* Thai DD/MM/พ.ศ. pickers, not <input type="date"> — the native one
+          follows the browser's locale (MM/DD/YYYY on en-US). Values stay
+          Gregorian YYYY-MM-DD; each side's range is bounded by the other. */}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <ThaiDateField
+          label="วันเริ่มอบรม"
+          value={start}
+          min={minDay}
+          max={end || maxDay}
+          onChange={setStart}
+        />
+        <ThaiDateField
+          label="วันสุดท้ายของการอบรม"
+          value={end}
+          min={start || minDay}
+          max={maxDay}
+          onChange={setEnd}
+        />
+      </div>
+      {preview && (
+        <p className="mt-2 text-sm font-medium text-9e-navy dark:text-white">= {preview}</p>
+      )}
+      {error && (
+        <p
+          role="alert"
+          className="mt-2 rounded-9e-sm bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 dark:bg-[#111d2c] dark:text-amber-400"
+        >
+          ⚠️ {error}
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={!start || !end || Boolean(error)}
+          onClick={() => onApply(start, end)}
+          className="rounded-9e-md bg-9e-action px-3 py-1.5 text-xs font-bold text-white hover:bg-9e-brand disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          ยืนยันรอบนี้
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#111d2c]"
+        >
+          ยกเลิก
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** A transferred course, in place of its future chips. */
+function TransferredState({ round, onCancel }) {
+  return (
+    <div data-transfer-state="" className="flex w-full flex-wrap items-center gap-2">
+      <span className="inline-flex items-center gap-2 rounded-9e-md border border-9e-action bg-9e-action px-3 py-2 text-sm text-white shadow-sm">
+        Transfer · เคยอบรม {round}
+      </span>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="text-xs font-medium text-9e-action underline underline-offset-2 hover:text-9e-brand"
+      >
+        ยกเลิก Transfer
+      </button>
+    </div>
+  );
+}
+
 // ── Step 1: Curriculum-driven course selection ─────────────────
 
 function Step1Courses({
-  curriculum, schedulesByCourse, selected, eligibility, itemEligibility,
+  curriculum, schedulesByCourse, selected, eligibility, codeToName,
   hybridChoice, onHybridChoice,
   onPick, total, selectedCount, canProceed, onNext,
+  pastSchedulesByCourse, todayKey, transferCount, transferLimit, onTransfer,
+  onManualTransfer, onCancelTransfer,
 }) {
+  // Transfer Module UI state: the course whose past-round picker is open, and
+  // the course whose out-of-window notice is showing. One of each at a time.
+  const [transferOpen, setTransferOpen] = useState(null);
+  const [transferNotice, setTransferNotice] = useState(null);
+
   if (curriculum.length === 0) {
     return (
       <div className="rounded-9e-lg border border-dashed border-[var(--surface-border)] p-10 text-center text-sm text-9e-slate-dp-50">
@@ -892,12 +1414,33 @@ function Step1Courses({
                   ? schedulesByCourse[code]
                   : [];
                 const myPick = selected[code]?.scheduleId ?? null;
-                const itemLock = itemEligibility?.[code] ?? { locked: false, reason: null };
+                // Prerequisite-pair verdict per round, against every OTHER
+                // pick (lib/career-paths/prerequisiteOrder). When it greys
+                // every round, the card names the blocking pick.
+                const pairBlocks = new Map(
+                  schedules.map((s) => [s._id, roundBlocker(curriculum, selected, code, s.dates)])
+                );
+                const allPairBlocked =
+                  schedules.length > 0 && schedules.every((s) => pairBlocks.get(s._id));
+                const cardLockReason = allPairBlocked
+                  ? pairBlockReason(pairBlocks.get(schedules[0]._id), selected, codeToName)
+                  : '';
 
                 // For Choice with max>1: disable adding new items beyond max
                 // (re-selecting on an already-picked item is allowed).
                 const choiceFull =
                   isChoice && chooseMax > 1 && !selected[code] && picks >= chooseMax;
+
+                // Transfer Module. A transferred course shows its attended
+                // round instead of the future chips; the picker lists the
+                // course's PAST rounds, newest first (the loader's order).
+                const transferred = isTransfer(selected[code]);
+                const pastRounds = Array.isArray(pastSchedulesByCourse?.[code])
+                  ? pastSchedulesByCourse[code]
+                  : [];
+                // One more transfer would leave no course to actually attend.
+                const transfersFull = transferCount >= transferLimit && !transferred;
+                const pickerOpen = transferOpen === code && !transferred;
 
                 /*
                   ── THE CARD AND ITS CHIPS COME FROM THE SHARED PICKER ─────
@@ -909,7 +1452,7 @@ function Step1Courses({
                   screen renders as it did apart from the `data-round-pick-*`
                   markers the shared component carries.
 
-                  THE RULES DID NOT MOVE. `itemLock`, `eligible`, `dateOk` and
+                  THE RULES DID NOT MOVE. `pairBlocks`, `eligible`, `dateOk` and
                   `choiceFull` are still decided here, over this flow's groups and
                   the last day of the previous course, and only their verdict is
                   handed down. The shared component owns no rules at all.
@@ -919,18 +1462,49 @@ function Step1Courses({
                     key={`${code}-${ii}`}
                     name={name}
                     code={code}
-                    lockReason={itemLock.locked ? itemLock.reason : ''}
-                    hasRounds={schedules.length > 0}
+                    lockReason={transferred ? '' : cardLockReason}
+                    hasRounds={transferred || schedules.length > 0}
+                    headerAction={
+                      <TransferHeaderAction
+                        transferred={transferred}
+                        open={pickerOpen}
+                        disabled={!eligible || transfersFull || choiceFull}
+                        full={transfersFull}
+                        onToggle={() => {
+                          setTransferNotice(null);
+                          setTransferOpen(pickerOpen ? null : code);
+                        }}
+                      />
+                    }
                     notices={
-                      /*
+                      <>
+                      {pickerOpen && (
+                        <TransferPicker
+                          rounds={pastRounds}
+                          todayKey={todayKey}
+                          showNotice={transferNotice === code}
+                          onBlocked={() => setTransferNotice(code)}
+                          onPick={(past) => {
+                            onTransfer(group, item, past);
+                            setTransferOpen(null);
+                            setTransferNotice(null);
+                          }}
+                          onManual={(start, end) => {
+                            onManualTransfer(group, item, start, end);
+                            setTransferOpen(null);
+                            setTransferNotice(null);
+                          }}
+                        />
+                      )}
+                      {/*
                         Rendered under the chips, exactly where it was.
 
                         Hybrid sub-selection — shown only when the currently
                         selected round for this course is a hybrid round.
                         Unresolved (no Classroom/MS Teams chosen) means the pick
                         is incomplete and the group stays unsatisfied.
-                      */
-                      (() => {
+                      */}
+                      {(() => {
                       const sel = selected[code];
                       if (!sel) return null;
                       const selSched = schedules.find((x) => x._id === sel.scheduleId);
@@ -967,14 +1541,21 @@ function Step1Courses({
                           )}
                         </div>
                       );
-                      })()
+                      })()}
+                      </>
                     }
                   >
-                    {schedules.map((sched) => {
+                    {transferred ? (
+                      <TransferredState
+                        round={selected[code].round || formatThaiRange(selected[code].dates)}
+                        onCancel={() => onCancelTransfer(code)}
+                      />
+                    ) : schedules.map((sched) => {
                       const isSelected = myPick === sched._id;
                       const start = minDateOf(sched.dates);
                       const dateOk = !latestPriorDate || isAfter(start, latestPriorDate);
-                      const isEnabled = eligible && dateOk && !choiceFull && !itemLock.locked;
+                      const pairBlock = pairBlocks.get(sched._id);
+                      const isEnabled = eligible && dateOk && !choiceFull && !pairBlock;
 
                       return (
                         <RoundPickChip
@@ -985,8 +1566,8 @@ function Step1Courses({
                           enabled={isEnabled}
                           nearlyFull={sched.status === 'nearly_full'}
                           title={
-                            itemLock.locked
-                              ? itemLock.reason
+                            pairBlock
+                              ? pairBlockReason(pairBlock, selected, codeToName)
                               : !eligible
                                 ? 'กรุณาเลือกรอบอบรมของกลุ่มก่อนหน้าก่อน'
                                 : !dateOk
@@ -1297,7 +1878,7 @@ export function Step3Preview({
                   </span>
                 </div>
                 <div className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                  {s.round}
+                  {isTransfer(s) ? `เคยอบรม ${s.round || formatThaiRange(s.dates)}` : s.round}
                 </div>
               </div>
               <span
@@ -1306,7 +1887,7 @@ export function Step3Preview({
                   badgeForType(s.type)
                 )}
               >
-                {displayType(s.type)}
+                {isTransfer(s) ? TRANSFER_CUSTOMER_LABEL : displayType(s.type)}
               </span>
             </li>
           ))}
@@ -1593,7 +2174,10 @@ function SelectedCoursesSummary({ selected, curriculum }) {
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-9e-navy dark:text-white">{s.round || '—'}</td>
+                  <td className="px-4 py-2 text-9e-navy dark:text-white">
+                    {/* A transfer names the round ATTENDED, not one to come. */}
+                    {isTransfer(s) ? `เคยอบรม ${s.round || formatThaiRange(s.dates)}` : s.round || '—'}
+                  </td>
                   <td className="px-4 py-2">
                     <span
                       className={cn(
@@ -1601,7 +2185,7 @@ function SelectedCoursesSummary({ selected, curriculum }) {
                         badgeForType(s.type)
                       )}
                     >
-                      {displayType(s.type)}
+                      {isTransfer(s) ? TRANSFER_CUSTOMER_LABEL : displayType(s.type)}
                     </span>
                   </td>
                 </tr>

@@ -7,6 +7,8 @@ import { RegistrationStatusSelect } from '../_components/RegistrationStatusSelec
 import { RecordHistory } from '@/components/audit/RecordHistory';
 import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { typedAttendeeRows } from '@/lib/registration/careerPathRoster';
+import { isTransfer } from '@/lib/career-paths/prerequisiteOrder';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'รายละเอียดการลงทะเบียน' };
@@ -16,6 +18,45 @@ const TYPE_BADGE = {
   Hybrid:    'bg-purple-100 text-purple-700 border-purple-200',
   Online:    'bg-green-100 text-green-700 border-green-200',
 };
+const TRANSFER_BADGE = 'bg-9e-action/10 text-9e-action border-9e-action/30';
+const FALLBACK_BADGE = 'bg-gray-100 text-gray-700 border-gray-200';
+
+/**
+ * A course row's training-type label. ONE place, because stored `type` has
+ * never had one casing: the pick step writes `classroom` / `online` lower-case,
+ * the learner's hybrid choice as `Hybrid (Classroom)` / `Hybrid (MS Teams)`,
+ * and a transfer as `transfer` — so printing it raw showed "classroom" next to
+ * "Hybrid (MS Teams)". Rows already stored read correctly with no migration.
+ */
+function courseTypeLabel(type) {
+  const raw = String(type ?? '').trim();
+  const lower = raw.toLowerCase();
+  if (lower === 'transfer') return 'Transfer';
+  if (lower === 'classroom') return 'Classroom';
+  if (lower === 'online') return 'Online';
+  if (lower === 'hybrid') return 'Hybrid';
+  const hybrid = /^hybrid \((classroom|ms teams)\)$/.exec(lower);
+  if (hybrid) return `Hybrid (${hybrid[1] === 'classroom' ? 'Classroom' : 'MS Teams'})`;
+  return raw || '—';
+}
+
+function courseTypeBadge(type) {
+  const label = courseTypeLabel(type);
+  if (label === 'Transfer') return TRANSFER_BADGE;
+  return TYPE_BADGE[label.split(' ')[0]] ?? FALLBACK_BADGE;
+}
+
+/**
+ * A course row's round, from the stored day list — never a raw ISO string.
+ * `formatRoundDays` reads upstream's datetimes and bare days alike, so rows
+ * stored before or after the server started rewriting them print the same
+ * way; `round` is the fallback for a row with no day list.
+ */
+function courseRoundLabel(c) {
+  return c?.dates?.length
+    ? formatRoundDays(c.dates, { showMonth: true, showYear: true })
+    : c?.round || '—';
+}
 
 /**
  * The สาขา label, from whichever of the three shapes this document carries.
@@ -44,8 +85,12 @@ function fmtDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
+  // Asia/Bangkok, explicitly: this is a SERVER component, so without a zone it
+  // printed UTC (07:52) while the list — a client component — showed the
+  // viewer's Bangkok time (14:52) for the same row.
   return d.toLocaleString('th-TH', {
     year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    timeZone: 'Asia/Bangkok',
   });
 }
 
@@ -89,16 +134,27 @@ export default async function RegistrationDetailPage({ params }) {
                   {c.courseName}
                 </div>
                 <div className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                  {c.round} · {c.startDate || '—'} – {c.endDate || '—'}
+                  {/* Transfer Module: the round ATTENDED, not one to come.
+                      The round label already names its days, so the old
+                      "· start – end" tail (raw ISO strings) is gone. */}
+                  {isTransfer(c) ? `เคยอบรม ${courseRoundLabel(c)}` : courseRoundLabel(c)}
                 </div>
               </div>
-              <span
-                className={
-                  'rounded-full border px-2 py-0.5 text-[11px] font-medium ' +
-                  (TYPE_BADGE[c.type] ?? 'bg-gray-100 text-gray-700 border-gray-200')
-                }
-              >
-                {c.type}
+              <span className="inline-flex flex-wrap items-center gap-1">
+                <span
+                  className={
+                    'rounded-full border px-2 py-0.5 text-[11px] font-medium ' +
+                    courseTypeBadge(c.type)
+                  }
+                >
+                  {courseTypeLabel(c.type)}
+                </span>
+                {/* A transfer round the learner typed — not matched to a real round. */}
+                {isTransfer(c) && c.transferManual === true && (
+                  <span className={'rounded-full border px-2 py-0.5 text-[11px] font-medium ' + FALLBACK_BADGE}>
+                    ระบุเอง
+                  </span>
+                )}
               </span>
             </li>
           ))}

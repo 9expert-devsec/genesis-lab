@@ -39,6 +39,19 @@ import { HERO_OVERLAY_SENTINEL_ID } from "@/lib/heroOverlay";
  * 2560 (601px measured, both), and `object-cover object-bottom` crops the
  * background wider instead of growing it taller.
  *
+ * ── SHORT LANDSCAPE PHONES: ONE MEDIA CONDITION, AND ONLY THAT ──────────────
+ * A phone on its side (956×440, 844×390, 667×375) is `md` by width, so it got
+ * the TABLET treatment: the copy centred in a `100dvh − 81px` box and then
+ * pulled up a further 120px (`md:-translate-y-[120px]`) — which put the first
+ * line of the headline on top of the logo. Every
+ * `[@media(orientation:landscape)_and_(max-height:500px)]:` class below undoes
+ * that for this case alone: top-aligned under the existing 81px header pad (the
+ * promo bar sits ABOVE the header in flow, so it needs no offset of its own and
+ * dismissing it leaves no gap), the section as tall as its content, the copy
+ * one column at 60% beside a smaller mascot, and `pb-24` so the CTAs stay clear
+ * of the 80px Feature Content pull-up (--9e-fc-overlap). Portrait phones,
+ * tablets and desktops never match it, so their classes are unchanged.
+ *
  * ── COLOURS ARE NOT THEME-DEPENDENT ─────────────────────────────────────────
  * The artwork is permanently dark in both themes, so the text and buttons are
  * the dark-on-image treatment unconditionally. No `dark:` variants here.
@@ -55,7 +68,8 @@ const HERO_DESCRIPTION =
 export function HeroSection() {
   return (
     <section className="relative w-full -mt-[81px] bg-9e-navy
-    min-h-dvh min-[1537px]:h-[601px] min-[1537px]:min-h-0 overflow-hidden min-[1400px]:portrait:h-[601px] min-[1400px]:portrait:min-h-0">
+    min-h-dvh min-[1537px]:h-[601px] min-[1537px]:min-h-0 overflow-hidden min-[1400px]:portrait:h-[601px] min-[1400px]:portrait:min-h-0
+    [@media(orientation:landscape)_and_(max-height:500px)]:min-h-0">
       {/* 2545 จอกลาง - 1425 จอแนวตั้ง */}
       {/* THE LCP ELEMENT, and it is FULL-BLEED at every width — no cap, no
           rounding, no letterboxing. `sizes="100vw"` says exactly that.
@@ -189,7 +203,7 @@ export function HeroSection() {
             1200px container, never the viewport. Anchored to the viewport's
             right edge it would fly away from the text on an ultra-wide screen
             and leave a dead gap in the middle. */}
-        <div className="relative mx-auto flex min-h-[calc(100dvh-81px)] max-w-[1200px] flex-col justify-center px-4 py-8 sm:px-6 lg:min-h-[520px] lg:px-8 lg:py-16 min-[1537px]:h-full min-[1537px]:min-h-0">
+        <div className="relative mx-auto flex min-h-[calc(100dvh-81px)] max-w-[1200px] flex-col justify-center px-4 py-8 sm:px-6 lg:min-h-[520px] lg:px-8 lg:py-16 min-[1537px]:h-full min-[1537px]:min-h-0 [@media(orientation:landscape)_and_(max-height:500px)]:min-h-0 [@media(orientation:landscape)_and_(max-height:500px)]:justify-start [@media(orientation:landscape)_and_(max-height:500px)]:pt-3 [@media(orientation:landscape)_and_(max-height:500px)]:pb-24">
           {/* The cap is what decides whether the headline is two lines or
               three. Measured in Chrome: at 560px the browser broke
               `มืออาชีพ` across lines — Thai has no inter-word spaces and is
@@ -208,9 +222,11 @@ export function HeroSection() {
                 lg:max-w-[600px]
 
                 xl:max-w-[760px]
+
+                [@media(orientation:landscape)_and_(max-height:500px)]:translate-y-0 [@media(orientation:landscape)_and_(max-height:500px)]:max-w-[60%]
                 "
           >
-            <h2 className="text-3xl font-bold leading-snug text-white sm:text-4xl xl:text-5xl xl:leading-[1.25]">
+            <h2 className="text-3xl font-bold leading-snug text-white sm:text-4xl xl:text-5xl xl:leading-[1.25] [@media(orientation:landscape)_and_(max-height:500px)]:text-2xl [@media(orientation:landscape)_and_(max-height:500px)]:leading-snug">
               <span className="block !font-[inherit]">ค้นหาหลักสูตรที่ใช่</span>
               <span className="block !font-[inherit]">
                 {/* TWO mechanisms, because they cover different widths.
@@ -233,24 +249,24 @@ export function HeroSection() {
               </span>
             </h2>
 
-            <p className="mt-5 text-base leading-relaxed text-white/85 sm:text-lg">
+            <p className="mt-5 text-base leading-relaxed text-white/85 sm:text-lg [@media(orientation:landscape)_and_(max-height:500px)]:mt-2 [@media(orientation:landscape)_and_(max-height:500px)]:text-sm">
               {HERO_DESCRIPTION}
             </p>
 
             {/* Mobile: both buttons full-width and stacked, so neither is a
                 narrow tap target on a phone. From `sm` up they sit side by
                 side at their natural width. */}
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 [@media(orientation:landscape)_and_(max-height:500px)]:mt-4 [@media(orientation:landscape)_and_(max-height:500px)]:flex-row [@media(orientation:landscape)_and_(max-height:500px)]:flex-wrap [@media(orientation:landscape)_and_(max-height:500px)]:items-center [@media(orientation:landscape)_and_(max-height:500px)]:gap-3">
               <Link
                 href="/training-course"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-9e-lime px-8 py-3.5 text-base font-semibold text-9e-navy transition-colors duration-9e-micro ease-9e hover:bg-9e-lime-scale-400 sm:w-auto"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-9e-lime px-8 py-3.5 text-base font-semibold text-9e-navy transition-colors duration-9e-micro ease-9e hover:bg-9e-lime-scale-400 sm:w-auto [@media(orientation:landscape)_and_(max-height:500px)]:w-auto [@media(orientation:landscape)_and_(max-height:500px)]:px-6 [@media(orientation:landscape)_and_(max-height:500px)]:py-2.5 [@media(orientation:landscape)_and_(max-height:500px)]:text-sm"
               >
                 เลือกดูหลักสูตร
                 <ArrowRight className="h-5 w-5" strokeWidth={2} />
               </Link>
               <Link
                 href="/registration/in-house"
-                className="inline-flex w-full items-center justify-center rounded-full border border-white/60 px-8 py-3.5 text-base font-semibold text-white transition-colors duration-9e-micro ease-9e hover:border-9e-air hover:bg-9e-air/10 hover:text-9e-air sm:w-auto"
+                className="inline-flex w-full items-center justify-center rounded-full border border-white/60 px-8 py-3.5 text-base font-semibold text-white transition-colors duration-9e-micro ease-9e hover:border-9e-air hover:bg-9e-air/10 hover:text-9e-air sm:w-auto [@media(orientation:landscape)_and_(max-height:500px)]:w-auto [@media(orientation:landscape)_and_(max-height:500px)]:px-6 [@media(orientation:landscape)_and_(max-height:500px)]:py-2.5 [@media(orientation:landscape)_and_(max-height:500px)]:text-sm"
               >
                 อบรมภายในองค์กร
               </Link>
@@ -327,6 +343,9 @@ export function HeroSection() {
     /* Large Desktop 1280px+ */
     min-[1537px]:-bottom-[100%]
     min-[1537px]:-right-[15%]
+
+    /* Short landscape phone — beside the copy, never under it */
+    [@media(orientation:landscape)_and_(max-height:500px)]:left-auto [@media(orientation:landscape)_and_(max-height:500px)]:right-0 [@media(orientation:landscape)_and_(max-height:500px)]:bottom-0 [@media(orientation:landscape)_and_(max-height:500px)]:mx-0 [@media(orientation:landscape)_and_(max-height:500px)]:translate-x-0 [@media(orientation:landscape)_and_(max-height:500px)]:h-[80%] [@media(orientation:landscape)_and_(max-height:500px)]:w-[38%]
   "
           >
             <Image

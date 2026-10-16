@@ -1,0 +1,148 @@
+/*
+ * /contact-us first-load entrance — the hero and the channels section only.
+ * Nothing below the channels animates, and there are no scroll reveals.
+ *
+ *   0ms        eyebrow     rise 14px + fade               500ms
+ *   80ms       h1           rise 10px ONLY — no opacity: it is the likely LCP
+ *                           element, and starting it at opacity 0 would delay LCP
+ *   160ms      subtitle     rise 14px + fade               500ms
+ *   360/440/520ms  the three channel cards  rise 28px + fade  550ms each
+ *   640ms      training-room card  rise 14px + fade        500ms
+ *   → everything settled by ~1.19s.
+ *
+ * WHY `translate` / `scale` AND NOT `transform`. The channel cards lift on hover
+ * with Tailwind's -translate-y-1, which writes `transform`. An animation with
+ * fill-mode `both` that animated `transform` would keep holding its final
+ * keyframe over that declaration after it ends, and the hover lift would never
+ * show. These keyframes animate the INDIVIDUAL `translate` / `scale` properties
+ * instead: they compose with `transform` rather than replacing it, so the
+ * entrance and the hover never fight, during or after the animation.
+ *
+ * The hero's aurora blobs are the exception below: they have no hover and no
+ * other transform to compose with, so they animate `transform` directly.
+ */
+
+/*
+ * Hero aurora — three blobs drifting forever. Transform only (translate +
+ * slight scale); filter, size and position are static, so every frame is a
+ * compositor-only move. Durations 9s / 12s / 14s never line up, so the mesh
+ * does not read as a loop. Each blob's resting position is its keyframe
+ * `from`, which is also where it sits under reduced motion.
+ */
+.blobA,
+.blobB,
+.blobC {
+  will-change: transform;
+}
+
+.blobA {
+  animation: auroraA 9s ease-in-out infinite alternate;
+}
+
+.blobB {
+  animation: auroraB 12s ease-in-out infinite alternate;
+}
+
+.blobC {
+  animation: auroraC 14s ease-in-out infinite alternate;
+}
+
+@keyframes auroraA {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-12%, 10%, 0) scale(1.08);
+  }
+}
+
+@keyframes auroraB {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(14%, -12%, 0) scale(0.94);
+  }
+}
+
+@keyframes auroraC {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-30%, 25%, 0) scale(1.12);
+  }
+}
+
+.eyebrow {
+  animation: rise14 500ms cubic-bezier(0, 0, 0.2, 1) both;
+}
+
+.title {
+  animation: rise10NoFade 500ms cubic-bezier(0, 0, 0.2, 1) 80ms both;
+}
+
+.subtitle {
+  animation: rise14 500ms cubic-bezier(0, 0, 0.2, 1) 160ms both;
+}
+
+/* The three cards are the only children of the channel row. */
+.card {
+  animation: rise28 550ms cubic-bezier(0, 0, 0.2, 1) 360ms both;
+}
+.card:nth-child(2) {
+  animation-delay: 440ms;
+}
+.card:nth-child(3) {
+  animation-delay: 520ms;
+}
+
+.room {
+  animation: rise14 500ms cubic-bezier(0, 0, 0.2, 1) 640ms both;
+}
+
+@keyframes rise14 {
+  from {
+    translate: 0 14px;
+    opacity: 0;
+  }
+  to {
+    translate: none;
+    opacity: 1;
+  }
+}
+
+@keyframes rise10NoFade {
+  from {
+    translate: 0 10px;
+  }
+  to {
+    translate: none;
+  }
+}
+
+@keyframes rise28 {
+  from {
+    translate: 0 28px;
+    opacity: 0;
+  }
+  to {
+    translate: none;
+    opacity: 1;
+  }
+}
+
+/* Reduced motion: no animation at all — everything is in its final state from
+   the first paint, and the aurora blobs hold their resting positions. */
+@media (prefers-reduced-motion: reduce) {
+  .blobA,
+  .blobB,
+  .blobC,
+  .eyebrow,
+  .title,
+  .subtitle,
+  .card,
+  .room {
+    animation: none;
+  }
+}

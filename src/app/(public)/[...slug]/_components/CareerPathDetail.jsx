@@ -500,30 +500,33 @@ function CareerPathPromotionSection() {
   );
 }
 
+// api_slug is like "prompt-engineer-career-path" → strip the suffix to get
+// the /career-path-register/<slug> segment.
+function careerPathRegisterSlug(careerPath) {
+  return careerPath.api_slug
+    ? careerPath.api_slug.replace(/-career-path$/, "")
+    : "";
+}
+
 function PriceSummary({ careerPath }) {
   const price = careerPath.price;
   const outline = careerPath.links?.outlineUrl;
-  const signup = careerPath.links?.signupUrl;
 
-  // api_slug is like "prompt-engineer-career-path" → strip the suffix
-  // to land on the local register route /career-path-register/<slug>.
-  const registerSlug = careerPath.api_slug
-    ? careerPath.api_slug.replace(/-career-path$/, "")
-    : "";
-  const localRegisterUrl =
-    careerPath.registrationOpen && registerSlug
-      ? `/career-path-register/${registerSlug}`
-      : null;
+  // Always the local register route, open or closed: step-1 renders the
+  // wizard when registrationOpen is true and "ยังไม่เปิดรับสมัคร" when it is
+  // false. Never `links.signupUrl` — upstream sync keeps that pointed at the
+  // legacy career-path.9experttraining.com host, and the Cloudflare hop off
+  // that host misses trailing slashes, query strings and renamed slugs.
+  const registerSlug = careerPathRegisterSlug(careerPath);
+  const registerUrl = registerSlug
+    ? `/career-path-register/${registerSlug}/step-1`
+    : null;
 
-  // Prefer local registration when open; otherwise fall back to the
-  // legacy MSDB external signup URL.
-  const signupHref = localRegisterUrl ?? signup;
-
-  // Panel previously hid itself when there was no price/link. Now it
-  // also stays visible whenever registration is open, so the CTA
-  // surfaces on price-less paths too.
+  // Panel stays visible whenever there is a register route, so the CTA
+  // surfaces on price-less paths too. Same condition as the sidebar
+  // column in CareerPathDetail, so the column is never rendered empty.
   const hasPrice = price && (price.fullPrice || price.salePrice);
-  if (!hasPrice && !careerPath.registrationOpen) return null;
+  if (!hasPrice && !registerUrl && !outline) return null;
 
   return (
     <aside className="rounded-2xl border border-[var(--surface-divider)] bg-[var(--surface-raised)] p-6 shadow-9e-sm">
@@ -553,24 +556,14 @@ function PriceSummary({ careerPath }) {
         </>
       )}
       <div className="mt-5 flex flex-col gap-2">
-        {signupHref &&
-          (localRegisterUrl ? (
-            <Link
-              href={localRegisterUrl}
-              className="inline-flex items-center justify-center gap-2 rounded-9e-md bg-[#005CFF] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#0046cc]"
-            >
-              ลงทะเบียน <ArrowRight className="h-4 w-4" />
-            </Link>
-          ) : (
-            <a
-              href={signupHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-9e-md bg-[#005CFF] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#0046cc]"
-            >
-              ลงทะเบียน <ArrowRight className="h-4 w-4" />
-            </a>
-          ))}
+        {registerUrl && (
+          <Link
+            href={registerUrl}
+            className="inline-flex items-center justify-center gap-2 rounded-9e-md bg-[#005CFF] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#0046cc]"
+          >
+            ลงทะเบียน <ArrowRight className="h-4 w-4" />
+          </Link>
+        )}
         {outline && (
           <a
             href={outline}
@@ -607,7 +600,7 @@ function CTABanner() {
 export function CareerPathDetail({ careerPath, faqs = [] }) {
   const hasPriceOrLinks =
     careerPath.price?.fullPrice ||
-    careerPath.links?.signupUrl ||
+    careerPathRegisterSlug(careerPath) ||
     careerPath.links?.outlineUrl ||
     careerPath.registrationOpen;
 

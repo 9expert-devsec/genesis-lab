@@ -17,6 +17,13 @@ import { sendCareerPathRegistrationEmail } from '@/lib/email/template-senders/ca
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo.
 import { searchTermPattern } from '@/lib/searchTerm';
+import {
+  getCareerPathPastSchedules,
+  getCareerPathWithSchedules,
+} from '@/lib/actions/career-paths';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+import { siteTodayKey } from '@/lib/articlePublishTime';
+import { isTransfer, resolveSubmittedPicks } from '@/lib/career-paths/prerequisiteOrder';
 
 const ADMIN_PATH = '/admin/career-path-registrations';
 
@@ -38,8 +45,56 @@ function serialize(v) {
   return v == null ? v : JSON.parse(JSON.stringify(v));
 }
 
+/**
+ * THE SERVER RE-CHECK of the picks, before anything is written.
+ *
+ * The pick step enforces these rules, but this action is callable with any
+ * payload, and every date in that payload came from the browser. So each pick
+ * is resolved to the LIVE round it names — through the same loaders the public
+ * page uses — and only that round is judged (resolveSubmittedPicks, in
+ * lib/career-paths/prerequisiteOrder):
+ *
+ *   · an ordinary pick: a FUTURE round still offered (getCareerPathWithSchedules)
+ *   · a transfer (`type: 'transfer'`): a PAST round of a course in the path,
+ *     ended, inside the one-year window (getCareerPathPastSchedules, loaded
+ *     only when the payload has a transfer) — or, flagged `transferManual`, two
+ *     typed days judged by manualTransferRoundError; never every course
+ *     transferred (maxTransfers)
+ *   · every group satisfied, every prerequisite pair in order (transfers exempt)
+ *
+ * Returns `{ error }` with a Thai sentence to refuse with, or `{ selectedCourses }`
+ * with each row's dates, start/end, round label and type rewritten from its live
+ * round — the browser's own copy of those is never stored.
+ *
+ * Codes are matched without regard to case, as everywhere in that module.
+ */
+async function refusePicks(data) {
+  const cp = await getCareerPathWithSchedules(data?.careerSlug);
+  if (!cp) return { error: 'ไม่พบ Career Path นี้ กรุณาลองใหม่อีกครั้ง' };
+
+  const curriculum = Array.isArray(cp.curriculum) ? cp.curriculum : [];
+  const rows = Array.isArray(data?.selectedCourses) ? data.selectedCourses : [];
+  const pastByCourse = rows.some(isTransfer) ? await getCareerPathPastSchedules(cp) : {};
+
+  return resolveSubmittedPicks({
+    curriculum,
+    schedulesByCourse: cp.schedulesByCourse,
+    pastByCourse,
+    selectedCourses: rows,
+    todayKey: siteTodayKey(),
+    formatRound: (dates) => formatRoundDays(dates, { showMonth: true, showYear: true }),
+  });
+}
+
 export async function createCareerPathRegistration(data) {
   await dbConnect();
+  const resolved = await refusePicks(data);
+  if (resolved.error) return { ok: false, error: resolved.error };
+  // The stored rows are the RESOLVED ones — every round's days rewritten from
+  // its live round — and nothing else about the payload changes. Rebound rather
+  // than spread into the call so the create below stays `create(data)`, which
+  // test/fs/registrationNoteFieldWiring pins (no note rule of its own here).
+  data = { ...data, selectedCourses: resolved.selectedCourses };
   const doc = await CareerPathRegistration.create(data);
   revalidatePath(ADMIN_PATH);
 
