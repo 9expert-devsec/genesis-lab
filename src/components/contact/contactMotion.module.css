@@ -2,8 +2,7 @@
  * /contact-us first-load entrance — the hero and the channels section only.
  * Nothing below the channels animates, and there are no scroll reveals.
  *
- *   0ms        hero image   scale 1.06→1, opacity 0.4→1   1100ms
- *   0ms        eyebrow      rise 14px + fade               500ms
+ *   0ms        eyebrow     rise 14px + fade               500ms
  *   80ms       h1           rise 10px ONLY — no opacity: it is the likely LCP
  *                           element, and starting it at opacity 0 would delay LCP
  *   160ms      subtitle     rise 14px + fade               500ms
@@ -18,10 +17,61 @@
  * show. These keyframes animate the INDIVIDUAL `translate` / `scale` properties
  * instead: they compose with `transform` rather than replacing it, so the
  * entrance and the hover never fight, during or after the animation.
+ *
+ * The hero's aurora blobs are the exception below: they have no hover and no
+ * other transform to compose with, so they animate `transform` directly.
  */
 
-.heroImage {
-  animation: heroImage 1100ms cubic-bezier(0, 0, 0.2, 1) both;
+/*
+ * Hero aurora — three blobs drifting forever. Transform only (translate +
+ * slight scale); filter, size and position are static, so every frame is a
+ * compositor-only move. Durations 9s / 12s / 14s never line up, so the mesh
+ * does not read as a loop. Each blob's resting position is its keyframe
+ * `from`, which is also where it sits under reduced motion.
+ */
+.blobA,
+.blobB,
+.blobC {
+  will-change: transform;
+}
+
+.blobA {
+  animation: auroraA 9s ease-in-out infinite alternate;
+}
+
+.blobB {
+  animation: auroraB 12s ease-in-out infinite alternate;
+}
+
+.blobC {
+  animation: auroraC 14s ease-in-out infinite alternate;
+}
+
+@keyframes auroraA {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-12%, 10%, 0) scale(1.08);
+  }
+}
+
+@keyframes auroraB {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(14%, -12%, 0) scale(0.94);
+  }
+}
+
+@keyframes auroraC {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-30%, 25%, 0) scale(1.12);
+  }
 }
 
 .eyebrow {
@@ -49,17 +99,6 @@
 
 .room {
   animation: rise14 500ms cubic-bezier(0, 0, 0.2, 1) 640ms both;
-}
-
-@keyframes heroImage {
-  from {
-    scale: 1.06;
-    opacity: 0.4;
-  }
-  to {
-    scale: 1;
-    opacity: 1;
-  }
 }
 
 @keyframes rise14 {
@@ -94,9 +133,11 @@
 }
 
 /* Reduced motion: no animation at all — everything is in its final state from
-   the first paint. */
+   the first paint, and the aurora blobs hold their resting positions. */
 @media (prefers-reduced-motion: reduce) {
-  .heroImage,
+  .blobA,
+  .blobB,
+  .blobC,
   .eyebrow,
   .title,
   .subtitle,

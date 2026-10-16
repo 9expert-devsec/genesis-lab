@@ -1,16 +1,17 @@
-import Image from 'next/image';
-
 import styles from './contactMotion.module.css';
 
 /**
- * Always dark, in both themes: the artwork is a night-blue globe and the text
- * is white over it. `bg-9e-navy` is the fallback if the image fails to load, so
- * the white text keeps its contrast either way.
+ * Always dark, in both themes: a CSS-only aurora on Deep Navy, white text over
+ * it. Every colour is a fixed 9e token with no `dark:` variant, so the banner
+ * never inverts with the theme toggle.
  *
- * The image is 2172x361 — the section is held near that height on desktop
- * (360px) so it is never upscaled far enough to soften. On phones the crop
- * slides right (object-[75%_center]) to keep the globe in frame, and a navy
- * scrim sits under the text there because the globe then lands behind it.
+ * Layers, back to front: the navy section background; three blurred blobs
+ * clustered on the RIGHT (Action Blue largest upper-right, Air Blue lower-right,
+ * a small Signal Lime hint between them) drifting on transform-only keyframes in
+ * contactMotion.module.css; a navy → transparent scrim from the left, stronger
+ * below lg where the text spans the full width, so the heading and subtitle sit
+ * on near-flat navy at every width. The blobs are sized down on phones and the
+ * section is overflow-hidden, so their bleed never causes a horizontal scroll.
  *
  * Heights are minimums (300 / 320 / 360px): the text block is vertically
  * centred, and if it wraps taller the banner grows with it. The container is
@@ -21,19 +22,20 @@ import styles from './contactMotion.module.css';
 export default function ContactHero() {
   return (
     <section className="relative isolate overflow-hidden bg-9e-navy text-white">
-      <Image
-        src="/contact-img/contact-hero.webp"
-        alt=""
-        fill
-        priority
-        fetchPriority="high"
-        quality={80}
-        sizes="100vw"
-        className={`-z-10 object-cover object-[75%_center] lg:object-[right_center] ${styles.heroImage}`}
-      />
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+        <div
+          className={`absolute -right-24 -top-32 h-72 w-72 rounded-full bg-9e-action opacity-70 blur-[60px] md:-right-16 md:-top-40 md:h-[34rem] md:w-[34rem] md:blur-[90px] ${styles.blobA}`}
+        />
+        <div
+          className={`absolute -bottom-28 right-4 h-56 w-56 rounded-full bg-9e-air opacity-60 blur-[60px] md:-bottom-40 md:right-[12%] md:h-[26rem] md:w-[26rem] md:blur-[80px] ${styles.blobB}`}
+        />
+        <div
+          className={`absolute right-[30%] top-[20%] h-28 w-28 rounded-full bg-9e-lime opacity-30 blur-[50px] md:right-[30%] md:top-[18%] md:h-48 md:w-48 md:blur-[70px] ${styles.blobC}`}
+        />
+      </div>
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-9e-navy/90 via-9e-navy/60 to-9e-navy/20 lg:from-9e-navy/40 lg:via-transparent lg:to-transparent"
+        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-9e-navy via-9e-navy/80 to-9e-navy/30 lg:via-9e-navy/60 lg:to-transparent"
       />
 
       <div className="mx-auto flex min-h-[300px] max-w-[1200px] flex-col justify-center px-4 py-12 md:min-h-[320px] lg:min-h-[360px] lg:px-6">
