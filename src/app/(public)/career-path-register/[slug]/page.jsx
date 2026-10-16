@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { redirectIfMixedCaseSlug, toQueryString } from './lowercaseSlug';
 
 /**
  * Legacy career-path registration entry point.
@@ -13,18 +14,9 @@ import { redirect } from 'next/navigation';
  * masterclass/[slug]/register/page.jsx.
  */
 export default async function Page({ params, searchParams }) {
+  await redirectIfMixedCaseSlug(params, searchParams, '');
+
   const { slug } = await params;
-  const sp = (await searchParams) ?? {};
-
-  const qs = new URLSearchParams();
-  for (const [key, value] of Object.entries(sp)) {
-    if (typeof value === 'string') {
-      qs.set(key, value);
-    } else if (Array.isArray(value)) {
-      value.forEach((v) => qs.append(key, v));
-    }
-  }
-
-  const query = qs.toString();
-  redirect(`/career-path-register/${encodeURIComponent(slug)}/step-1${query ? `?${query}` : ''}`);
+  const query = toQueryString(await searchParams);
+  redirect(`/career-path-register/${encodeURIComponent(slug)}/step-1${query}`);
 }
