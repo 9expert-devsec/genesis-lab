@@ -116,14 +116,17 @@ export function ProgramSelector({
   const shouldReduceMotion = useReducedMotion();
 
   return (
-    <motion.section
-      className="bg-9e-ice dark:bg-9e-card px-4 py-14 lg:px-6"
-      variants={FADE_UP_VARIANTS}
-      initial={shouldReduceMotion ? false : 'hidden'}
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.25 }}
-    >
-      <div className="mx-auto max-w-[1200px]">
+    // The section owns the background and is NEVER animated: at opacity 0 it
+    // would let the page's white show through under the Feature Content arc,
+    // whose fill uses these same tokens. Only the content wrapper reveals.
+    <section className="bg-9e-ice dark:bg-9e-card px-4 py-14 lg:px-6">
+      <motion.div
+        className="mx-auto max-w-[1200px]"
+        variants={FADE_UP_VARIANTS}
+        initial={shouldReduceMotion ? false : 'hidden'}
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.25 }}
+      >
         <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
           ค้นหาสิ่งที่คุณสนใจ
         </h2>
@@ -328,8 +331,8 @@ export function ProgramSelector({
             )}
           </div>
         )}
-      </div>
-    </motion.section>
+      </motion.div>
+    </section>
   );
 }
 
