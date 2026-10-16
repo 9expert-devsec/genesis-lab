@@ -7,10 +7,15 @@ import { motion, useReducedMotion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Keyboard, Lightbulb } from "lucide-react";
 import { cn, programHref, skillHref } from "@/lib/utils";
 
-/** ROUND HS-C: whole-section fade-up, once per mount. */
+/**
+ * ROUND HS-C: whole-section fade-up, once per mount. 0.8s (was 0.4s, which
+ * had finished before anyone scrolling to it could tell it ran), triggered at
+ * 25% in view (see `viewport` on the section). Local to this file — BlogSection
+ * has its own copy.
+ */
 const FADE_UP_VARIANTS = {
   hidden: { opacity: 0, y: 24 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: 'easeOut' } },
 };
 
 /**
@@ -116,7 +121,7 @@ export function ProgramSelector({
       variants={FADE_UP_VARIANTS}
       initial={shouldReduceMotion ? false : 'hidden'}
       whileInView="visible"
-      viewport={{ once: true, amount: 0.2 }}
+      viewport={{ once: true, amount: 0.25 }}
     >
       <div className="mx-auto max-w-[1200px]">
         <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
