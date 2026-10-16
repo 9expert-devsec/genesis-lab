@@ -6,6 +6,7 @@ import Image from "next/image";
 import { motion, useReducedMotion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Keyboard, Lightbulb } from "lucide-react";
 import { cn, programHref, skillHref } from "@/lib/utils";
+import { HorizonGlow } from "./HorizonDivider";
 
 /** ROUND HS-C: whole-section fade-up, once per mount. */
 const FADE_UP_VARIANTS = {
@@ -112,12 +113,15 @@ export function ProgramSelector({
 
   return (
     <motion.section
-      className="bg-9e-ice dark:bg-9e-card px-4 py-14 lg:px-6"
+      // `relative isolate` only so HorizonGlow can sit behind the content at
+      // -z-10; no spacing change.
+      className="relative isolate bg-9e-ice dark:bg-9e-card px-4 py-14 lg:px-6"
       variants={FADE_UP_VARIANTS}
       initial={shouldReduceMotion ? false : 'hidden'}
       whileInView="visible"
       viewport={{ once: true, amount: 0.2 }}
     >
+      <HorizonGlow />
       <div className="mx-auto max-w-[1200px]">
         <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
           ค้นหาสิ่งที่คุณสนใจ
