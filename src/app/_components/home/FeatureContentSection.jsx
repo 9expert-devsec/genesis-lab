@@ -7,6 +7,7 @@ import {
   warnFeatureContentMisses,
 } from "@/lib/home/featureContentRefs";
 import { FeaturedContentSlider } from "./FeaturedContentSlider";
+import { HorizonDivider } from "./HorizonDivider";
 
 /**
  * Home "Feature Content" — the dark band directly under the hero.
@@ -119,19 +120,28 @@ export async function FeatureContentSection({ banners = [] }) {
       // and a "no two on one page" rule (see tailwind.config.js), enforced by
       // test/pure/zIndexStack.
       //
-      // No `pt-*` or `pb-*` here. The top padding is the overlap plus 3rem
+      // Bottom padding holds the whole HorizonDivider, which is pinned to
+      // this section's bottom edge and never reaches past it:
+      //   3rem above the arc's corners (the gap every Home section uses)
+      //   + --horizon-depth (28px / 64px from md)
+      //   + --horizon-gap   (32px / 48px from md)
+      //   = 108px / 160px from md.
+      // Retune those variables and these two numbers move with them. There
+      // is no `pt-*` here: the top padding is the overlap plus that same 3rem
       // and lives in .fc-surface, because it must move with the negative
-      // margin; the bottom padding is --section-fade-height, also in
-      // .fc-surface, because it must move with the fade (.fc-fade-out).
+      // margin.
       //
       // NO overflow-hidden. See the note above.
-      className="fc-surface pointer-events-none relative z-20 w-full px-4 lg:px-6"
+      className="fc-surface pointer-events-none relative z-20 w-full px-4 pb-[108px] md:pb-[160px] lg:px-6"
     >
       <div aria-hidden="true" className="fc-aurora pointer-events-none" />
 
-      {/* The long fade into ProgramSelector, in this section's bottom
-          padding — below the cards, never over them. */}
-      <div aria-hidden="true" className="fc-fade-out pointer-events-none" />
+      {/* The horizon, inside this section's bottom padding. Fill and gap use
+          ProgramSelector's own background tokens. */}
+      <HorizonDivider
+        fillClassName="fill-9e-ice dark:fill-9e-card"
+        gapClassName="bg-9e-ice dark:bg-9e-card"
+      />
 
       {/* Pointer events come back ON here — and this box starts below the
           overlap band, so it never sits over the hero. `relative` so it
