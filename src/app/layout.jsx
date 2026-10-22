@@ -5,6 +5,7 @@ import { OG_DEFAULT_IMAGE } from '@/lib/seo/ogImage';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { Analytics } from '@/components/analytics/Analytics';
 import { AnalyticsPageTracker } from '@/components/analytics/AnalyticsPageTracker';
+import { LinkerParamCleaner } from '@/components/analytics/LinkerParamCleaner';
 import { MetaPixel } from '@/components/analytics/MetaPixel';
 import { MetaPixelPageTracker } from '@/components/analytics/MetaPixelPageTracker';
 import { FloatingActionDock } from '@/components/ui/FloatingActionDock';
@@ -131,6 +132,9 @@ export default function RootLayout({ children }) {
               sits here only to keep the two page trackers together. */}
           <MetaPixelPageTracker />
         </Suspense>
+        {/* Outside the Suspense: usePathname only. Removes `_gl` from the
+            address bar after gtag has read it — see the component. */}
+        <LinkerParamCleaner />
         <ThemeProvider>
           {children}
           {/* ── THE FLOATING DOCK IS MOUNTED HERE, ONCE ──────────────────
