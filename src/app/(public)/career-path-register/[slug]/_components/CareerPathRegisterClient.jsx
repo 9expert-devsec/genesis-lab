@@ -31,6 +31,9 @@ import { z } from 'zod';
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Loader2, Lock,
 } from 'lucide-react';
+// ADDED beside the statement above, per the repo's rule: the Transfer panel's
+// history icon and its selected-row check.
+import { Check, History } from 'lucide-react';
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
 import { ThaiDateField } from '@/components/registration/ThaiDateField';
 // ADDED beside the statement above rather than folded into it — the standing
@@ -1163,19 +1166,43 @@ function TransferExplainer() {
 }
 
 /**
- * The past-round picker, inside the course card. Same chips as the future
- * rounds; one outside the window is greyed, and a tap on it shows why (a
- * disabled button takes no tap, so a transparent button sits over it).
- * "กรอกรอบอบรมเอง" opens ManualTransferRound in its place.
+ * The past-round picker, inside the course card.
+ *
+ * IT MUST NOT LOOK LIKE THE ROUND CHIPS ABOVE IT. Those ask "which round will
+ * you attend"; this asks "which round did you already attend", and when both
+ * were the same white chip with the same blue delivery pill, learners could not
+ * tell the two questions apart. So this is a HISTORY panel: solid warm border
+ * and tint (the theme's `--9e-orange-*` scale, which has light and dark
+ * values), a history icon, compact radio rows with a grey เข้าอบรมแล้ว tag
+ * where the blue pill was. Presentation only — what a pick does is unchanged.
+ *
+ * A round outside the window keeps its old behaviour: it is not picked, and a
+ * tap on it shows why (onBlocked). One button per row now carries that, as
+ * `aria-disabled` rather than `disabled`, because a disabled button takes no
+ * tap. "ระบุวันที่อบรมเอง" opens ManualTransferRound in its place.
  */
+const TRANSFER_PANEL_CLASS =
+  'mt-3 rounded-lg border border-[var(--9e-orange-400)] bg-[var(--9e-orange-950)] p-3';
+const TRANSFER_FOCUS_CLASS =
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-9e-action dark:focus-visible:outline-9e-air';
+
+/** ARROW KEYS MOVE FOCUS between the rows — never the pick: a pick is a click. */
+function moveRadioFocus(e) {
+  const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+  if (!step) return;
+  const rows = [...e.currentTarget.querySelectorAll('[data-transfer-round]')];
+  const at = rows.indexOf(document.activeElement);
+  if (at === -1) return;
+  e.preventDefault();
+  rows[(at + step + rows.length) % rows.length].focus();
+}
+
 function TransferPicker({ rounds, todayKey, showNotice, onBlocked, onPick, onManual }) {
   const [manualOpen, setManualOpen] = useState(false);
+  const titleId = useId();
   if (manualOpen) {
     return (
-      <div
-        data-transfer-picker=""
-        className="mt-3 rounded-lg border border-9e-action/30 bg-white p-3 dark:bg-[#0D1B2A]"
-      >
+      <div data-transfer-picker="" className={TRANSFER_PANEL_CLASS}>
         <ManualTransferRound
           todayKey={todayKey}
           onApply={onManual}
@@ -1185,42 +1212,84 @@ function TransferPicker({ rounds, todayKey, showNotice, onBlocked, onPick, onMan
     );
   }
   return (
-    <div
-      data-transfer-picker=""
-      className="mt-3 rounded-lg border border-9e-action/30 bg-white p-3 dark:bg-[#0D1B2A]"
-    >
+    <div data-transfer-picker="" className={TRANSFER_PANEL_CLASS}>
+      <div className="flex items-start gap-2">
+        <History aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--9e-orange-50)]" />
+        <div>
+          <p id={titleId} data-transfer-title="" className="text-xs font-semibold text-[var(--text-primary)]">
+            โอนสิทธิ์จากรอบที่เคยอบรม
+          </p>
+          <p data-transfer-helper="" className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
+            เลือกรอบ Public Training ที่คุณเคยเข้าอบรมหลักสูตรนี้ภายใน 1 ปี
+          </p>
+        </div>
+      </div>
       {rounds.length > 0 && (
         <>
-          <p className="mb-2 text-xs font-semibold text-9e-navy dark:text-white">
-            เลือกรอบที่เคยเข้าอบรม
-          </p>
-          <div className="flex flex-wrap gap-2">
+          <div
+            role="radiogroup"
+            aria-labelledby={titleId}
+            onKeyDown={moveRadioFocus}
+            className="mt-3 flex flex-col gap-1.5 sm:flex-row sm:flex-wrap"
+          >
             {rounds.map((r) => {
               const label = formatThaiRange(r.dates);
               const allowed = transferRoundAllowed(r.dates, todayKey);
-              const chip = (
-                <RoundPickChip
-                  key={r.scheduleId}
-                  roundId={r.scheduleId}
-                  dateLabel={label}
-                  type={r.type}
-                  enabled={allowed}
-                  title={allowed ? undefined : TRANSFER_OUT_OF_WINDOW_MESSAGE}
-                  srReason={allowed ? '' : TRANSFER_OUT_OF_WINDOW_MESSAGE}
-                  onClick={() => onPick(r)}
-                />
-              );
-              if (allowed) return chip;
+              const format = ROUND_TYPE_LABEL[String(r.type ?? '').toLowerCase()] ?? '';
               return (
-                <span key={r.scheduleId} className="relative inline-flex">
-                  {chip}
-                  <button
-                    type="button"
-                    aria-label={`${label} — ${TRANSFER_OUT_OF_WINDOW_MESSAGE}`}
-                    onClick={onBlocked}
-                    className="absolute inset-0 cursor-not-allowed rounded-9e-md"
+                <button
+                  key={r.scheduleId}
+                  type="button"
+                  role="radio"
+                  aria-checked="false"
+                  aria-disabled={allowed ? 'false' : 'true'}
+                  data-transfer-round=""
+                  data-round-id={r.scheduleId}
+                  title={allowed ? undefined : TRANSFER_OUT_OF_WINDOW_MESSAGE}
+                  onClick={() => (allowed ? onPick(r) : onBlocked())}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-full border bg-[var(--surface)] px-3 py-1 text-left text-xs sm:w-auto',
+                    TRANSFER_FOCUS_CLASS,
+                    allowed
+                      ? 'border-[var(--round-chip-muted-border)] hover:border-[var(--9e-orange-50)]'
+                      : 'cursor-not-allowed border-dashed border-[var(--round-chip-muted-border)]'
+                  )}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-[var(--round-chip-muted-border)]"
                   />
-                </span>
+                  {/* Date and format wrap as two whole phrases, never mid-word. */}
+                  <span className="min-w-0 flex-1 sm:flex-none">
+                    <span
+                      data-transfer-round-date=""
+                      className={cn(
+                        'whitespace-nowrap',
+                        allowed ? 'text-[var(--text-secondary)]' : 'text-[var(--round-chip-muted-ink)]'
+                      )}
+                    >
+                      {label}
+                    </span>
+                    {format && (
+                      <>
+                        {' '}
+                        <span
+                          data-transfer-round-format=""
+                          className="whitespace-nowrap text-[10px] text-[var(--text-secondary)]"
+                        >
+                          · {format}
+                        </span>
+                      </>
+                    )}
+                  </span>
+                  <span
+                    data-transfer-round-tag=""
+                    className="shrink-0 whitespace-nowrap rounded-full border border-[var(--round-chip-muted-border)] bg-[var(--round-chip-muted-bg)] px-2 py-0.5 text-[10px] font-medium text-[var(--round-chip-muted-ink)]"
+                  >
+                    เข้าอบรมแล้ว
+                  </span>
+                  {!allowed && <span className="sr-only">{TRANSFER_OUT_OF_WINDOW_MESSAGE}</span>}
+                </button>
               );
             })}
           </div>
@@ -1234,16 +1303,20 @@ function TransferPicker({ rounds, todayKey, showNotice, onBlocked, onPick, onMan
           )}
         </>
       )}
-      <button
-        type="button"
-        onClick={() => setManualOpen(true)}
-        className={cn(
-          'text-[11px] font-medium text-9e-action underline underline-offset-2 hover:text-9e-brand',
-          rounds.length > 0 && 'mt-2'
-        )}
-      >
-        ไม่พบรอบที่เคยเรียน? กรอกรอบอบรมเอง
-      </button>
+      <p data-transfer-manual-lead="" className="mt-3 text-[11px] text-[var(--text-secondary)]">
+        ไม่พบรอบที่เคยเรียน?{' '}
+        <button
+          type="button"
+          data-transfer-manual-open=""
+          onClick={() => setManualOpen(true)}
+          className={cn(
+            'rounded-sm font-medium text-9e-action underline underline-offset-2 hover:text-9e-brand dark:text-9e-air',
+            TRANSFER_FOCUS_CLASS
+          )}
+        >
+          ระบุวันที่อบรมเอง
+        </button>
+      </p>
     </div>
   );
 }
@@ -1318,17 +1391,31 @@ function ManualTransferRound({ todayKey, onApply, onCancel }) {
   );
 }
 
-/** A transferred course, in place of its future chips. */
+/**
+ * A transferred course, in place of its future chips. Drawn as the SELECTED
+ * past-round row — filled radio, warm border, check — and deliberately not as
+ * the blue filled chip a picked future round is.
+ */
 function TransferredState({ round, onCancel }) {
   return (
     <div data-transfer-state="" className="flex w-full flex-wrap items-center gap-2">
-      <span className="inline-flex items-center gap-2 rounded-9e-md border border-9e-action bg-9e-action px-3 py-2 text-sm text-white shadow-sm">
+      <span className="inline-flex items-center gap-2 rounded-full border-2 border-[var(--9e-orange-50)] bg-[var(--9e-orange-950)] px-3 py-1.5 text-sm text-[var(--text-primary)]">
+        <span
+          aria-hidden="true"
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-[var(--9e-orange-50)]"
+        >
+          <span className="h-2 w-2 rounded-full bg-[var(--9e-orange-50)]" />
+        </span>
         Transfer · เคยอบรม {round}
+        <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--text-primary)]" />
       </span>
       <button
         type="button"
         onClick={onCancel}
-        className="text-xs font-medium text-9e-action underline underline-offset-2 hover:text-9e-brand"
+        className={cn(
+          'rounded-sm text-xs font-medium text-9e-action underline underline-offset-2 hover:text-9e-brand',
+          TRANSFER_FOCUS_CLASS
+        )}
       >
         ยกเลิก Transfer
       </button>
@@ -1442,6 +1529,39 @@ function Step1Courses({
                 const transfersFull = transferCount >= transferLimit && !transferred;
                 const pickerOpen = transferOpen === code && !transferred;
 
+                // One future round's chip — the same chip and the same verdicts
+                // whether or not the past-round panel is open above it.
+                const renderUpcomingChip = (sched) => {
+                  const isSelected = myPick === sched._id;
+                  const start = minDateOf(sched.dates);
+                  const dateOk = !latestPriorDate || isAfter(start, latestPriorDate);
+                  const pairBlock = pairBlocks.get(sched._id);
+                  const isEnabled = eligible && dateOk && !choiceFull && !pairBlock;
+
+                  return (
+                    <RoundPickChip
+                      key={sched._id}
+                      dateLabel={formatThaiRange(sched.dates)}
+                      type={sched.type}
+                      selected={isSelected}
+                      enabled={isEnabled}
+                      nearlyFull={sched.status === 'nearly_full'}
+                      title={
+                        pairBlock
+                          ? pairBlockReason(pairBlock, selected, codeToName)
+                          : !eligible
+                            ? 'กรุณาเลือกรอบอบรมของกลุ่มก่อนหน้าก่อน'
+                            : !dateOk
+                              ? 'วันอบรมต้องมาหลังจากคอร์สก่อนหน้า'
+                              : choiceFull
+                                ? `เลือกได้สูงสุด ${chooseMax} คอร์สในกลุ่มนี้`
+                                : undefined
+                      }
+                      onClick={() => onPick(group, item, sched)}
+                    />
+                  );
+                };
+
                 /*
                   ── THE CARD AND ITS CHIPS COME FROM THE SHARED PICKER ─────
                   They were spelled out here. They now live in
@@ -1550,36 +1670,32 @@ function Step1Courses({
                         round={selected[code].round || formatThaiRange(selected[code].dates)}
                         onCancel={() => onCancelTransfer(code)}
                       />
-                    ) : schedules.map((sched) => {
-                      const isSelected = myPick === sched._id;
-                      const start = minDateOf(sched.dates);
-                      const dateOk = !latestPriorDate || isAfter(start, latestPriorDate);
-                      const pairBlock = pairBlocks.get(sched._id);
-                      const isEnabled = eligible && dateOk && !choiceFull && !pairBlock;
-
-                      return (
-                        <RoundPickChip
-                          key={sched._id}
-                          dateLabel={formatThaiRange(sched.dates)}
-                          type={sched.type}
-                          selected={isSelected}
-                          enabled={isEnabled}
-                          nearlyFull={sched.status === 'nearly_full'}
-                          title={
-                            pairBlock
-                              ? pairBlockReason(pairBlock, selected, codeToName)
-                              : !eligible
-                                ? 'กรุณาเลือกรอบอบรมของกลุ่มก่อนหน้าก่อน'
-                                : !dateOk
-                                  ? 'วันอบรมต้องมาหลังจากคอร์สก่อนหน้า'
-                                  : choiceFull
-                                    ? `เลือกได้สูงสุด ${chooseMax} คอร์สในกลุ่มนี้`
-                                    : undefined
-                          }
-                          onClick={() => onPick(group, item, sched)}
-                        />
-                      );
-                    })}
+                    ) : pickerOpen && schedules.length > 0 ? (
+                      /*
+                        A course holds ONE pick, and a transfer replaces a
+                        future round (pickTransfer). So while the past-round
+                        panel is open the future chips step back: faded and
+                        inert until the Transfer toggle closes the panel. The
+                        pick rules are untouched. `inert=""` is the string
+                        form React 18 passes through to the DOM.
+                      */
+                      <>
+                        <p
+                          data-transfer-upcoming-note=""
+                          className="w-full text-[11px] text-[var(--text-secondary)]"
+                        >
+                          ใช้สิทธิ์โอนแทนการเลือกรอบใหม่
+                        </p>
+                        <div
+                          aria-disabled="true"
+                          inert=""
+                          data-transfer-upcoming-muted=""
+                          className="flex flex-wrap gap-2 opacity-50"
+                        >
+                          {schedules.map(renderUpcomingChip)}
+                        </div>
+                      </>
+                    ) : schedules.map(renderUpcomingChip)}
                   </RoundPickCourseCard>
                 );
               })}
