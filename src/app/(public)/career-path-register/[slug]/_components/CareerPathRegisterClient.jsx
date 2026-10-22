@@ -1171,7 +1171,7 @@ function TransferExplainer() {
  * IT MUST NOT LOOK LIKE THE ROUND CHIPS ABOVE IT. Those ask "which round will
  * you attend"; this asks "which round did you already attend", and when both
  * were the same white chip with the same blue delivery pill, learners could not
- * tell the two questions apart. So this is a HISTORY panel: dashed warm border
+ * tell the two questions apart. So this is a HISTORY panel: solid warm border
  * and tint (the theme's `--9e-orange-*` scale, which has light and dark
  * values), a history icon, compact radio rows with a grey เข้าอบรมแล้ว tag
  * where the blue pill was. Presentation only — what a pick does is unchanged.
@@ -1182,18 +1182,9 @@ function TransferExplainer() {
  * tap. "ระบุวันที่อบรมเอง" opens ManualTransferRound in its place.
  */
 const TRANSFER_PANEL_CLASS =
-  'relative mt-3 rounded-lg border border-dashed border-[var(--9e-orange-400)] bg-[var(--9e-orange-950)] p-3 pl-4';
+  'mt-3 rounded-lg border border-[var(--9e-orange-400)] bg-[var(--9e-orange-950)] p-3';
 const TRANSFER_FOCUS_CLASS =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-9e-action dark:focus-visible:outline-9e-air';
-
-function TransferPanelAccent() {
-  return (
-    <span
-      aria-hidden="true"
-      className="absolute bottom-3 left-0 top-3 w-1 rounded-r-full bg-[var(--9e-orange-50)]"
-    />
-  );
-}
 
 /** ARROW KEYS MOVE FOCUS between the rows — never the pick: a pick is a click. */
 function moveRadioFocus(e) {
@@ -1212,7 +1203,6 @@ function TransferPicker({ rounds, todayKey, showNotice, onBlocked, onPick, onMan
   if (manualOpen) {
     return (
       <div data-transfer-picker="" className={TRANSFER_PANEL_CLASS}>
-        <TransferPanelAccent />
         <ManualTransferRound
           todayKey={todayKey}
           onApply={onManual}
@@ -1223,7 +1213,6 @@ function TransferPicker({ rounds, todayKey, showNotice, onBlocked, onPick, onMan
   }
   return (
     <div data-transfer-picker="" className={TRANSFER_PANEL_CLASS}>
-      <TransferPanelAccent />
       <div className="flex items-start gap-2">
         <History aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--9e-orange-50)]" />
         <div>
