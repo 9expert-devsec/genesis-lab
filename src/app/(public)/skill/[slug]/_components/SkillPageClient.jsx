@@ -8,15 +8,17 @@ import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 import { ProgramArticlesSection } from '@/components/program/ProgramArticlesSection';
 import { ProgramOnlineCoursesSection } from '@/components/program/ProgramOnlineCoursesSection';
 import { PageCatalogButton } from '@/components/ui/PageCatalogButton';
+import { RoadmapHeroThumbnail } from '@/components/ui/RoadmapHeroThumbnail';
 
 /**
  * Public skill detail page.
  *
  * Layout:
- *   1. Gradient hero with the skill icon, name, count, and teaser.
+ *   1. Gradient hero with the skill icon, name, count, and teaser — two
+ *      columns with a roadmap thumbnail when `skill_roadmap_url` is present,
+ *      one centred column when it is not.
  *   2. Per-program sections — each has its own course grid so users
  *      can scan how a skill is broken down across programs.
- *   3. Optional roadmap image when `skill_roadmap_url` is present.
  */
 export function SkillPageClient({
   skill,
@@ -50,6 +52,68 @@ export function SkillPageClient({
   return (
     <main className="min-h-screen bg-9e-ice dark:bg-9e-border pb-16">
       {/* ── Hero ──────────────────────────────────────────────────── */}
+      {/*
+        TWO HEROES, CHOSEN BY THE ROADMAP.
+
+        With a roadmap: the program page's two-column grid — text and the
+        catalog left-aligned on the left, the roadmap THUMBNAIL on the right
+        (RoadmapHeroThumbnail, the same component the program page uses),
+        stacking under the text below `lg`. This replaced a full-width roadmap
+        section under the hero that pushed the first program row ~1,400px down
+        at 1440.
+
+        Without one (4 of 7 skills): the single centred hero below, unchanged
+        markup. The skill gradient is kept in both.
+      */}
+      {roadmapUrl ? (
+      <section className="bg-gradient-to-b from-9e-action to-[#0047CC] dark:from-[#0a1628] dark:to-[#0d1e36]">
+        <div className="mx-auto grid max-w-[1200px] grid-cols-1 items-center gap-8 px-4 py-12 lg:grid-cols-2 lg:px-6 lg:py-16">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-4">
+              {skill?.skilliconurl && (
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 p-2 backdrop-blur">
+                  <Image
+                    src={skill.skilliconurl}
+                    alt={skill.skill_name ?? ''}
+                    width={48}
+                    height={48}
+                    className="object-contain"
+                    unoptimized
+                  />
+                </div>
+              )}
+              <div>
+                <h1 className="text-3xl font-bold text-white md:text-4xl">
+                  {skill?.skill_name}
+                </h1>
+                <p className="mt-1 text-sm text-white/80">
+                  กลุ่ม Skill {skill?.skill_name} มีทั้งหมด{' '}
+                  <span className="font-bold text-white">{totalCourses}</span>{' '}
+                  หลักสูตร
+                </p>
+              </div>
+            </div>
+
+            {description && (
+              <p className="max-w-xl text-sm leading-relaxed text-white/80 md:text-base">
+                {description}
+              </p>
+            )}
+
+            {/* Same `config`, same predicate as the centred hero; `mt-2`
+                trims the button's built-in mt-6 inside this gapped column,
+                as the program hero does. */}
+            <PageCatalogButton config={config} className="mt-2 self-start" />
+          </div>
+
+          <RoadmapHeroThumbnail
+            src={roadmapUrl}
+            alt={`${skill?.skill_name ?? ''} Roadmap`}
+            name={skill?.skill_name ?? ''}
+          />
+        </div>
+      </section>
+      ) : (
       <section className="bg-gradient-to-b from-9e-action to-[#0047CC] py-14 text-center dark:from-[#0a1628] dark:to-[#0d1e36]">
         <div className="mx-auto max-w-[900px] px-4 lg:px-6">
           {skill?.skilliconurl && (
@@ -83,41 +147,6 @@ export function SkillPageClient({
           <PageCatalogButton config={config} />
         </div>
       </section>
-
-      {/* ── Roadmap ───────────────────────────────────────────────── */}
-      {/*
-        THE FRAME HUGS THE IMAGE. This was a fixed 16:7 box with a `fill`
-        image and `object-contain`; measured 2026-10-26 the two skill roadmaps
-        are 2500x1664 (power-platform, 1.502) and 5266x3724 (automation,
-        1.414), so the box painted ~200px of white bar on each side — a white
-        slab in dark mode. Same move ProgramPageClient made for its roadmap:
-        no fixed ratio, `h-auto w-full`, the frame's height following the
-        image, and the card-surface / border tokens instead of a white
-        literal. The image is not altered.
-
-        FULL WIDTH, NOT SHRINK-TO-FIT. A fit-content frame around a full-width
-        image is a circular percentage: before the image loads the frame
-        collapses to the browser's 300px default and then jumps — measured
-        CLS 0.24 on desktop. Both roadmaps are wider than the 1200px column,
-        so full width is their natural-width cap anyway.
-      */}
-      {roadmapUrl && (
-        <section className="mx-auto max-w-[1200px] px-4 pt-10 lg:px-6">
-          <div className="overflow-hidden rounded-2xl border border-[var(--surface-border)] bg-[var(--surface)] shadow-9e-sm">
-            <Image
-              src={roadmapUrl}
-              alt={`${skill?.skill_name ?? ''} Roadmap`}
-              // Seeds an aspect ratio so the space is reserved before load;
-              // the browser switches to the image's true ratio once it
-              // arrives. A placeholder, not a constraint.
-              width={2500}
-              height={1664}
-              sizes="(max-width: 1280px) 100vw, 1200px"
-              className="block h-auto w-full"
-              unoptimized
-            />
-          </div>
-        </section>
       )}
 
       {/* ── Per-program sections ──────────────────────────────────── */}
