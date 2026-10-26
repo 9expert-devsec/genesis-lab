@@ -133,10 +133,10 @@ function CareerPathPromotionSection() {
       aria-labelledby="career-path-promotion-heading"
       className="space-y-8"
     >
-      <div className="rounded-2xl border border-9e-air bg-white px-5 py-7 md:px-8">
+      <div className="rounded-2xl border border-9e-air bg-[var(--surface)] px-5 py-7 md:px-8">
         <div
           id="career-path-promotion-heading"
-          className="text-center text-xl font-bold text-[#0D1B2A] font-thai"
+          className="text-center text-xl font-bold text-[var(--text-primary)] font-thai"
         >
           <h2 className="text-[#FF4D4F]">โปรโมชันพิเศษ!</h2>{" "}
           รวมทีมแล้วมาสมัครเรียนกัน ลดแรงทุกระดับ
@@ -149,7 +149,7 @@ function CareerPathPromotionSection() {
               className={`flex min-h-32 flex-col items-center justify-center rounded-xl border px-3 py-5 text-center ${
                 item.highlighted
                   ? "border-9e-air bg-9e-air text-[#0D1B2A]"
-                  : "border-gray-200 bg-white text-[#0D1B2A] shadow-sm"
+                  : "border-gray-200 bg-[var(--surface)] text-[var(--text-primary)] dark:border-[var(--surface-border)] shadow-sm"
               }`}
             >
               <p className="text-base font-bold">
@@ -174,7 +174,7 @@ function CareerPathPromotionSection() {
           ))}
         </div>
 
-        <p className="mt-5 text-xs leading-relaxed text-[#0D1B2A] md:text-sm">
+        <p className="mt-5 text-xs leading-relaxed text-[var(--text-primary)] md:text-sm">
           *ส่วนลดสูงสุด 30% สำหรับผู้สมัครพร้อมกัน 11 ท่าน
           (ได้ทั้งนามบุคคลหรือองค์กร) ในแต่ละ Career Path
           ท่านสามารถสอบถามเพื่อรับสิทธิ์ราคาพิเศษได้กับเจ้าหน้าที่ฝ่ายขายทาง
@@ -183,7 +183,7 @@ function CareerPathPromotionSection() {
             href="https://line.me/R/ti/p/%409expert"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-[#005CFF] hover:underline"
+            className="font-semibold text-[#005CFF] hover:underline dark:text-9e-air"
           >
             @9expert
           </a>
@@ -191,7 +191,7 @@ function CareerPathPromotionSection() {
       </div>
 
       <div className="space-y-5">
-        <h3 className="text-center text-base font-bold text-[#0D1B2A]">
+        <h3 className="text-center text-base font-bold text-[var(--text-primary)]">
           สำหรับการเรียนในโปรแกรม Career Path ท่านจะได้รับสิทธิพิเศษดังต่อไปนี้
         </h3>
 
@@ -199,12 +199,12 @@ function CareerPathPromotionSection() {
           {benefits.map((benefit) => (
             <div
               key={benefit.title}
-              className="rounded-xl bg-[#F5F8FC] px-5 py-5 text-center shadow-sm"
+              className="rounded-xl bg-[#F5F8FC] dark:bg-[var(--surface)] px-5 py-5 text-center shadow-sm"
             >
-              <h4 className="min-h-10 text-base font-bold leading-5 text-[#0D1B2A]">
+              <h4 className="min-h-10 text-base font-bold leading-5 text-[var(--text-primary)]">
                 {benefit.title}
               </h4>
-              <p className="mt-3 text-sm leading-relaxed text-[#0D1B2A]">
+              <p className="mt-3 text-sm leading-relaxed text-[var(--text-primary)]">
                 {benefit.description}
               </p>
               {benefit.note && (
@@ -217,7 +217,7 @@ function CareerPathPromotionSection() {
         </div>
       </div>
 
-      <div className="space-y-3 text-[#0D1B2A]">
+      <div className="space-y-3 text-[var(--text-primary)]">
         <h3 className="text-lg font-bold">เงื่อนไขโปรโมชัน</h3>
         <ul className="list-disc space-y-1 pl-5 text-base leading-relaxed">
           {promotionConditions.map((condition) => (
@@ -226,11 +226,11 @@ function CareerPathPromotionSection() {
         </ul>
       </div>
 
-      <div className="mx-auto max-w-2xl rounded-2xl bg-[#F8FAFD] p-6 shadow-sm md:px-8">
-        <h3 className="text-lg font-bold text-[#0D1B2A]">
+      <div className="mx-auto max-w-2xl rounded-2xl bg-[#F8FAFD] dark:bg-[var(--surface)] p-6 shadow-sm md:px-8">
+        <h3 className="text-lg font-bold text-[var(--text-primary)]">
           กรณีเป็นศิษย์เก่า 9Expert
         </h3>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-base leading-relaxed text-[#0D1B2A]">
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-base leading-relaxed text-[var(--text-primary)]">
           <li>
             ผู้เรียนที่เคยเรียนบางคอร์สใน Career Path Program สามารถใช้{" "}
             <strong className="text-[#00AEEF]">สิทธิ์ Transfer Module</strong>{" "}
@@ -251,7 +251,7 @@ function CareerPathPromotionSection() {
         </ul>
       </div>
 
-      <div className="space-y-3 text-[#0D1B2A]">
+      <div className="space-y-3 text-[var(--text-primary)]">
         <h3 className="text-lg font-bold">หมายเหตุ</h3>
         <ul className="list-disc space-y-1 pl-5 text-base leading-relaxed">
           {notes.map((note) => (
@@ -260,14 +260,14 @@ function CareerPathPromotionSection() {
         </ul>
       </div>
 
-      <div className="space-y-2 text-base leading-relaxed text-[#0D1B2A]">
+      <div className="space-y-2 text-base leading-relaxed text-[var(--text-primary)]">
         <p>
           หากมีคำถามหรือข้อสงสัยเพิ่มเติม ติดต่อเราได้ที่ LINE Official{" "}
           <a
             href="https://line.me/R/ti/p/%409expert"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-[#005CFF] hover:underline"
+            className="font-semibold text-[#005CFF] hover:underline dark:text-9e-air"
           >
             @9expert
           </a>
@@ -276,7 +276,7 @@ function CareerPathPromotionSection() {
           หรือสนใจดูรายละเอียดหลักสูตรอื่น ๆ เพิ่มเติม สามารถดูได้ที่นี่ :{" "}
           <Link
             href="/training-course"
-            className="font-semibold text-[#005CFF] hover:underline"
+            className="font-semibold text-[#005CFF] hover:underline dark:text-9e-air"
           >
             รายละเอียดหลักสูตร
           </Link>
@@ -300,13 +300,13 @@ export default async function Page() {
         ) : (
           <div className="space-y-12">
             <div className="space-y-2 text-center">
-              <div className="text-[28px] font-semibold text-9e-navy">
+              <div className="text-[28px] font-semibold text-[var(--text-primary)]">
                 Build your Future with Career Path Program
                 <br />
                 9Expert ชวนอัปสกิลและต่อยอดความรู้ตามสายอาชีพ (Career Path)
                 <br />
               </div>
-              <div className="text-[20px] font-normal text-9e-navy">
+              <div className="text-[20px] font-normal text-[var(--text-primary)]">
                 มาคนเดียวก็เลิศ มาทั้งกลุ่มก็ปัง ลดสูงสุด 30 %
                 ได้ความรู้+ใบรับรอง อัปความมั่นใจในสายงาน <br />
                 ปี 2026 นี้เราเตรียมแพ็กเกจคอร์สอบรมมามอบให้แล้วกว่า 10 สายอาชีพ
