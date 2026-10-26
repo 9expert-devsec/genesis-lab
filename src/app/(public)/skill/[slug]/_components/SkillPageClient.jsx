@@ -85,19 +85,37 @@ export function SkillPageClient({
       </section>
 
       {/* ── Roadmap ───────────────────────────────────────────────── */}
+      {/*
+        THE FRAME HUGS THE IMAGE. This was a fixed 16:7 box with a `fill`
+        image and `object-contain`; measured 2026-10-26 the two skill roadmaps
+        are 2500x1664 (power-platform, 1.502) and 5266x3724 (automation,
+        1.414), so the box painted ~200px of white bar on each side — a white
+        slab in dark mode. Same move ProgramPageClient made for its roadmap:
+        no fixed ratio, `h-auto w-full`, the frame's height following the
+        image, and the card-surface / border tokens instead of a white
+        literal. The image is not altered.
+
+        FULL WIDTH, NOT SHRINK-TO-FIT. A fit-content frame around a full-width
+        image is a circular percentage: before the image loads the frame
+        collapses to the browser's 300px default and then jumps — measured
+        CLS 0.24 on desktop. Both roadmaps are wider than the 1200px column,
+        so full width is their natural-width cap anyway.
+      */}
       {roadmapUrl && (
         <section className="mx-auto max-w-[1200px] px-4 pt-10 lg:px-6">
-          <div className="overflow-hidden rounded-2xl bg-white shadow-9e-sm">
-            <div className="relative aspect-[16/7] w-full">
-              <Image
-                src={roadmapUrl}
-                alt={`${skill?.skill_name ?? ''} Roadmap`}
-                fill
-                sizes="(max-width: 1280px) 100vw, 1200px"
-                className="object-contain"
-                unoptimized
-              />
-            </div>
+          <div className="overflow-hidden rounded-2xl border border-[var(--surface-border)] bg-[var(--surface)] shadow-9e-sm">
+            <Image
+              src={roadmapUrl}
+              alt={`${skill?.skill_name ?? ''} Roadmap`}
+              // Seeds an aspect ratio so the space is reserved before load;
+              // the browser switches to the image's true ratio once it
+              // arrives. A placeholder, not a constraint.
+              width={2500}
+              height={1664}
+              sizes="(max-width: 1280px) 100vw, 1200px"
+              className="block h-auto w-full"
+              unoptimized
+            />
           </div>
         </section>
       )}
