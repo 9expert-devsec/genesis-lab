@@ -5,39 +5,47 @@ import { motion, useInView, useReducedMotion } from "framer-motion";
 import { GraduationCap, Building2, BookOpen, Users } from "lucide-react";
 
 /**
- * STATS feed the three secondary bento cards.
- * The featured card (90,000+ ผู้เรียน) is rendered separately by FeaturedCard.
+ * The secondary bento cards. The featured card (ผู้เรียน) is rendered
+ * separately by FeaturedCard.
+ *
+ * organizations, learners and courses come from getSiteStats() via the page
+ * (the first two typed at /admin/about, courses counted from the public
+ * catalogue). "20+ ปี" and the 201.9K+ community figure stay local to this
+ * page. A null course count (upstream failure) drops that card rather than
+ * showing 0.
  */
-const STATS = [
-  {
-    target: 20,
-    suffix: "+",
-    label: "ปีประสบการณ์",
-    sub: "ตั้งแต่ปี 2005",
-    Icon: GraduationCap,
-  },
-  {
-    target: 5000,
-    suffix: "+",
-    label: "องค์กรที่ไว้วางใจ",
-    sub: "ครอบคลุมทุกอุตสาหกรรม",
-    Icon: Building2,
-  },
-  {
-    target: 79,
-    suffix: "",
-    label: "หลักสูตรที่เปิดสอน",
-    sub: "Public & Corporate Training",
-    Icon: BookOpen,
-  },
-  {
-    target: 201.9,
-    suffix: "K+",
-    label: "สมาชิกในชุมชน",
-    sub: "ด้าน Data, AI และ MS Technology",
-    Icon: Users,
-  },
-];
+function secondaryStats({ organizations, courses }) {
+  return [
+    {
+      target: 20,
+      suffix: "+",
+      label: "ปีประสบการณ์",
+      sub: "ตั้งแต่ปี 2005",
+      Icon: GraduationCap,
+    },
+    {
+      target: organizations,
+      suffix: "+",
+      label: "องค์กรที่ไว้วางใจ",
+      sub: "ครอบคลุมทุกอุตสาหกรรม",
+      Icon: Building2,
+    },
+    courses != null && {
+      target: courses,
+      suffix: "",
+      label: "หลักสูตรที่เปิดสอน",
+      sub: "Public & Corporate Training",
+      Icon: BookOpen,
+    },
+    {
+      target: 201.9,
+      suffix: "K+",
+      label: "สมาชิกในชุมชน",
+      sub: "ด้าน Data, AI และ MS Technology",
+      Icon: Users,
+    },
+  ].filter(Boolean);
+}
 
 function useCountUp(target, duration = 1800, active = false, reduced = false) {
   const [count, setCount] = React.useState(0);
@@ -67,8 +75,8 @@ function fmt(n) {
   return n >= 1000 ? n.toLocaleString("en-US") : String(n);
 }
 
-function FeaturedCard({ active, reduced }) {
-  const count = useCountUp(90000, 2000, active, reduced);
+function FeaturedCard({ learners, active, reduced }) {
+  const count = useCountUp(learners, 2000, active, reduced);
   return (
     <motion.div
       initial={{ opacity: 0, x: -24 }}
@@ -196,7 +204,8 @@ function SecondaryCard({ stat, active, reduced, delay = 0, wide = false }) {
   );
 }
 
-export default function PortfolioStats() {
+export default function PortfolioStats({ organizations, learners, courses }) {
+  const stats = secondaryStats({ organizations, courses });
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: "-80px" });
   const reduced = useReducedMotion() ?? false;
@@ -224,37 +233,19 @@ export default function PortfolioStats() {
         className="mx-auto grid max-w-[1200px] grid-cols-1 gap-4 px-4 md:grid-cols-2 md:h-[360px]"
       >
         {/* Featured — left column, full height */}
-        <FeaturedCard active={inView} reduced={reduced} />
+        <FeaturedCard learners={learners} active={inView} reduced={reduced} />
 
-        {/* Right column — 3 secondary cards */}
+        {/* Right column — secondary cards, 2×2 */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-2  md:grid-rows-2 md:h-full">
-          {/* Top: two cards side by side */}
-         
+          {stats.map((stat, i) => (
             <SecondaryCard
-              stat={STATS[0]}
+              key={stat.label}
+              stat={stat}
               active={inView}
               reduced={reduced}
-              delay={0.1}
+              delay={0.1 * (i + 1)}
             />
-            <SecondaryCard
-              stat={STATS[1]}
-              active={inView}
-              reduced={reduced}
-              delay={0.2}
-            />
-            {/* Bottom: wide card */}
-          <SecondaryCard
-            stat={STATS[2]}
-            active={inView}
-            reduced={reduced}
-            delay={0.3}
-          />
-          <SecondaryCard
-            stat={STATS[3]}
-            active={inView}
-            reduced={reduced}
-            delay={0.4}
-          />
+          ))}
           </div>
           
         

@@ -2,96 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { useInView, useReducedMotion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSwipe } from '@/hooks/useSwipe';
-
-/**
- * ROUND HS-C: split out of the old flat `value: '5K+'` strings into
- * target/suffix/decimals so the count-up can animate a real number and
- * reassemble the exact displayed string at the end. The reassembly rule is
- * `target + suffix` (decimals=0) or `target.toFixed(1) + suffix` (decimals=1,
- * the รีวิว stat only), which currently yields '5K+', '90K+', '5.0', '700K+'
- * and '79'.
- *
- * Note that รีวิว is 5.0 and not 5: it MUST keep decimals=1, or toFixed drops
- * the tenth and the strip reads a bare '5' next to a five-star row.
- */
-/**
- * ── THESE NUMBERS ARE HARDCODED AND WILL DRIFT AGAIN ────────────────────────
- * หลักสูตร sat at 73 while the real count was 79 — a six-course gap nobody
- * noticed, because nothing here reads the catalogue. Every value below is a
- * literal that is true on the day someone types it and decays quietly after.
- * Making หลักสูตร computed is a separate round (it needs an MSDB call plus a
- * course_extensions read, fed through landing_cache, because this is a client
- * component); it was priced in ORIGIN-1 and deliberately not built there.
- * Until then, re-measure before trusting any of these.
- *
- * Provenance, 2026-09-09 (round ORIGIN-1):
- *   · องค์กร 5K+, ผู้เรียน 90K+  — unchanged, not re-measured this round.
- *   · รีวิว 4.9 → 5.0            — approved.
- *   · ผู้ติดตาม 700K+            — UNCHANGED ON PURPOSE. Live counts that day
- *     totalled ~797,500 (TikTok 278.7K, YouTube 257K, Facebook 241.4K, LINE
- *     11.5K, Instagram 8.5K, X 316), so 700K+ is true and conservative. The
- *     team's own figure is pending and the number is not to be changed twice.
- *     Do NOT "improve" this to 790K+.
- *   · หลักสูตร 73 → 79           — recounted: 77 published courses (upstream
- *     /public-course, minus CourseExtension.isPublished === false, which was
- *     zero that day) + 2 masterclass courses.
- */
-const STATS = [
-  { target: 5, suffix: 'K+', decimals: 0, label: 'องค์กร' },
-  { target: 90, suffix: 'K+', decimals: 0, label: 'ผู้เรียน' },
-  { target: 5.0, suffix: '', decimals: 1, label: 'รีวิว', star: true },
-  { target: 700, suffix: 'K+', decimals: 0, label: 'ผู้ติดตาม' },
-  { target: 79, suffix: '', decimals: 0, label: 'หลักสูตร' },
-];
-
-/**
- * rAF-based count-up, matching the pattern already established in
- * src/components/portfolio/PortfolioStats.jsx (same cubic ease-out, same
- * "snap to the exact target on the final frame" guarantee — that last
- * `setCount(target)` in the p>=1 branch is what makes the landing value
- * exact regardless of any float drift during the eased ramp).
- *
- * Extended for decimals: PortfolioStats' stats are all integers, but the
- * รีวิว stat here is 4.9, so the value is kept as a float throughout and
- * only rounded at FORMAT time via toFixed, not floored during the ramp.
- */
-function useCountUp(target, decimals, duration, active, reduced) {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (!active) return undefined;
-    if (reduced) {
-      setCount(target);
-      return undefined;
-    }
-    let start = null;
-    let raf = 0;
-    const step = (ts) => {
-      if (!start) start = ts;
-      const p = Math.min((ts - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - p, 3);
-      setCount(eased * target);
-      if (p < 1) raf = requestAnimationFrame(step);
-      else setCount(target);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [active, target, duration, reduced]);
-  return decimals > 0 ? count.toFixed(decimals) : String(Math.floor(count));
-}
-
-function StatNumber({ stat, active, reduced }) {
-  const display = useCountUp(stat.target, stat.decimals, 1350, active, reduced);
-  return (
-    <>
-      {display}
-      {stat.suffix}
-    </>
-  );
-}
+import { StatsStrip } from '@/components/stats/StatsStrip';
 
 /**
  * Home-page testimonials + corporate stats.
@@ -99,14 +13,16 @@ function StatNumber({ stat, active, reduced }) {
  * `reviews` are admin-curated via the `featured_reviews` collection
  * and hydrated server-side from the public reviews API. Cards rotate
  * on a sliding-window carousel: three visible on desktop with the
- * middle card elevated, one visible on mobile. The stats row below is
- * intentionally hardcoded (corporate marketing numbers, not API-driven).
+ * middle card elevated, one visible on mobile.
+ *
+ * `stats` is the ordered item list built by the Home page from
+ * getSiteStats() (HOME_STAT_KEYS). The typed numbers are edited at
+ * /admin/about; หลักสูตร and Masterclass are counted, not typed. The old
+ * literals and their 2026-09-09 provenance (incl. "700K+ is conservative —
+ * do not improve it to 790K+") now live as FALLBACK_STATS in
+ * src/lib/stats/statsInput.js.
  */
-export function TestimonialStats({ reviews = [] }) {
-  const statsRef = useRef(null);
-  const statsInView = useInView(statsRef, { once: true, margin: '-100px' });
-  const shouldReduceMotion = useReducedMotion() ?? false;
-
+export function TestimonialStats({ reviews = [], stats = [] }) {
   return (
     <section className="bg-9e-ice px-4 py-14 dark:bg-9e-card lg:px-6">
       <div className="mx-auto max-w-[1200px]">
@@ -121,29 +37,7 @@ export function TestimonialStats({ reviews = [] }) {
 
         <ReviewCarousel reviews={reviews} />
 
-        <div ref={statsRef} className="grid grid-cols-2 text-center md:grid-cols-5">
-          {STATS.map((s, i) => (
-            <div
-              key={s.label}
-              className={cn(
-                'flex flex-col items-center gap-1 border-gray-300 dark:border-[#1e3a5f]',
-                i < STATS.length - 1 && 'md:border-r-4'
-              )}
-            >
-              <div className="flex items-center gap-1">
-                {s.star && (
-                  <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                )}
-                <span className="text-2xl font-extrabold text-9e-navy dark:text-white">
-                  <StatNumber stat={s} active={statsInView} reduced={shouldReduceMotion} />
-                </span>
-              </div>
-              <span className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                {s.label}
-              </span>
-            </div>
-          ))}
-        </div>
+        <StatsStrip items={stats} variant="divided" />
       </div>
     </section>
   );

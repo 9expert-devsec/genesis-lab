@@ -153,8 +153,12 @@ test('the size caption survives nowhere on this route', () => {
 test('/about-us keeps ITS caption — the deletion was scoped to this route', () => {
   // CompanyProfileSection makes the same three choices and was not in scope.
   // If this goes red, the round reached further than it was asked to.
+  // Its size is no longer typed ("ประมาณ 22 MB"): round AB-1 reads it from the
+  // file (getCompanyProfileSize) and passes it in as `size`.
   const about = read('src/components/about/CompanyProfileSection.jsx');
-  assert.ok(about.includes('ขนาดประมาณ 22 MB'));
+  assert.ok(about.includes('เปิดในแท็บใหม่'));
+  assert.ok(about.includes('ขนาด ${size}'));
+  assert.equal(about.includes('ประมาณ 22 MB'), false);
 });
 
 // ── CONTROLS ────────────────────────────────────────────────────────────────

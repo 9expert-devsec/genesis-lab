@@ -1,7 +1,8 @@
 'use server';
 
 /**
- * Server actions for /about-us — Instructor CRUD + AboutConfig text.
+ * Server actions for /about-us — Instructor CRUD + AboutConfig text and the
+ * site's admin-typed headline stats (read by src/lib/stats/getSiteStats.js).
  * Reads are public (consumed by the page); writes require admin auth.
  *
  * Cloudinary uploads only happen when a fresh `image_file` is present
@@ -16,15 +17,21 @@ import Instructor from '@/models/Instructor';
 import AboutConfig from '@/models/AboutConfig';
 import { requireAdmin } from '@/lib/actions/auth';
 import { uploadToCloudinary, deleteFromCloudinary } from '@/lib/cloudinary';
+import { parseStatsInput } from '@/lib/stats/statsInput';
+import { DEFAULT_TAGLINE } from '@/lib/about/aboutText';
 
 const PUBLIC_PATH = '/about-us';
 const ADMIN_PATH  = '/admin/about';
+// Every route that renders AboutConfig.stats through getSiteStats.
+const STATS_PATHS = ['/', PUBLIC_PATH, '/portfolio'];
 
 const DEFAULT_CONFIG = {
-  tagline:     'Universe of Learning Technology',
+  tagline:     DEFAULT_TAGLINE,
   description: '',
   mission:     '',
   vision:      '',
+  stats:       {},
+  statsAsOf:   '',
 };
 
 function serialize(value) {
@@ -209,6 +216,14 @@ export async function getAboutConfig() {
 
 export async function saveAboutConfig(data) {
   await requireAdmin('about');
+
+  // Same validator the form runs live; the server re-checks because the form
+  // is not the only thing that can call an action.
+  const parsed = parseStatsInput(data?.stats);
+  if (!parsed.ok) {
+    return { ok: false, error: 'ตัวเลขสถิติไม่ถูกต้อง', fieldErrors: parsed.errors };
+  }
+
   await dbConnect();
 
   const update = {
@@ -216,15 +231,18 @@ export async function saveAboutConfig(data) {
     description: String(data?.description ?? '').trim(),
     mission:     String(data?.mission ?? '').trim(),
     vision:      String(data?.vision ?? '').trim(),
+    stats:       parsed.stats,
+    statsAsOf:   String(data?.statsAsOf ?? '').trim(),
   };
 
   const doc = await AboutConfig.findOneAndUpdate({}, update, {
     upsert: true,
     new: true,
     setDefaultsOnInsert: true,
+    runValidators: true,
   });
 
-  revalidatePath(PUBLIC_PATH);
+  for (const p of STATS_PATHS) revalidatePath(p);
   revalidatePath(ADMIN_PATH);
   return { ok: true, data: serialize(doc) };
 }

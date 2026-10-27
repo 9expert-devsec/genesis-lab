@@ -3,8 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X, ZoomIn } from 'lucide-react';
 import { useSwipe } from '@/hooks/useSwipe';
+import { withCloudinaryTransform } from '@/lib/cloudinaryUrl';
 
 // ── Config ─────────────────────────────────────────────────────────
+
+/**
+ * Cloudinary delivery transforms. The grid tile is at most ~400px wide (2×
+ * covers it); the lightbox keeps full resolution and only gains auto
+ * format/quality. Non-Cloudinary URLs pass through unchanged.
+ */
+const GRID_TRANSFORM = 'w_800,c_limit,f_auto,q_auto';
+const LIGHTBOX_TRANSFORM = 'f_auto,q_auto';
 
 /** How long each slide stays before auto-advancing (ms) */
 const AUTO_PLAY_INTERVAL = 3500;
@@ -244,7 +253,7 @@ function PhotoCard({ photo, onClick }) {
       aria-label={`ดูภาพขยาย: ${photo.caption_th || 'บรรยากาศการฝึกอบรม'}`}
     >
       <img
-        src={photo.image_url}
+        src={withCloudinaryTransform(photo.image_url, GRID_TRANSFORM)}
         alt={photo.caption_th || 'บรรยากาศการฝึกอบรม'}
         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         draggable={false}
@@ -316,7 +325,7 @@ function Lightbox({ photos, index, onClose, onPrev, onNext }) {
         onClick={(e) => e.stopPropagation()}
       >
         <img
-          src={photo.image_url}
+          src={withCloudinaryTransform(photo.image_url, LIGHTBOX_TRANSFORM)}
           alt={photo.caption_th || 'บรรยากาศการฝึกอบรม'}
           className="max-h-[85vh] max-w-[88vw] rounded-9e-lg object-contain shadow-9e-lg"
           draggable={false}

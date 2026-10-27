@@ -1,14 +1,21 @@
-import HeroUniverse from "@/components/about/HeroUniverse";
-import MissionSection from "@/components/about/MissionSection";
-import KPISection from "@/components/about/KPISection";
-import HowWeTeachSection from "@/components/about/HowWeTeachSection";
+import AboutHero from "@/components/about/AboutHero";
+import StorySection from "@/components/about/StorySection";
+import ProofSection from "@/components/about/ProofSection";
+import TeachingSection from "@/components/about/TeachingSection";
+import FormatsSection from "@/components/about/FormatsSection";
 import InstructorSection2 from "@/components/about/InstructorSection2";
 import CompanyProfileSection from "@/components/about/CompanyProfileSection";
 import JoinUsSection from "@/components/about/JoinUsSection";
 import AtmosphereSection from "@/components/portfolio/AtmosphereSection";
 
-import { getInstructors } from "@/lib/actions/about";
-import { getActiveAtmospherePhotos } from "@/lib/actions/portfolio";
+import { getInstructors, getAboutConfig } from "@/lib/actions/about";
+import { getCompanyProfileSize } from "@/lib/about/companyProfileSize";
+import { getActiveAtmospherePhotos, getActiveClientLogos } from "@/lib/actions/portfolio";
+import { getSiteStats } from "@/lib/stats/getSiteStats";
+import { getActiveCareerPaths } from "@/lib/career-paths/getCareerPaths";
+import { buildStatItems, ABOUT_STAT_KEYS } from "@/lib/stats/statItems";
+import { getNavMenuData } from "@/lib/navmenu/getNavMenuData";
+import { focusPillLinks } from "@/lib/about/focusPills";
 import { SITE_URL } from "@/lib/seo/siteUrl";
 import { ABOUT_TITLE, buildAboutPageJsonLd } from "@/lib/seo/infoPageJsonLd";
 
@@ -41,21 +48,24 @@ export function generateMetadata() {
 }
 
 export default async function AboutUsPage() {
-  const [instructors, atmospherePhotos] = await Promise.all([
+  const [instructors, atmospherePhotos, clientLogos, siteStats, aboutConfig, profileSize, careerPaths, navMenu] = await Promise.all([
     getInstructors(),
     getActiveAtmospherePhotos().catch(() => []),
+    getActiveClientLogos().catch(() => []),
+    getSiteStats(),
+    // Only `tagline` is rendered (the Story quote card); see quoteCardText.
+    getAboutConfig().catch(() => null),
+    getCompanyProfileSize(),
+    // The same loader the header and /career-path-project use; only its count
+    // is shown (the Career Path format card). A failure hides the number.
+    getActiveCareerPaths().catch(() => null),
+    // The header's own loader; its skillSlugs give the hero pills the same
+    // URLs the mega menu uses. Never throws (returns empty maps).
+    getNavMenuData(),
   ]);
 
-  const stats = [
-    { value: 90, suffix: "K+", label: "ผู้เรียน" },
-    { value: 5, suffix: "K+", label: "องค์กร" },
-    { value: 5.0, suffix: "", label: "คะแนนรีวิว", decimals: 1 },
-    { value: 700, suffix: "K+", label: "ผู้ติดตาม" },
-    { value: 79, suffix: "", label: "หลักสูตร" },
-  ];
-
   return (
-    <main>
+    <main data-page="about" className="about-page">
       {/* An AboutPage node referencing the home graph's organisation by @id —
           no organisation facts are restated here. Same pattern as
           /training-course and /schedule: a plain ld+json script from server
@@ -66,14 +76,41 @@ export default async function AboutUsPage() {
           __html: JSON.stringify(buildAboutPageJsonLd()),
         }}
       />
-      <HeroUniverse />
-      <MissionSection />
-      <KPISection stats={stats} />
-      <HowWeTeachSection />
-      <InstructorSection2 instructors={instructors} />
-      <CompanyProfileSection />
-      <AtmosphereSection photos={atmospherePhotos} />
-      <JoinUsSection />
+      {/* Every top-level section sits under a stable about-* id, for anchor
+          links. data-page="about" scopes this page's scroll-padding-top in
+          globals.css: the ONE header offset for #hash jumps, so the wrappers
+          carry no scroll-margin of their own. */}
+      <div id="about-hero">
+        <AboutHero pills={focusPillLinks(navMenu?.skillSlugs)} />
+      </div>
+      <div id="about-proof">
+        <ProofSection
+          items={buildStatItems(siteStats, ABOUT_STAT_KEYS)}
+          organizations={siteStats.organizations}
+          logos={clientLogos}
+        />
+      </div>
+      <div id="about-story">
+        <StorySection tagline={aboutConfig?.tagline} />
+      </div>
+      <div id="about-teach">
+        <TeachingSection />
+      </div>
+      <div id="about-formats">
+        <FormatsSection careerPathCount={careerPaths?.length || null} />
+      </div>
+      <div id="about-instructors">
+        <InstructorSection2 instructors={instructors} />
+      </div>
+      <div id="about-profile">
+        <CompanyProfileSection size={profileSize} />
+      </div>
+      <div id="about-gallery">
+        <AtmosphereSection photos={atmospherePhotos} />
+      </div>
+      <div id="about-join">
+        <JoinUsSection />
+      </div>
     </main>
   );
 }

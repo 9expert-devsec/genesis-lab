@@ -214,8 +214,12 @@ test('the headline column is wide enough for two lines', () => {
   );
 });
 
+// The astronaut is /hero-img/nongnai-to-the-moon.png; nongnai.png was retired
+// (and deleted from public/) when the moon pose replaced it.
+const ASTRONAUT = '/hero-img/nongnai-to-the-moon.png';
+
 test('the astronaut is NOT priority, and is never object-cover', () => {
-  const art = imageBlock(HERO.code, '/hero-img/nongnai.png');
+  const art = imageBlock(HERO.code, ASTRONAUT);
   assert.ok(art, 'the astronaut <Image> is gone');
   assert.ok(
     !/\bpriority\b/.test(art),
@@ -229,7 +233,7 @@ test('CONTROL: the image-block extractor isolates ONE element', () => {
   // Otherwise "the astronaut block has no priority" could be reading a block
   // that is empty, or the background's.
   const bg = imageBlock(HERO.code, '/hero-img/background.png');
-  const art = imageBlock(HERO.code, '/hero-img/nongnai.png');
+  const art = imageBlock(HERO.code, ASTRONAUT);
   assert.ok(!bg.includes('nongnai'), 'the background block swallowed the astronaut');
   assert.ok(!art.includes('background.png'), 'the astronaut block swallowed the background');
   assert.ok(art.includes('sizes='), 'the astronaut block is too short to contain its own props');

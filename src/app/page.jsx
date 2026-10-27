@@ -30,6 +30,8 @@ import { siteCurrentYear } from "@/lib/articlePublishTime";
 import { OnlineCoursesSection } from "./_components/home/OnlineCoursesSection";
 import { InhouseCTA } from "./_components/home/InhouseCTA";
 import { TestimonialStats } from "./_components/home/TestimonialStats";
+import { getSiteStats } from "@/lib/stats/getSiteStats";
+import { buildStatItems, HOME_STAT_KEYS } from "@/lib/stats/statItems";
 import { BlogSection } from "./_components/home/BlogSection";
 import { InstructorQuote } from "./_components/home/InstructorQuote";
 
@@ -105,6 +107,7 @@ export default async function HomePage() {
     { programSlugs, skillSlugs },
     programsRes,
     skillsRes,
+    siteStats,
   ] = await Promise.all([
     getLandingData(),
     getActiveTopBars().catch(() => []),
@@ -130,6 +133,8 @@ export default async function HomePage() {
     // upstream outage must make chips disappear, never take the home page down.
     listPrograms().catch(() => ({ items: [] })),
     listSkills().catch(() => ({ items: [] })),
+    // The stats strip under the reviews. Never throws — see getSiteStats.
+    getSiteStats(),
   ]);
 
   // Destructured after the fact so `landing._meta` survives — the sections are
@@ -275,7 +280,10 @@ export default async function HomePage() {
 
           <ClientLogosSection logos={clientLogos} />
 
-          <TestimonialStats reviews={reviews} />
+          <TestimonialStats
+            reviews={reviews}
+            stats={buildStatItems(siteStats, HOME_STAT_KEYS)}
+          />
 
           <BlogSection
           articles={featuredArticles}

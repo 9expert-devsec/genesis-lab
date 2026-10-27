@@ -23,11 +23,13 @@ import { Download, FileText } from "lucide-react";
  * makes, for the same reason — see the note in src/lib/actions/schedule-pdf.js
  * about the header winning over the markup either way.
  *
- * The size is stated in the caption because 22 MB is a real cost on mobile
+ * The size is stated in the caption because ~22 MB is a real cost on mobile
  * data, and /schedule's button — which sits on a far smaller file — has no
- * caption to copy.
+ * caption to copy. `size` is read from the file itself by the route
+ * (getCompanyProfileSize, a HEAD on the rewrite's Blob destination), so a
+ * replaced edition updates the caption; when it is null the size is left out.
  */
-export default function CompanyProfileSection() {
+export default function CompanyProfileSection({ size = null }) {
   return (
     <section className="relative overflow-hidden bg-[#F8FAFD] py-24 dark:bg-[#0D1B2A]">
       <div className="mx-auto max-w-[1200px] px-4 text-center lg:px-6">
@@ -72,7 +74,7 @@ export default function CompanyProfileSection() {
         </a>
 
         <p className="mt-4 text-sm text-[#465469] dark:text-[#94a3b8]">
-          ไฟล์ PDF · ขนาดประมาณ 22 MB · เปิดในแท็บใหม่
+          {["ไฟล์ PDF", size && `ขนาด ${size}`, "เปิดในแท็บใหม่"].filter(Boolean).join(" · ")}
         </p>
       </div>
     </section>

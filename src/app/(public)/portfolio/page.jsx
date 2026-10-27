@@ -6,6 +6,7 @@ import AwardsSection from '@/components/portfolio/AwardsSection';
 import CommunitySection from '@/components/portfolio/CommunitySection';
 import PortfolioCTA from '@/components/portfolio/PortfolioCTA';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
+import { getSiteStats } from '@/lib/stats/getSiteStats';
 
 export const metadata = {
   title: 'ผลงานของเรา',
@@ -16,12 +17,19 @@ export const metadata = {
   openGraph: { url: `${process.env.NEXT_PUBLIC_SITE_URL}/portfolio` },
 };
 
-export default function PortfolioPage() {
+// Same hourly window as / and /about-us, which read the same getSiteStats();
+// an admin save at /admin/about revalidates all three immediately.
+export const revalidate = 3600;
+
+export default async function PortfolioPage() {
+  const { organizations, learners, courses } = await getSiteStats();
   return (
     <main>
       <PortfolioHero />
       <PortfolioSectionNav />
-      <section id="impact"><PortfolioStats /></section>
+      <section id="impact">
+        <PortfolioStats organizations={organizations} learners={learners} courses={courses} />
+      </section>
       <section id="learning"><TrainingSection /></section>
       <section id="consulting"><ConsultingSection /></section>
       <section id="awards"><AwardsSection /></section>
