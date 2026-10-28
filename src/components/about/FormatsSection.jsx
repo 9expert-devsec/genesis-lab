@@ -32,7 +32,7 @@ function formats({ careerPathCount }) {
   ];
 }
 
-// Hover/focus/active treatment (sweep, gradient border, title colour, arrow
+// Hover/focus/active treatment (sweep, accent ring, title colour, arrow
 // nudge, press) lives in globals.css under .about-format.
 const CARD =
   'about-card about-format flex min-h-[72px] items-center justify-between gap-4 rounded-2xl bg-[var(--page-bg-muted)] p-5';

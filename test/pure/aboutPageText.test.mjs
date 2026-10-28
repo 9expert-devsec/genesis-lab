@@ -4,6 +4,7 @@ import { QUOTE_FALLBACK, quoteCardText } from '@/lib/about/aboutText';
 import {
   COMPANY_PROFILE_PATH,
   companyProfileBlobUrl,
+  companyProfileMeta,
   formatProfileSize,
   getCompanyProfileSize,
 } from '@/lib/about/companyProfileSize';
@@ -73,4 +74,16 @@ test('getCompanyProfileSize: HEADs, reads Content-Length; any failure hides the 
     null,
   );
   assert.equal(await getCompanyProfileSize({ url: null, fetchImpl: ok(1) }), null);
+});
+
+test('Company Profile meta: bytes become "x.x MB"; a missing page count drops that part', () => {
+  assert.equal(companyProfileMeta({ bytes: 18272549 }), 'PDF · 17.4 MB');
+  assert.equal(companyProfileMeta({ size: '17.4 MB' }), 'PDF · 17.4 MB');
+  assert.equal(companyProfileMeta({ bytes: 18272549, pages: 24 }), 'PDF · 24 หน้า · 17.4 MB');
+  for (const pages of [undefined, null, 0, -3, 2.5, 'abc']) {
+    assert.equal(companyProfileMeta({ bytes: 18272549, pages }), 'PDF · 17.4 MB', String(pages));
+  }
+  // nothing readable at all → just the format, never an invented figure
+  assert.equal(companyProfileMeta({}), 'PDF');
+  assert.equal(companyProfileMeta({ bytes: 0 }), 'PDF');
 });

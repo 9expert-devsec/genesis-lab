@@ -26,6 +26,22 @@ export function formatProfileSize(bytes) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * The Company Profile card's meta line, built ONLY from values actually read:
+ * "PDF · {pages} หน้า · {size}". `size` is an already formatted string (what
+ * getCompanyProfileSize returns) or `bytes` is formatted here; a missing page
+ * count or size simply drops that part — nothing is typed in.
+ */
+export function companyProfileMeta({ bytes, size, pages } = {}) {
+  const sizeText = size || formatProfileSize(bytes);
+  const pageCount = Number(pages);
+  return [
+    'PDF',
+    Number.isInteger(pageCount) && pageCount > 0 ? `${pageCount} หน้า` : null,
+    sizeText,
+  ].filter(Boolean).join(' · ');
+}
+
 export function companyProfileBlobUrl(blobBase = process.env.BLOB_PUBLIC_BASE) {
   const rule = webrootRewrites(blobBase).find((r) => r.source === COMPANY_PROFILE_PATH);
   return rule?.destination ?? null;

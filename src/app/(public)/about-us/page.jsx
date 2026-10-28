@@ -3,12 +3,14 @@ import StorySection from "@/components/about/StorySection";
 import ProofSection from "@/components/about/ProofSection";
 import TeachingSection from "@/components/about/TeachingSection";
 import FormatsSection from "@/components/about/FormatsSection";
-import InstructorSection2 from "@/components/about/InstructorSection2";
-import CompanyProfileSection from "@/components/about/CompanyProfileSection";
-import JoinUsSection from "@/components/about/JoinUsSection";
-import AtmosphereSection from "@/components/portfolio/AtmosphereSection";
+import InstructorCardsSection from "@/components/about/InstructorCardsSection";
+import ClosingCtaSection from "@/components/about/ClosingCtaSection";
+import CommunitySection from "@/components/about/CommunitySection";
+import ReviewsSection from "@/components/about/ReviewsSection";
+import { getLandingData } from "@/lib/landing/getLandingData";
 
 import { getInstructors, getAboutConfig } from "@/lib/actions/about";
+import { buildInstructorCards } from "@/lib/about/instructorCards";
 import { getCompanyProfileSize } from "@/lib/about/companyProfileSize";
 import { getActiveAtmospherePhotos, getActiveClientLogos } from "@/lib/actions/portfolio";
 import { getSiteStats } from "@/lib/stats/getSiteStats";
@@ -48,7 +50,7 @@ export function generateMetadata() {
 }
 
 export default async function AboutUsPage() {
-  const [instructors, atmospherePhotos, clientLogos, siteStats, aboutConfig, profileSize, careerPaths, navMenu] = await Promise.all([
+  const [instructors, atmospherePhotos, clientLogos, siteStats, aboutConfig, profileSize, careerPaths, navMenu, landing] = await Promise.all([
     getInstructors(),
     getActiveAtmospherePhotos().catch(() => []),
     getActiveClientLogos().catch(() => []),
@@ -62,7 +64,12 @@ export default async function AboutUsPage() {
     // The header's own loader; its skillSlugs give the hero pills the same
     // URLs the mega menu uses. Never throws (returns empty maps).
     getNavMenuData(),
+    // Home's own loader: its `reviews` are the admin's featured reviews, in
+    // order. Never throws (empty defaults when the cache is missing).
+    getLandingData(),
   ]);
+  // Same instructors, same order; adds each one's program icons (MSDB-curated).
+  const instructorCards = await buildInstructorCards(instructors);
 
   return (
     <main data-page="about" className="about-page">
@@ -100,16 +107,16 @@ export default async function AboutUsPage() {
         <FormatsSection careerPathCount={careerPaths?.length || null} />
       </div>
       <div id="about-instructors">
-        <InstructorSection2 instructors={instructors} />
+        <InstructorCardsSection cards={instructorCards} />
       </div>
-      <div id="about-profile">
-        <CompanyProfileSection size={profileSize} />
+      <div id="about-community">
+        <CommunitySection photos={atmospherePhotos} />
       </div>
-      <div id="about-gallery">
-        <AtmosphereSection photos={atmospherePhotos} />
+      <div id="about-reviews">
+        <ReviewsSection reviews={landing?.reviews} />
       </div>
-      <div id="about-join">
-        <JoinUsSection />
+      <div id="about-cta">
+        <ClosingCtaSection profileSize={profileSize} />
       </div>
     </main>
   );
