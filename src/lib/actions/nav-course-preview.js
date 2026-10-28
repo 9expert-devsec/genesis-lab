@@ -1,6 +1,6 @@
 'use server';
 
-import { listPublicCourses, getCourseByCode } from '@/lib/api/public-courses';
+import { listPublicCourses, getCourseByCode, getPublicCourseByCode } from '@/lib/api/public-courses';
 import { dbConnect } from '@/lib/db/connect';
 import CourseExtension from '@/models/CourseExtension';
 
@@ -140,7 +140,9 @@ async function firstCourseCover(listCourse) {
 export async function getCoursePreview(courseId) {
   if (!courseId) return null;
   try {
-    const detail = await getCourseByCode(courseId);
+    // 'use server': any caller can POST any code here, so this must not be the
+    // raw upstream getter — a hidden course answers null, like an unknown one.
+    const detail = await getPublicCourseByCode(courseId);
     if (!detail) return null;
     return {
       course_id: detail.course_id ?? courseId,

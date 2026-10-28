@@ -1,6 +1,6 @@
 import { dbConnect } from '@/lib/db/connect';
 import ScheduleLocal from '@/models/ScheduleLocal';
-import { getCourseByCode } from '@/lib/api/public-courses';
+import { getPublicCourseByCode } from '@/lib/api/public-courses';
 import { resolvePricePerSeat, computePricing } from '@/lib/pricing';
 
 /**
@@ -14,7 +14,8 @@ import { resolvePricePerSeat, computePricing } from '@/lib/pricing';
 export async function resolveCheckoutPricing({ courseCode, classId, seats }) {
   await dbConnect();
   const [course, local] = await Promise.all([
-    getCourseByCode(courseCode),
+    // Public checkout: a hidden course resolves to null → course_not_found.
+    getPublicCourseByCode(courseCode),
     ScheduleLocal.findOne({ msdb_schedule_id: String(classId) }).lean(),
   ]);
   if (!course) throw new Error('course_not_found');

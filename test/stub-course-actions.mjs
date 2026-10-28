@@ -27,3 +27,12 @@ export async function deleteCourse() {
 export async function findCourseCodeInsensitive() {
   throw new Error('stub-course-actions: findCourseCodeInsensitive must not be called in a render test');
 }
+export async function createPrivateCourse() {
+  throw new Error('stub-course-actions: createPrivateCourse must not be called in a render test');
+}
+export async function updatePrivateCourse() {
+  throw new Error('stub-course-actions: updatePrivateCourse must not be called in a render test');
+}
+export async function deletePrivateCourse() {
+  throw new Error('stub-course-actions: deletePrivateCourse must not be called in a render test');
+}

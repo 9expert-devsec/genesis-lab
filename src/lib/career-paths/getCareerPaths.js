@@ -8,6 +8,8 @@
 
 import { dbConnect } from '@/lib/db/connect';
 import CareerPath from '@/models/CareerPath';
+import { loadHiddenCourseIds } from '@/lib/courses/hiddenCourses';
+import { dropHiddenCurriculumCourses } from '@/lib/career-paths/dropHiddenCurriculum';
 
 function serialize(value) {
   if (value == null) return value;
@@ -17,10 +19,12 @@ function serialize(value) {
 /** Active career paths for the public /career-path-project landing. */
 export async function getActiveCareerPaths() {
   await dbConnect();
-  const docs = await CareerPath.find({ is_active: true })
-    .sort({ display_order: 1 })
-    .lean();
-  return serialize(docs);
+  const [docs, hidden] = await Promise.all([
+    CareerPath.find({ is_active: true }).sort({ display_order: 1 }).lean(),
+    loadHiddenCourseIds(),
+  ]);
+  // Public reads only — the admin screens use getAllCareerPaths, unfiltered.
+  return serialize(docs).map((doc) => dropHiddenCurriculumCourses(doc, hidden));
 }
 
 /**
@@ -43,11 +47,11 @@ export async function getCareerPathBySlug(slug) {
     clean.replace(/-career-path$/, ''),
   ]);
 
-  const doc = await CareerPath.findOne({
-    api_slug: { $in: [...candidates] },
-    is_active: true,
-  }).lean();
-  return serialize(doc);
+  const [doc, hidden] = await Promise.all([
+    CareerPath.findOne({ api_slug: { $in: [...candidates] }, is_active: true }).lean(),
+    loadHiddenCourseIds(),
+  ]);
+  return dropHiddenCurriculumCourses(serialize(doc), hidden);
 }
 
 /** All career paths (active + inactive) for the admin list. */

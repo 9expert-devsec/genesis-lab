@@ -69,7 +69,9 @@ test('EVERY saveExtensionFor call site passes an id — none is left one-argumen
 
 test('the payload carries it under the name the action reads', () => {
   const { code } = readSource(FORM);
-  assert.match(code, /upstreamId: String\(upstreamId \?\? ''\)/,
+  // A PRIVATE course anchors nothing: its id is a private_courses one, and an
+  // anchor set from it would block the real MSDB id on a later conversion.
+  assert.match(code, /upstreamId: isPrivate \? '' : String\(upstreamId \?\? ''\)/,
     'the id is passed but never lands in the payload');
 });
 

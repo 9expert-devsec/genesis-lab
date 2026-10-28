@@ -18,12 +18,17 @@
  * a course with no fields. The throw is what makes "we do not have that" a
  * thing the model can say.
  *
- * ── HIDDEN COURSES ARE UNREACHABLE HERE ────────────────────────────────────
- * `includeHidden` is never passed, so the resolver's fallback list is the
- * public one. The direct `?course_id=` leg is an upstream lookup that never
- * saw the hidden flag, so a hidden course with an ORDINARY code would still
- * resolve through it — which is why the online branch below and the public
- * branch both re-check against the public listing before answering.
+ * ── HIDDEN COURSES ARE UNREACHABLE HERE — BECAUSE OF THE DEP, NOT THIS FILE ─
+ * This file does no hidden check of its own. An earlier version of this note
+ * claimed both branches "re-check against the public listing"; neither did,
+ * and a hidden course with an ordinary-case code resolved through the plain
+ * resolver's direct `?course_id=` leg, which never saw the hidden flag.
+ *
+ * The check lives in the dep: lib/mcp/register.js wires
+ * `getCourseByCodeInsensitive` to `getPublicCourseByCode`, which answers a
+ * hidden course with null. A hidden code then falls through to the online
+ * scan, misses there too, and gets the same "course not found" an unknown code
+ * gets. test/fs/hiddenCourseLeaks pins that wiring.
  */
 
 import { McpToolError, dropEmpty, onlineCourseCard, publicCourseCard } from '@/lib/mcp/shape';

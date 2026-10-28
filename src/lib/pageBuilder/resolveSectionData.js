@@ -1,4 +1,5 @@
 import { getCourseByCode, listPublicCourses } from '@/lib/api/public-courses';
+import { isHiddenCourse, loadHiddenCourseIds } from '@/lib/courses/hiddenCourses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { getActiveInstructors } from '@/lib/instructors/getInstructors';
 import { collectRefs, assembleResolved, RESOLVED_TYPES } from './resolveSectionRefs';
@@ -37,13 +38,31 @@ export { RESOLVED_TYPES };
 
 const CHUNK = 10; // bounded fan-out, mirrors enrich-courses.js
 
-async function fetchCourses(ids) {
+/**
+ * Course cards, manual lists, bundles and course_schedule all resolve their
+ * codes here, through upstream's by-code getter — which has never heard of
+ * `CourseExtension.isPublished`. A HIDDEN course is therefore left out of the
+ * map, so every section reads it exactly as it reads a code upstream no longer
+ * has: a card renders nothing, a manual list draws one fewer, a schedule has no
+ * rounds, and a promotion_bundle item keeps its marked "missing" row (see
+ * assembleResolved for why a bundle never silently shrinks). One hidden-set
+ * read for the whole page, not one per code — this also runs inside route
+ * handlers, where React's per-request memo does not hold.
+ */
+export async function fetchCourses(
+  ids,
+  { fetchCourse = getCourseByCode, loadHidden = loadHiddenCourseIds } = {}
+) {
   const map = new Map();
+  if (!ids.length) return map;
+  const hidden = await loadHidden();
   for (let i = 0; i < ids.length; i += CHUNK) {
     const chunk = ids.slice(i, i + CHUNK);
-    const results = await Promise.allSettled(chunk.map((id) => getCourseByCode(id)));
+    const results = await Promise.allSettled(chunk.map((id) => fetchCourse(id)));
     results.forEach((r, j) => {
-      if (r.status === 'fulfilled' && r.value) map.set(chunk[j], r.value);
+      if (r.status !== 'fulfilled' || !r.value) return;
+      if (isHiddenCourse(hidden, r.value.course_id) || isHiddenCourse(hidden, chunk[j])) return;
+      map.set(chunk[j], r.value);
     });
   }
   return map;

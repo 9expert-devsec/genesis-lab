@@ -63,7 +63,7 @@ test('the try wraps ONLY the fetch — redirect() must stay outside it', () => {
   const tryBlock = /try \{([\s\S]*?)\} catch \(err\) \{/.exec(PAGE);
   assert.ok(tryBlock, 'there is a try/catch around the lookup');
   assert.ok(!tryBlock[1].includes('redirect('), 'no redirect() inside the try');
-  assert.match(tryBlock[1], /course = await getCourseByCodeInsensitive\(attempted\)/,
+  assert.match(tryBlock[1], /course = await getPublicCourseByCode\(attempted\)/,
     'and the fetch IS inside it');
 });
 
@@ -80,8 +80,16 @@ test('the comment explaining the two-block shape survives', () => {
 // ── Commit 2: both call sites use the case-tolerant helper ─────────────────
 
 test('the registration page looks up through the case-tolerant helper', () => {
-  assert.match(PAGE, /import \{ getCourseByCodeInsensitive \} from '@\/lib\/api\/public-courses'/);
-  assert.match(PAGE, /await getCourseByCodeInsensitive\(attempted\)/);
+  // Through its PUBLIC wrapper since the hidden-course round (a hidden course
+  // must bounce like a bad link — test/fs/hiddenCourseLeaks). The wrapper's
+  // default fetcher IS the case-tolerant helper, so the five mixed-case
+  // courses still resolve; both halves are pinned here.
+  assert.match(PAGE, /import \{ getPublicCourseByCode \} from '@\/lib\/api\/public-courses'/);
+  assert.match(PAGE, /await getPublicCourseByCode\(attempted\)/);
+  assert.match(
+    ADAPTER,
+    /export async function getPublicCourseByCode\(\s*courseId,\s*\{ fetchCourse = getCourseByCodeInsensitive,/
+  );
 });
 
 test('resolveCourse path 2 uses it too — the detail pages need it as much', () => {

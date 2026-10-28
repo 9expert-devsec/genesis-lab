@@ -181,7 +181,8 @@ test('the save-and-preview button is gated on !isCreate, close enough to bind to
   const btnIdx = FORM.code.indexOf('data-intent="save-and-preview"');
   assert.notEqual(btnIdx, -1);
   const lookbehind = FORM.code.slice(Math.max(0, btnIdx - 200), btnIdx);
-  assert.match(lookbehind, /\{!isCreate && \(/, 'no nearby !isCreate gate precedes the save-and-preview button');
+  // `&& !isPrivate` since private courses: they have no public page yet either.
+  assert.match(lookbehind, /\{!isCreate && !isPrivate && \(/, 'no nearby !isCreate gate precedes the save-and-preview button');
 });
 
 // ── CONTROL: proves the presence checks above can actually go red ──────────

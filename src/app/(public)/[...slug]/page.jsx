@@ -78,7 +78,12 @@ import { ProgramPageClient } from '@/app/(public)/program/[slug]/_components/Pro
 import { SkillPageClient } from '@/app/(public)/skill/[slug]/_components/SkillPageClient';
 import { buildCourseJsonLd } from '@/lib/courses/buildCourseJsonLd';
 import { courseCanonicalUrl } from '@/lib/courses/courseCanonicalPath';
-import { attachAliases, loadCourseAliasMap } from '@/lib/courses/hiddenCourses';
+import {
+  attachAliases,
+  dropHiddenCourses,
+  loadCourseAliasMap,
+  loadHiddenCourseIds,
+} from '@/lib/courses/hiddenCourses';
 import {
   getCustomPageBySlug,
   getCustomPageBySlugAny,
@@ -918,7 +923,9 @@ export default async function CatchAllPage({ params, searchParams }) {
         <CourseDetail
           course={course}
           relatedCoursesWithAliases={attachAliases(
-            Array.isArray(course.related_courses) ? course.related_courses : [],
+            // Embedded upstream rows never pass through listPublicCourses, so
+            // a hidden course would otherwise stay in another course's rail.
+            dropHiddenCourses(course.related_courses, await loadHiddenCourseIds()),
             await loadCourseAliasMap(),
           )}
           skillHrefs={skillHrefs}

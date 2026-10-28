@@ -262,6 +262,7 @@ test('one failing source is named in `sources` and does not empty the response',
     readMasterclass: async () => ({ batches: [DMC_BATCH_1], courses: COURSES }),
     readBuilderPages: async () => { throw new Error('mongo went away'); },
     readEarlyBirdConfigs: async () => [{ _id: 'eb-pbi', course_id: 'POWER-BI', special_price: 59999, deadline: FUTURE, is_active: false }],
+    loadHidden: async () => new Set(),
     log: (...args) => logged.push(args),
   });
   assert.equal(out.generated_at, NOW.toISOString(), 'the one instant every item was judged against');
@@ -285,6 +286,7 @@ test('the corpus is ordered by soonest live_until, null last, then id — the sa
       livePage({ _id: 'page-soon', slug: 'soon', publishEndDate: '2026-09-14T16:59:59.999Z' }),
     ],
     readEarlyBirdConfigs: async () => [],
+    loadHidden: async () => new Set(),
   };
   const a = await buildPromotionsCorpus(deps);
   const b = await buildPromotionsCorpus(deps);

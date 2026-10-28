@@ -73,6 +73,7 @@ import { McpToolError, SITE_ORIGIN, dropEmpty, publicCourseUrl } from '@/lib/mcp
 import { roundHasEnded, roundHasStarted, roundFirstDayKey, roundLastDayKey } from '@/lib/schedule/roundHasStarted';
 import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';
 import { scheduleStatusLabel } from '@/lib/scheduleStatus';
+import { isHiddenCourse } from '@/lib/courses/hiddenCourses';
 
 export const LIST_TRAINING_ROUNDS_DESCRIPTION =
   'List scheduled classroom and hybrid training rounds for 9Expert courses, optionally ' +
@@ -137,6 +138,7 @@ function dayKeys(dates) {
  * @param {object} deps
  * @param {Function} deps.listSchedules                ({ from, to, courses, status }) → { items }
  * @param {Function} deps.getCourseByCodeInsensitive   (code) → course|null
+ * @param {Function} deps.loadHiddenCourseIds          () → Set of hidden course codes
  * @param {Function} [deps.todayKey]                   () → 'YYYY-MM-DD' in Asia/Bangkok
  * @param {Function} [deps.warn]                       server-side log; defaults to console.warn
  */
@@ -173,13 +175,18 @@ export async function listTrainingRounds(input, deps) {
     resolvedCourseId = course.course_id ?? null;
   }
 
-  const res = await deps.listSchedules({
-    from: fromDay,
-    to: toDay,
-    courses,
-    // (1) — always. MSDB's default filter hides every `full` round.
-    status: UPSTREAM_STATUS_ALL,
-  });
+  const [res, hidden] = await Promise.all([
+    deps.listSchedules({
+      from: fromDay,
+      to: toDay,
+      courses,
+      // (1) — always. MSDB's default filter hides every `full` round.
+      status: UPSTREAM_STATUS_ALL,
+    }),
+    // `/schedules` has never heard of CourseExtension.isPublished, so without a
+    // course_id every round of a hidden course would come back.
+    deps.loadHiddenCourseIds(),
+  ]);
 
   let droppedOrphans = 0;
   const rounds = [];
@@ -190,6 +197,7 @@ export async function listTrainingRounds(input, deps) {
       droppedOrphans += 1;
       continue;
     }
+    if (isHiddenCourse(hidden, row.course.course_id)) continue;
 
     const days = dayKeys(row.dates);
     // A round with no usable date is a data fault, not a round. It cannot be
