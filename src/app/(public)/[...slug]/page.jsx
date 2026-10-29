@@ -30,6 +30,7 @@ import { CoursePrerequisites } from './_components/CoursePrerequisites';
 import { CourseRequirements } from './_components/CourseRequirements';
 import { CourseOutline } from './_components/CourseOutline';
 import { prepareOutlineRichHtml } from '@/lib/courses/courseOutlineView';
+import { richSectionPresence } from '@/lib/courses/richSectionPresence';
 import { CourseRoadmap } from './_components/CourseRoadmap';
 import { SidebarNav } from './_components/SidebarNav';
 import { CourseSectionTabs } from './_components/CourseSectionTabs';
@@ -1162,6 +1163,10 @@ function CourseDetail({
   // for it would be plumbing a dead path. The component calls the shared helper
   // anyway, so it emits the canonical URL if that block is ever revived.
   const hasRelated = relatedCourses.length > 0;
+  // Sections that render only from their rich copy, for the two navs (round
+  // 3b). Every course: a normal course's rich-only section is listed too —
+  // see richSectionPresence.js.
+  const richSections = richSectionPresence(extension);
   const gallery = Array.isArray(extension?.gallery) ? extension.gallery : [];
   // `getEarlyBirdByCourse` joins the linked Promotion as `promotion` so
   // the banner can render the thumbnail without a second DB hit.
@@ -1208,6 +1213,7 @@ function CourseDetail({
         hasSchedules={hasSchedules}
         hasRelated={hasRelated}
         hasFaqs={Boolean(faqs?.length)}
+        rich={richSections}
       />
 
       {/* pb-36 below lg reserves room for the fixed CourseStickyCTA bar so the
@@ -1251,7 +1257,9 @@ function CourseDetail({
                 remembers to look; and this card is several times the strip's
                 height, so pinning it would permanently spend a third of a
                 phone screen on two download buttons. */}
-            <PDFDownload course={course} className="lg:hidden" layout="row" />
+            {/* Not on a PRIVATE page: its hero card already carries the
+                outline buttons (round 3b), so this copy would repeat them. */}
+            {!isPrivate && <PDFDownload course={course} className="lg:hidden" layout="row" />}
             {!isPrivate && earlyBird && (
               <EarlyBirdBanner
                 earlyBird={earlyBird}
@@ -1318,6 +1326,7 @@ function CourseDetail({
               hasSchedules={hasSchedules}
               hasRelated={hasRelated}
               hasFaqs={Boolean(faqs?.length)}
+              rich={richSections}
             />
             {/* <InhouseCTA courseId={course.course_id} /> */}
             {/* DESKTOP slot. `hidden lg:flex`, not `lg:block` — the card's root

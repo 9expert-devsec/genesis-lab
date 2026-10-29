@@ -80,7 +80,7 @@ const MSDB_EXT = Object.freeze({ courseId: 'MSE-L1', urlAlias: '/excel-l1', isPu
 const DROPPED = [
   'course_price', 'course_netprice', 'related_courses', 'previous_course',
   'course_roadmap_desktop_url', 'course_roadmap_mobile_url', 'skills',
-  'sort_order', 'course_promote_status', 'course_levels', '_id', 'createdAt', 'updatedAt', '__v',
+  'sort_order', 'course_promote_status', '_id', 'createdAt', 'updatedAt', '__v',
   'schedules', 'earlyBird', 'promotions',
   // Round 2b's link fields — resolved through the program seam, never passed raw.
   'privateProgram', 'privateSkills',
@@ -100,7 +100,7 @@ test('toPrivateCourseView drops every field only a hidden section reads', () => 
 test('toPrivateCourseView keeps what the kept sections render', () => {
   const view = toPrivateCourseView(PRIVATE_DOC, { programs: PROGRAMS });
   for (const key of ['course_id', 'course_name', 'course_teaser', 'course_trainingdays',
-    'course_traininghours', 'course_type_public', 'course_type_inhouse', 'course_workshop_status',
+    'course_traininghours', 'course_levels', 'course_type_public', 'course_type_inhouse', 'course_workshop_status',
     'course_certificate_status', 'course_cover_url', 'course_objectives', 'course_target_audience',
     'course_prerequisites', 'course_system_requirements', 'training_topics',
     'course_outline_th', 'course_outline_en']) {

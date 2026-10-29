@@ -110,8 +110,13 @@ export const COURSE_SECTION_LABELS = Object.freeze({
  *
  * An empty array is a real answer: a course with none of these sections has no
  * navigation, and both renderings return null rather than an empty shell.
+ *
+ * `rich` — `{ description, objective, target, prerequisite, requirement }`
+ * booleans from `richSectionPresence`: the section renders from its
+ * CourseExtension rich copy even with no plain content, so it gets a link too.
+ * Omitted, every section is judged on its plain field alone, as before.
  */
-export function courseSectionLinks({ course, hasSchedules, hasRelated, hasFaqs }) {
+export function courseSectionLinks({ course, hasSchedules, hasRelated, hasFaqs, rich = {} }) {
   return [
     {
       id: 'schedule',
@@ -123,31 +128,31 @@ export function courseSectionLinks({ course, hasSchedules, hasRelated, hasFaqs }
       id: 'description',
       label: COURSE_SECTION_LABELS.description,
       icon: FileText,
-      show: !!course?.course_teaser,
+      show: !!course?.course_teaser || !!rich.description,
     },
     {
       id: 'objective',
       label: COURSE_SECTION_LABELS.objective,
       icon: Target,
-      show: !!course?.course_objectives?.length,
+      show: !!course?.course_objectives?.length || !!rich.objective,
     },
     {
       id: 'target',
       label: COURSE_SECTION_LABELS.target,
       icon: Users,
-      show: !!course?.course_target_audience?.length,
+      show: !!course?.course_target_audience?.length || !!rich.target,
     },
     {
       id: 'prerequisite',
       label: COURSE_SECTION_LABELS.prerequisite,
       icon: GraduationCap,
-      show: !!course?.course_prerequisites?.length,
+      show: !!course?.course_prerequisites?.length || !!rich.prerequisite,
     },
     {
       id: 'requirement',
       label: COURSE_SECTION_LABELS.requirement,
       icon: Monitor,
-      show: !!course?.course_system_requirements?.length,
+      show: !!course?.course_system_requirements?.length || !!rich.requirement,
     },
     {
       id: 'outline',

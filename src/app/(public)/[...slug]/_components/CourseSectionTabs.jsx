@@ -71,8 +71,8 @@ import { courseSectionLinks } from '@/lib/courseSectionNav';
  * layout, no scrolling, no events. Shipping one with no control proving it
  * works is worse than not shipping it; the strip's job is to get you there.
  */
-export function CourseSectionTabs({ course, hasSchedules, hasRelated, hasFaqs }) {
-  const links = courseSectionLinks({ course, hasSchedules, hasRelated, hasFaqs });
+export function CourseSectionTabs({ course, hasSchedules, hasRelated, hasFaqs, rich }) {
+  const links = courseSectionLinks({ course, hasSchedules, hasRelated, hasFaqs, rich });
 
   // Same rule as the sidebar: no links, no empty shell.
   if (!links.length) return null;

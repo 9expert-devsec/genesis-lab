@@ -7,8 +7,8 @@ import { courseSectionLinks } from '@/lib/courseSectionNav';
  * this rendering and the mobile tab strip cannot disagree about which sections
  * a course has. This file owns presentation only.
  */
-export function SidebarNav({ course, hasSchedules, hasRelated, hasFaqs }) {
-  const links = courseSectionLinks({ course, hasSchedules, hasRelated, hasFaqs });
+export function SidebarNav({ course, hasSchedules, hasRelated, hasFaqs, rich }) {
+  const links = courseSectionLinks({ course, hasSchedules, hasRelated, hasFaqs, rich });
 
   if (!links.length) return null;
 

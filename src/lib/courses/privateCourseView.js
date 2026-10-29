@@ -12,7 +12,8 @@
  * Withheld, among everything else: course_price, course_netprice,
  * related_courses, previous_course, course_roadmap_desktop_url /
  * course_roadmap_mobile_url, skills, sort_order, course_promote_status,
- * course_levels, _id and the timestamps. Schedules, promotions, early bird,
+ * _id and the timestamps. (`course_levels` joined the kept list in round 3b,
+ * for the hero's level pill — it is not sensitive.) Schedules, promotions, early bird,
  * FAQs and bundles are never fetched for a private course at all.
  */
 
@@ -22,6 +23,7 @@ export const PRIVATE_VIEW_FIELDS = Object.freeze([
   'course_teaser',
   'course_trainingdays',
   'course_traininghours',
+  'course_levels',
   'course_type_public',
   'course_type_inhouse',
   'course_workshop_status',
