@@ -1,9 +1,11 @@
 /**
  * /about-us "ผู้เรียนพูดถึงเราอย่างไร" — the first three of Home's featured
  * reviews (same loader: getLandingData().reviews, admin order), in a STATIC
- * layout so About does not repeat Home's carousel. Hover only
- * (globals.css, .about-card / .about-review-*).
+ * layout so About does not repeat Home's carousel. Hover is a border colour
+ * only (globals.css, .about-card / .about-review-*).
  */
+import { AboutSection, AboutSectionHeader } from '@/components/about/AboutSection';
+
 const MAX_REVIEWS = 3;
 
 // Stars exactly as Home's StarRating paints them (★, #FFBC00 / gray-200),
@@ -28,7 +30,7 @@ function Avatar({ src, name }) {
     return (
       <span
         aria-hidden="true"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-9e-signature-900 text-base font-bold text-9e-action"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--ab-panel-2)] text-base text-[var(--ab-meta)]"
       >
         {(String(name ?? '').trim()[0] ?? '?').toUpperCase()}
       </span>
@@ -48,43 +50,35 @@ export default function ReviewsSection({ reviews = [] }) {
   if (!shown.length) return null;
 
   return (
-    <section className="bg-[var(--page-bg-muted)] px-4 py-20 lg:px-6 lg:py-24">
-      <div className="mx-auto max-w-[1200px]">
-        <h2 className="text-center font-heading text-3xl font-bold leading-snug text-[var(--text-primary)] md:text-[40px]">
-          ผู้เรียนพูดถึงเราอย่างไร
-        </h2>
+    <AboutSection>
+      <AboutSectionHeader title="ผู้เรียนพูดถึงเราอย่างไร" />
 
-        <div role="region" tabIndex={0} aria-label="รีวิวจากผู้เรียน" className="about-review-scroller mt-10 lg:mt-12">
-          <ul className="about-review-row">
-            {shown.map((r) => {
-              const meta = [r.reviewerRole, r.reviewerCompany].map((s) => String(s ?? '').trim()).filter(Boolean).join(' · ');
-              return (
-                <li
-                  key={r._id ?? r.id ?? r.reviewerName}
-                  // Surface = Home's ReviewCard as it renders at desktop (the
-                  // non-featured state every card is in there).
-                  className="about-card about-review rounded-2xl bg-white opacity-90 dark:bg-9e-navy dark:ring-1 dark:ring-[#1e3a5f]/60"
-                >
-                  <Stars rating={r.rating} />
-                  <blockquote className="mt-4 flex-1 text-base leading-relaxed text-[var(--text-primary)]">
-                    <p>“{String(r.comment).trim()}”</p>
-                  </blockquote>
-                  {r.courseName && (
-                    <p className="mt-4 text-sm font-bold text-9e-navy dark:text-[#48B0FF]">{r.courseName}</p>
-                  )}
-                  <div className="mt-5 flex items-center gap-3 border-t border-[var(--surface-border)] pt-5">
-                    <Avatar src={r.avatarUrl} name={r.reviewerName} />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-9e-navy dark:text-white">{r.reviewerName}</p>
-                      {meta && <p className="truncate text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">{meta}</p>}
-                    </div>
+      <div role="region" tabIndex={0} aria-label="รีวิวจากผู้เรียน" className="about-review-scroller mt-10 lg:mt-12">
+        <ul data-reveal-group="" className="about-review-row">
+          {shown.map((r) => {
+            const meta = [r.reviewerRole, r.reviewerCompany].map((s) => String(s ?? '').trim()).filter(Boolean).join(' · ');
+            return (
+              // An opaque panel object; the stars are its only colour.
+              <li key={r._id ?? r.id ?? r.reviewerName} data-reveal="" className="about-card about-review">
+                <Stars rating={r.rating} />
+                <blockquote className="mt-4 flex-1 text-base leading-relaxed text-[var(--ab-bright)]">
+                  <p>“{String(r.comment).trim()}”</p>
+                </blockquote>
+                {r.courseName && (
+                  <p className="mt-4 text-sm text-[var(--ab-meta)]">{r.courseName}</p>
+                )}
+                <div className="mt-5 flex items-center gap-3 border-t border-[var(--ab-hairline)] pt-5">
+                  <Avatar src={r.avatarUrl} name={r.reviewerName} />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-[var(--ab-bright)]">{r.reviewerName}</p>
+                    {meta && <p className="truncate text-xs text-[var(--ab-meta)]">{meta}</p>}
                   </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </div>
-    </section>
+    </AboutSection>
   );
 }

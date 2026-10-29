@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { QUOTE_FALLBACK, quoteCardText } from '@/lib/about/aboutText';
+import { QUOTE_FALLBACK } from '@/lib/about/aboutText';
+import { quoteParts } from '@/lib/about/quoteParts';
 import {
   COMPANY_PROFILE_PATH,
   companyProfileBlobUrl,
@@ -14,26 +15,36 @@ import {
  * profile size read from the file. See src/lib/about/.
  */
 
-test('quote card: text without surrounding quotes gets one pair of “ ”', () => {
-  // the live tagline: quotes INSIDE, not around — kept verbatim, wrapped once
-  assert.equal(
-    quoteCardText('  สอนแบ่งปันความรู้ เทคโนโลยีเพื่อ "ขับเคลื่อนประเทศไทย"  '),
-    '“สอนแบ่งปันความรู้ เทคโนโลยีเพื่อ "ขับเคลื่อนประเทศไทย"”',
-  );
-  assert.equal(quoteCardText('Never Stop Learning'), '“Never Stop Learning”');
+// ── the pull quote (round AB-3c): emphasis from the stored quote pair ──────
+const NO_QUOTES = /["“”]/;
+const all = (p) => p.before + p.emphasis + p.after;
+
+test('pull quote: the stored tagline splits on its inner straight quotes', () => {
+  const p = quoteParts('  สอนแบ่งปันความรู้ เทคโนโลยีเพื่อ "ขับเคลื่อนประเทศไทย"  ');
+  assert.deepEqual(p, { before: 'สอนแบ่งปันความรู้ เทคโนโลยีเพื่อ ', emphasis: 'ขับเคลื่อนประเทศไทย', after: '' });
+  assert.equal(NO_QUOTES.test(all(p)), false, 'no quote mark survives');
 });
 
-test('quote card: text already wrapped in quote characters is shown as-is', () => {
-  for (const t of ['“ก ข”', '"ก ข"', "'ก ข'", '“ก ข"']) {
-    assert.equal(quoteCardText(t), t);
+test('pull quote: curly inner quotes, text after the pair, and a surrounding pair', () => {
+  assert.deepEqual(quoteParts('ก “ข” ค'), { before: 'ก ', emphasis: 'ข', after: ' ค' });
+  // a pair an older component wrapped around the whole tagline is dropped
+  assert.deepEqual(quoteParts('“ก "ข"”'), { before: 'ก ', emphasis: 'ข', after: '' });
+  assert.deepEqual(quoteParts('"ก ข"'), { before: 'ก ข', emphasis: '', after: '' });
+  // only the FIRST pair is emphasis; later marks are dropped, not shown
+  const two = quoteParts('"ก" และ "ข"');
+  assert.deepEqual(two, { before: '', emphasis: 'ก', after: ' และ ข' });
+  for (const t of ['ก “ข” ค', '“ก "ข"”', '"ก" และ "ข"', 'ก "ข', '"']) {
+    assert.equal(NO_QUOTES.test(all(quoteParts(t))), false, t);
   }
-  // a lone quote character is not "already quoted"
-  assert.equal(quoteCardText('"'), '“"”');
 });
 
-test('quote card: empty or missing tagline → the fallback, quoted', () => {
-  for (const empty of ['', '   ', null, undefined]) {
-    assert.equal(quoteCardText(empty), `“${QUOTE_FALLBACK}”`);
+test('pull quote: no inner pair → the whole text, no emphasis', () => {
+  assert.deepEqual(quoteParts('Never Stop Learning'), { before: 'Never Stop Learning', emphasis: '', after: '' });
+});
+
+test('pull quote: empty or missing tagline → the fallback, never a crash', () => {
+  for (const empty of ['', '   ', null, undefined, '""', '“”', '"']) {
+    assert.deepEqual(quoteParts(empty), { before: QUOTE_FALLBACK, emphasis: '', after: '' }, String(empty));
   }
   assert.equal(QUOTE_FALLBACK, 'สอนแบ่งปันความรู้เทคโนโลยี เพื่อขับเคลื่อนประเทศไทย');
 });

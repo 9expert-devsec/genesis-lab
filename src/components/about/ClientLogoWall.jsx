@@ -1,4 +1,5 @@
 import { ClientLogoImage } from '@/components/portfolio/ClientLogosSection';
+import { AboutSectionHeader } from '@/components/about/AboutSection';
 
 /**
  * /about-us client logos as a STATIC wall — deliberately not Home's marquee.
@@ -17,14 +18,12 @@ export default function ClientLogoWall({ logos = [], heading }) {
   if (!shown.length) return null;
 
   return (
-    <div className="text-center">
-      <h2 className="font-heading text-2xl font-bold text-[var(--text-primary)] md:text-[28px]">
-        {heading}
-      </h2>
-      <p className="mx-auto mt-3 max-w-[640px] text-sm leading-relaxed text-[var(--text-secondary)] md:text-base">
-        ตั้งแต่สถาบันการเงิน พลังงาน ค้าปลีก ไปจนถึงหน่วยงานภาครัฐ เลือกให้ 9Expert พัฒนาทักษะบุคลากร
-      </p>
-      <ul className="about-logo-wall mt-10">
+    <div>
+      <AboutSectionHeader
+        title={heading}
+        intro="ตั้งแต่สถาบันการเงิน พลังงาน ค้าปลีก ไปจนถึงหน่วยงานภาครัฐ เลือกให้ 9Expert พัฒนาทักษะบุคลากร"
+      />
+      <ul data-reveal="fade" className="about-logo-wall mt-10 lg:mt-12">
         {shown.map((logo) => (
           <li key={logo._id}>
             <div className="about-logo-cell">

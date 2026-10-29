@@ -1,18 +1,16 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 import { COMPANY_PROFILE_PATH } from '@/lib/about/companyProfileSize';
 
 /**
- * /about-us hero — dark navy in BOTH themes, text left and the rocket mascot
- * right (mascot on top below lg). All copy is fixed; AboutConfig.tagline is
- * rendered in StorySection's quote card, not here.
+ * /about-us hero — on the page's one ground in both themes (round AB-3, light
+ * modern / dark modern): text left and the rocket mascot right (mascot on top
+ * below lg). All copy is fixed; AboutConfig.tagline is rendered in
+ * StorySection's quote card, not here.
  *
- * ── THE FOG ─────────────────────────────────────────────────────────────────
- * The bottom of the hero fades to var(--page-bg-muted), the SAME variable the
- * Proof section below paints its background with, so the seam is invisible in
- * light and dark alike. The content block's bottom padding keeps the text above
- * the fog's opaque half.
+ * No fog: the hero shares the ground with the section below, so there is no
+ * seam to hide. Dark mode only, one soft static light pool sits behind the
+ * mascot (.about-pool); light mode is flat.
  */
 
 const PARAGRAPH =
@@ -26,41 +24,29 @@ const PILLS = ['AI', 'DATA', 'AUTOMATION'];
  */
 export default function AboutHero({ pills = PILLS.map((label) => ({ label, href: null })) }) {
   return (
-    <section className="relative isolate overflow-hidden bg-9e-navy px-4 lg:min-h-[720px] lg:px-6">
-      {/* ── Decoration ─────────────────────────────────────────────── */}
+    <section className="relative isolate overflow-hidden px-4 lg:px-6">
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
-        {/* soft blue glow behind the mascot */}
-        {/* <div
-          className="absolute left-1/2 top-[-120px] h-[560px] w-[560px] -translate-x-1/2 rounded-full lg:left-auto lg:right-[-80px] lg:top-[-80px] lg:h-[820px] lg:w-[820px] lg:translate-x-0"
-          style={{
-            background:
-              'radial-gradient(closest-side, rgba(36,134,255,0.38) 0%, rgba(36,134,255,0.12) 55%, transparent 100%)',
-          }}
-        /> */}
-        {/* fog into the Proof section's background */}
-{/* Gradient into the Proof section's background */}
-<div
-  className="pointer-events-none absolute inset-x-0 bottom-0 h-[200px]"
-  style={{
-    background: "var(--hero-gradient)",
-  }}
-/>
+        <div className="about-pool absolute left-1/2 top-[-50px] h-[420px] w-[420px] -translate-x-1/2 lg:left-auto lg:right-[calc(50%-720px)] lg:top-0 lg:h-[720px] lg:w-[720px] lg:translate-x-0" />
       </div>
 
-      {/* ── Content ────────────────────────────────────────────────── */}
-      <div className="mx-auto grid max-w-[1200px] gap-8 pb-[150px] pt-10 lg:min-h-[720px] lg:grid-cols-[minmax(0,700px)_480px] lg:items-center lg:justify-between lg:gap-10 lg:pb-[200px] lg:pt-16">
+      {/* The bottom padding sets the hero-to-stats gap: the Proof section's stats row
+          follows with no rule and no top padding, so it reads as the ruled
+          row of facts under the hero: 40px below the buttons on mobile. At
+          lg the 480px mascot is taller than the centred copy, so its box
+          plus this padding sets the gap to the stats. */}
+      <div className="mx-auto grid max-w-[1200px] gap-8 pb-10 pt-10 lg:grid-cols-[minmax(0,700px)_480px] lg:items-center lg:justify-between lg:gap-10 lg:pb-20 lg:pt-16">
         <div className="min-w-0">
           {/* The two lines are spans, and globals.css forces every span to
               Google Sans with !important. The class-level !important below
               (higher specificity than the element rule) hands them back to
-              font-heading, i.e. LINE Seed Sans TH via var(--font-thai), bold
-              700, which LINE Seed ships. Scoped to this H1 only. */}
+              the heading face, LINE Seed Sans TH, at its regular 400 weight.
+              Scoped to this H1 only. */}
           <h1 className="font-heading text-[34px] font-bold leading-[1.3] sm:text-[44px] lg:text-[48px] [&_span]:!font-heading">
-            <span className="block text-white">เปลี่ยนความรู้ให้เป็นทักษะ</span>
-            <span className="block text-9e-brand">เปลี่ยนทักษะให้เป็นผลลัพธ์</span>
+            <span className="block text-[var(--ab-bright)]">เปลี่ยนความรู้ให้เป็นทักษะ</span>
+            <span className="block text-[var(--ab-accent)]">เปลี่ยนทักษะให้เป็นผลลัพธ์</span>
           </h1>
 
-          <p className="mt-6 max-w-[620px] text-base leading-relaxed text-9e-slate-lt-300 lg:text-lg">
+          <p className="mt-6 max-w-[620px] text-base leading-relaxed text-[var(--ab-read)] lg:text-lg">
             {PARAGRAPH}
           </p>
 
@@ -79,19 +65,17 @@ export default function AboutHero({ pills = PILLS.map((label) => ({ label, href:
           </ul>
 
           <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
-            <Button asChild variant="primary" size="lg" className="about-btn-primary h-12 w-full px-7 text-base sm:w-auto">
-              <Link href="/training-course">ดูหลักสูตรทั้งหมด</Link>
-            </Button>
-            <Button
-              asChild
-              variant="outline"
-              size="lg"
-              className="about-btn-ghost h-12 w-full border-white/60 px-7 text-base text-white sm:w-auto"
+            <Link href="/training-course" className="about-cta w-full sm:w-auto">
+              ดูหลักสูตรทั้งหมด
+            </Link>
+            <a
+              href={COMPANY_PROFILE_PATH}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="about-cta-secondary w-full sm:w-auto"
             >
-              <a href={COMPANY_PROFILE_PATH} target="_blank" rel="noopener noreferrer">
-                ดาวน์โหลด Company Profile
-              </a>
-            </Button>
+              ดาวน์โหลด Company Profile
+            </a>
           </div>
         </div>
 

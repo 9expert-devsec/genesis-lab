@@ -54,11 +54,12 @@ export default function CommunityGallery({ layout, items }) {
 
   return (
     <>
-      <div className={cn('about-bento', layout === 'grid' && 'about-bento--grid')}>
+      <div data-reveal-group="" className={cn('about-bento', layout === 'grid' && 'about-bento--grid')}>
         {items.map((it, i) => (
           <button
             key={it.id}
             type="button"
+            data-reveal="fade"
             ref={(el) => { tileRefs.current[i] = el; }}
             onClick={() => open(i)}
             aria-label={`ดูภาพขนาดใหญ่: ${it.alt}`}

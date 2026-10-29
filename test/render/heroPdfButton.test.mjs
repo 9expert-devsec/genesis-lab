@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import React from 'react';
@@ -150,15 +150,38 @@ test('the size caption survives nowhere on this route', () => {
   }
 });
 
-test('/about-us keeps ITS caption — the deletion was scoped to this route', () => {
-  // CompanyProfileSection makes the same three choices and was not in scope.
-  // If this goes red, the round reached further than it was asked to.
-  // Its size is no longer typed ("ประมาณ 22 MB"): round AB-1 reads it from the
-  // file (getCompanyProfileSize) and passes it in as `size`.
-  const about = read('src/components/about/CompanyProfileSection.jsx');
-  assert.ok(about.includes('เปิดในแท็บใหม่'));
-  assert.ok(about.includes('ขนาด ${size}'));
-  assert.equal(about.includes('ประมาณ 22 MB'), false);
+test('/about-us keeps ITS caption — the deletion was scoped to this route', async () => {
+  // The Company Profile link makes the same three choices and was not in
+  // scope. If this goes red, the round reached further than it was asked to.
+  // Its size is not typed ("ประมาณ 22 MB"): round AB-1 reads it from the file
+  // (getCompanyProfileSize) and the page passes it in. Since round AB-3 the
+  // link lives in the closing CTA's Company Profile card (and the hero); the
+  // old stand-alone section's file is gone.
+  const { default: ClosingCtaSection } = await import('@/components/about/ClosingCtaSection');
+  const card = html(React.createElement(ClosingCtaSection, { profileSize: '22.4 MB' }));
+  const link = /<a[^>]+href="\/9expert-company-profile\.pdf"[^>]*>[\s\S]*?<\/a>/.exec(card)?.[0] ?? '';
+  assert.match(link, /target="_blank"/);
+  assert.match(link, /rel="noopener noreferrer"/);
+  assert.equal(/\sdownload[\s=>]/.test(link), false, 'no download attribute');
+  assert.ok(link.includes('เปิดในแท็บใหม่'), 'the new-tab caption is announced');
+  assert.ok(card.includes('PDF · 22.4 MB'), 'the size read from the file is shown');
+  const unsized = html(React.createElement(ClosingCtaSection, { profileSize: null }));
+  assert.equal(/\d\s*MB/.test(unsized), false, 'no size when it could not be read');
+  assert.equal(code('src/components/about/ClosingCtaSection.jsx').includes('ประมาณ 22 MB'), false);
+  assert.deepEqual(
+    readdirSync(path.join(ROOT, 'src/components/about')).filter((f) => /^CompanyProfile/.test(f)),
+    [],
+    'the old stand-alone Company Profile section was not deleted',
+  );
+});
+
+test('/about-us hero: the Company Profile button is the same new-tab root-path link', async () => {
+  const { default: AboutHero } = await import('@/components/about/AboutHero');
+  const out = html(React.createElement(AboutHero, {}));
+  const link = /<a[^>]+href="\/9expert-company-profile\.pdf"[^>]*>/.exec(out)?.[0] ?? '';
+  assert.match(link, /target="_blank"/);
+  assert.match(link, /rel="noopener noreferrer"/);
+  assert.equal(/\sdownload[\s=>]/.test(link), false);
 });
 
 // ── CONTROLS ────────────────────────────────────────────────────────────────
