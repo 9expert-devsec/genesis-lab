@@ -92,19 +92,9 @@ const LG_COLS = {
   6: 'lg:grid-cols-6',
 };
 
-// Panel dividers: 3 columns below lg (a vertical rule left of columns 2–3, one
-// horizontal rule above the second row), one row at lg (a vertical rule left of
-// every item but the first). Complete literals, for Tailwind's scanner.
-function panelDividerClass(i) {
-  if (i === 0) return '';
-  if (i % 3 === 0) return 'border-t lg:border-l lg:border-t-0';
-  if (i > 3) return 'border-l border-t lg:border-t-0';
-  return 'border-l';
-}
-
 /**
  * @param {{ items: { key: string, value: number, label: string,
- *   kind?: 'count'|'rating', star?: boolean, accent?: boolean }[],
+ *   kind?: 'count'|'rating', star?: boolean }[],
  *   variant?: 'divided'|'panel', className?: string }} props
  */
 export function StatsStrip({ items = [], variant = 'divided', className }) {
@@ -112,38 +102,24 @@ export function StatsStrip({ items = [], variant = 'divided', className }) {
   const phase = useCountUpPhase(ref);
   if (!items.length) return null;
 
-  // About's Proof section: one card, ruled cells. `accent` paints a number
-  // brand blue. Opt-in — Home ('divided') never reaches this branch.
+  // About's Proof section: a ruled row of facts on the page ground — rules
+  // above and below, hairline dividers between cells (the .about-ruled grid in
+  // globals.css), no card, fill or hover. 2 columns below md, 3 at md, one
+  // row at lg. Colours are About's --ab-* tokens, so this branch only renders
+  // inside .about-page. Opt-in — Home ('divided') never reaches it.
   if (variant === 'panel') {
     return (
-      <div
-        ref={ref}
-        className={cn(
-          'grid grid-cols-3 overflow-hidden rounded-3xl border border-[var(--surface-border)] bg-[var(--surface-raised)] text-center shadow-9e-lg',
-          LG_COLS[items.length],
-          className
-        )}
-      >
-        {items.map((item, i) => (
-          <div
-            key={item.key}
-            className={cn(
-              // about-stat-* are hover hooks styled in globals.css (About only)
-              'about-stat-cell flex min-w-0 flex-col items-center justify-center gap-1 border-[var(--surface-border)] px-2 py-5 lg:py-8',
-              panelDividerClass(i)
-            )}
-          >
-            <span
-              className={cn(
-                'about-stat-num whitespace-nowrap text-2xl font-extrabold leading-tight md:text-3xl lg:text-4xl',
-                item.accent ? 'text-9e-action dark:text-9e-air' : 'text-[var(--text-primary)]'
-              )}
-            >
-              <StatValue item={item} phase={phase} />
-            </span>
-            <span className="text-xs text-[var(--text-secondary)] md:text-sm">{item.label}</span>
-          </div>
-        ))}
+      <div ref={ref} className={cn('about-ruled', className)}>
+        <div data-reveal-group="" className={cn('grid grid-cols-2 md:grid-cols-3', LG_COLS[items.length])}>
+          {items.map((item) => (
+            <div key={item.key} data-reveal="" className="flex min-w-0 flex-col gap-1 px-4 py-6 lg:px-6 lg:py-8">
+              <span className="!font-heading whitespace-nowrap text-3xl font-bold leading-tight text-[var(--ab-bright)] tabular-nums lg:text-4xl">
+                <StatValue item={item} phase={phase} />
+              </span>
+              <span className="text-sm text-[var(--ab-meta)]">{item.label}</span>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

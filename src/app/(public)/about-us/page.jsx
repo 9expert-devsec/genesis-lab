@@ -7,6 +7,7 @@ import InstructorCardsSection from "@/components/about/InstructorCardsSection";
 import ClosingCtaSection from "@/components/about/ClosingCtaSection";
 import CommunitySection from "@/components/about/CommunitySection";
 import ReviewsSection from "@/components/about/ReviewsSection";
+import AboutReveal from "@/components/about/AboutReveal";
 import { getLandingData } from "@/lib/landing/getLandingData";
 
 import { getInstructors, getAboutConfig } from "@/lib/actions/about";
@@ -55,7 +56,7 @@ export default async function AboutUsPage() {
     getActiveAtmospherePhotos().catch(() => []),
     getActiveClientLogos().catch(() => []),
     getSiteStats(),
-    // Only `tagline` is rendered (the Story quote card); see quoteCardText.
+    // Only `tagline` is rendered (the Story pull quote); see quoteParts.
     getAboutConfig().catch(() => null),
     getCompanyProfileSize(),
     // The same loader the header and /career-path-project use; only its count
@@ -118,6 +119,8 @@ export default async function AboutUsPage() {
       <div id="about-cta">
         <ClosingCtaSection profileSize={profileSize} />
       </div>
+      {/* Client-only scroll reveal for the sections above; renders nothing. */}
+      <AboutReveal />
     </main>
   );
 }

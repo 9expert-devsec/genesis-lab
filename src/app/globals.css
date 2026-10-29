@@ -1923,29 +1923,110 @@ html:has([data-page="about"]) {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   /about-us — shared interaction tokens + effects (.about-*)
+   /about-us — "Modern" token layer + effects (.about-*)   (round AB-3)
    ──────────────────────────────────────────────────────────────
-   Every rule here is scoped to .about-page (the page's <main>) or to an
-   .about-* class used only by components/about, so nothing reaches another
-   route. ONE accent colour, glow, lift and timing for every hover on the
-   page, so the sections feel like one system. No green/lime gradients (round
-   AB-2e): hover borders, bars, fills and highlighted text are the solid
-   --about-accent — 9e-action in light, 9e-brand in dark (the contrast pair).
+   Light theme = light modern, dark theme = dark modern, for the WHOLE page,
+   hero included. ONE ground per theme, painted once by the page's <main>;
+   every section is transparent on it and is separated from the previous one
+   by a 1px hairline on its max-width container (components/about/
+   AboutSection), never by a change of background colour.
 
-   Motion rule for the whole block: under prefers-reduced-motion: reduce no
-   element moves (each feature below carries its own reduced-motion block
-   that switches its transforms and keyframes off); colour and opacity
-   changes stay. Every hover is mirrored on
-   :focus-visible where the element can take focus; the global focus ring is
-   not touched. */
+   Components take colour ONLY from these --ab-* tokens (plus the --9e-* brand
+   tokens named in the components). Every value is a var() to an existing
+   token or a literal this file already declares — no new colours; the guard
+   is test/fs/aboutTokens.
+
+   Contrast: dark --ab-meta is slate-dp-300 (6.6:1 on #080E16), never
+   --text-muted (#5E6A7E, 3.2:1 there). Lime is never text or a text-carrying
+   fill in LIGHT mode (1.17:1 on ice), so the light signal and CTA are Action
+   Blue (white on it ≈ 5:1).
+
+   Motion: colour, border-colour and background-colour transitions only, at
+   --ab-dur / --ab-ease. Nothing on this page moves on hover; the lightbox
+   fade is the one other transition. Focus is the global ring. Every rule is
+   scoped to .about-page or to an .about-* class used only by
+   components/about, so nothing reaches another route. */
 .about-page {
-  --about-accent: var(--9e-action);
-  --about-glow: 0 12px 32px -10px color-mix(in srgb, var(--9e-brand) 45%, transparent);
-  --about-lift: -4px;
-  --about-dur: 240ms;
-  --about-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ab-ground:       var(--9e-ice);
+  --ab-panel:        #FFFFFF;                 /* = :root --surface */
+  --ab-panel-2:      var(--9e-slate-lt-800);
+  --ab-hairline:     rgba(13, 27, 42, 0.12);  /* = :root --surface-border */
+  --ab-hairline-2:   var(--9e-slate-lt-500);
+  --ab-bright:       var(--9e-navy);
+  --ab-read:         #465469;                 /* = :root --text-secondary */
+  --ab-meta:         var(--9e-slate-dp-50);
+  --ab-accent:       var(--9e-action);
+  --ab-signal:       var(--9e-action);
+  --ab-cta-bg:       var(--9e-action);
+  --ab-cta-fg:       #FFFFFF;
+  --ab-cta-bg-hover: var(--9e-action-100);
+  --ab-dur:          120ms;
+  --ab-ease:         ease-out;
 }
-.dark .about-page { --about-accent: var(--9e-brand); }
+.dark .about-page {
+  /* --pb-bg-dark resolves on this element, under html.dark, to #080E16. */
+  --ab-ground:       var(--pb-bg-dark);
+  --ab-panel:        var(--9e-navy);
+  --ab-panel-2:      var(--9e-card);
+  --ab-hairline:     var(--9e-border);
+  --ab-hairline-2:   #1E3A5F;                 /* = .dark --surface-raised */
+  --ab-bright:       var(--9e-ice);
+  --ab-read:         #C5CEDA;                 /* = .dark --text-secondary */
+  --ab-meta:         var(--9e-slate-dp-300);
+  --ab-accent:       var(--9e-air);
+  --ab-signal:       var(--9e-lime);
+  --ab-cta-bg:       var(--9e-lime);
+  --ab-cta-fg:       var(--9e-navy);
+  --ab-cta-bg-hover: var(--9e-lime-lt);
+}
+/* The ground, painted once. The admin crop preview also carries .about-page
+   (for the tokens) on a plain div and paints its own panel. */
+main.about-page { background-color: var(--ab-ground); }
+
+/* Scroll reveal (round AB-3c, owner request). Content NEVER depends on JS to
+   be visible: the hidden start state exists only under a class the client
+   adds to <main> after mount (components/about/AboutReveal), and only when
+   reduced motion is not requested. Server HTML, crawlers, no-JS and a slow
+   hydration show everything. Once, on first entry: opacity 0 → 1 and 16px
+   up → 0 over 500ms; the "fade" variant only fades. The transition lives on
+   a temporary state the client removes when the reveal ends, so a card's
+   own hover transitions are untouched afterwards. */
+.about-page.reveal-ready [data-reveal]:not(.is-revealed) {
+  opacity: 0;
+  transform: translateY(16px);
+}
+.about-page.reveal-ready [data-reveal="fade"]:not(.is-revealed) { transform: none; }
+.about-page.reveal-ready [data-reveal].is-revealing {
+  transition: opacity 500ms cubic-bezier(0.22, 1, 0.36, 1), transform 500ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+/* Story pull quote: the decorative opening mark is drawn here, so no quote
+   character is part of the quote's text. */
+.about-quote-mark { display: block; height: 0.6em; font-size: 64px; line-height: 0.6; color: var(--ab-accent); }
+.about-quote-mark::before { content: "\201C"; }
+
+/* Light pool — DARK ONLY: one soft, static radial of ice at 7% (behind the
+   hero mascot and the Company Profile card), fading to nothing. Light mode
+   stays flat. The element places and sizes it. */
+.about-pool { display: none; }
+.dark .about-pool {
+  display: block;
+  border-radius: 9999px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--9e-ice) 7%, transparent), transparent);
+}
+
+/* ── Ruled grids (stats, teaching steps, workshop) ─────────────
+   Grid lines, no cell fills: a rule above and below the wrapper; each cell
+   draws its own left and top rule, and the inner grid is pulled 1px up and
+   left so the first row's top rules and the first column's left rules fall
+   outside the wrapper's clip. Columns are set on the inner element. */
+.about-ruled { overflow: hidden; border-block: 1px solid var(--ab-hairline); }
+.about-ruled > * { margin: -1px 0 0 -1px; }
+.about-ruled > * > * {
+  border-left: 1px solid var(--ab-hairline);
+  border-top: 1px solid var(--ab-hairline);
+}
 
 /* ── Client logo wall ──────────────────────────────────────────
    Static and calm: real colours at full opacity, no hover. The dark-mode
@@ -1988,127 +2069,109 @@ html:has([data-page="about"]) {
 }
 @media (min-width: 1024px) { .about-logo-img { max-height: 44px; } }
 
-/* ── Hero focus pills (links) ──────────────────────────────── */
+/* ── Pills ─────────────────────────────────────────────────────
+   Outlined. The hero's are links (hover: border and text to the accent);
+   the instructor section's are plain labels. Letter-spaced uppercase is for
+   Latin labels only — the --th modifier keeps Thai at normal tracking. */
 .about-pill {
   display: inline-block;
   border-radius: 9999px;
-  border: 1px solid var(--9e-brand);
+  border: 1px solid var(--ab-hairline-2);
   padding: 0.375rem 1rem;
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--9e-brand);
-  transition: color var(--about-dur) var(--about-ease),
-              box-shadow var(--about-dur) var(--about-ease),
-              transform var(--about-dur) var(--about-ease);
+  color: var(--ab-bright);
+  transition: color var(--ab-dur) var(--ab-ease), border-color var(--ab-dur) var(--ab-ease);
 }
-/* The hero is navy in both themes, so the pill's hover border is the
-   brand blue that reads on navy, solid. */
+.about-pill--th { font-size: 0.8125rem; letter-spacing: normal; text-transform: none; }
 a.about-pill:hover,
 a.about-pill:focus-visible {
-  border-color: var(--9e-brand);
-  background-color: color-mix(in srgb, var(--9e-brand) 16%, transparent);
-  color: #FFFFFF;
-  box-shadow: inset 0 0 14px color-mix(in srgb, var(--9e-brand) 40%, transparent);
-  transform: translateY(-2px);
-}
-@media (prefers-reduced-motion: reduce) {
-  .about-pill { transition: color var(--about-dur) var(--about-ease), box-shadow var(--about-dur) var(--about-ease); }
-  a.about-pill:hover, a.about-pill:focus-visible { transform: none; }
+  border-color: var(--ab-accent);
+  color: var(--ab-accent);
 }
 
-/* ── Section hovers ────────────────────────────────────────────
-   Highlighted numbers and years turn the solid accent — no gradient text. */
-.about-stat-cell:hover .about-stat-num,
-.about-ms:hover .about-ms-year,
-.about-workshop:hover .about-workshop-num { color: var(--about-accent); }
+/* ── Buttons (hero + closing CTA + profile card) ───────────────
+   Pill radius. Primary: --ab-cta-bg/fg (Action Blue + white in light, Signal
+   Lime + navy in dark). Secondary: transparent, hairline-2 border, bright
+   text; hover takes the border to the bright colour. */
+.about-cta,
+.about-cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 3rem;
+  padding: 0 1.75rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  font-size: 1rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color var(--ab-dur) var(--ab-ease), border-color var(--ab-dur) var(--ab-ease),
+              color var(--ab-dur) var(--ab-ease);
+}
+.about-cta { background-color: var(--ab-cta-bg); color: var(--ab-cta-fg); }
+.about-cta:hover,
+.about-cta:focus-visible { background-color: var(--ab-cta-bg-hover); }
+.about-cta-secondary { border-color: var(--ab-hairline-2); background-color: transparent; color: var(--ab-bright); }
+.about-cta-secondary:hover,
+.about-cta-secondary:focus-visible { border-color: var(--ab-bright); }
+.about-cta--sm { height: 2.75rem; padding: 0 1.5rem; font-size: 0.875rem; }
 
-/* Hero buttons */
-.about-btn-primary {
-  background-image: linear-gradient(90deg, var(--9e-brand) 0%, var(--9e-action) 50%, var(--9e-brand) 100%);
-  background-size: 200% 100%;
-  background-position: 0% 0;
-  transition: background-position 600ms var(--about-ease), transform var(--about-dur) var(--about-ease),
-              box-shadow var(--about-dur) var(--about-ease);
-}
-.about-btn-primary:hover,
-.about-btn-primary:focus-visible {
-  background-position: 100% 0;
-  transform: translateY(-2px);
-  box-shadow: var(--about-glow);
-}
-.about-btn-ghost { transition: background-color var(--about-dur) var(--about-ease), border-color var(--about-dur) var(--about-ease); }
-.about-btn-ghost:hover,
-.about-btn-ghost:focus-visible {
-  background-color: rgb(255 255 255 / 0.1);
-  border-color: #FFFFFF;
-  color: #FFFFFF;
-  transform: translateY(-2px);
-}
-
-/* Stats cells */
-.about-stat-cell { transition: background-color var(--about-dur) var(--about-ease), box-shadow var(--about-dur) var(--about-ease); }
-.about-stat-cell:hover {
-  background-color: var(--surface-hover);
-  box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--9e-brand) 35%, transparent);
-}
-
-/* STEMPLUS card: one diagonal light sheen per hover; logo tiles lift. */
-.about-stemplus { position: relative; overflow: hidden; isolation: isolate; }
-.about-stemplus::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.55) 50%, transparent 70%);
-  transform: translateX(-110%);
-}
-.about-stemplus:hover::after { transform: translateX(110%); transition: transform 1100ms var(--about-ease); }
-.about-stemplus-logo { transition: transform var(--about-dur) var(--about-ease), box-shadow var(--about-dur) var(--about-ease); }
-.about-stemplus:hover .about-stemplus-logo { transform: translateY(-3px); box-shadow: var(--about-glow); }
-
-/* Story quote: the bar widens, in the solid accent. */
-.about-quote-bar { transition: width var(--about-dur) var(--about-ease); }
-.about-quote:hover .about-quote-bar {
-  width: 6px;
-  background-color: var(--about-accent);
-}
-
-/* Timeline */
-.about-ms-marker { transition: background-color var(--about-dur) var(--about-ease); }
-.about-ms:hover .about-ms-marker { background-color: var(--9e-action); animation: about-ring 900ms ease-out 1; }
-.about-ms-now { animation: about-ring 2.4s ease-out infinite; }
-@keyframes about-ring {
-  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--9e-brand) 55%, transparent); }
-  100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--9e-brand) 0%, transparent); }
-}
-.about-ms-line::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background-color: var(--about-accent);
-  transform: scaleY(0);
-  transform-origin: top;
-  transition: transform 500ms var(--about-ease);
-}
-@media (min-width: 1024px) {
-  .about-ms-line::after { transform: scaleX(0); transform-origin: left; }
-}
-.about-ms:hover .about-ms-line::after { transform: none; }
-
-/* Cards with a 1px accent ring on hover (step, workshop, format, review,
-   instructor, Company Profile): a pseudo-element masked to a 1px ring, so the
-   card's own border and layout never change. Solid accent, no gradient. */
+/* ── Cards ─────────────────────────────────────────────────────
+   Opaque objects with a hairline border (format links, instructors,
+   reviews, Company Profile). Hover/focus moves the border to hairline-2;
+   link cards go to the accent. No ring, glow, shadow or lift.
+   position: relative keeps each card's absolutely-positioned sr-only text
+   (the star score) inside the card, so a card in a mobile swipe row is
+   clipped by that row and never widens the page. */
 .about-card {
   position: relative;
-  isolation: isolate;
-  transition: transform var(--about-dur) var(--about-ease), box-shadow var(--about-dur) var(--about-ease),
-              background-size 450ms var(--about-ease);
+  border: 1px solid var(--ab-hairline);
+  transition: border-color var(--ab-dur) var(--ab-ease);
 }
-.about-card::before {
+.about-card:hover,
+.about-card:focus-within { border-color: var(--ab-hairline-2); }
+a.about-card:hover,
+a.about-card:focus-visible { border-color: var(--ab-accent); }
+
+/* Format links: title and arrow to the accent on hover/focus. */
+.about-format-title,
+.about-format-arrow { transition: color var(--ab-dur) var(--ab-ease); }
+.about-format:hover .about-format-title,
+.about-format:focus-visible .about-format-title,
+.about-format:hover .about-format-arrow,
+.about-format:focus-visible .about-format-arrow { color: var(--ab-accent); }
+
+/* ── Instructor cards ──────────────────────────────────────────
+   Round AB-3b: the CARD is back to its AB-2h-fix design (8063faf0) — a dark
+   9e-card object in BOTH themes, a deliberate dark object on the light
+   ground — while the section around it stays AB-3 (no navy band, the
+   two-column header, --ab-* header colours).
+
+   The card's interaction tokens and its 1px accent ring were page-wide
+   before AB-3 (.about-page / .about-card). They are declared HERE, on the
+   card itself, and the ring's selector is the card's own class, so no other
+   card on the page picks up the ring, lift or glow again.
+
+   Below 768px the list is a horizontal row that snaps per card — scroll-snap
+   on THIS row only, never the page — with the scrollbar hidden; the wrapper
+   is a focusable region for keyboards. Hover: accent ring, lift 6px, deeper
+   shadow, photo scales 1.04, program icons lift. Nothing moves under
+   reduced motion. */
+.about-instructor {
+  --about-accent: var(--9e-action);
+  --about-glow: 0 12px 32px -10px color-mix(in srgb, var(--9e-brand) 45%, transparent);
+  --about-dur: 240ms;
+  --about-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  isolation: isolate;
+  transition: transform var(--about-dur) var(--about-ease), box-shadow var(--about-dur) var(--about-ease);
+}
+.dark .about-instructor { --about-accent: var(--9e-brand); }
+.about-instructor::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -2122,61 +2185,11 @@ a.about-pill:focus-visible {
   transition: opacity var(--about-dur) var(--about-ease);
   pointer-events: none;
 }
-.about-card:hover::before,
-.about-card:focus-visible::before { opacity: 1; }
-.about-step:hover,
-.about-workshop:hover { transform: translateY(var(--about-lift)); box-shadow: var(--about-glow); }
-
-/* Step number: solid brand blue, white digit, slight scale. */
-.about-step-num { transition: transform var(--about-dur) var(--about-ease), background-color var(--about-dur) var(--about-ease); }
-.about-step:hover .about-step-num {
-  background-color: var(--about-accent);
-  color: #FFFFFF;
-  transform: scale(1.1);
-}
-
-/* Format link cards: mist→sky sweep from the left, accent ring, title
-   to brand blue (action in light, air in dark — AA on the swept surface),
-   arrow slides 4px, a press scales to 0.98. */
-.about-format {
-  background-image: linear-gradient(90deg, var(--9e-signature-900), var(--9e-signature-900));
-  background-repeat: no-repeat;
-  background-size: 0% 100%;
-}
-.dark .about-format { background-image: linear-gradient(90deg, var(--surface-raised), var(--surface-raised)); }
-.about-format:hover,
-.about-format:focus-visible { background-size: 100% 100%; box-shadow: var(--about-glow); }
-.about-format-title { transition: color var(--about-dur) var(--about-ease); }
-.about-format:hover .about-format-title,
-.about-format:focus-visible .about-format-title { color: var(--9e-action); }
-.dark .about-format:hover .about-format-title,
-.dark .about-format:focus-visible .about-format-title { color: var(--9e-air); }
-.about-format-arrow { display: inline-block; transition: transform var(--about-dur) var(--about-ease); }
-.about-format:hover .about-format-arrow,
-.about-format:focus-visible .about-format-arrow { transform: translateX(4px); }
-.about-format:active { transform: scale(0.98); }
-
+.about-instructor:hover::before,
+.about-instructor:focus-visible::before { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
-  .about-btn-primary, .about-btn-ghost, .about-stemplus-logo, .about-quote-bar,
-  .about-ms-line::after, .about-card, .about-step-num, .about-format-arrow { transition: none; }
-  .about-btn-primary:hover, .about-btn-primary:focus-visible,
-  .about-btn-ghost:hover, .about-btn-ghost:focus-visible,
-  .about-stemplus:hover .about-stemplus-logo,
-  .about-step:hover, .about-workshop:hover,
-  .about-step:hover .about-step-num,
-  .about-format:hover .about-format-arrow, .about-format:focus-visible .about-format-arrow,
-  .about-format:active { transform: none; }
-  .about-stemplus::after { display: none; }
-  .about-ms:hover .about-ms-marker, .about-ms-now { animation: none; }
-  .about-ms-now { box-shadow: 0 0 0 4px color-mix(in srgb, var(--9e-brand) 25%, transparent); }
+  .about-instructor { transition: none; }
 }
-
-/* ── Instructor cards ──────────────────────────────────────────
-   Dark cards on the navy section. Below 768px the list is a horizontal row
-   that snaps per card — scroll-snap on THIS row only, never the page — with
-   the scrollbar hidden; the wrapper is a focusable region for keyboards.
-   Hover (reusing the .about-card accent ring): lift 6px, deeper shadow,
-   photo scales 1.04, program tiles lift. Nothing moves under reduced motion. */
 .about-instructor-scroller {
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -2325,8 +2338,8 @@ a.about-instructor-program:focus-visible { outline: 2px solid var(--9e-air); out
 /* ── Community gallery (bento) + lightbox ──────────────────────
    Desktop: 4 columns × 260px rows, 12px gaps; a wide tile spans 2 columns
    (row 1: wide·narrow·narrow, row 2: narrow·narrow·wide). Below 768px: 2
-   columns × 180px, wide tiles span both. Hover: image scales 1.03 inside its
-   frame and a dark gradient rises at the bottom. Calm: no entrance motion. */
+   columns × 180px, wide tiles span both. Hover/focus: a dark gradient fades
+   in at the bottom (opacity only — nothing moves or scales). */
 .about-bento {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2340,11 +2353,10 @@ a.about-instructor-program:focus-visible { outline: 2px solid var(--9e-air); out
 .about-bento-tile {
   position: relative;
   overflow: hidden;
-  border-radius: 16px;
-  background-color: var(--page-bg-muted);
+  border-radius: 6px;
+  background-color: var(--ab-panel-2);
 }
 .about-bento-tile--wide { grid-column: span 2 / span 2; }
-.about-bento-tile img { transition: transform 400ms var(--about-ease); }
 .about-bento-tile::after {
   content: "";
   position: absolute;
@@ -2352,10 +2364,8 @@ a.about-instructor-program:focus-visible { outline: 2px solid var(--9e-air); out
   pointer-events: none;
   background: linear-gradient(180deg, transparent 55%, rgb(13 27 42 / 0.55) 100%);
   opacity: 0;
-  transition: opacity var(--about-dur) var(--about-ease);
+  transition: opacity var(--ab-dur) var(--ab-ease);
 }
-.about-bento-tile:hover img,
-.about-bento-tile:focus-visible img { transform: scale(1.03); }
 .about-bento-tile:hover::after,
 .about-bento-tile:focus-visible::after { opacity: 1; }
 
@@ -2389,7 +2399,8 @@ a.about-instructor-program:focus-visible { outline: 2px solid var(--9e-air); out
 
 /* ── Training rooms ────────────────────────────────────────────
    4 columns at lg, 2×2 at md, below 768px a swipe row that snaps per card
-   (row only, never the page). Hover: lift 4px, photo scales 1.03. */
+   (row only, never the page). No hover movement. The label gradient on the
+   photo stays: it carries the room name's legibility. */
 .about-room-scroller {
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -2399,7 +2410,7 @@ a.about-instructor-program:focus-visible { outline: 2px solid var(--9e-air); out
   margin-inline: -1rem;
 }
 .about-room-scroller::-webkit-scrollbar { display: none; }
-.about-room-row { display: flex; gap: 1rem; padding: 0.5rem 1rem 1rem; }
+.about-room-row { display: flex; gap: 1rem; padding: 0.25rem 1rem 0.5rem; }
 .about-room-row > li { flex: 0 0 75%; scroll-snap-align: start; }
 @media (min-width: 768px) {
   .about-room-scroller { overflow: visible; scroll-snap-type: none; margin-inline: 0; }
@@ -2413,9 +2424,8 @@ a.about-instructor-program:focus-visible { outline: 2px solid var(--9e-air); out
   position: relative;
   height: 220px;
   overflow: hidden;
-  border-radius: 16px;
+  border-radius: 6px;
   isolation: isolate;
-  transition: transform var(--about-dur) var(--about-ease), box-shadow var(--about-dur) var(--about-ease);
 }
 .about-room::after {
   content: "";
@@ -2425,22 +2435,15 @@ a.about-instructor-program:focus-visible { outline: 2px solid var(--9e-air); out
   pointer-events: none;
   background: linear-gradient(180deg, transparent 40%, rgb(13 27 42 / 0.85) 100%);
 }
-.about-room-photo { transition: transform 400ms var(--about-ease); }
 .about-room-label { position: absolute; left: 1rem; right: 1rem; bottom: 0.875rem; z-index: 1; }
-.about-room:hover { transform: translateY(var(--about-lift)); box-shadow: var(--about-glow); }
-.about-room:hover .about-room-photo { transform: scale(1.03); }
 
 @media (prefers-reduced-motion: reduce) {
-  .about-bento-tile img, .about-bento-tile::after, .about-room, .about-room-photo { transition: none; }
-  .about-bento-tile:hover img, .about-bento-tile:focus-visible img,
-  .about-room:hover, .about-room:hover .about-room-photo { transform: none; }
   .about-lightbox[open] { animation: none; }
 }
 
 /* ── Learner reviews ───────────────────────────────────────────
    Static cards (Home keeps the carousel): 3 columns at lg, 2 at md (the third
-   wraps), below 768px a swipe row that snaps per card on the row only.
-   Hover: lift 4px + the shared .about-card accent ring (no green). */
+   wraps), below 768px a swipe row that snaps per card on the row only. */
 .about-review-scroller {
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -2450,7 +2453,7 @@ a.about-instructor-program:focus-visible { outline: 2px solid var(--9e-air); out
   margin-inline: -1rem;
 }
 .about-review-scroller::-webkit-scrollbar { display: none; }
-.about-review-row { display: flex; gap: 1rem; padding: 0.5rem 1rem 1rem; }
+.about-review-row { display: flex; gap: 1rem; padding: 0.25rem 1rem 0.5rem; }
 .about-review-row > li { flex: 0 0 85%; scroll-snap-align: start; }
 @media (min-width: 768px) {
   .about-review-scroller { overflow: visible; scroll-snap-type: none; margin-inline: 0; }
@@ -2460,30 +2463,25 @@ a.about-instructor-program:focus-visible { outline: 2px solid var(--9e-air); out
 @media (min-width: 1024px) {
   .about-review-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-/* Surface, radius, opacity and dark ring come from Home's ReviewCard classes
-   on the element; this only lays the card out. Hover adds
-   the lift and the accent ring. */
 .about-review {
   display: flex;
   flex-direction: column;
   padding: 28px;
-}
-.about-review:hover { transform: translateY(var(--about-lift)); }
-@media (prefers-reduced-motion: reduce) {
-  .about-review:hover { transform: none; }
+  border-radius: 8px;
+  background-color: var(--ab-panel);
 }
 
-/* ── Closing CTA + Company Profile card ────────────────────────
-   The card is a translucent white panel on navy; hover shows the shared
-   accent ring and lifts the cover 4px (not under reduced motion). */
+/* ── Company Profile card (closing CTA) ────────────────────────
+   An opaque object on the ground. The cover thumbnail keeps its own navy
+   artwork in both themes; nothing lifts. */
 .about-profile-card {
+  position: relative;
   display: flex;
   gap: 1.25rem;
   align-items: flex-start;
   padding: 1.5rem;
-  border-radius: 24px;
-  border: 1px solid rgb(255 255 255 / 0.1);
-  background-color: rgb(255 255 255 / 0.06);
+  border-radius: 8px;
+  background-color: var(--ab-panel);
 }
 .about-profile-cover {
   display: flex;
@@ -2492,19 +2490,9 @@ a.about-instructor-program:focus-visible { outline: 2px solid var(--9e-air); out
   width: 120px;
   height: 170px;
   padding: 0.875rem;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1px solid rgb(255 255 255 / 0.12);
   background: linear-gradient(160deg, var(--9e-navy) 0%, var(--9e-card) 60%, var(--9e-action) 140%);
-  box-shadow: 0 16px 32px -16px rgb(0 0 0 / 0.6);
-  transition: transform var(--about-dur) var(--about-ease);
-}
-.about-profile-card:hover .about-profile-cover,
-.about-profile-card:focus-within .about-profile-cover { transform: translateY(var(--about-lift)); }
-.about-profile-card:focus-within::before { opacity: 1; }
-@media (prefers-reduced-motion: reduce) {
-  .about-profile-cover { transition: none; }
-  .about-profile-card:hover .about-profile-cover,
-  .about-profile-card:focus-within .about-profile-cover { transform: none; }
 }
 
 /* ──────────────────────────────────────────────────────────────
