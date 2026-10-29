@@ -16,6 +16,18 @@
   --9e-air:          #48B0FF;
   --9e-ice:          #F8FAFD;
 
+    /* Hero Gradient — LIGHT MODE */
+  --hero-gradient: linear-gradient(
+    180deg in oklab,
+    #0D1B2A 0%,
+    #0D1B2A 8%,
+    #1A2C3F 24%,
+    #52677D 46%,
+    #A6B5C4 70%,
+    #E3EAF0 88%,
+    var(--page-bg-muted) 100%
+  );
+
   /*
    * Contrast rule (WCAG AA):
    * - Small text/links on white/light bg → use --9e-action (#005CFF, ~5.3:1) ✅
@@ -461,6 +473,16 @@
   --text-primary:   #F8FAFD;
   --text-secondary: #C5CEDA;
   --text-muted:     #5E6A7E;
+
+  --hero-gradient: linear-gradient(
+    180deg in oklab,
+    var(--page-bg) 0%,
+    var(--page-bg) 15%,
+    color-mix(in oklab, var(--page-bg) 80%, var(--page-bg-muted) 20%) 38%,
+    color-mix(in oklab, var(--page-bg) 45%, var(--page-bg-muted) 55%) 68%,
+    color-mix(in oklab, var(--page-bg) 15%, var(--page-bg-muted) 85%) 88%,
+    var(--page-bg-muted) 100%
+  );
 
   /* The faded round chip, on a dark tile. The ink CANNOT be the light value:
      #5E6A7E on the #1A2D42 fill is 2.1:1. #8E97A5 is the darkest — so the most
@@ -1640,6 +1662,7 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
    ────────────────────────────────────────────────────────────── */
 
 :root {
+
   /* ── The base. Read the note above before changing it. ── */
   --9e-fc-base-rgb: 0 3 20;          /* #000314 */
 

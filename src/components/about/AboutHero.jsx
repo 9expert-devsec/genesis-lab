@@ -26,26 +26,29 @@ const PILLS = ['AI', 'DATA', 'AUTOMATION'];
  */
 export default function AboutHero({ pills = PILLS.map((label) => ({ label, href: null })) }) {
   return (
-    <section className="relative isolate overflow-hidden bg-9e-navy px-4 lg:min-h-[840px] lg:px-6">
+    <section className="relative isolate overflow-hidden bg-9e-navy px-4 lg:min-h-[720px] lg:px-6">
       {/* ── Decoration ─────────────────────────────────────────────── */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
         {/* soft blue glow behind the mascot */}
-        <div
+        {/* <div
           className="absolute left-1/2 top-[-120px] h-[560px] w-[560px] -translate-x-1/2 rounded-full lg:left-auto lg:right-[-80px] lg:top-[-80px] lg:h-[820px] lg:w-[820px] lg:translate-x-0"
           style={{
             background:
               'radial-gradient(closest-side, rgba(36,134,255,0.38) 0%, rgba(36,134,255,0.12) 55%, transparent 100%)',
           }}
-        />
+        /> */}
         {/* fog into the Proof section's background */}
-        <div
-          className="absolute inset-x-0 bottom-0 h-[280px] lg:h-[320px]"
-          style={{ background: 'linear-gradient(180deg, transparent 0%, var(--page-bg-muted) 100%)' }}
-        />
+{/* Gradient into the Proof section's background */}
+<div
+  className="pointer-events-none absolute inset-x-0 bottom-0 h-[200px]"
+  style={{
+    background: "var(--hero-gradient)",
+  }}
+/>
       </div>
 
       {/* ── Content ────────────────────────────────────────────────── */}
-      <div className="mx-auto grid max-w-[1200px] gap-8 pb-[200px] pt-10 lg:min-h-[840px] lg:grid-cols-[minmax(0,700px)_480px] lg:items-center lg:justify-between lg:gap-10 lg:pb-[260px] lg:pt-16">
+      <div className="mx-auto grid max-w-[1200px] gap-8 pb-[150px] pt-10 lg:min-h-[720px] lg:grid-cols-[minmax(0,700px)_480px] lg:items-center lg:justify-between lg:gap-10 lg:pb-[200px] lg:pt-16">
         <div className="min-w-0">
           {/* The two lines are spans, and globals.css forces every span to
               Google Sans with !important. The class-level !important below
