@@ -85,11 +85,23 @@ test('the builder\'s comment records the removal — so it is not re-added as a 
 });
 
 test('TestimonialStats.jsx is NOT an offender — marketing copy is out of scope', () => {
-  const stats = readSource('src/app/_components/home/TestimonialStats.jsx');
-  assert.deepEqual(ratingMarkup(stats.code), []);
-  // It really does show the numbers; the guard is not passing because the
-  // file is empty of them.
-  assert.match(stats.raw, /4\.9/);
+  // Round AB-1 moved the strip's numbers out of this file: the Home page
+  // builds them from getSiteStats() and the shared StatsStrip renders them,
+  // with the rating's fallback in statsInput. All four are marketing copy.
+  const files = [
+    'src/app/_components/home/TestimonialStats.jsx',
+    'src/components/stats/StatsStrip.jsx',
+    'src/lib/stats/statItems.js',
+    'src/lib/stats/statsInput.js',
+  ].map(readSource);
+  for (const f of files) assert.deepEqual(ratingMarkup(f.code), []);
+  // They really do show a rating; the guard is not passing because the files
+  // are empty of one.
+  const [stats, strip, items, input] = files;
+  assert.match(stats.raw, /<StatsStrip items=\{stats\}/);
+  assert.match(items.raw, /rating:\s*\{ label: 'รีวิว', kind: 'rating', star: true \}/);
+  assert.match(input.raw, /rating: 5\.0/);
+  assert.match(strip.raw, /ratingParts/);
 });
 
 test('CONTROL: the scanner catches every construction form it bans', () => {

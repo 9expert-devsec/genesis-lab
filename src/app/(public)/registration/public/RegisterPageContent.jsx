@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
+import { getPublicCourseByCode } from '@/lib/api/public-courses';
 import {
   PUBLIC_SCHEDULE_STATUSES,
   listSchedulesByCourse,
@@ -67,7 +67,8 @@ export async function RegisterPageContent({ searchParams, step }) {
   const attempted = courseSlug.toUpperCase();
   let course = null;
   try {
-    course = await getCourseByCodeInsensitive(attempted);
+    // The PUBLIC lookup: a hidden course is a miss, so it bounces like a bad link.
+    course = await getPublicCourseByCode(attempted);
   } catch (err) {
     console.warn(
       `[registration] upstream lookup FAILED for course_id="${attempted}" ` +

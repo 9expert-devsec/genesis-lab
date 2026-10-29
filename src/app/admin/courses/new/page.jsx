@@ -3,6 +3,7 @@ import { listSkills } from '@/lib/api/skills';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { courseListQuery } from '@/lib/courses/adminListQuery';
+import { privateTaxonomyOptions } from '@/lib/courses/privateTaxonomyStore';
 import { CourseForm } from '../_components/CourseForm';
 
 export const metadata = {
@@ -21,7 +22,7 @@ export default async function NewCoursePage({ searchParams }) {
 
   // Best-effort — if any upstream lookup fails, the form still renders;
   // the missing selector just shows an empty state.
-  const [skillsRes, programsRes, coursesRes] = await Promise.allSettled([
+  const [skillsRes, programsRes, coursesRes, taxonomyRes] = await Promise.allSettled([
     listSkills(),
     listPrograms(),
     // includeHidden — this list becomes CourseForm's `allCourses`, which is
@@ -29,7 +30,12 @@ export default async function NewCoursePage({ searchParams }) {
     // Filtered, a prerequisite pointing at a hidden course would render as an
     // empty picker and be dropped on the next save, silently.
     listPublicCourses({ includeHidden: true }),
+    // Custom private programs/skills — the form offers them only while the
+    // type is set to Private Course.
+    privateTaxonomyOptions(),
   ]);
+  const privateTaxonomy =
+    taxonomyRes.status === 'fulfilled' ? taxonomyRes.value : { programs: [], skills: [] };
 
   const skills      = skillsRes.status   === 'fulfilled' ? skillsRes.value.items   ?? [] : [];
   const programs    = programsRes.status === 'fulfilled' ? programsRes.value.items ?? [] : [];
@@ -46,6 +52,7 @@ export default async function NewCoursePage({ searchParams }) {
       programs={programs}
       allCourses={allCourses}
       listQuery={listQuery}
+      privateTaxonomy={privateTaxonomy}
     />
   );
 }

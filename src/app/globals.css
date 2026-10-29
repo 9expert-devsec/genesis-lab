@@ -16,6 +16,18 @@
   --9e-air:          #48B0FF;
   --9e-ice:          #F8FAFD;
 
+    /* Hero Gradient — LIGHT MODE */
+  --hero-gradient: linear-gradient(
+    180deg in oklab,
+    #0D1B2A 0%,
+    #0D1B2A 8%,
+    #1A2C3F 24%,
+    #52677D 46%,
+    #A6B5C4 70%,
+    #E3EAF0 88%,
+    var(--page-bg-muted) 100%
+  );
+
   /*
    * Contrast rule (WCAG AA):
    * - Small text/links on white/light bg → use --9e-action (#005CFF, ~5.3:1) ✅
@@ -461,6 +473,16 @@
   --text-primary:   #F8FAFD;
   --text-secondary: #C5CEDA;
   --text-muted:     #5E6A7E;
+
+  --hero-gradient: linear-gradient(
+    180deg in oklab,
+    var(--page-bg) 0%,
+    var(--page-bg) 15%,
+    color-mix(in oklab, var(--page-bg) 80%, var(--page-bg-muted) 20%) 38%,
+    color-mix(in oklab, var(--page-bg) 45%, var(--page-bg-muted) 55%) 68%,
+    color-mix(in oklab, var(--page-bg) 15%, var(--page-bg-muted) 85%) 88%,
+    var(--page-bg-muted) 100%
+  );
 
   /* The faded round chip, on a dark tile. The ink CANNOT be the light value:
      #5E6A7E on the #1A2D42 fill is 2.1:1. #8E97A5 is the darkest — so the most
@@ -1640,6 +1662,7 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
    ────────────────────────────────────────────────────────────── */
 
 :root {
+
   /* ── The base. Read the note above before changing it. ── */
   --9e-fc-base-rgb: 0 3 20;          /* #000314 */
 
@@ -1885,6 +1908,545 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
   .fc-strip-fade {
     width: 64px;
   }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   /about-us — header offset for in-page jumps
+   ──────────────────────────────────────────────────────────────
+   The page's <main> carries data-page="about"; :has() scopes this to that
+   page's document scroller only. One offset for every #hash jump: the sticky
+   header is h-20 plus its 1px border-b. The section wrappers carry no
+   scroll-margin, so nothing doubles it. No scroll-snap on this page (see
+   round AB-2a-fix: proximity snapping trapped notched mouse wheels). */
+html:has([data-page="about"]) {
+  scroll-padding-top: calc(5rem + 1px);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   /about-us — shared interaction tokens + effects (.about-*)
+   ──────────────────────────────────────────────────────────────
+   Every rule here is scoped to .about-page (the page's <main>) or to an
+   .about-* class used only by components/about, so nothing reaches another
+   route. ONE accent colour, glow, lift and timing for every hover on the
+   page, so the sections feel like one system. No green/lime gradients (round
+   AB-2e): hover borders, bars, fills and highlighted text are the solid
+   --about-accent — 9e-action in light, 9e-brand in dark (the contrast pair).
+
+   Motion rule for the whole block: under prefers-reduced-motion: reduce no
+   element moves (each feature below carries its own reduced-motion block
+   that switches its transforms and keyframes off); colour and opacity
+   changes stay. Every hover is mirrored on
+   :focus-visible where the element can take focus; the global focus ring is
+   not touched. */
+.about-page {
+  --about-accent: var(--9e-action);
+  --about-glow: 0 12px 32px -10px color-mix(in srgb, var(--9e-brand) 45%, transparent);
+  --about-lift: -4px;
+  --about-dur: 240ms;
+  --about-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+.dark .about-page { --about-accent: var(--9e-brand); }
+
+/* ── Client logo wall ──────────────────────────────────────────
+   Static and calm: real colours at full opacity, no hover. The dark-mode
+   knockout comes from Home's ClientLogoImage (Tailwind dark:brightness-0
+   dark:invert, skipped for keepColorOnDark), not from here. Three rows at
+   every width: the server sends at most 18 (6 columns); 4 columns show 12 and
+   3 columns show 9. */
+.about-logo-wall {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  column-gap: 1rem;
+  row-gap: 1.5rem;
+}
+.about-logo-wall > li { flex: 0 0 calc((100% - 2rem) / 3); }
+.about-logo-wall > li:nth-child(n + 10) { display: none; }
+@media (min-width: 768px) {
+  .about-logo-wall > li { flex-basis: calc((100% - 3rem) / 4); }
+  .about-logo-wall > li:nth-child(n + 10) { display: list-item; }
+  .about-logo-wall > li:nth-child(n + 13) { display: none; }
+}
+@media (min-width: 1024px) {
+  .about-logo-wall > li { flex-basis: calc((100% - 5rem) / 6); }
+  .about-logo-wall > li:nth-child(n + 13) { display: list-item; }
+}
+
+.about-logo-cell {
+  display: flex;
+  height: 72px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.75rem;
+}
+.about-logo-img {
+  max-width: 100%;
+  max-height: 32px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+@media (min-width: 1024px) { .about-logo-img { max-height: 44px; } }
+
+/* ── Hero focus pills (links) ──────────────────────────────── */
+.about-pill {
+  display: inline-block;
+  border-radius: 9999px;
+  border: 1px solid var(--9e-brand);
+  padding: 0.375rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--9e-brand);
+  transition: color var(--about-dur) var(--about-ease),
+              box-shadow var(--about-dur) var(--about-ease),
+              transform var(--about-dur) var(--about-ease);
+}
+/* The hero is navy in both themes, so the pill's hover border is the
+   brand blue that reads on navy, solid. */
+a.about-pill:hover,
+a.about-pill:focus-visible {
+  border-color: var(--9e-brand);
+  background-color: color-mix(in srgb, var(--9e-brand) 16%, transparent);
+  color: #FFFFFF;
+  box-shadow: inset 0 0 14px color-mix(in srgb, var(--9e-brand) 40%, transparent);
+  transform: translateY(-2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .about-pill { transition: color var(--about-dur) var(--about-ease), box-shadow var(--about-dur) var(--about-ease); }
+  a.about-pill:hover, a.about-pill:focus-visible { transform: none; }
+}
+
+/* ── Section hovers ────────────────────────────────────────────
+   Highlighted numbers and years turn the solid accent — no gradient text. */
+.about-stat-cell:hover .about-stat-num,
+.about-ms:hover .about-ms-year,
+.about-workshop:hover .about-workshop-num { color: var(--about-accent); }
+
+/* Hero buttons */
+.about-btn-primary {
+  background-image: linear-gradient(90deg, var(--9e-brand) 0%, var(--9e-action) 50%, var(--9e-brand) 100%);
+  background-size: 200% 100%;
+  background-position: 0% 0;
+  transition: background-position 600ms var(--about-ease), transform var(--about-dur) var(--about-ease),
+              box-shadow var(--about-dur) var(--about-ease);
+}
+.about-btn-primary:hover,
+.about-btn-primary:focus-visible {
+  background-position: 100% 0;
+  transform: translateY(-2px);
+  box-shadow: var(--about-glow);
+}
+.about-btn-ghost { transition: background-color var(--about-dur) var(--about-ease), border-color var(--about-dur) var(--about-ease); }
+.about-btn-ghost:hover,
+.about-btn-ghost:focus-visible {
+  background-color: rgb(255 255 255 / 0.1);
+  border-color: #FFFFFF;
+  color: #FFFFFF;
+  transform: translateY(-2px);
+}
+
+/* Stats cells */
+.about-stat-cell { transition: background-color var(--about-dur) var(--about-ease), box-shadow var(--about-dur) var(--about-ease); }
+.about-stat-cell:hover {
+  background-color: var(--surface-hover);
+  box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--9e-brand) 35%, transparent);
+}
+
+/* STEMPLUS card: one diagonal light sheen per hover; logo tiles lift. */
+.about-stemplus { position: relative; overflow: hidden; isolation: isolate; }
+.about-stemplus::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.55) 50%, transparent 70%);
+  transform: translateX(-110%);
+}
+.about-stemplus:hover::after { transform: translateX(110%); transition: transform 1100ms var(--about-ease); }
+.about-stemplus-logo { transition: transform var(--about-dur) var(--about-ease), box-shadow var(--about-dur) var(--about-ease); }
+.about-stemplus:hover .about-stemplus-logo { transform: translateY(-3px); box-shadow: var(--about-glow); }
+
+/* Story quote: the bar widens, in the solid accent. */
+.about-quote-bar { transition: width var(--about-dur) var(--about-ease); }
+.about-quote:hover .about-quote-bar {
+  width: 6px;
+  background-color: var(--about-accent);
+}
+
+/* Timeline */
+.about-ms-marker { transition: background-color var(--about-dur) var(--about-ease); }
+.about-ms:hover .about-ms-marker { background-color: var(--9e-action); animation: about-ring 900ms ease-out 1; }
+.about-ms-now { animation: about-ring 2.4s ease-out infinite; }
+@keyframes about-ring {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--9e-brand) 55%, transparent); }
+  100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--9e-brand) 0%, transparent); }
+}
+.about-ms-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-color: var(--about-accent);
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform 500ms var(--about-ease);
+}
+@media (min-width: 1024px) {
+  .about-ms-line::after { transform: scaleX(0); transform-origin: left; }
+}
+.about-ms:hover .about-ms-line::after { transform: none; }
+
+/* Cards with a 1px accent ring on hover (step, workshop, format, review,
+   instructor, Company Profile): a pseudo-element masked to a 1px ring, so the
+   card's own border and layout never change. Solid accent, no gradient. */
+.about-card {
+  position: relative;
+  isolation: isolate;
+  transition: transform var(--about-dur) var(--about-ease), box-shadow var(--about-dur) var(--about-ease),
+              background-size 450ms var(--about-ease);
+}
+.about-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background-color: var(--about-accent);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--about-dur) var(--about-ease);
+  pointer-events: none;
+}
+.about-card:hover::before,
+.about-card:focus-visible::before { opacity: 1; }
+.about-step:hover,
+.about-workshop:hover { transform: translateY(var(--about-lift)); box-shadow: var(--about-glow); }
+
+/* Step number: solid brand blue, white digit, slight scale. */
+.about-step-num { transition: transform var(--about-dur) var(--about-ease), background-color var(--about-dur) var(--about-ease); }
+.about-step:hover .about-step-num {
+  background-color: var(--about-accent);
+  color: #FFFFFF;
+  transform: scale(1.1);
+}
+
+/* Format link cards: mist→sky sweep from the left, accent ring, title
+   to brand blue (action in light, air in dark — AA on the swept surface),
+   arrow slides 4px, a press scales to 0.98. */
+.about-format {
+  background-image: linear-gradient(90deg, var(--9e-signature-900), var(--9e-signature-900));
+  background-repeat: no-repeat;
+  background-size: 0% 100%;
+}
+.dark .about-format { background-image: linear-gradient(90deg, var(--surface-raised), var(--surface-raised)); }
+.about-format:hover,
+.about-format:focus-visible { background-size: 100% 100%; box-shadow: var(--about-glow); }
+.about-format-title { transition: color var(--about-dur) var(--about-ease); }
+.about-format:hover .about-format-title,
+.about-format:focus-visible .about-format-title { color: var(--9e-action); }
+.dark .about-format:hover .about-format-title,
+.dark .about-format:focus-visible .about-format-title { color: var(--9e-air); }
+.about-format-arrow { display: inline-block; transition: transform var(--about-dur) var(--about-ease); }
+.about-format:hover .about-format-arrow,
+.about-format:focus-visible .about-format-arrow { transform: translateX(4px); }
+.about-format:active { transform: scale(0.98); }
+
+@media (prefers-reduced-motion: reduce) {
+  .about-btn-primary, .about-btn-ghost, .about-stemplus-logo, .about-quote-bar,
+  .about-ms-line::after, .about-card, .about-step-num, .about-format-arrow { transition: none; }
+  .about-btn-primary:hover, .about-btn-primary:focus-visible,
+  .about-btn-ghost:hover, .about-btn-ghost:focus-visible,
+  .about-stemplus:hover .about-stemplus-logo,
+  .about-step:hover, .about-workshop:hover,
+  .about-step:hover .about-step-num,
+  .about-format:hover .about-format-arrow, .about-format:focus-visible .about-format-arrow,
+  .about-format:active { transform: none; }
+  .about-stemplus::after { display: none; }
+  .about-ms:hover .about-ms-marker, .about-ms-now { animation: none; }
+  .about-ms-now { box-shadow: 0 0 0 4px color-mix(in srgb, var(--9e-brand) 25%, transparent); }
+}
+
+/* ── Instructor cards ──────────────────────────────────────────
+   Dark cards on the navy section. Below 768px the list is a horizontal row
+   that snaps per card — scroll-snap on THIS row only, never the page — with
+   the scrollbar hidden; the wrapper is a focusable region for keyboards.
+   Hover (reusing the .about-card accent ring): lift 6px, deeper shadow,
+   photo scales 1.04, program tiles lift. Nothing moves under reduced motion. */
+.about-instructor-scroller {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 1rem;
+  scrollbar-width: none;
+  margin-inline: -1rem;            /* run to the viewport edge so the next card peeks */
+}
+.about-instructor-scroller::-webkit-scrollbar { display: none; }
+.about-instructor-row {
+  display: flex;
+  gap: 1rem;
+  padding: 0.5rem 1rem 1.5rem;     /* room for the hover lift and shadow */
+}
+.about-instructor-row > li { flex: 0 0 85%; scroll-snap-align: start; }
+@media (min-width: 768px) {
+  .about-instructor-scroller { overflow: visible; scroll-snap-type: none; margin-inline: 0; }
+  .about-instructor-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem;
+    padding: 0;
+  }
+  .about-instructor-row > li { flex: none; }
+}
+@media (min-width: 1024px) {
+  .about-instructor-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.about-instructor {
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  padding: 28px 24px;
+  border-radius: 28px;
+  background-color: var(--9e-card);
+  border: 1px solid rgb(255 255 255 / 0.06);
+  box-shadow: 0 24px 48px -24px rgb(0 0 0 / 0.6);
+}
+.about-instructor:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 32px 64px -24px rgb(0 0 0 / 0.75), var(--about-glow);
+}
+.about-instructor-panel {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 336 / 300;
+  border-radius: 22px;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--9e-navy) 0%, var(--9e-action) 62%, var(--9e-brand) 100%);
+}
+/* Head-and-chest crop, one rule for every card. The photos are cut-outs of
+   one height-matched set (heads ~3% below their top edge), but their WIDTHS
+   vary with the arms, so the crop scales by HEIGHT: the frame is 225% of the
+   panel height and 130% of its width (wider than any photo's aspect needs,
+   so object-contain always fits the height), centred, starting 2% below the
+   panel's top. Result: the head top lands ~8–9% down, the head is about a
+   third of the panel width, and the panel's bottom edge cuts mid-chest. */
+.about-instructor-crop {
+  position: absolute;
+  top: 2%;
+  left: 50%;
+  width: 130%;
+  height: 225%;
+  transform: translateX(-50%);
+}
+.about-instructor-photo { transform-origin: 50% 20%; transition: transform var(--about-dur) var(--about-ease); }
+.about-instructor:hover .about-instructor-photo { transform: scale(1.04); }
+.about-instructor-tile {
+  display: flex;
+  height: 32px;
+  width: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background-color: rgb(255 255 255 / 0.1);
+  transition: transform var(--about-dur) var(--about-ease), background-color var(--about-dur) var(--about-ease);
+}
+.about-instructor-tile:hover { transform: translateY(-2px); background-color: rgb(255 255 255 / 0.18); }
+
+@media (prefers-reduced-motion: reduce) {
+  .about-instructor-photo, .about-instructor-tile { transition: none; }
+  .about-instructor:hover,
+  .about-instructor:hover .about-instructor-photo,
+  .about-instructor-tile:hover { transform: none; }
+}
+
+/* ── Community gallery (bento) + lightbox ──────────────────────
+   Desktop: 4 columns × 260px rows, 12px gaps; a wide tile spans 2 columns
+   (row 1: wide·narrow·narrow, row 2: narrow·narrow·wide). Below 768px: 2
+   columns × 180px, wide tiles span both. Hover: image scales 1.03 inside its
+   frame and a dark gradient rises at the bottom. Calm: no entrance motion. */
+.about-bento {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 180px;
+  gap: 12px;
+}
+@media (min-width: 768px) {
+  .about-bento { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 260px; }
+  .about-bento--grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.about-bento-tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  background-color: var(--page-bg-muted);
+}
+.about-bento-tile--wide { grid-column: span 2 / span 2; }
+.about-bento-tile img { transition: transform 400ms var(--about-ease); }
+.about-bento-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 55%, rgb(13 27 42 / 0.55) 100%);
+  opacity: 0;
+  transition: opacity var(--about-dur) var(--about-ease);
+}
+.about-bento-tile:hover img,
+.about-bento-tile:focus-visible img { transform: scale(1.03); }
+.about-bento-tile:hover::after,
+.about-bento-tile:focus-visible::after { opacity: 1; }
+
+.about-lightbox {
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #FFFFFF;
+}
+.about-lightbox::backdrop { background: rgb(7 14 26 / 0.92); }
+.about-lightbox[open] { animation: about-fade 180ms ease-out; }
+@keyframes about-fade { from { opacity: 0; } to { opacity: 1; } }
+.about-lightbox-btn {
+  position: absolute;
+  display: flex;
+  height: 44px;
+  width: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background-color: rgb(255 255 255 / 0.12);
+  color: #FFFFFF;
+}
+.about-lightbox-btn:hover,
+.about-lightbox-btn:focus-visible { background-color: rgb(255 255 255 / 0.24); }
+
+/* ── Training rooms ────────────────────────────────────────────
+   4 columns at lg, 2×2 at md, below 768px a swipe row that snaps per card
+   (row only, never the page). Hover: lift 4px, photo scales 1.03. */
+.about-room-scroller {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 1rem;
+  scrollbar-width: none;
+  margin-inline: -1rem;
+}
+.about-room-scroller::-webkit-scrollbar { display: none; }
+.about-room-row { display: flex; gap: 1rem; padding: 0.5rem 1rem 1rem; }
+.about-room-row > li { flex: 0 0 75%; scroll-snap-align: start; }
+@media (min-width: 768px) {
+  .about-room-scroller { overflow: visible; scroll-snap-type: none; margin-inline: 0; }
+  .about-room-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; padding: 0; }
+  .about-room-row > li { flex: none; }
+}
+@media (min-width: 1024px) {
+  .about-room-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.about-room {
+  position: relative;
+  height: 220px;
+  overflow: hidden;
+  border-radius: 16px;
+  isolation: isolate;
+  transition: transform var(--about-dur) var(--about-ease), box-shadow var(--about-dur) var(--about-ease);
+}
+.about-room::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 40%, rgb(13 27 42 / 0.85) 100%);
+}
+.about-room-photo { transition: transform 400ms var(--about-ease); }
+.about-room-label { position: absolute; left: 1rem; right: 1rem; bottom: 0.875rem; z-index: 1; }
+.about-room:hover { transform: translateY(var(--about-lift)); box-shadow: var(--about-glow); }
+.about-room:hover .about-room-photo { transform: scale(1.03); }
+
+@media (prefers-reduced-motion: reduce) {
+  .about-bento-tile img, .about-bento-tile::after, .about-room, .about-room-photo { transition: none; }
+  .about-bento-tile:hover img, .about-bento-tile:focus-visible img,
+  .about-room:hover, .about-room:hover .about-room-photo { transform: none; }
+  .about-lightbox[open] { animation: none; }
+}
+
+/* ── Learner reviews ───────────────────────────────────────────
+   Static cards (Home keeps the carousel): 3 columns at lg, 2 at md (the third
+   wraps), below 768px a swipe row that snaps per card on the row only.
+   Hover: lift 4px + the shared .about-card accent ring (no green). */
+.about-review-scroller {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 1rem;
+  scrollbar-width: none;
+  margin-inline: -1rem;
+}
+.about-review-scroller::-webkit-scrollbar { display: none; }
+.about-review-row { display: flex; gap: 1rem; padding: 0.5rem 1rem 1rem; }
+.about-review-row > li { flex: 0 0 85%; scroll-snap-align: start; }
+@media (min-width: 768px) {
+  .about-review-scroller { overflow: visible; scroll-snap-type: none; margin-inline: 0; }
+  .about-review-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; padding: 0; }
+  .about-review-row > li { flex: none; }
+}
+@media (min-width: 1024px) {
+  .about-review-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* Surface, radius, opacity and dark ring come from Home's ReviewCard classes
+   on the element; this only lays the card out. Hover adds
+   the lift and the accent ring. */
+.about-review {
+  display: flex;
+  flex-direction: column;
+  padding: 28px;
+}
+.about-review:hover { transform: translateY(var(--about-lift)); }
+@media (prefers-reduced-motion: reduce) {
+  .about-review:hover { transform: none; }
+}
+
+/* ── Closing CTA + Company Profile card ────────────────────────
+   The card is a translucent white panel on navy; hover shows the shared
+   accent ring and lifts the cover 4px (not under reduced motion). */
+.about-profile-card {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  padding: 1.5rem;
+  border-radius: 24px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background-color: rgb(255 255 255 / 0.06);
+}
+.about-profile-cover {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 120px;
+  height: 170px;
+  padding: 0.875rem;
+  border-radius: 12px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: linear-gradient(160deg, var(--9e-navy) 0%, var(--9e-card) 60%, var(--9e-action) 140%);
+  box-shadow: 0 16px 32px -16px rgb(0 0 0 / 0.6);
+  transition: transform var(--about-dur) var(--about-ease);
+}
+.about-profile-card:hover .about-profile-cover,
+.about-profile-card:focus-within .about-profile-cover { transform: translateY(var(--about-lift)); }
+.about-profile-card:focus-within::before { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .about-profile-cover { transition: none; }
+  .about-profile-card:hover .about-profile-cover,
+  .about-profile-card:focus-within .about-profile-cover { transform: none; }
 }
 
 /* ──────────────────────────────────────────────────────────────

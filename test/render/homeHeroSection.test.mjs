@@ -109,7 +109,8 @@ test('the primary CTA carries an arrow glyph, not just text', () => {
 
 test('both hero images are present', () => {
   assert.match(html, /<img[^>]*src="\/hero-img\/background\.png"/);
-  assert.match(html, /<img[^>]*src="\/hero-img\/nongnai\.png"/);
+  // the astronaut on the moon (nongnai.png was retired with that pose)
+  assert.match(html, /<img[^>]*src="\/hero-img\/nongnai-to-the-moon\.png"/);
 });
 
 test('the switch-back sentinel is rendered, under the shared id', () => {

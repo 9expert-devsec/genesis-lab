@@ -114,7 +114,10 @@ test('the course detail route attaches aliases to related and previous courses',
   // Both are EMBEDDED in upstream's detail response and never pass through
   // listPublicCourses, so nothing else would have attached one.
   const { code, withImports } = readSource('src/app/(public)/[...slug]/page.jsx');
-  assert.match(withImports, /import \{ attachAliases, loadCourseAliasMap \}/);
+  assert.match(
+    withImports,
+    /import \{[^}]*\battachAliases\b[^}]*\bloadCourseAliasMap\b[^}]*\} from '@\/lib\/courses\/hiddenCourses'/
+  );
   // ── ATTACHED IN THE ASYNC PAGE, PASSED DOWN AS A PROP ────────────────────
   // Not inside CourseDetail: that component is SYNCHRONOUS, and an `await`
   // there compiles to "await isn't allowed in a non-async function". Nothing

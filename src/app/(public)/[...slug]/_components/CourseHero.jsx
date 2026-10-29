@@ -5,6 +5,9 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Award, Clock, MonitorPlay, ChevronLeft, ChevronRight } from 'lucide-react';
 import { INHOUSE_ONLY_LABEL, isInhouseOnlyPrice } from '@/lib/coursePriceLabel';
+import { PDFDownload } from './PDFDownload';
+
+const COURSE_LEVEL_LABEL = { 1: 'Beginner', 2: 'Intermediate', 3: 'Advanced' };
 
 /**
  * Hero for the course detail page.
@@ -18,7 +21,21 @@ import { INHOUSE_ONLY_LABEL, isInhouseOnlyPrice } from '@/lib/coursePriceLabel';
  * skill's color (fallback). Dark and saturated colors lighten
  * aggressively so the gradient never competes with the white card.
  */
-export function CourseHero({ course, heroColor, gallery = [] }) {
+/**
+ * `isPrivate` — a genesis-only private course, reached by a link sent to one
+ * client. Its `course` is the reduced view (no price fields at all), and this
+ * flag drops the parts of the card that only make sense for a course on sale:
+ * the time-of-day line, the price and its note, and both quotation buttons.
+ * Code, title, days/hours, the Public/Inhouse pills, Workshop/e-Certificate and
+ * the cover/video stay.
+ *
+ * And it ADDS what fills the card those removals emptied (round 3b): the
+ * program chip (logo + name, from privateProgramView), the teaser clamped to
+ * three lines, a level pill, and the Course Outline downloads where the
+ * quotation buttons sit on a course on sale. All four are private-only, so a
+ * normal course's card is exactly what it was.
+ */
+export function CourseHero({ course, heroColor, gallery = [], isPrivate = false }) {
   // Build ordered slide list for the cover zone:
   //  1. YouTube items (from gallery, in order)
   //  2. Cover image (course_cover_url) — always before image slides
@@ -64,6 +81,9 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
   const hours =
     course.course_traininghours ??
     (course.course_trainingdays ? course.course_trainingdays * 6 : null);
+
+  // Private only: a normal course's type row is unchanged.
+  const levelLabel = isPrivate ? COURSE_LEVEL_LABEL[Number(course.course_levels)] ?? null : null;
 
   const hasPromotion =
     course.course_netprice != null &&
@@ -150,6 +170,21 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
               mobile would not have bought it. */}
           <div className="min-w-0 flex flex-col justify-center bg-[var(--surface-raised)] p-6 lg:w-[40%] lg:flex-none lg:rounded-2xl lg:px-8 lg:py-6 lg:shadow-9e-sm lg:dark:ring-1 lg:dark:ring-inset lg:dark:ring-white/10">
             <div className="w-full">
+              {isPrivate && course.program?.program_name && (
+                <span className="mb-2 inline-flex max-w-full items-center gap-1.5 rounded-full border border-[var(--surface-divider)] bg-[var(--surface-raised)] px-3 py-1 text-xs font-bold text-[var(--text-secondary)]">
+                  {course.program.programiconurl && (
+                    <Image
+                      src={course.program.programiconurl}
+                      alt=""
+                      width={16}
+                      height={16}
+                      className="h-4 w-4 shrink-0 object-contain"
+                    />
+                  )}
+                  <span className="truncate">{course.program.program_name}</span>
+                </span>
+              )}
+
               <p className="mb-1 text-xs font-bold  tracking-wider text-[var(--text-secondary)]">
                 {course.course_id}
               </p>
@@ -158,13 +193,19 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                 {course.course_name}
               </h1>
 
+              {isPrivate && course.course_teaser && (
+                <p className="mb-4 line-clamp-3 text-sm text-[var(--text-secondary)]">
+                  {course.course_teaser}
+                </p>
+              )}
+
               <div className="mb-4 flex flex-wrap items-center gap-1.5 text-lg text-[var(--text-secondary)]">
                 <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                 <span className="font-bold text-[var(--text-primary)]">
                   {course.course_trainingdays} วัน
                   {hours ? ` (${hours} ชม.)` : ''}
                 </span>
-                <span>/ ช่วงเวลา 9:00 - 16:00 น.</span>
+                {!isPrivate && <span>/ ช่วงเวลา 9:00 - 16:00 น.</span>}
               </div>
 
               {/* COURSE TYPE, from the two flags the admin actually edits.
@@ -184,8 +225,13 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                   old markup blurred them — it labelled `course_type_public` as
                   "Classroom" and rendered "Hybrid" as an unconditional literal
                   tied to no field at all. */}
-              {(course.course_type_public || course.course_type_inhouse) && (
+              {(levelLabel || course.course_type_public || course.course_type_inhouse) && (
                 <div className="mb-4 flex flex-wrap gap-2">
+                  {levelLabel && (
+                    <span className="rounded-full border border-9e-slate-lt-400 dark:border-9e-slate-dp-400 bg-white px-3 py-1 text-xs font-bold text-9e-slate-dp-50">
+                      {levelLabel}
+                    </span>
+                  )}
                   {course.course_type_public && (
                     <span className="rounded-full border border-9e-brand bg-white px-3 py-1 text-xs font-bold text-9e-action">
                       Public
@@ -199,6 +245,8 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                 </div>
               )}
 
+              {!isPrivate && (
+              <>
               <div className="mb-1 flex flex-wrap items-baseline gap-2">
                 {isInhouseOnly ? (
                   /* The widest slot the label has to fit: 3xl extrabold, and
@@ -231,6 +279,8 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
               <p className="mb-4 text-xs text-[var(--text-secondary)]">
                 {isInhouseOnly ? '*รับเฉพาะ InHouse Training เท่านั้น' : '*ราคาดังกล่าวยังไม่รวมภาษีมูลค่าเพิ่ม'}
               </p>
+              </>
+              )}
 
               {(course.course_workshop_status ||
                 course.course_certificate_status) && (
@@ -256,6 +306,7 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                 </div>
               )}
 
+              {!isPrivate && (
               <div className="flex flex-row gap-3">
                 {!isInhouseOnly && (
                   <Link
@@ -272,6 +323,12 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                   ขอใบเสนอราคา Inhouse
                 </Link>
               </div>
+              )}
+
+              {/* Where the quotation buttons sit on a course on sale. The same
+                  component as the sidebar box, so only languages with a file
+                  render, and it returns null when neither has one. */}
+              {isPrivate && <PDFDownload course={course} layout="row" />}
             </div>
           </div>
 

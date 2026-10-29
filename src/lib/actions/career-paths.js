@@ -20,6 +20,8 @@ import { requireAdmin } from '@/lib/actions/auth';
 import { syncCareerPaths } from '@/lib/career-paths/syncCareerPaths';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
+import { loadHiddenCourseIds } from '@/lib/courses/hiddenCourses';
+import { dropHiddenCurriculumCourses } from '@/lib/career-paths/dropHiddenCurriculum';
 import {
   canonicaliseCurriculumCodes,
   maxDateOf,
@@ -600,8 +602,14 @@ export async function updateCareerPathCourses(id, payload = {}) {
  * the upstream ever loosens.
  */
 export async function getCareerPathWithSchedules(slug) {
-  const cp = await getCareerPathForRegistration(slug);
-  if (!cp) return null;
+  const [stored, hidden] = await Promise.all([
+    getCareerPathForRegistration(slug),
+    loadHiddenCourseIds(),
+  ]);
+  if (!stored) return null;
+  // The public registration form AND submit validation read this, so a hidden
+  // course is neither offered nor accepted as a pick.
+  const cp = dropHiddenCurriculumCourses(stored, hidden);
 
   // Flatten unique course codes out of the curriculum tree.
   const codes = new Set();

@@ -26,7 +26,8 @@ import { z } from 'zod';
 
 import { getOnlineCourses } from '@/lib/api/online-courses';
 import { listPrograms } from '@/lib/api/programs';
-import { getCourseByCodeInsensitive, listPublicCourses } from '@/lib/api/public-courses';
+import { getPublicCourseByCode, listPublicCourses } from '@/lib/api/public-courses';
+import { loadHiddenCourseIds } from '@/lib/courses/hiddenCourses';
 import { listSchedules } from '@/lib/api/schedules';
 import { listSkills } from '@/lib/api/skills';
 import { buildPromotionsCorpus } from '@/lib/corpus/promotions';
@@ -67,7 +68,11 @@ export const productionDeps = {
   // The dep is named for what a tool asks of it; the module's own export is
   // `getOnlineCourses`. Aliased here rather than renamed at nine call sites.
   listOnlineCourses: getOnlineCourses,
-  getCourseByCodeInsensitive,
+  // The tools ask for "the case-insensitive resolver"; what they get is the
+  // PUBLIC one, which answers a hidden course with null — the same answer as
+  // an unknown code. The plain resolver's direct leg never saw the hidden flag.
+  getCourseByCodeInsensitive: getPublicCourseByCode,
+  loadHiddenCourseIds,
   listSchedules,
   buildPromotionsCorpus,
 };

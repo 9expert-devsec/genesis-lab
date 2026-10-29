@@ -9,8 +9,10 @@ import {
   updateInstructor,
   deleteInstructor,
 } from '@/lib/actions/instructors';
+import { MAX_PROGRAMS, appendProgramsToForm } from '@/lib/instructors/instructorPrograms';
+import { MAX_SPECIALTIES, MAX_SPECIALTY_LENGTH } from '@/lib/instructors/instructorSpecialties';
 
-export function InstructorsAdminClient({ instructors }) {
+export function InstructorsAdminClient({ instructors, programs = [], programsUnavailable = false }) {
   const router = useRouter();
   const [editing, setEditing] = useState(null); // null | 'new' | <instructor>
   const [busyId, setBusyId] = useState(null);
@@ -159,6 +161,8 @@ export function InstructorsAdminClient({ instructors }) {
       {editing && (
         <InstructorModal
           instructor={editing === 'new' ? null : editing}
+          programs={programs}
+          programsUnavailable={programsUnavailable}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -170,7 +174,7 @@ export function InstructorsAdminClient({ instructors }) {
   );
 }
 
-function InstructorModal({ instructor, onClose, onSaved }) {
+function InstructorModal({ instructor, programs, programsUnavailable, onClose, onSaved }) {
   const isEdit = Boolean(instructor?._id);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState(null);
@@ -184,6 +188,9 @@ function InstructorModal({ instructor, onClose, onSaved }) {
   const [specialties, setSpecialties] = useState(instructor?.specialties ?? []);
   const [tagInput, setTagInput]       = useState('');
   const [isActive, setIsActive]       = useState(instructor?.is_active !== false);
+  // MSDB program _ids in selection order, starting from what MSDB holds (the
+  // page resolved it). Always sent back on save — see appendProgramsToForm.
+  const [programIds, setProgramIds]   = useState(instructor?.programs ?? []);
 
   function handleFileChange(e) {
     const file = e.target.files?.[0];
@@ -214,6 +221,7 @@ function InstructorModal({ instructor, onClose, onSaved }) {
     if (imageFile) fd.set('image', imageFile);
     else if (imagePreview) fd.set('image_url', imagePreview);
     for (const s of specialties) fd.append('specialties', s);
+    appendProgramsToForm(fd, programIds);
     if (isActive) fd.set('is_active', 'on');
 
     startTransition(async () => {
@@ -310,6 +318,9 @@ function InstructorModal({ instructor, onClose, onSaved }) {
 
           <div>
             <span className="text-sm font-medium text-9e-navy dark:text-white">ความเชี่ยวชาญ</span>
+            <p className="mt-0.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              แสดงบนการ์ดอาจารย์ในหน้าเกี่ยวกับเรา คั่นด้วย | · สูงสุด {MAX_SPECIALTIES} รายการ รายการละไม่เกิน {MAX_SPECIALTY_LENGTH} ตัวอักษร
+            </p>
             <div className="mt-1 flex gap-1">
               <input
                 type="text"
@@ -338,6 +349,13 @@ function InstructorModal({ instructor, onClose, onSaved }) {
               </div>
             )}
           </div>
+
+          <ProgramPicker
+            programs={programs}
+            unavailable={programsUnavailable}
+            value={programIds}
+            onChange={setProgramIds}
+          />
 
           <label className="flex items-center gap-2 text-sm text-9e-navy dark:text-white">
             <input
@@ -373,3 +391,79 @@ function InstructorModal({ instructor, onClose, onSaved }) {
 
 const inputCls =
   'mt-1 w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white';
+
+/**
+ * "โปรแกรมที่สอน": chips in selection order (removable) above the list of
+ * programs still available to add. Order = the order clicked; no reordering.
+ */
+function ProgramPicker({ programs, unavailable, value, onChange }) {
+  const byId = new Map(programs.map((p) => [p.id, p]));
+  const selected = value.map((id) => byId.get(id) ?? { id, name: id, iconUrl: '' });
+  const available = programs.filter((p) => !value.includes(p.id));
+  const full = value.length >= MAX_PROGRAMS;
+
+  return (
+    <div>
+      <span className="text-sm font-medium text-9e-navy dark:text-white">โปรแกรมที่สอน</span>
+      <p className="mt-0.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+        ไอคอนเหล่านี้จะแสดงบนการ์ดอาจารย์ในหน้าเกี่ยวกับเรา · เลือกได้สูงสุด {MAX_PROGRAMS} รายการ ตามลำดับที่เลือก
+      </p>
+      {unavailable && (
+        <p className="mt-1 text-xs text-red-600">
+          โหลดรายการโปรแกรมไม่ได้ — ค่าเดิมจะถูกเก็บไว้ตามเดิม
+        </p>
+      )}
+
+      {selected.length > 0 && (
+        <ol className="mt-2 flex flex-wrap gap-1.5">
+          {selected.map((p, i) => (
+            <li
+              key={p.id}
+              className="inline-flex items-center gap-1.5 rounded-full bg-9e-ice py-0.5 pl-1 pr-2 text-[11px] text-9e-navy dark:bg-[#0D1B2A] dark:text-white"
+            >
+              <span className="text-9e-slate-dp-50">{i + 1}.</span>
+              {p.iconUrl && <img src={p.iconUrl} alt="" className="h-4 w-4 object-contain" />}
+              {p.name}
+              <button
+                type="button"
+                onClick={() => onChange(value.filter((id) => id !== p.id))}
+                aria-label={`เอา ${p.name} ออก`}
+                className="text-9e-slate-dp-50 hover:text-red-500"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {!unavailable && (
+        <div className="mt-2 max-h-40 overflow-y-auto rounded-9e-md border border-[var(--surface-border)] p-1">
+          {available.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-9e-slate-dp-50">เลือกครบทุกโปรแกรมแล้ว</p>
+          ) : (
+            <ul className="grid grid-cols-2 gap-1">
+              {available.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    disabled={full}
+                    onClick={() => onChange([...value, p.id])}
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs text-9e-navy hover:bg-9e-ice disabled:cursor-not-allowed disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
+                  >
+                    {p.iconUrl ? (
+                      <img src={p.iconUrl} alt="" className="h-5 w-5 shrink-0 object-contain" />
+                    ) : (
+                      <span className="h-5 w-5 shrink-0" />
+                    )}
+                    <span className="truncate">{p.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

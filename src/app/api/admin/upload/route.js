@@ -59,6 +59,10 @@ const ALLOWED_FOLDERS = new Set([
   // the worst failure available here. It also carries its own, stricter rules
   // (see uploadRules.js): JPG/PNG/WebP only, no SVG, no PDF, 2 MB.
   'avatars',
+  // Logos of custom PRIVATE programs/skills (/admin/courses/private-taxonomy).
+  // Same reason as 'avatars': unlisted, the upload "succeeds" into `uploads`.
+  // Default rule (image or PDF, 5 MB); the field's file picker asks for images.
+  'private-taxonomy',
   'uploads',
 ]);
 

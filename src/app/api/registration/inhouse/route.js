@@ -7,6 +7,7 @@ import { sendInhouseRegistrationEmails } from '@/lib/email/template-senders/inho
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { refNo } from '@/lib/refNo';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
+import { namesHiddenCourse, HIDDEN_COURSE_RESPONSE } from '@/lib/registration/hiddenCourseGuard';
 
 /**
  * Cover image AND display title for the first course of interest, from ONE
@@ -54,6 +55,12 @@ export async function POST(req) {
   }
 
   const data = parsed.data;
+
+  // A hidden course takes no new quote requests — the picker no longer offers
+  // it, and a hand-built POST must not get round that.
+  if (await namesHiddenCourse(data.coursesInterested)) {
+    return NextResponse.json(HIDDEN_COURSE_RESPONSE, { status: 404 });
+  }
 
   const headersList = await headers();
   const ipAddress =

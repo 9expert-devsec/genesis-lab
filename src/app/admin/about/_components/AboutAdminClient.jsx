@@ -13,6 +13,13 @@ import {
   toggleInstructorActive,
   saveAboutConfig,
 } from '@/lib/actions/about';
+import {
+  FALLBACK_STATS,
+  STAT_FIELDS,
+  parseStatField,
+  parseStatsInput,
+} from '@/lib/stats/statsInput';
+import { formatRating, formatStat } from '@/lib/stats/formatStat';
 
 export function AboutAdminClient({ initialInstructors, initialConfig }) {
   const [tab, setTab] = useState('instructors');
@@ -440,19 +447,40 @@ function ConfigSection({ initialConfig }) {
     description: initialConfig?.description ?? '',
     mission:     initialConfig?.mission ?? '',
     vision:      initialConfig?.vision ?? '',
+    // No input any more — no page renders it. Kept in the form state so a save
+    // writes the stored value back unchanged instead of clearing it.
+    statsAsOf:   initialConfig?.statsAsOf ?? '',
   });
+  // Raw strings, so a half-typed value is kept as typed; parsed on every render.
+  const [stats, setStats] = useState(() =>
+    Object.fromEntries(
+      STAT_FIELDS.map(({ key }) => {
+        const v = initialConfig?.stats?.[key];
+        return [key, typeof v === 'number' ? String(v) : ''];
+      })
+    )
+  );
   const [pending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState(null);
+  const [serverErrors, setServerErrors] = useState({});
 
   const update = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const updateStat = (k) => (e) => {
+    const value = e.target.value;
+    setStats((s) => ({ ...s, [k]: value }));
+    setServerErrors((errs) => ({ ...errs, [k]: undefined }));
+  };
+
+  const parsed = parseStatsInput(stats);
 
   function handleSave() {
     setFeedback(null);
     startTransition(async () => {
-      const result = await saveAboutConfig(form);
+      const result = await saveAboutConfig({ ...form, stats });
       if (result?.ok) {
         setFeedback({ type: 'ok', message: 'บันทึกแล้ว' });
       } else {
+        setServerErrors(result?.fieldErrors ?? {});
         setFeedback({ type: 'err', message: result?.error ?? 'บันทึกไม่สำเร็จ' });
       }
     });
@@ -460,7 +488,7 @@ function ConfigSection({ initialConfig }) {
 
   return (
     <div className="space-y-4 rounded-2xl border border-[var(--surface-border)] bg-white p-6 dark:bg-[#111d2c]">
-      <Field label="Tagline" hint="ข้อความใต้หัวข้อในหน้า hero">
+      <Field label="Tagline" hint="แสดงในกล่องคำคมของส่วน 'เรื่องราวของเรา'">
         <input
           type="text"
           value={form.tagline}
@@ -496,11 +524,53 @@ function ConfigSection({ initialConfig }) {
         />
       </Field>
 
+      <div className="space-y-4 border-t border-[var(--surface-border)] pt-4">
+        <div>
+          <p className="text-sm font-bold text-9e-navy dark:text-white">ตัวเลขสถิติ</p>
+          <p className="mt-0.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+            แสดงบนหน้าแรก หน้าเกี่ยวกับเรา และหน้าผลงาน · เว้นว่างเพื่อใช้ค่าเริ่มต้น ·
+            จำนวนหลักสูตรและ Masterclass นับอัตโนมัติ แก้ไขที่นี่ไม่ได้
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {STAT_FIELDS.map(({ key, label, kind }) => {
+            const { value, error } = parseStatField(kind, stats[key]);
+            const shownError = error ?? serverErrors[key];
+            const fmt = kind === 'rating' ? formatRating : formatStat;
+            return (
+              <Field key={key} label={label}>
+                <input
+                  type="text"
+                  inputMode={kind === 'rating' ? 'decimal' : 'numeric'}
+                  value={stats[key]}
+                  onChange={updateStat(key)}
+                  placeholder={String(FALLBACK_STATS[key])}
+                  aria-invalid={shownError ? true : undefined}
+                  className={
+                    'w-full rounded-lg border bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:bg-[#0D1B2A] dark:text-white ' +
+                    (shownError ? 'border-red-500' : 'border-gray-200 dark:border-[#1e3a5f]')
+                  }
+                />
+                <p className={'mt-1 text-xs ' + (shownError ? 'text-red-600' : 'text-9e-slate-dp-50 dark:text-[#94a3b8]')}>
+                  {shownError
+                    ? shownError
+                    : value === null
+                      ? `ใช้ค่าเริ่มต้น · แสดงเป็น ${fmt(FALLBACK_STATS[key])}`
+                      : `แสดงเป็น ${kind === 'rating' ? '★' : ''}${fmt(value)}`}
+                </p>
+              </Field>
+            );
+          })}
+        </div>
+
+      </div>
+
       <div className="flex items-center gap-2 pt-2">
         <button
           type="button"
           onClick={handleSave}
-          disabled={pending}
+          disabled={pending || !parsed.ok}
           className="rounded-lg bg-9e-action px-5 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
         >
           {pending ? 'กำลังบันทึก…' : 'บันทึก'}

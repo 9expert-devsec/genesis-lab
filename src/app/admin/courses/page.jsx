@@ -11,7 +11,10 @@ import { listPrograms } from '@/lib/api/programs';
 import { listCourseExtensions } from '@/lib/actions/course-extensions';
 import { loadCourseOrder } from '@/lib/courses/courseOrderStore';
 import { buildProgramIndex } from '@/lib/courses/programAccent';
+import { listPrivateCourses } from '@/lib/courses/privateCourseStore';
+import { courseListQuery } from '@/lib/courses/adminListQuery';
 import { CoursesAdminClient } from './_components/CoursesAdminClient';
+import { PrivateCoursesTable } from './_components/PrivateCoursesTable';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -37,13 +40,15 @@ export default async function AdminCoursesPage({ searchParams }) {
   const program = one('program');
   const type = one('type');
 
-  const [coursesRes, extensionsRes, programsRes] = await Promise.allSettled([
+  const [coursesRes, extensionsRes, programsRes, privateRes] = await Promise.allSettled([
     // includeHidden — this IS the management table. It carries the สถานะ
     // column that says เผยแพร่ / ซ่อน, so a hidden course missing from it would
     // remove the only control that can un-hide it.
     listPublicCourses({ includeHidden: true }),
     listCourseExtensions(),
     listPrograms(),
+    // genesis-only private courses — never in the MSDB list above.
+    listPrivateCourses(),
   ]);
 
   /**
@@ -71,6 +76,30 @@ export default async function AdminCoursesPage({ searchParams }) {
   const extByCourseId = Object.fromEntries(
     extensions.map((ext) => [ext.courseId, ext])
   );
+
+  // The private section honours the same search and type filter as the main
+  // table; plain objects only, so they can cross into the client component.
+  const needle = q.trim().toLowerCase();
+  const privateRows = (privateRes.status === 'fulfilled' ? privateRes.value : [])
+    .filter((c) =>
+      (!needle
+        || (c.course_name || '').toLowerCase().includes(needle)
+        || (c.course_id || '').toLowerCase().includes(needle))
+      && (!type
+        || type === 'private'
+        || (type === 'public' && c.course_type_public)
+        || (type === 'inhouse' && c.course_type_inhouse))
+    )
+    .map((c) => ({
+      _id: String(c._id),
+      course_id: c.course_id,
+      course_name: c.course_name ?? '',
+      urlAlias: extByCourseId[c.course_id]?.urlAlias ?? '',
+      isPublished: extByCourseId[c.course_id]?.isPublished,
+    }));
+  if (privateRes.status === 'rejected') {
+    console.error('[admin/courses] private course read failed', privateRes.reason?.message);
+  }
 
   // Maps → plain objects, because these cross the server/client boundary. Keyed
   // by `program_id` (the CODE) to match ProgramOrder.programId and
@@ -127,6 +156,12 @@ export default async function AdminCoursesPage({ searchParams }) {
         program={program}
         type={type}
       />
+
+      {/* A program filter narrows to MSDB programs, which private courses do
+          not belong to in the list's sense — the section steps aside. */}
+      {!program && (
+        <PrivateCoursesTable rows={privateRows} listQuery={courseListQuery(sp)} />
+      )}
     </div>
   );
 }

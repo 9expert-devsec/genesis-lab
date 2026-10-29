@@ -85,8 +85,6 @@ const REVIEWED = new Map([
     'the URL, EMAIL and PHONE sources are module-level literals'],
   ['src/lib/cookieConsentStore.js',
     'built from the CONSENT_COOKIE constant, which is a literal'],
-  ['src/components/about/InstructorSection2.jsx',
-    'iterates the hardcoded KEYWORDS list; the instructor title is the HAYSTACK, not the pattern'],
   ['src/lib/pageBuilder/scopeCss.js',
     'sectionId is a generated UUID and isValidSectionId refuses anything else '
     + 'before it reaches the selector — fail-closed, and tested in its own file'],

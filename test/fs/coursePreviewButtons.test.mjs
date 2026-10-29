@@ -181,6 +181,7 @@ test('the save-and-preview button is gated on !isCreate, close enough to bind to
   const btnIdx = FORM.code.indexOf('data-intent="save-and-preview"');
   assert.notEqual(btnIdx, -1);
   const lookbehind = FORM.code.slice(Math.max(0, btnIdx - 200), btnIdx);
+  // Private courses get it too since round 3 — their public page resolves.
   assert.match(lookbehind, /\{!isCreate && \(/, 'no nearby !isCreate gate precedes the save-and-preview button');
 });
 

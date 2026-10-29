@@ -13,6 +13,7 @@ import { loadCourseOrder } from '@/lib/courses/courseOrderStore';
 import { orderCoursesInCategory, orderCoursesGlobally } from '@/lib/courses/courseOrder';
 import {
   dropHiddenCourses,
+  isHiddenCourse,
   loadHiddenCourseIds,
   loadCourseAliasMap,
   attachAliases,
@@ -290,4 +291,35 @@ export async function getCourseByCodeInsensitive(
   );
 
   return fetchByCode(match.course_id);
+}
+
+/**
+ * getCourseByCodeInsensitive, for PUBLIC callers: a hidden course is `null`,
+ * exactly like a code that does not exist.
+ *
+ * ── WHY THE PLAIN RESOLVER IS NOT ENOUGH ────────────────────────────────────
+ * Its direct `?course_id=` leg is an upstream lookup and has never heard of
+ * `CourseExtension.isPublished`, so a hidden course with an ordinary-case code
+ * resolves through it untouched. Only the list fallback is filtered. Every
+ * public by-code surface — registration, checkout pricing, the MCP tools, the
+ * mega-menu hover card, page-builder course cards — went through one of those
+ * two upstream getters and so kept serving a course that the listings had
+ * already dropped.
+ *
+ * Same predicate as listPublicCourses (`isHiddenCourse` over the one
+ * per-request extension read), so the two cannot disagree. Both codes are
+ * checked: the one asked for and the one upstream returned, because the stored
+ * extension code can lag an upstream rename and either may be the one on file.
+ *
+ * Admin callers keep using getCourseByCodeInsensitive / getCourseByCode.
+ */
+export async function getPublicCourseByCode(
+  courseId,
+  { fetchCourse = getCourseByCodeInsensitive, loadHidden = loadHiddenCourseIds } = {}
+) {
+  if (!courseId) return null;
+  const [course, hidden] = await Promise.all([fetchCourse(courseId), loadHidden()]);
+  if (!course) return null;
+  if (isHiddenCourse(hidden, course.course_id) || isHiddenCourse(hidden, courseId)) return null;
+  return course;
 }

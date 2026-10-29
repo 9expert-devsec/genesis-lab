@@ -14,6 +14,7 @@ import { buildEarlyBirdTag } from '@/lib/registration/build-public';
 import { getEarlyBirdByCourse } from '@/lib/actions/course-promos';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { refNo } from '@/lib/refNo';
+import { namesHiddenCourse, HIDDEN_COURSE_RESPONSE } from '@/lib/registration/hiddenCourseGuard';
 
 /**
  * The course cover for the confirmation email, or '' — NEVER a throw.
@@ -50,6 +51,11 @@ export async function POST(req) {
   }
 
   const data = parsed.data;
+
+  // A hidden course takes no new registrations, whatever link the POST came from.
+  if (await namesHiddenCourse([data.courseId, data.courseCode])) {
+    return NextResponse.json(HIDDEN_COURSE_RESPONSE, { status: 404 });
+  }
 
   // Respect admin-set status override. Upstream already filters for
   // open/nearly_full, so the only blocking case is an explicit 'closed'.

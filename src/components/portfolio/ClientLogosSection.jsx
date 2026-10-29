@@ -166,19 +166,30 @@ function MarqueeRow({ logos, direction, speed = 40 }) {
               * carry `keepColorOnDark` and render in original colour, which
               * is legible because their bright elements sit inside their own
               * coloured fields. See ClientLogo.keepColorOnDark. */}
-            <img
-              src={logo.image_url}
-              alt={logo.company_name}
-              className={
-                'h-auto max-h-[52px] w-auto max-w-[130px] object-contain' +
-                (logo.keepColorOnDark ? '' : ' dark:brightness-0 dark:invert')
-              }
-              loading="lazy"
-              draggable={false}
+            <ClientLogoImage
+              logo={logo}
+              className="h-auto max-h-[52px] w-auto max-w-[130px] object-contain"
             />
           </div>
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * One client logo with the dark-mode treatment above. Exported so the About
+ * page's static logo wall renders logos exactly as this marquee does, rather
+ * than spelling a second version of the knockout and its exception.
+ */
+export function ClientLogoImage({ logo, className }) {
+  return (
+    <img
+      src={logo.image_url}
+      alt={logo.company_name}
+      className={className + (logo.keepColorOnDark ? '' : ' dark:brightness-0 dark:invert')}
+      loading="lazy"
+      draggable={false}
+    />
   );
 }

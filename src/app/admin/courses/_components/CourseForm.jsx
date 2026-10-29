@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft, Eye, ExternalLink, X } from 'lucide-react';
 import { createCourse, updateCourse } from '@/lib/actions/courses';
+import { createPrivateCourse, updatePrivateCourse } from '@/lib/actions/courses';
+import { PRIVATE_PROGRAM_PREFIX } from '@/lib/courses/privateProgramRule';
 import {
   saveCourseExtension,
   checkAliasAvailable,
@@ -105,8 +107,28 @@ export function CourseForm({
    * list was unfiltered or the editor was opened directly.
    */
   listQuery = '',
+  /**
+   * EDIT MODE: true when `initial` is a genesis-only PRIVATE course (the
+   * /admin/courses/private/[id]/edit route). On create the admin picks the type
+   * with the ประเภทหลักสูตร control instead, and this stays false.
+   *
+   * The type decides the STORE and nothing else on the form: a private course
+   * saves through createPrivateCourse / updatePrivateCourse (private_courses,
+   * never MSDB), skips the version history (out of scope this round), anchors
+   * no MSDB id on its extension row, and has no public page to preview yet.
+   */
+  privateCourse = false,
+  /**
+   * The custom PRIVATE programs and skills (private_taxonomy), as plain
+   * `{ _id, name }` rows. Offered ONLY while the type is Private Course — a
+   * normal course never sees them. See lib/courses/privateProgramRule for how
+   * the shared `program` select carries a custom pick.
+   */
+  privateTaxonomy = { programs: [], skills: [] },
 }) {
   const router = useRouter();
+  const [courseKind, setCourseKind] = useState(privateCourse ? 'private' : 'normal');
+  const isPrivate = courseKind === 'private';
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState(null);
 
@@ -258,6 +280,14 @@ export function CourseForm({
     return initial.skills.map((s) => s?._id ?? s).filter(Boolean).map(String);
   })();
   const [selectedSkillIds, setSelectedSkillIds] = useState(initialSkillIds);
+  // Custom private skills — their own selection, posted as `private_skills`,
+  // which shapePayload never reads.
+  const [selectedPrivateSkillIds, setSelectedPrivateSkillIds] = useState(
+    (Array.isArray(initial?.privateSkills) ? initial.privateSkills : []).map(String)
+  );
+  function togglePrivateSkill(id) {
+    setSelectedPrivateSkillIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  }
 
   function toggleSkill(id) {
     setSelectedSkillIds((cur) =>
@@ -544,11 +574,15 @@ export function CourseForm({
         targetAudienceRich,
         prerequisitesRich,
         systemRequirementsRich,
-        upstreamId: String(upstreamId ?? ''),
+        // A private course has no MSDB `_id` — its id is a private_courses one,
+        // and anchoring that would block storing the real MSDB id if the course
+        // is ever converted to public.
+        upstreamId: isPrivate ? '' : String(upstreamId ?? ''),
       }).catch((err) => ({ ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' })),
     [urlAlias, metaTitle, metaDescription, ogImage, tags, gallery, isPublished,
       omisePaymentEnabled, trainingTopicsRich, descriptionRich,
-      objectivesRich, targetAudienceRich, prerequisitesRich, systemRequirementsRich]
+      objectivesRich, targetAudienceRich, prerequisitesRich, systemRequirementsRich,
+      isPrivate]
   );
 
   /**
@@ -568,6 +602,13 @@ export function CourseForm({
       baselineRef.current = snapshot();
       leavingRef.current = true;
       setDirty(false);
+      // A private course's id is a private_courses one, so it has its own
+      // editor route; the MSDB-`_id` route below would 404 on it.
+      if (isPrivate && newId) {
+        router.push(withListQuery(`/admin/courses/private/${encodeURIComponent(newId)}/edit`, listQuery));
+        router.refresh();
+        return;
+      }
       router.push(
         newId
           ? withListQuery(`/admin/courses/${encodeURIComponent(newId)}/edit`, listQuery)
@@ -575,7 +616,7 @@ export function CourseForm({
       );
       router.refresh();
     },
-    [router, listQuery, snapshot]
+    [router, listQuery, snapshot, isPrivate]
   );
 
   // ── submit ────────────────────────────────────────────────────────
@@ -612,8 +653,9 @@ export function CourseForm({
           const retryRes = await saveExtensionFor(createdCourse.code, createdCourse.id);
           // The retry is the second half of a create landing. Same joint point,
           // same reasoning as the edit path — and ABSENT rather than SKIPPED
-          // because this course had no earlier state to be missing.
-          await commitCourseVersion({
+          // because this course had no earlier state to be missing. Not for a
+          // private course: its history reads MSDB and is a later round.
+          if (!isPrivate) await commitCourseVersion({
             courseId: createdCourse.code,
             upstreamId: createdCourse.id,
             preImage: { state: PRE_IMAGE.ABSENT },
@@ -658,9 +700,16 @@ export function CourseForm({
           return;
         }
 
-        const courseRes = await createCourse(fd).catch((err) => ({
-          ok: false, error: err?.message ?? 'สร้างหลักสูตรไม่สำเร็จ',
-        }));
+        // THE TYPE PICKS THE STORE, and only the store. A private course goes
+        // to private_courses and never to MSDB; both actions run the same
+        // three-store duplicate guard first and answer in the same shape.
+        const courseRes = isPrivate
+          ? await createPrivateCourse(fd).catch((err) => ({
+            ok: false, error: err?.message ?? 'สร้างหลักสูตรไม่สำเร็จ',
+          }))
+          : await createCourse(fd).catch((err) => ({
+            ok: false, error: err?.message ?? 'สร้างหลักสูตรไม่สำเร็จ',
+          }));
 
         if (courseRes?.ok !== true) {
           // NOTHING WAS WRITTEN. Stay put, keep the create button enabled, and
@@ -685,8 +734,10 @@ export function CourseForm({
          * ABSENT, never UNAVAILABLE: there was no course a moment ago, so the
          * baseline is legitimately empty rather than unreadable. Flagging it as
          * missing would report a defect on every course anyone adds.
+         *
+         * Skipped for a private course (its history is a later round).
          */
-        await commitCourseVersion({
+        if (!isPrivate) await commitCourseVersion({
           courseId: code,
           upstreamId: newId,
           preImage: { state: PRE_IMAGE.ABSENT },
@@ -763,15 +814,26 @@ export function CourseForm({
        * stop a save, and an absent baseline reads as SKIPPED, which is exactly
        * what it is.
        */
-      const preImage = await captureCoursePreImage({
-        courseId,
-        upstreamId: initial?._id,
-      }).catch(() => ({ state: PRE_IMAGE.SKIPPED }));
+      // A private course has no MSDB row to read a baseline from, and no
+      // version history yet (a later round), so nothing is captured for it.
+      const preImage = isPrivate
+        ? null
+        : await captureCoursePreImage({
+          courseId,
+          upstreamId: initial?._id,
+        }).catch(() => ({ state: PRE_IMAGE.SKIPPED }));
 
-      const courseRes = await updateCourse(initial?._id, fd).catch((err) => ({
-        ok: false,
-        error: err?.message ?? 'บันทึกไม่สำเร็จ',
-      }));
+      // `initial._id` is a private_courses id on the private edit route and an
+      // MSDB id on the normal one — each action only ever sees its own kind.
+      const courseRes = isPrivate
+        ? await updatePrivateCourse(initial?._id, fd).catch((err) => ({
+          ok: false,
+          error: err?.message ?? 'บันทึกไม่สำเร็จ',
+        }))
+        : await updateCourse(initial?._id, fd).catch((err) => ({
+          ok: false,
+          error: err?.message ?? 'บันทึกไม่สำเร็จ',
+        }));
 
       // Same one definition the create path uses — see saveExtensionFor.
       // `initial._id` is the ObjectId THIS ROUTE WAS OPENED WITH, so the edit
@@ -796,7 +858,7 @@ export function CourseForm({
        * on screen waits for it. Swallowed for the same reason as everything
        * else on this path.
        */
-      await commitCourseVersion({
+      if (!isPrivate) await commitCourseVersion({
         courseId,
         upstreamId: initial?._id,
         preImage,
@@ -867,6 +929,10 @@ export function CourseForm({
 
   // Pre-cooked defaults that map upstream populated objects.
   const programId = initial?.program?._id ?? initial?.program ?? '';
+  // A private course on a CUSTOM program selects its `private:<id>` option.
+  const programSelectValue = isPrivate && initial?.privateProgram
+    ? `${PRIVATE_PROGRAM_PREFIX}${initial.privateProgram}`
+    : programId;
 
   /**
    * The course body — every MSDB field except `website_urls`.
@@ -883,6 +949,43 @@ export function CourseForm({
           Section 1 — ข้อมูลหลัก
       ─────────────────────────────────────────────────────────── */}
       <Section title="1. ข้อมูลหลัก">
+        {/* ประเภทหลักสูตร — picks the STORE. Chosen on create only: converting
+            an existing course between the two is a later round, so on edit it
+            is shown read-only. `course_kind` is not a key shapePayload reads. */}
+        <Field
+          label="ประเภทหลักสูตร"
+          hint={
+            isPrivate
+              ? 'Private Course เก็บใน Genesis เท่านั้น ไม่ส่งไป MSDB และไม่แสดงในหน้ารายการสาธารณะใดๆ'
+              : undefined
+          }
+        >
+          {isCreate ? (
+            <div className="flex flex-wrap gap-4 text-sm" role="radiogroup">
+              {[
+                ['normal', 'หลักสูตรปกติ'],
+                ['private', 'Private Course'],
+              ].map(([value, label]) => (
+                <label key={value} className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="course_kind"
+                    value={value}
+                    checked={courseKind === value}
+                    onChange={() => setCourseKind(value)}
+                    disabled={Boolean(createdCourse)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm font-medium text-9e-navy dark:text-white">
+              {isPrivate ? 'Private Course' : 'หลักสูตรปกติ'}
+            </p>
+          )}
+        </Field>
+
         <Field label="ชื่อหลักสูตร *">
           <input
             required
@@ -1165,7 +1268,7 @@ export function CourseForm({
         <Field label="โปรแกรม" hint="จำเป็นต้องเลือก">
           <select
             name="program"
-            defaultValue={programId}
+            defaultValue={programSelectValue}
             required
             className={inputCls}
           >
@@ -1175,7 +1278,28 @@ export function CourseForm({
                 {p.name ?? p.program_name ?? p.label ?? p._id}
               </option>
             ))}
+            {/* PRIVATE COURSES ONLY. One select, so a custom pick replaces an
+                MSDB one and vice versa; the private actions split the
+                `private:` value into `privateProgram`. */}
+            {isPrivate && privateTaxonomy.programs.length > 0 && (
+              <optgroup label="Custom (Private)">
+                {privateTaxonomy.programs.map((p) => (
+                  <option key={p._id} value={`${PRIVATE_PROGRAM_PREFIX}${p._id}`}>
+                    {p.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
+          {isPrivate && (
+            <Link
+              href="/admin/courses/private-taxonomy"
+              target="_blank"
+              className="mt-1 inline-block text-xs text-9e-action hover:underline"
+            >
+              จัดการโปรแกรม / Skill แบบ Private
+            </Link>
+          )}
         </Field>
 
         <Field label="Skills" hint="กดเลือกหลายค่าได้">
@@ -1210,6 +1334,34 @@ export function CourseForm({
             <input key={id} type="hidden" name="skills" value={id} />
           ))}
         </Field>
+
+        {isPrivate && privateTaxonomy.skills.length > 0 && (
+          <Field label="Skills — Custom (Private)" hint="ไม่แสดงบนหน้าเว็บ — เก็บไว้ใช้ภายใน">
+            <div className="flex flex-wrap gap-1.5">
+              {privateTaxonomy.skills.map((s) => {
+                const active = selectedPrivateSkillIds.includes(s._id);
+                return (
+                  <button
+                    key={s._id}
+                    type="button"
+                    onClick={() => togglePrivateSkill(s._id)}
+                    className={
+                      'rounded-full px-3 py-1 text-xs transition-colors ' +
+                      (active
+                        ? 'bg-purple-600 text-white'
+                        : 'border border-purple-200 bg-white text-purple-700 hover:bg-purple-50 dark:bg-[#0D1B2A]')
+                    }
+                  >
+                    {s.name}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedPrivateSkillIds.map((id) => (
+              <input key={id} type="hidden" name="private_skills" value={id} />
+            ))}
+          </Field>
+        )}
       </Section>
 
       {/* ───────────────────────────────────────────────────────────
@@ -1535,7 +1687,12 @@ export function CourseForm({
           <>
           {/* The four editors that stayed on /admin/courses/[courseId]. The
               list's SEO/Gallery button is gone, so this is now their only way
-              in — without it they would be unreachable, not merely moved. */}
+              in — without it they would be unreachable, not merely moved.
+              NOT for a private course: promos / early bird / FAQ / payment are
+              all MSDB-keyed and hidden on its page anyway. Its ดูหน้าจริง below
+              works like any course's — the public route resolves it by alias
+              or code path, and `?preview=1` while it is hidden. */}
+          {!isPrivate && (
           <Link
             // Keyed by the course_id CODE, unlike this page's own _id route —
             // and carrying the filter one hop further so that page's ← back to
@@ -1545,6 +1702,7 @@ export function CourseForm({
           >
             โปรโมชัน / Early Bird / FAQ / ชำระเงิน
           </Link>
+          )}
 
           {/* R1: NOT "Preview" — this opens the PUBLIC page, which reads MSDB
               fresh and therefore shows only whatever the last successful save

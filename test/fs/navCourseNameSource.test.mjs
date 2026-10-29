@@ -57,7 +57,9 @@ test('getCoursePreview still fetches the detail — the cover genuinely needs it
   // would take the cover with it and turn a wrong name into a missing image,
   // which is not the trade this change makes.
   const body = functionBody(readSource(ACTION).code, 'getCoursePreview');
-  assert.match(body, /getCourseByCode\(/, 'the detail fetch must stay');
+  // The PUBLIC by-code getter since the hidden-course round: same detail
+  // response, but a hidden course answers null (test/fs/hiddenCourseLeaks).
+  assert.match(body, /getPublicCourseByCode\(/, 'the detail fetch must stay');
   assert.match(body, /course_cover_url/, 'and it must still yield the cover URL');
 });
 

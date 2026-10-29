@@ -65,7 +65,14 @@ import { parseTrainingTopicsValue } from '@/lib/courses/trainingTopics';
 import { outlineFromFormValue } from '@/lib/courses/courseOutline';
 import { checkboxBool, courseTypeFlags } from '@/lib/courses/courseTypeFlags';
 import { courseIdConflict } from '@/lib/courses/courseIdAvailability';
-import { findCourseExtensionCodeInsensitive } from '@/lib/actions/course-extensions';
+import { findCourseExtensionCodeInsensitive, deleteCourseExtension } from '@/lib/actions/course-extensions';
+import {
+  findPrivateCourseCodeInsensitive,
+  insertPrivateCourse,
+  updatePrivateCourseDoc,
+  removePrivateCourse,
+} from '@/lib/courses/privateCourseStore';
+import { privateTaxonomyFields, exactlyOneProgram } from '@/lib/courses/privateProgramRule';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import {
   resolveCourseObjectIds,
@@ -407,36 +414,38 @@ export async function findCourseCodeInsensitive(code, { fetchAll } = {}) {
   return hit?.course_id ?? null;
 }
 
-export async function createCourse(formData) {
-  const session = await requireAdmin('courses');
-  const body = shapePayload(formData);
-  if (!body.course_name) return { ok: false, error: 'กรุณากรอกชื่อหลักสูตร' };
-  if (!body.course_id)   return { ok: false, error: 'กรุณากรอกรหัสหลักสูตร (course_id)' };
-
-  /**
-   * DUPLICATE GUARD — BEFORE ANY WRITE, and covering BOTH stores.
-   *
-   * Lives inside the action rather than in the form so it cannot be bypassed,
-   * and runs before `msdbCreate` so a refusal creates nothing at all. See
-   * lib/courses/courseIdAvailability for why a duplicate code is destructive
-   * rather than merely invalid: the extension write is an upsert keyed by the
-   * code, so it would silently overwrite a DIFFERENT course's SEO, gallery and
-   * omisePaymentEnabled.
-   *
-   * A failed lookup is NOT treated as "free". Refusing to answer is not the
-   * same as answering no, and guessing here costs another course's data.
-   */
+/**
+ * DUPLICATE GUARD — BEFORE ANY WRITE, covering ALL THREE stores: MSDB,
+ * course_extensions and private_courses. ONE definition, run by BOTH create
+ * actions (createCourse and createPrivateCourse), so a code used by either kind
+ * of course is refused by both.
+ *
+ * Lives inside the actions rather than in the form so it cannot be bypassed,
+ * and runs before the store write so a refusal creates nothing at all. See
+ * lib/courses/courseIdAvailability for why a duplicate code is destructive
+ * rather than merely invalid: the extension write is an upsert keyed by the
+ * code, so it would silently overwrite a DIFFERENT course's SEO, gallery and
+ * omisePaymentEnabled.
+ *
+ * A failed lookup is NOT treated as "free". Refusing to answer is not the
+ * same as answering no, and guessing here costs another course's data.
+ *
+ * Returns the refusal (`{ ok: false, field, error }`) or null when free.
+ */
+async function courseIdRefusal(body) {
   try {
-    const [existingCourseId, existingExtensionId] = await Promise.all([
+    const [existingCourseId, existingExtensionId, existingPrivateId] = await Promise.all([
       findCourseCodeInsensitive(body.course_id),
       findCourseExtensionCodeInsensitive(body.course_id),
+      findPrivateCourseCodeInsensitive(body.course_id),
     ]);
     const conflict = courseIdConflict({
       code: body.course_id,
       existingCourseId,
       existingExtensionId,
+      existingPrivateId,
     });
-    if (conflict) return { ok: false, ...conflict };
+    return conflict ? { ok: false, ...conflict } : null;
   } catch (err) {
     return {
       ok: false,
@@ -446,6 +455,16 @@ export async function createCourse(formData) {
         + `กรุณาลองใหม่อีกครั้ง (${err?.message ?? 'lookup failed'})`,
     };
   }
+}
+
+export async function createCourse(formData) {
+  const session = await requireAdmin('courses');
+  const body = shapePayload(formData);
+  if (!body.course_name) return { ok: false, error: 'กรุณากรอกชื่อหลักสูตร' };
+  if (!body.course_id)   return { ok: false, error: 'กรุณากรอกรหัสหลักสูตร (course_id)' };
+
+  const refusal = await courseIdRefusal(body);
+  if (refusal) return refusal;
 
   try {
     const payload = await resolveCourseRefs(body);
@@ -578,3 +597,134 @@ export async function deleteCourse(id) {
   }
 }
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// PRIVATE COURSES — genesis-only. NOTHING BELOW MAY REACH MSDB.
+//
+// They live here rather than in a module of their own for one reason:
+// `shapePayload` is module-private to this 'use server' file (a server module
+// can export only async functions), and the private save must take the SAME
+// shaped body a normal course does — a second copy of the shaper is how the
+// two would drift. So these three call `shapePayload`, the shared duplicate
+// guard, and lib/courses/privateCourseStore, and NOTHING else that writes:
+// no msdbCreate/msdbUpdate/msdbDelete, no aiFetch, no resolveCourseRefs (the
+// refs stay codes — see models/PrivateCourse), no upstream tag bust (nothing
+// public reads a private course yet). test/fs/privateCourseNoMsdb pins it.
+//
+// Audit rows use the course actions' own shape and pair (`courses`/`course`),
+// with `recordId` = the private_courses `_id` and `meta.store: 'private'`.
+// ════════════════════════════════════════════════════════════════════════════
+
+const PRIVATE_META = Object.freeze({ store: 'private' });
+
+export async function createPrivateCourse(formData) {
+  const session = await requireAdmin('courses');
+  const body = shapePayload(formData);
+  if (!body.course_name) return { ok: false, error: 'กรุณากรอกชื่อหลักสูตร' };
+  if (!body.course_id)   return { ok: false, error: 'กรุณากรอกรหัสหลักสูตร (course_id)' };
+
+  // MSDB program OR custom private program — exactly one. Split from the same
+  // `program` select shapePayload already read; see lib/courses/privateProgramRule.
+  const taxonomy = privateTaxonomyFields(body, formData);
+  const programRefusal = exactlyOneProgram(taxonomy);
+  if (programRefusal) return programRefusal;
+
+  const refusal = await courseIdRefusal(body);
+  if (refusal) return refusal;
+
+  try {
+    const item = await insertPrivateCourse({ ...body, ...taxonomy });
+    revalidatePath(ADMIN_PATH);
+
+    recordAdminActionAfter({
+      menu:        'courses',
+      action:      'create',
+      entity:      'course',
+      recordId:    String(item?._id ?? ''),
+      recordLabel: courseLabel(item?.course_id, body.course_name),
+      after:       courseFields(item ?? body),
+      meta:        PRIVATE_META,
+      actor:       { id: session.user?.id, name: session.user?.name },
+    });
+
+    return { ok: true, item: { ...item, _id: String(item?._id ?? '') }, id: String(item?._id ?? '') };
+  } catch (err) {
+    return { ok: false, error: err?.message ?? 'สร้าง Private Course ไม่สำเร็จ' };
+  }
+}
+
+export async function updatePrivateCourse(id, formData) {
+  const session = await requireAdmin('courses');
+  if (!id) return { ok: false, error: 'Missing course id' };
+
+  const body = shapePayload(formData);
+  const taxonomy = privateTaxonomyFields(body, formData);
+  const programRefusal = exactlyOneProgram(taxonomy);
+  if (programRefusal) return programRefusal;
+  try {
+    const item = await updatePrivateCourseDoc(id, { ...body, ...taxonomy });
+    if (!item) return { ok: false, error: 'ไม่พบ Private Course นี้' };
+    revalidatePath(ADMIN_PATH);
+    revalidatePath(`${ADMIN_PATH}/private/${id}/edit`);
+    // The PUBLIC private page, at its code path. Its alias path is revalidated
+    // by saveCourseExtension, which the form always runs right after this.
+    // No MSDB tag: nothing upstream holds a private course.
+    revalidatePath(derivedCoursePath(item.course_id));
+
+    recordAdminActionAfter({
+      menu:        'courses',
+      action:      'update',
+      entity:      'course',
+      recordId:    String(id),
+      recordLabel: courseLabel(item.course_id, item.course_name),
+      after:       courseFields(item),
+      meta:        PRIVATE_META,
+      actor:       { id: session.user?.id, name: session.user?.name },
+    });
+
+    return { ok: true, item: { ...item, _id: String(item._id) } };
+  } catch (err) {
+    return { ok: false, error: err?.message ?? 'อัปเดต Private Course ไม่สำเร็จ' };
+  }
+}
+
+/**
+ * Removes the private_courses row AND its CourseExtension row (alias, SEO,
+ * gallery) — a private course has no other home, so an extension left behind
+ * would be an orphan the next course with this code inherits. The extension
+ * delete is its own audited action, exactly as for a normal course's rail.
+ */
+export async function deletePrivateCourse(id) {
+  const session = await requireAdmin('courses');
+  if (!id) return { ok: false, error: 'Missing course id' };
+
+  try {
+    const removed = await removePrivateCourse(id);
+    if (!removed) return { ok: false, error: 'ไม่พบ Private Course นี้' };
+
+    recordAdminActionAfter({
+      menu:        'courses',
+      action:      'delete',
+      entity:      'course',
+      recordId:    String(id),
+      recordLabel: courseLabel(removed.course_id, removed.course_name),
+      before:      courseFields(removed),
+      meta:        PRIVATE_META,
+      actor:       { id: session.user?.id, name: session.user?.name },
+    });
+
+    const extRes = await deleteCourseExtension(removed.course_id).catch((err) => ({
+      ok: false, error: err?.message ?? 'ลบข้อมูล SEO/แกลเลอรีไม่สำเร็จ',
+    }));
+    revalidatePath(ADMIN_PATH);
+    if (extRes?.ok !== true) {
+      return {
+        ok: false,
+        error: `ลบ Private Course แล้ว แต่ลบข้อมูล SEO/แกลเลอรีไม่สำเร็จ (${extRes?.error ?? ''})`,
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err?.message ?? 'ลบ Private Course ไม่สำเร็จ' };
+  }
+}

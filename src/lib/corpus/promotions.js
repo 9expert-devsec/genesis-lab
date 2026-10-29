@@ -56,6 +56,7 @@ import { resolveBatchPrice } from '@/lib/masterclass/getMasterclass';
 // bundle item may still carry the legacy one-round shape — this is the shared
 // normaliser every other reader uses.
 import { offeredRoundsOf } from '@/lib/pageBuilder/chosenRounds';
+import { isHiddenCourse, loadHiddenCourseIds } from '@/lib/courses/hiddenCourses';
 
 /** Every item's URL is on the main site host — the masterclass pages included. */
 export const CORPUS_PUBLIC_ORIGIN = 'https://www.9experttraining.com';
@@ -383,11 +384,34 @@ async function readEarlyBirdConfigRows() {
  * @param {Function} [deps.readEarlyBirdConfigs] () → rows
  * @param {Function} [deps.log]                  server-side sink for a failed source
  */
+/**
+ * Hidden courses (`CourseExtension.isPublished === false`) leave the corpus.
+ *
+ * Each item's `courses` loses the hidden ones. An item that NAMED courses and
+ * is left with none — an early-bird deal on a hidden course, or a bundle made
+ * only of hidden courses — is dropped whole: it is a deal on nothing a visitor
+ * can see. A bundle that keeps at least one course stays, with the hidden one
+ * gone; its stored data is not touched. Items that never named a course (a
+ * `page` item) are untouched.
+ */
+export function dropHiddenPromotionCourses(items, hidden) {
+  if (!hidden || hidden.size === 0) return items;
+  const out = [];
+  for (const item of items ?? []) {
+    const courses = Array.isArray(item?.courses) ? item.courses : [];
+    const kept = courses.filter((c) => !isHiddenCourse(hidden, c?.course_code));
+    if (courses.length > 0 && kept.length === 0) continue;
+    out.push(kept.length === courses.length ? item : { ...item, courses: kept });
+  }
+  return out;
+}
+
 export async function buildPromotionsCorpus({
   now = new Date(),
   readMasterclass = readMasterclassRows,
   readBuilderPages = readBuilderPageRows,
   readEarlyBirdConfigs = readEarlyBirdConfigRows,
+  loadHidden = loadHiddenCourseIds,
   log = console.error,
 } = {}) {
   const at = new Date(ms(now) ?? Date.now());
@@ -427,6 +451,6 @@ export async function buildPromotionsCorpus({
     generated_at:  at.toISOString(),
     timezone_note: TIMEZONE_NOTE,
     sources:       Object.fromEntries(CORPUS_SOURCES.map((s) => [s, sources[s]])),
-    items:         sortItems(items),
+    items:         sortItems(dropHiddenPromotionCourses(items, await loadHidden())),
   };
 }

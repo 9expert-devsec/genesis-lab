@@ -22,6 +22,9 @@ const TYPE_OPTIONS = [
   { value: '',         label: 'ทุกประเภท' },
   { value: 'public',   label: 'Public' },
   { value: 'inhouse',  label: 'In-house' },
+  // Private courses are listed in their own section below (PrivateCoursesTable);
+  // picking this narrows the page to that section — no MSDB row matches it.
+  { value: 'private',  label: 'Private Course' },
 ];
 
 /**
@@ -131,6 +134,8 @@ export function CoursesAdminClient({
         (c.course_name_th || '').toLowerCase().includes(needle) ||
         (c.course_id || '').toLowerCase().includes(needle);
       const matchProgram = !program || programIdOf(c) === program;
+      // `type === 'private'` matches no row here: every course in this list
+      // comes from MSDB, and a private course never does.
       const matchType =
         !type ||
         (type === 'public'  && c.course_type_public) ||

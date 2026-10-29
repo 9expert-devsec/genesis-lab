@@ -36,6 +36,7 @@ function deps(items, extra = {}) {
   return {
     listSchedules: async () => ({ items, total: items.length }),
     getCourseByCodeInsensitive: async () => null,
+    loadHiddenCourseIds: async () => new Set(),
     todayKey: () => TODAY,
     warn: () => {},
     ...extra,
@@ -224,6 +225,7 @@ test('status=all is always sent upstream, or full rounds vanish silently', async
   await listTrainingRounds({}, {
     listSchedules: async (args) => { seen = args; return { items: [] }; },
     getCourseByCodeInsensitive: async () => null,
+    loadHiddenCourseIds: async () => new Set(),
     todayKey: () => TODAY,
     warn: () => {},
   });

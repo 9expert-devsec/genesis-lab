@@ -43,9 +43,21 @@ export function normaliseCourseId(raw) {
  * @param {string} input.code                the code being created
  * @param {string|null} [input.existingCourseId]    matching MSDB course_id, or null
  * @param {string|null} [input.existingExtensionId] matching extension courseId, or null
+ * @param {string|null} [input.existingPrivateId]   matching private_courses course_id, or null
  * @returns {{ field: 'course_id', error: string }|null} null when the code is free
+ *
+ * THREE STORES since private courses: MSDB, course_extensions, and genesis's
+ * own `private_courses`. A private course normally HAS an extension row, so
+ * the extension check usually catches it too — but not when its extension
+ * write failed, and a code shared by a private course and a public one would
+ * put both on one extension row. Both create paths run this same check.
  */
-export function courseIdConflict({ code, existingCourseId = null, existingExtensionId = null } = {}) {
+export function courseIdConflict({
+  code,
+  existingCourseId = null,
+  existingExtensionId = null,
+  existingPrivateId = null,
+} = {}) {
   const wanted = normaliseCourseId(code);
   if (!wanted) return null; // "required" is a different error, raised elsewhere
 
@@ -57,6 +69,17 @@ export function courseIdConflict({ code, existingCourseId = null, existingExtens
       error:
         `รหัสหลักสูตร "${existingCourseId}" มีอยู่แล้วในระบบ — `
         + 'กรุณาใช้รหัสอื่น (การใช้รหัสซ้ำจะเขียนทับ SEO และแกลเลอรีของหลักสูตรเดิม)',
+    };
+  }
+
+  // Before the extension check: a private course usually has an extension row
+  // too, and "used by a Private Course" is the message that says what it is.
+  if (existingPrivateId) {
+    return {
+      field: 'course_id',
+      error:
+        `รหัสหลักสูตร "${existingPrivateId}" ถูกใช้โดย Private Course แล้ว — `
+        + 'กรุณาใช้รหัสอื่น',
     };
   }
 
