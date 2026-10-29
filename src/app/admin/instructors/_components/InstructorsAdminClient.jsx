@@ -11,6 +11,8 @@ import {
 } from '@/lib/actions/instructors';
 import { MAX_PROGRAMS, appendProgramsToForm } from '@/lib/instructors/instructorPrograms';
 import { MAX_SPECIALTIES, MAX_SPECIALTY_LENGTH } from '@/lib/instructors/instructorSpecialties';
+import { PHOTO_SCALE, PHOTO_OFFSET_Y, PHOTO_OFFSET_X, photoCropValues } from '@/lib/instructors/photoCrop';
+import InstructorPhotoPanel from '@/components/about/InstructorPhotoPanel';
 
 export function InstructorsAdminClient({ instructors, programs = [], programsUnavailable = false }) {
   const router = useRouter();
@@ -191,6 +193,8 @@ function InstructorModal({ instructor, programs, programsUnavailable, onClose, o
   // MSDB program _ids in selection order, starting from what MSDB holds (the
   // page resolved it). Always sent back on save — see appendProgramsToForm.
   const [programIds, setProgramIds]   = useState(instructor?.programs ?? []);
+  // Card photo crop — genesis-only, defaults when the instructor has none.
+  const [crop, setCrop]               = useState(() => photoCropValues(instructor ?? {}));
 
   function handleFileChange(e) {
     const file = e.target.files?.[0];
@@ -222,6 +226,9 @@ function InstructorModal({ instructor, programs, programsUnavailable, onClose, o
     else if (imagePreview) fd.set('image_url', imagePreview);
     for (const s of specialties) fd.append('specialties', s);
     appendProgramsToForm(fd, programIds);
+    fd.set('photo_scale', String(crop.scale));
+    fd.set('photo_offset_y', String(crop.offsetY));
+    fd.set('photo_offset_x', String(crop.offsetX));
     if (isActive) fd.set('is_active', 'on');
 
     startTransition(async () => {
@@ -316,6 +323,13 @@ function InstructorModal({ instructor, programs, programsUnavailable, onClose, o
             </div>
           </div>
 
+          <PhotoCropField
+            imageUrl={imagePreview}
+            alt={name}
+            value={crop}
+            onChange={setCrop}
+          />
+
           <div>
             <span className="text-sm font-medium text-9e-navy dark:text-white">ความเชี่ยวชาญ</span>
             <p className="mt-0.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
@@ -391,6 +405,107 @@ function InstructorModal({ instructor, programs, programsUnavailable, onClose, o
 
 const inputCls =
   'mt-1 w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white';
+
+/**
+ * "ตำแหน่งรูปบนการ์ด": zoom and vertical offset for the /about-us card photo,
+ * with a live preview rendered by the card's own InstructorPhotoPanel — what
+ * the admin sees here is what ships. Saved with the rest of the form.
+ */
+function PhotoCropField({ imageUrl, alt, value, onChange }) {
+  const isDefault =
+    value.scale === PHOTO_SCALE.default
+    && value.offsetY === PHOTO_OFFSET_Y.default
+    && value.offsetX === PHOTO_OFFSET_X.default;
+  return (
+    <div>
+      <span className="text-sm font-medium text-9e-navy dark:text-white">ตำแหน่งรูปบนการ์ด</span>
+      <p className="mt-0.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+        ปรับให้ศีรษะอยู่กลางและเห็นถึงช่วงอก ตามที่จะแสดงบนหน้าเกี่ยวกับเรา
+      </p>
+      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start">
+        <div className="w-full max-w-[220px] shrink-0 rounded-[18px] bg-9e-navy p-2">
+          {imageUrl ? (
+            <InstructorPhotoPanel
+              imageUrl={imageUrl}
+              alt={alt || 'ตัวอย่างรูปบนการ์ด'}
+              scale={value.scale}
+              offsetY={value.offsetY}
+              offsetX={value.offsetX}
+              sizes="220px"
+              unoptimized={imageUrl.startsWith('blob:')}
+            />
+          ) : (
+            <div className="about-instructor-panel flex items-center justify-center text-xs text-white/70">
+              ยังไม่มีรูป
+            </div>
+          )}
+        </div>
+        <div className="flex-1 space-y-3">
+          <label className="block text-xs text-9e-navy dark:text-white">
+            <span className="flex justify-between">
+              <span>ซูม</span>
+              <span className="tabular-nums text-9e-slate-dp-50">{value.scale}%</span>
+            </span>
+            <input
+              type="range"
+              name="photo_scale"
+              min={PHOTO_SCALE.min}
+              max={PHOTO_SCALE.max}
+              step={1}
+              value={value.scale}
+              onChange={(e) => onChange({ ...value, scale: Number(e.target.value) })}
+              className="mt-1 w-full accent-9e-action"
+            />
+          </label>
+          <label className="block text-xs text-9e-navy dark:text-white">
+            <span className="flex justify-between">
+              <span>เลื่อนขึ้น-ลง</span>
+              <span className="tabular-nums text-9e-slate-dp-50">{value.offsetY}%</span>
+            </span>
+            <input
+              type="range"
+              name="photo_offset_y"
+              min={PHOTO_OFFSET_Y.min}
+              max={PHOTO_OFFSET_Y.max}
+              step={0.5}
+              value={value.offsetY}
+              onChange={(e) => onChange({ ...value, offsetY: Number(e.target.value) })}
+              className="mt-1 w-full accent-9e-action"
+            />
+          </label>
+          <label className="block text-xs text-9e-navy dark:text-white">
+            <span className="flex justify-between">
+              <span>เลื่อนซ้าย-ขวา</span>
+              <span className="tabular-nums text-9e-slate-dp-50">{value.offsetX}%</span>
+            </span>
+            <input
+              type="range"
+              name="photo_offset_x"
+              min={PHOTO_OFFSET_X.min}
+              max={PHOTO_OFFSET_X.max}
+              step={0.5}
+              value={value.offsetX}
+              onChange={(e) => onChange({ ...value, offsetX: Number(e.target.value) })}
+              className="mt-1 w-full accent-9e-action"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={isDefault}
+            onClick={() => onChange({
+              scale: PHOTO_SCALE.default,
+              offsetY: PHOTO_OFFSET_Y.default,
+              offsetX: PHOTO_OFFSET_X.default,
+            })}
+            className="rounded border border-[var(--surface-border)] px-3 py-1 text-xs text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
+          >
+            รีเซ็ตเป็นค่าเริ่มต้น
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * "โปรแกรมที่สอน": chips in selection order (removable) above the list of

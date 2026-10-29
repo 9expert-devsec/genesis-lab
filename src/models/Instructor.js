@@ -21,6 +21,11 @@ const InstructorSchema = new mongoose.Schema(
     specialties:     { type: [String], default: [] },
     // Programs the instructor teaches (MSDB ObjectId array).
     programs:        { type: [String], default: [] },
+    // Card photo crop — Genesis-local, never sent to MSDB. null = the default
+    // crop. See src/lib/instructors/photoCrop.js.
+    photo_scale:     { type: Number, default: null, min: 120, max: 320 },
+    photo_offset_y:  { type: Number, default: null, min: -20, max: 30 },
+    photo_offset_x:  { type: Number, default: null, min: -30, max: 30 },
     display_order:   { type: Number, default: 0 },
     is_active:       { type: Boolean, default: true },
     synced_at:       { type: Date, default: null },

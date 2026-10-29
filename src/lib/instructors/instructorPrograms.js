@@ -17,6 +17,8 @@
  *   · a submission WITHOUT the marker keeps the stored value (resolveSubmittedPrograms).
  */
 
+import { chipHref, programHref } from '@/lib/utils';
+
 export const MAX_PROGRAMS = 12;
 export const PROGRAMS_PRESENT_KEY = 'programs_present';
 
@@ -80,11 +82,16 @@ export function resolveSubmittedPrograms({ present, submitted, current, validIds
   return { ok: true, programs: list };
 }
 
-/** Upstream /programs items → { id, name, iconUrl } options, list order. */
+/**
+ * Upstream /programs items → { id, code, name, iconUrl } options, list order.
+ * `code` is the upstream program_id ("POWER-BI") — page configs may be keyed
+ * by it, so the card link needs it alongside the _id.
+ */
 export function toProgramOptions(items) {
   return (Array.isArray(items) ? items : [])
     .map((p) => ({
       id: programIdOf(p),
+      code: String(p?.program_id ?? '').trim(),
       name: String(p?.program_name ?? p?.name ?? '').trim(),
       iconUrl: String(p?.programiconurl ?? p?.program_icon ?? p?.icon_url ?? '').trim(),
     }))
@@ -96,9 +103,42 @@ export function toProgramOptions(items) {
  * stored order, dropping ids that no longer resolve or have no icon.
  */
 export function resolveInstructorPrograms(programIds, options) {
+  return resolvedOptions(programIds, options).map(({ name, iconUrl }) => ({ name, iconUrl }));
+}
+
+function resolvedOptions(programIds, options) {
   const byId = new Map((options ?? []).map((o) => [o.id, o]));
   return ids(programIds)
     .map((id) => byId.get(id))
-    .filter((o) => o && o.iconUrl)
-    .map(({ name, iconUrl }) => ({ name, iconUrl }));
+    .filter((o) => o && o.iconUrl);
+}
+
+/**
+ * The program's course-listing page, by the site's one rule for program links
+ * (chipHref + programHref, as the course page's program chip uses): its
+ * admin-set slug (`/power-bi-all-courses`), else the legacy
+ * `/program/<kebab-name>` path, and NULL when its page is explicitly
+ * unpublished — that icon renders as a plain image.
+ *
+ * @param {{ id: string, code?: string, name: string }} option
+ * @param {{ programSlugs: object, programBlocked: Set<string> }} linkability
+ *   getPageLinkability()'s result
+ */
+export function programCardHref(option, linkability) {
+  if (!option || !linkability) return null;
+  return chipHref(
+    { _id: option.id, program_id: option.code || undefined, program_name: option.name },
+    'program',
+    { ...linkability, skillSlugs: {}, skillBlocked: new Set() },
+    programHref
+  );
+}
+
+/** resolveInstructorPrograms, plus each program's listing link (or null). */
+export function instructorProgramLinks(programIds, options, linkability) {
+  return resolvedOptions(programIds, options).map((o) => ({
+    name: o.name,
+    iconUrl: o.iconUrl,
+    href: programCardHref(o, linkability),
+  }));
 }

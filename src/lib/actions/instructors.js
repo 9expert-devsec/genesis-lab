@@ -18,7 +18,8 @@
  *   photo_public_id  ↔ photo_public_id  (Genesis local: image_public_id)
  *   programs[]       ↔ programs[]
  * `specialties[]` lives only in Genesis Mongo — MSDB has no such
- * field, so we never send it upstream.
+ * field, so we never send it upstream. Same for the card photo crop
+ * (`photo_scale`, `photo_offset_y`, `photo_offset_x`).
  */
 
 import { revalidatePath } from 'next/cache';
@@ -36,6 +37,7 @@ import {
   resolveSubmittedPrograms,
 } from '@/lib/instructors/instructorPrograms';
 import { normalizeSpecialties } from '@/lib/instructors/instructorSpecialties';
+import { parsePhotoCrop } from '@/lib/instructors/photoCrop';
 
 const ADMIN_PATH = '/admin/instructors';
 // The About page renders the instructor cards (and their program icons).
@@ -126,6 +128,16 @@ async function readFormAndUpload(formData, current) {
   if (!programsResult.ok) return { error: programsResult.error };
   const { programs } = programsResult;
 
+  // Card photo crop: validated, empty → null (the default). A submission that
+  // does not carry the fields keeps what is stored.
+  const cropResult = parsePhotoCrop({
+    photo_scale:    formData.has('photo_scale') ? get('photo_scale') : current?.photo_scale,
+    photo_offset_y: formData.has('photo_offset_y') ? get('photo_offset_y') : current?.photo_offset_y,
+    photo_offset_x: formData.has('photo_offset_x') ? get('photo_offset_x') : current?.photo_offset_x,
+  });
+  if (!cropResult.ok) return { error: cropResult.error };
+  const { photo_scale, photo_offset_y, photo_offset_x } = cropResult.value;
+
   // Handle the image: either a fresh file upload (Cloudinary) or a
   // URL/existing value to keep.
   let photo_url       = '';
@@ -175,6 +187,9 @@ async function readFormAndUpload(formData, current) {
     specialties,
     programs,
     is_active,
+    photo_scale,
+    photo_offset_y,
+    photo_offset_x,
   };
 
   return { msdb, local, cloudinary };
