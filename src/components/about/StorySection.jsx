@@ -36,7 +36,7 @@ export default function StorySection({ tagline }) {
         intro="ตั้งแต่ปี 2005 นายน์เอ็กซ์เพิร์ท (9Expert) ไม่หยุดพัฒนาหลักสูตรให้ทันเทคโนโลยี AI, Data และ Automation เรามุ่งหวังให้ทุกการเรียนรู้นำไปต่อยอดได้จริง ช่วยเพิ่มศักยภาพของบุคลากร ยกระดับประสิทธิภาพการทำงาน และสร้างคุณค่าให้กับองค์กร"
       />
 
-      <blockquote data-reveal="" className="mx-auto mt-12 max-w-[720px] text-center lg:mt-14">
+      {/* <blockquote data-reveal="" className="mx-auto mt-12 max-w-[720px] text-center lg:mt-14">
         <span aria-hidden="true" className="mx-auto block h-px w-[120px] bg-[var(--ab-hairline)]" />
         <div className="py-8">
           <span aria-hidden="true" className="about-quote-mark" />
@@ -49,7 +49,7 @@ export default function StorySection({ tagline }) {
           </p>
         </div>
         <span aria-hidden="true" className="mx-auto block h-px w-[120px] bg-[var(--ab-hairline)]" />
-      </blockquote>
+      </blockquote> */}
 
       <ol data-reveal-group="" className="mt-14 grid lg:mt-16 lg:grid-cols-6">
         {MILESTONES.map((m, i) => {
