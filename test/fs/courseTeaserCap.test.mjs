@@ -70,7 +70,9 @@ test('there is still no zod schema or server-side validator capping this field',
 });
 
 test('the DISPLAY clamps are untouched — they are a different concern', () => {
-  const PAGE = readSource('src/app/(public)/[...slug]/page.jsx');
+  // The course page's metadata moved into lib/courses/courseMetadata in round 3
+  // (shared by public and private courses); the clamp moved with it, unchanged.
+  const PAGE = readSource('src/lib/courses/courseMetadata.js');
   const JSONLD = readSource('src/lib/courses/buildCourseJsonLd.js');
   assert.match(
     PAGE.code,

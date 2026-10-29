@@ -31,6 +31,7 @@ import {
   getCourseExtensionByFormerAlias,
 } from '@/lib/actions/course-extensions';
 import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
+import { getPrivateCourseByCode } from '@/lib/courses/privateCourseStore';
 import { normaliseAlias } from '@/lib/courses/aliasAvailability';
 
 const SUFFIX = '-training-course';
@@ -51,6 +52,27 @@ export async function resolveCourse(
     fetchExtensionByFormerCode = getCourseExtensionByFormerCode,
     fetchExtensionByFormerAlias = getCourseExtensionByFormerAlias,
     fetchCourse = getCourseByCodeInsensitive,
+    /**
+     * ── PRIVATE COURSES: ONE INDEXED MONGO READ, ASKED FIRST ─────────────────
+     * A genesis-only private course is never in MSDB, so `fetchCourse` cannot
+     * find it. At each of the three URL shapes below, once the code is known,
+     * `private_courses` is asked FIRST — one exact read on its unique
+     * `course_id` index — and only on a miss does resolution go on to MSDB,
+     * exactly as before.
+     *
+     * Private-first rather than MSDB-first is the choice that keeps the
+     * private path off MSDB entirely: asking MSDB first would cost every
+     * private page view an upstream read (and a full-list fallback, since the
+     * direct `?course_id=` misses). The price on the public path is that one
+     * indexed miss. A code cannot be in both stores — the create guard refuses
+     * a code held by either (lib/courses/courseIdAvailability) — so asking
+     * first shadows nothing.
+     *
+     * A hit returns `kind: 'private'`; every MSDB result is unchanged and
+     * carries no `kind`. The publish gate and `includeHidden` apply exactly as
+     * for an MSDB course, because both read the same CourseExtension row.
+     */
+    fetchPrivateCourse = getPrivateCourseByCode,
     /**
      * ── THE ADMIN PREVIEW BYPASS, AND THE ONLY THING THAT OPENS IT ───────────
      * `true` resolves a course whose extension says `isPublished: false`.
@@ -99,6 +121,10 @@ export async function resolveCourse(
   const alias = normaliseAlias(seg);
   const byAlias = alias ? await fetchExtensionByAlias(alias).catch(() => null) : null;
   if (byAlias && (includeHidden || byAlias.isPublished !== false)) {
+    const privateCourse = await fetchPrivateCourse(byAlias.courseId).catch(() => null);
+    if (privateCourse) {
+      return { course: privateCourse, extension: byAlias, mode: 'alias', kind: 'private' };
+    }
     /**
      * CASE-TOLERANT, because the stored key can LAG AN UPSTREAM RENAME.
      *
@@ -184,6 +210,10 @@ export async function resolveCourse(
   if (alias) {
     const byFormer = await fetchExtensionByFormerAlias(alias).catch(() => null);
     if (byFormer && (includeHidden || byFormer.isPublished !== false)) {
+      const privateCourse = await fetchPrivateCourse(byFormer.courseId).catch(() => null);
+      if (privateCourse) {
+        return { course: privateCourse, extension: byFormer, mode: 'alias-former', kind: 'private' };
+      }
       const course = await fetchCourse(byFormer.courseId, { includeHidden }).catch(
         () => null
       );
@@ -200,6 +230,17 @@ export async function resolveCourse(
     // and four siblings 404 outright.
     const courseId = seg.slice(0, -SUFFIX.length).toUpperCase();
     if (!courseId) return null;
+
+    // Private first — see `fetchPrivateCourse` above. Its extension is keyed
+    // by the same code (a private course is never renamed), and the publish
+    // gate is the same one the MSDB branch below applies.
+    const privateCourse = await fetchPrivateCourse(courseId).catch(() => null);
+    if (privateCourse) {
+      const privateExt = await fetchExtension(privateCourse.course_id).catch(() => null);
+      if (!includeHidden && privateExt?.isPublished === false) return null;
+      return { course: privateCourse, extension: privateExt, mode: 'code', kind: 'private' };
+    }
+
     const course = await fetchCourse(courseId, { includeHidden }).catch(() => null);
     if (!course) return null;
     // Look up extension by the upstream's canonical course_id (which

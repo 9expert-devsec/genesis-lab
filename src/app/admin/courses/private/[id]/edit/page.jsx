@@ -6,6 +6,7 @@ import { listSkills } from '@/lib/api/skills';
 import { listPrograms } from '@/lib/api/programs';
 import { getCourseExtension } from '@/lib/actions/course-extensions';
 import { getPrivateCourse } from '@/lib/courses/privateCourseStore';
+import { privateTaxonomyOptions } from '@/lib/courses/privateTaxonomyStore';
 import { courseListQuery } from '@/lib/courses/adminListQuery';
 import { CourseForm } from '../../../_components/CourseForm';
 
@@ -41,11 +42,14 @@ export default async function EditPrivateCoursePage({ params, searchParams }) {
   // ObjectIds and Dates cannot cross into a client component as they are.
   const course = JSON.parse(JSON.stringify(stored));
 
-  const [listRes, skillsRes, programsRes] = await Promise.allSettled([
+  const [listRes, skillsRes, programsRes, taxonomyRes] = await Promise.allSettled([
     aiFetch('/public-course', { revalidate: 0 }),
     listSkills(),
     listPrograms(),
+    privateTaxonomyOptions(),
   ]);
+  const privateTaxonomy =
+    taxonomyRes.status === 'fulfilled' ? taxonomyRes.value : { programs: [], skills: [] };
   const allCourses = listRes.status === 'fulfilled' ? unwrap(listRes.value).items ?? [] : [];
   const skills = skillsRes.status === 'fulfilled' ? skillsRes.value.items ?? [] : [];
   const programs = programsRes.status === 'fulfilled' ? programsRes.value.items ?? [] : [];
@@ -68,6 +72,7 @@ export default async function EditPrivateCoursePage({ params, searchParams }) {
       allCourses={allCourses}
       extension={extension}
       listQuery={listQuery}
+      privateTaxonomy={privateTaxonomy}
     />
   );
 }

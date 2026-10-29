@@ -69,6 +69,14 @@ const PrivateCourseSchema = new mongoose.Schema(
     program: { type: String, default: '' },
     skills: { type: [String], default: [] },
 
+    // A CUSTOM private program / skills from `private_taxonomy` (round 2b).
+    // PRIVATE-STORE ONLY — nothing like them exists in MSDB, and `program` /
+    // `skills` above keep meaning MSDB ids. A course has EXACTLY ONE of
+    // `program` or `privateProgram` (lib/courses/privateProgramRule, enforced
+    // by the private create/update actions).
+    privateProgram: { type: mongoose.Schema.Types.ObjectId, ref: 'PrivateTaxonomy', default: null },
+    privateSkills: { type: [mongoose.Schema.Types.ObjectId], ref: 'PrivateTaxonomy', default: [] },
+
     course_objectives: { type: [String], default: [] },
     course_target_audience: { type: [String], default: [] },
     course_prerequisites: { type: [String], default: [] },

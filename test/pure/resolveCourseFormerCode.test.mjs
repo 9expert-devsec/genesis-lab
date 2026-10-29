@@ -46,6 +46,9 @@ const deps = (over = {}) => ({
   fetchExtensionByFormerCode: async (code) =>
     (EXT.formerCodes.some((f) => f.toLowerCase() === String(code).toLowerCase()) ? EXT : null),
   fetchCourse,
+  // Round 3's private-course lookup. Its default reaches Mongo; no course
+  // here is private, so it always misses.
+  fetchPrivateCourse: async () => null,
   ...over,
 });
 
@@ -120,6 +123,7 @@ test('a course with NO formerCodes behaves exactly as before', async () => {
     fetchExtensionByFormerAlias: async () => null,
     fetchExtensionByFormerCode: async () => null,
     fetchCourse,
+    fetchPrivateCourse: async () => null,
   };
   const byAlias = await resolveCourse('plain-training-course', d);
   assert.equal(byAlias.mode, 'alias');

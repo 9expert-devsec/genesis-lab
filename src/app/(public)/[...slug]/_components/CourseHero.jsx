@@ -18,7 +18,15 @@ import { INHOUSE_ONLY_LABEL, isInhouseOnlyPrice } from '@/lib/coursePriceLabel';
  * skill's color (fallback). Dark and saturated colors lighten
  * aggressively so the gradient never competes with the white card.
  */
-export function CourseHero({ course, heroColor, gallery = [] }) {
+/**
+ * `isPrivate` — a genesis-only private course, reached by a link sent to one
+ * client. Its `course` is the reduced view (no price fields at all), and this
+ * flag drops the parts of the card that only make sense for a course on sale:
+ * the time-of-day line, the price and its note, and both quotation buttons.
+ * Code, title, days/hours, the Public/Inhouse pills, Workshop/e-Certificate and
+ * the cover/video stay.
+ */
+export function CourseHero({ course, heroColor, gallery = [], isPrivate = false }) {
   // Build ordered slide list for the cover zone:
   //  1. YouTube items (from gallery, in order)
   //  2. Cover image (course_cover_url) — always before image slides
@@ -164,7 +172,7 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                   {course.course_trainingdays} วัน
                   {hours ? ` (${hours} ชม.)` : ''}
                 </span>
-                <span>/ ช่วงเวลา 9:00 - 16:00 น.</span>
+                {!isPrivate && <span>/ ช่วงเวลา 9:00 - 16:00 น.</span>}
               </div>
 
               {/* COURSE TYPE, from the two flags the admin actually edits.
@@ -199,6 +207,8 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                 </div>
               )}
 
+              {!isPrivate && (
+              <>
               <div className="mb-1 flex flex-wrap items-baseline gap-2">
                 {isInhouseOnly ? (
                   /* The widest slot the label has to fit: 3xl extrabold, and
@@ -231,6 +241,8 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
               <p className="mb-4 text-xs text-[var(--text-secondary)]">
                 {isInhouseOnly ? '*รับเฉพาะ InHouse Training เท่านั้น' : '*ราคาดังกล่าวยังไม่รวมภาษีมูลค่าเพิ่ม'}
               </p>
+              </>
+              )}
 
               {(course.course_workshop_status ||
                 course.course_certificate_status) && (
@@ -256,6 +268,7 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                 </div>
               )}
 
+              {!isPrivate && (
               <div className="flex flex-row gap-3">
                 {!isInhouseOnly && (
                   <Link
@@ -272,6 +285,7 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                   ขอใบเสนอราคา Inhouse
                 </Link>
               </div>
+              )}
             </div>
           </div>
 

@@ -155,6 +155,9 @@ test('resolveCourse gates EVERY url shape on isPublished', () => {
   assert.match(code, /if \(byAlias && \(includeHidden \|\| byAlias\.isPublished !== false\)\)/);
   assert.match(code, /if \(byFormer && \(includeHidden \|\| byFormer\.isPublished !== false\)\)/);
   assert.match(code, /if \(!includeHidden && extension\?\.isPublished === false\) return null;/);
+  // ROUND 3: a PRIVATE course on the derived code path reads its own extension
+  // (its alias hits ride the two alias gates above), so it carries its own gate.
+  assert.match(code, /if \(!includeHidden && privateExt\?\.isPublished === false\) return null;/);
 });
 
 test('CONTROL: the gates read isPublished, one per URL shape and no more', () => {
@@ -165,7 +168,8 @@ test('CONTROL: the gates read isPublished, one per URL shape and no more', () =>
   // bare number, so that adding a shape without its gate cannot be made to pass
   // by editing one digit.
   const { code } = readSource('src/lib/resolveCourse.js');
-  const SHAPES = ['a current alias', 'a former alias', 'a derived code path'];
+  const SHAPES = ['a current alias', 'a former alias', 'a derived code path',
+    "a private course's derived code path"];
   const hits = code.match(/isPublished/g) ?? [];
   assert.equal(hits.length, SHAPES.length,
     `one gate per URL shape — resolveCourse resolves ${SHAPES.join(', ')}, and an `

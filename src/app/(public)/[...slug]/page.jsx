@@ -3,6 +3,9 @@ import { notFound, permanentRedirect, redirect } from 'next/navigation';
 // rule in this repo.
 import { notFoundOrRedirect } from '@/lib/redirects/notFoundBoundary';
 import { listPrograms } from '@/lib/api/programs';
+import { toPrivateCourseView } from '@/lib/courses/privateCourseView';
+import { getTaxonomyItem } from '@/lib/courses/privateTaxonomyStore';
+import { courseMetadata } from '@/lib/courses/courseMetadata';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import {
   PUBLIC_SCHEDULE_STATUSES,
@@ -470,15 +473,6 @@ export async function generateMetadata({ params, searchParams }) {
   const resolved = await resolveCourse(segment);
   if (resolved) {
     const { course, extension } = resolved;
-    const title =
-      extension?.metaTitle?.trim() ||
-      `${course.course_name}`;
-    const description =
-      extension?.metaDescription?.trim() ||
-      course.course_teaser?.slice(0, 160) ||
-      '';
-    const ogImage =
-      extension?.ogImage?.trim() || course.course_cover_url || '';
 
     /**
      * ── THE COURSE CANONICAL DOES NOT FOLLOW THE REQUEST ──────────────────
@@ -504,17 +498,14 @@ export async function generateMetadata({ params, searchParams }) {
     const canonicalUrl =
       courseCanonicalUrl(course, extension, process.env.NEXT_PUBLIC_SITE_URL) || pageUrl;
 
-    return {
-      title,
-      description,
-      alternates: { canonical: canonicalUrl },
-      openGraph: {
-        title,
-        description,
-        url: canonicalUrl,
-        images: ogImage ? [{ url: ogImage }] : [],
-      },
-    };
+    // A private course adds noindex/nofollow and nothing else — see
+    // lib/courses/courseMetadata for why OG stays normal.
+    return courseMetadata({
+      course,
+      extension,
+      canonicalUrl,
+      isPrivate: resolved.kind === 'private',
+    });
   }
 
   // Builder page metadata — same precedence tier as custom pages, after every
@@ -773,6 +764,57 @@ export default async function CatchAllPage({ params, searchParams }) {
       if (canonicalRedirect) {
         courseRedirectFn({ redirect, permanentRedirect })(canonicalRedirect);
       }
+    }
+
+    /**
+     * ── A PRIVATE COURSE: THE SAME DETAIL, REDUCED ──────────────────────────
+     * Reached only by the link the admin sends. It reuses CourseDetail with
+     * `variant="private"`, and differs from the branch below in three ways:
+     *
+     *   · ONE fetch — `/programs`, for the hero colour. No schedules, early
+     *     bird, promos, FAQs, skills, linkability or bundles are read: every
+     *     section they feed is hidden on this page.
+     *   · `course` is toPrivateCourseView(...), never the stored document, so
+     *     the price and every other hidden field is absent from the RSC
+     *     payload, not merely unrendered.
+     *   · NO JSON-LD. A private page must never be findable; structured data
+     *     is a machine-readable advertisement for it. (`noindex` is set in
+     *     generateMetadata; OG stays normal so a shared link unfurls.)
+     */
+    if (resolved.kind === 'private') {
+      // A CUSTOM program is one indexed read and needs no `/programs` at all;
+      // only a course on an MSDB program fetches the program list.
+      const customProgram = course.privateProgram
+        ? await getTaxonomyItem(String(course.privateProgram)).catch(() => null)
+        : null;
+      const programs = customProgram
+        ? []
+        : await listPrograms()
+          .then((r) => r?.items ?? [])
+          .catch(() => []);
+      const view = toPrivateCourseView(course, { programs, customProgram });
+      return (
+        <>
+          {isHiddenPreview && (
+            <div className="bg-9e-lime/20 border-b border-9e-lime px-4 py-2 text-center text-sm font-medium text-[var(--text-primary)]">
+              ตัวอย่างหลักสูตรที่ซ่อนอยู่ (ยังไม่เผยแพร่) — เฉพาะผู้ดูแลระบบ
+            </div>
+          )}
+          <CourseDetail
+            variant="private"
+            course={view}
+            extension={extension}
+            // The one resolved program, carrying its colour — CourseDetail
+            // picks the hero colour from this list by the course's program id.
+            programs={view.program ? [view.program] : []}
+            schedules={[]}
+            earlyBird={null}
+            coursePromos={[]}
+            bundlePages={[]}
+            faqs={[]}
+          />
+        </>
+      );
     }
 
     // Parallelise schedules + programs. `/programs` carries `programcolor`
@@ -1077,7 +1119,16 @@ function CourseDetail({
   coursePromos,
   bundlePages = [],
   faqs = [],
+  /**
+   * 'private' for a genesis-only private course. Its `course` is already the
+   * REDUCED view (lib/courses/privateCourseView) and the schedules / promos /
+   * FAQs / related it would need were never fetched, so most hidden sections
+   * have nothing to render. They are ALSO gated here by name, so a hidden
+   * section stays hidden even if a later edit starts passing it data.
+   */
+  variant = 'public',
 }) {
+  const isPrivate = variant === 'private';
   const hasSchedules = Boolean(schedules?.length);
   const isInhouseOnly = !course.course_price || Number(course.course_price) === 0;
   // Sticky-bar navigation target — only an inhouse-only course navigates (to
@@ -1135,12 +1186,14 @@ function CourseDetail({
 
   return (
     <article className="bg-[var(--page-bg)]">
-      <CourseHero course={course} heroColor={heroColor} gallery={gallery} />
-      <SkillBreadcrumb
-        course={course}
-        skillHrefs={skillHrefs}
-        programHref={courseProgramHref}
-      />
+      <CourseHero course={course} heroColor={heroColor} gallery={gallery} isPrivate={isPrivate} />
+      {!isPrivate && (
+        <SkillBreadcrumb
+          course={course}
+          skillHrefs={skillHrefs}
+          programHref={courseProgramHref}
+        />
+      )}
 
       {/* Mobile-only sticky jump links; the sidebar copy is hidden below lg.
           Kept as a component rather than inline markup on purpose — see the
@@ -1162,7 +1215,16 @@ function CourseDetail({
           small screens; this is content-length-independent (works when a short
           course has no RelatedCourses below). lg keeps the original pb-8 — the
           large-screen bar is centered and its presentation is unchanged. */}
-      <div className="mx-auto max-w-[1200px] px-4 pt-8 pb-36 lg:pb-8">
+      {/* A PRIVATE page has no sticky bar, so it reserves no room for one —
+          the mobile pb-36 would be an empty band above the footer. The inline
+          2rem is pb-8 at every width (what lg already uses); it is a style
+          rather than a second className because the stacking-context guard in
+          test/render/stickyBarButtonCoordination locates this wrapper by its
+          literal className. */}
+      <div
+        className="mx-auto max-w-[1200px] px-4 pt-8 pb-36 lg:pb-8"
+        style={isPrivate ? { paddingBottom: '2rem' } : undefined}
+      >
         {/* id="course-content" marks the content zone (main column + sidebar).
             CourseStickyCTA hides once this element's bottom scrolls above the
             viewport — i.e. before the related-courses section / footer — and
@@ -1190,7 +1252,7 @@ function CourseDetail({
                 height, so pinning it would permanently spend a third of a
                 phone screen on two download buttons. */}
             <PDFDownload course={course} className="lg:hidden" layout="row" />
-            {earlyBird && (
+            {!isPrivate && earlyBird && (
               <EarlyBirdBanner
                 earlyBird={earlyBird}
                 earlyBirdPromotion={earlyBirdPromotion}
@@ -1200,7 +1262,7 @@ function CourseDetail({
                 course={course}
               />
             )}
-            {Array.isArray(coursePromos) && coursePromos.length > 0 && (
+            {!isPrivate && Array.isArray(coursePromos) && coursePromos.length > 0 && (
               <CoursePromoSection coursePromos={coursePromos} />
             )}
             {/* AFTER the MSDB promotions, which is the block order the
@@ -1209,8 +1271,8 @@ function CourseDetail({
                 are two independent scales nobody has reconciled. The component
                 renders null on an empty list, so a course with no bundles has
                 exactly the promo area it had before this round. */}
-            <CourseBundleSection bundles={bundlePages} />
-            {!isInhouseOnly && (
+            {!isPrivate && <CourseBundleSection bundles={bundlePages} />}
+            {!isPrivate && !isInhouseOnly && (
               <ScheduleSection
                 course={course}
                 schedules={schedules}
@@ -1233,13 +1295,15 @@ function CourseDetail({
               course={course}
               richHtml={prepareOutlineRichHtml({ course, extension })}
             />
-            <CourseRoadmap course={course} />
-            <FaqAccordionSection
-              faqs={faqs}
-              id="faq"
-              className={SECTION_ANCHOR_CLASS}
-              headingClassName="mb-4 border-l-4 border-9e-brand pl-3 text-lg font-bold text-[var(--text-primary)]"
-            />
+            {!isPrivate && <CourseRoadmap course={course} />}
+            {!isPrivate && (
+              <FaqAccordionSection
+                faqs={faqs}
+                id="faq"
+                className={SECTION_ANCHOR_CLASS}
+                headingClassName="mb-4 border-l-4 border-9e-brand pl-3 text-lg font-bold text-[var(--text-primary)]"
+              />
+            )}
           </div>
 
           {/* relative z-50 raises the sidebar above the fixed CourseStickyCTA
@@ -1271,18 +1335,22 @@ function CourseDetail({
         </div>
       </div>
 
-      <RelatedCourses
-        courses={relatedCourses}
-        currentYear={siteCurrentYear()}
-        skillSlugs={skillSlugs}
-      />
+      {!isPrivate && (
+        <RelatedCourses
+          courses={relatedCourses}
+          currentYear={siteCurrentYear()}
+          skillSlugs={skillSlugs}
+        />
+      )}
 
-      <CourseStickyCTA
-        title={course.course_name}
-        coverUrl={course.course_cover_url}
-        hasSchedules={hasSchedules}
-        inhouseHref={stickyInhouseHref}
-      />
+      {!isPrivate && (
+        <CourseStickyCTA
+          title={course.course_name}
+          coverUrl={course.course_cover_url}
+          hasSchedules={hasSchedules}
+          inhouseHref={stickyInhouseHref}
+        />
+      )}
     </article>
   );
 }

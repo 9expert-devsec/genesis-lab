@@ -43,7 +43,10 @@ export function PrivateCoursesTable({ rows = [], listQuery = '' }) {
         Private Courses
       </h2>
       <p className="mb-3 text-sm text-[var(--text-secondary)]">
-        เก็บใน Genesis เท่านั้น — ไม่ส่งไป MSDB และไม่แสดงในหน้ารายการสาธารณะ
+        เก็บใน Genesis เท่านั้น — ไม่ส่งไป MSDB และไม่แสดงในหน้ารายการสาธารณะ ·{' '}
+        <Link href="/admin/courses/private-taxonomy" className="text-9e-action hover:underline">
+          จัดการโปรแกรม / Skill แบบ Private
+        </Link>
       </p>
 
       {error && (

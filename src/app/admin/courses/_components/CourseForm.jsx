@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ChevronLeft, Eye, ExternalLink, X } from 'lucide-react';
 import { createCourse, updateCourse } from '@/lib/actions/courses';
 import { createPrivateCourse, updatePrivateCourse } from '@/lib/actions/courses';
+import { PRIVATE_PROGRAM_PREFIX } from '@/lib/courses/privateProgramRule';
 import {
   saveCourseExtension,
   checkAliasAvailable,
@@ -117,6 +118,13 @@ export function CourseForm({
    * no MSDB id on its extension row, and has no public page to preview yet.
    */
   privateCourse = false,
+  /**
+   * The custom PRIVATE programs and skills (private_taxonomy), as plain
+   * `{ _id, name }` rows. Offered ONLY while the type is Private Course — a
+   * normal course never sees them. See lib/courses/privateProgramRule for how
+   * the shared `program` select carries a custom pick.
+   */
+  privateTaxonomy = { programs: [], skills: [] },
 }) {
   const router = useRouter();
   const [courseKind, setCourseKind] = useState(privateCourse ? 'private' : 'normal');
@@ -272,6 +280,14 @@ export function CourseForm({
     return initial.skills.map((s) => s?._id ?? s).filter(Boolean).map(String);
   })();
   const [selectedSkillIds, setSelectedSkillIds] = useState(initialSkillIds);
+  // Custom private skills — their own selection, posted as `private_skills`,
+  // which shapePayload never reads.
+  const [selectedPrivateSkillIds, setSelectedPrivateSkillIds] = useState(
+    (Array.isArray(initial?.privateSkills) ? initial.privateSkills : []).map(String)
+  );
+  function togglePrivateSkill(id) {
+    setSelectedPrivateSkillIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  }
 
   function toggleSkill(id) {
     setSelectedSkillIds((cur) =>
@@ -913,6 +929,10 @@ export function CourseForm({
 
   // Pre-cooked defaults that map upstream populated objects.
   const programId = initial?.program?._id ?? initial?.program ?? '';
+  // A private course on a CUSTOM program selects its `private:<id>` option.
+  const programSelectValue = isPrivate && initial?.privateProgram
+    ? `${PRIVATE_PROGRAM_PREFIX}${initial.privateProgram}`
+    : programId;
 
   /**
    * The course body — every MSDB field except `website_urls`.
@@ -1248,7 +1268,7 @@ export function CourseForm({
         <Field label="โปรแกรม" hint="จำเป็นต้องเลือก">
           <select
             name="program"
-            defaultValue={programId}
+            defaultValue={programSelectValue}
             required
             className={inputCls}
           >
@@ -1258,7 +1278,28 @@ export function CourseForm({
                 {p.name ?? p.program_name ?? p.label ?? p._id}
               </option>
             ))}
+            {/* PRIVATE COURSES ONLY. One select, so a custom pick replaces an
+                MSDB one and vice versa; the private actions split the
+                `private:` value into `privateProgram`. */}
+            {isPrivate && privateTaxonomy.programs.length > 0 && (
+              <optgroup label="Custom (Private)">
+                {privateTaxonomy.programs.map((p) => (
+                  <option key={p._id} value={`${PRIVATE_PROGRAM_PREFIX}${p._id}`}>
+                    {p.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
+          {isPrivate && (
+            <Link
+              href="/admin/courses/private-taxonomy"
+              target="_blank"
+              className="mt-1 inline-block text-xs text-9e-action hover:underline"
+            >
+              จัดการโปรแกรม / Skill แบบ Private
+            </Link>
+          )}
         </Field>
 
         <Field label="Skills" hint="กดเลือกหลายค่าได้">
@@ -1293,6 +1334,34 @@ export function CourseForm({
             <input key={id} type="hidden" name="skills" value={id} />
           ))}
         </Field>
+
+        {isPrivate && privateTaxonomy.skills.length > 0 && (
+          <Field label="Skills — Custom (Private)" hint="ไม่แสดงบนหน้าเว็บ — เก็บไว้ใช้ภายใน">
+            <div className="flex flex-wrap gap-1.5">
+              {privateTaxonomy.skills.map((s) => {
+                const active = selectedPrivateSkillIds.includes(s._id);
+                return (
+                  <button
+                    key={s._id}
+                    type="button"
+                    onClick={() => togglePrivateSkill(s._id)}
+                    className={
+                      'rounded-full px-3 py-1 text-xs transition-colors ' +
+                      (active
+                        ? 'bg-purple-600 text-white'
+                        : 'border border-purple-200 bg-white text-purple-700 hover:bg-purple-50 dark:bg-[#0D1B2A]')
+                    }
+                  >
+                    {s.name}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedPrivateSkillIds.map((id) => (
+              <input key={id} type="hidden" name="private_skills" value={id} />
+            ))}
+          </Field>
+        )}
       </Section>
 
       {/* ───────────────────────────────────────────────────────────
@@ -1614,23 +1683,16 @@ export function CourseForm({
               URL of a course that is not there. Rendering either would be a
               link that 404s by construction. They appear on the edit page the
               create flow redirects to. */}
-          {/* A PRIVATE course has neither of them yet: the public page does not
-              resolve private courses until a later round, and the promos/FAQ
-              page is MSDB-keyed. A disabled Preview says why instead. */}
-          {!isCreate && isPrivate && (
-            <span
-              aria-disabled="true"
-              title="Private Course ยังไม่มีหน้าแสดงผล — การดูตัวอย่างจะมาในรอบถัดไป"
-              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm font-medium text-gray-400"
-            >
-              <Eye className="h-4 w-4" /> ดูหน้าจริง
-            </span>
-          )}
-          {!isCreate && !isPrivate && (
+          {!isCreate && (
           <>
           {/* The four editors that stayed on /admin/courses/[courseId]. The
               list's SEO/Gallery button is gone, so this is now their only way
-              in — without it they would be unreachable, not merely moved. */}
+              in — without it they would be unreachable, not merely moved.
+              NOT for a private course: promos / early bird / FAQ / payment are
+              all MSDB-keyed and hidden on its page anyway. Its ดูหน้าจริง below
+              works like any course's — the public route resolves it by alias
+              or code path, and `?preview=1` while it is hidden. */}
+          {!isPrivate && (
           <Link
             // Keyed by the course_id CODE, unlike this page's own _id route —
             // and carrying the filter one hop further so that page's ← back to
@@ -1640,6 +1702,7 @@ export function CourseForm({
           >
             โปรโมชัน / Early Bird / FAQ / ชำระเงิน
           </Link>
+          )}
 
           {/* R1: NOT "Preview" — this opens the PUBLIC page, which reads MSDB
               fresh and therefore shows only whatever the last successful save
@@ -1732,7 +1795,7 @@ export function CourseForm({
               already, same reason ดูหน้าจริง itself is hidden while creating.
               `data-intent` is how handleSubmit tells this submit apart from
               the plain "บันทึก" one — see its `wantsPreviewAfterSave` read. */}
-          {!isCreate && !isPrivate && (
+          {!isCreate && (
             <button
               type="submit"
               data-intent="save-and-preview"

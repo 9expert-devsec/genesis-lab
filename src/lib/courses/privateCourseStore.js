@@ -65,6 +65,20 @@ export async function removePrivateCourse(id, { model } = {}) {
   return M.findByIdAndDelete(id).lean();
 }
 
+/**
+ * The private course with this code, or null — ONE read on the unique
+ * `course_id` index. Exact, not a regex: the code is stored uppercase, so
+ * uppercasing the lookup is the whole of the case rule and the index serves it.
+ * This is what resolveCourse runs on the public route, including for every
+ * MSDB course (where it misses), so it must stay this cheap.
+ */
+export async function getPrivateCourseByCode(code, { model } = {}) {
+  const wanted = normaliseCourseId(code);
+  if (!wanted) return null;
+  const M = model ?? (await defaultModel());
+  return M.findOne({ course_id: wanted }).lean();
+}
+
 export async function getPrivateCourse(id, { model } = {}) {
   if (!id) return null;
   const M = model ?? (await defaultModel());

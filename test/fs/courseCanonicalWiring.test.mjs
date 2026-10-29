@@ -48,8 +48,13 @@ test('the course branch computes its canonical from the shared helper', () => {
 test('the course branch uses that value for BOTH canonical and og:url', () => {
   // Two claims about the same page. Emitting one and not the other is a
   // half-migration that reads as done.
-  assert.match(code, /alternates: \{ canonical: canonicalUrl \}/, 'alternates.canonical');
-  assert.match(code, /url: canonicalUrl,/, 'openGraph.url');
+  // ROUND 3 moved the object into lib/courses/courseMetadata (shared by the
+  // public and private course), so the claim is now in two halves: the page
+  // hands it `canonicalUrl`, and the helper uses it for both fields.
+  assert.match(code, /return courseMetadata\(\{[\s\S]{0,80}?canonicalUrl,/, 'the page passes canonicalUrl in');
+  const helper = readSource('src/lib/courses/courseMetadata.js').code;
+  assert.match(helper, /alternates: \{ canonical: canonicalUrl \}/, 'alternates.canonical');
+  assert.match(helper, /url: canonicalUrl,/, 'openGraph.url');
 });
 
 test('the course branch no longer self-canonicalises', () => {

@@ -66,6 +66,9 @@ function harness({ extensions = [STALE_EXTENSION] } = {}) {
     // test/fs/injectedDepCoverage exists to catch before it costs a hang.
     fetchExtensionByFormerAlias: async () => null,
     fetchExtensionByFormerCode: async () => null,
+    // Round 3's private-course lookup — db-backed by default; nothing here is
+    // private, so it always misses.
+    fetchPrivateCourse: async () => null,
   };
   return { calls, deps };
 }
@@ -129,6 +132,7 @@ test('CONTROL: with an EXACT-match lookup, the reported 404 comes straight back'
     fetchExtension: async () => null,
     fetchExtensionByFormerAlias: async () => null,
     fetchExtensionByFormerCode: async () => null,
+    fetchPrivateCourse: async () => null,
   };
 
   assert.equal(

@@ -48,6 +48,9 @@ function resolverDeps(ext) {
     // test/fs/injectedDepCoverage exists to catch before it costs a hang.
     fetchExtensionByFormerAlias: async () => null,
     fetchExtensionByFormerCode: async () => null,
+    // Round 3's private-course lookup — db-backed by default; nothing here is
+    // private, so it always misses.
+    fetchPrivateCourse: async () => null,
   };
 }
 
@@ -105,6 +108,7 @@ test('a course with NO extension row at all still resolves — it was never hidd
     fetchExtensionByAlias: async () => null,
     fetchExtension: async () => null,
     fetchCourse: async () => COURSE,
+    fetchPrivateCourse: async () => null,
   });
   assert.equal(out.mode, 'code');
   assert.equal(out.extension, null);

@@ -72,6 +72,7 @@ import {
   updatePrivateCourseDoc,
   removePrivateCourse,
 } from '@/lib/courses/privateCourseStore';
+import { privateTaxonomyFields, exactlyOneProgram } from '@/lib/courses/privateProgramRule';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import {
   resolveCourseObjectIds,
@@ -622,11 +623,17 @@ export async function createPrivateCourse(formData) {
   if (!body.course_name) return { ok: false, error: 'กรุณากรอกชื่อหลักสูตร' };
   if (!body.course_id)   return { ok: false, error: 'กรุณากรอกรหัสหลักสูตร (course_id)' };
 
+  // MSDB program OR custom private program — exactly one. Split from the same
+  // `program` select shapePayload already read; see lib/courses/privateProgramRule.
+  const taxonomy = privateTaxonomyFields(body, formData);
+  const programRefusal = exactlyOneProgram(taxonomy);
+  if (programRefusal) return programRefusal;
+
   const refusal = await courseIdRefusal(body);
   if (refusal) return refusal;
 
   try {
-    const item = await insertPrivateCourse(body);
+    const item = await insertPrivateCourse({ ...body, ...taxonomy });
     revalidatePath(ADMIN_PATH);
 
     recordAdminActionAfter({
@@ -651,11 +658,18 @@ export async function updatePrivateCourse(id, formData) {
   if (!id) return { ok: false, error: 'Missing course id' };
 
   const body = shapePayload(formData);
+  const taxonomy = privateTaxonomyFields(body, formData);
+  const programRefusal = exactlyOneProgram(taxonomy);
+  if (programRefusal) return programRefusal;
   try {
-    const item = await updatePrivateCourseDoc(id, body);
+    const item = await updatePrivateCourseDoc(id, { ...body, ...taxonomy });
     if (!item) return { ok: false, error: 'ไม่พบ Private Course นี้' };
     revalidatePath(ADMIN_PATH);
     revalidatePath(`${ADMIN_PATH}/private/${id}/edit`);
+    // The PUBLIC private page, at its code path. Its alias path is revalidated
+    // by saveCourseExtension, which the form always runs right after this.
+    // No MSDB tag: nothing upstream holds a private course.
+    revalidatePath(derivedCoursePath(item.course_id));
 
     recordAdminActionAfter({
       menu:        'courses',

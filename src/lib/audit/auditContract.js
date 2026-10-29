@@ -223,6 +223,9 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
    * holding today's catalogue has the new code, not the retired one.
    */
   entry('courses', 'course_code', 'รหัสหลักสูตร', 'full'),
+  // Custom PRIVATE programs/skills (genesis-only), managed under the courses
+  // menu because they exist only to serve private courses.
+  entry('courses', 'private_taxonomy', 'โปรแกรม/Skill แบบ Private', 'full'),
 
   entry('schedules',   'schedule',   'รอบอบรม', 'full'),
   entry('instructors', 'instructor', 'วิทยากร', 'full'),

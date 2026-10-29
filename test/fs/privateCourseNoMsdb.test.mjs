@@ -48,9 +48,12 @@ function calledNames(body) {
 }
 
 const COMMON = ['requireAdmin', 'shapePayload', 'revalidatePath', 'recordAdminActionAfter', 'courseLabel', 'courseFields', 'String'];
+// Round 2b: the program/skill split and the exactly-one-program rule — both pure.
+const PROGRAM_RULE = ['privateTaxonomyFields', 'exactlyOneProgram'];
 const ALLOWED = {
-  createPrivateCourse: [...COMMON, 'courseIdRefusal', 'insertPrivateCourse'],
-  updatePrivateCourse: [...COMMON, 'updatePrivateCourseDoc'],
+  createPrivateCourse: [...COMMON, ...PROGRAM_RULE, 'courseIdRefusal', 'insertPrivateCourse'],
+  // derivedCoursePath only builds '/<code>-training-course' for revalidatePath.
+  updatePrivateCourse: [...COMMON, ...PROGRAM_RULE, 'updatePrivateCourseDoc', 'derivedCoursePath'],
   deletePrivateCourse: [...COMMON, 'removePrivateCourse', 'deleteCourseExtension'],
   // The shared duplicate guard. Its MSDB call is the uncached READ the normal
   // create has always made; it writes nothing.
@@ -75,6 +78,65 @@ test('the private store imports no upstream client at all', () => {
   );
   assert.doesNotMatch(STORE.code, /\b(aiFetch|msdbCreate|msdbUpdate|msdbDelete)\b/);
   assert.match(STORE.code, /import\('@\/models\/PrivateCourse'\)/, 'CONTROL: it does reach its own model');
+});
+
+// ── round 2b: custom private programs / skills ─────────────────────────────
+
+const TAXONOMY_ACTIONS = readSource('src/lib/actions/private-taxonomy.js');
+const TAXONOMY_STORE = readSource('src/lib/courses/privateTaxonomyStore.js');
+const T_COMMON = ['requireAdmin', 'revalidatePath', 'recordAdminActionAfter', 'String', 'fields', 'plain'];
+const T_ALLOWED = {
+  createPrivateTaxonomyItem: [...T_COMMON, 'validateTaxonomyInput', 'insertTaxonomyItem'],
+  updatePrivateTaxonomyItem: [...T_COMMON, 'getTaxonomyItem', 'validateTaxonomyInput', 'updateTaxonomyItem'],
+  deletePrivateTaxonomyItem: [...T_COMMON, 'taxonomyDeleteRefusal', 'coursesReferencingTaxonomy', 'removeTaxonomyItem'],
+};
+
+for (const [name, allowed] of Object.entries(T_ALLOWED)) {
+  test(`${name} calls only what it is allowed to — and no MSDB writer`, () => {
+    const body = functionBody(TAXONOMY_ACTIONS.code, name);
+    assert.doesNotMatch(body, MSDB_WRITERS, `${name} reaches an MSDB writer`);
+    const extra = [...calledNames(body)].filter((n) => !allowed.includes(n));
+    assert.deepEqual(extra, [], `${name} calls something not on its allowlist`);
+  });
+}
+
+test('the taxonomy actions and store import no upstream client', () => {
+  for (const src of [TAXONOMY_ACTIONS, TAXONOMY_STORE]) {
+    assert.doesNotMatch(src.withImports, /from '@\/lib\/api\/(msdb-write|client|resolveIds|bustUpstream|public-courses)'/);
+    assert.doesNotMatch(src.code, /\b(aiFetch|msdbCreate|msdbUpdate|msdbDelete)\b/);
+  }
+  assert.match(TAXONOMY_STORE.code, /import\('@\/models\/PrivateTaxonomy'\)/, 'CONTROL: it does reach its own model');
+});
+
+// ── the NORMAL course payload is untouched ─────────────────────────────────
+
+test("shapePayload's output keys for a normal course are exactly what they were", () => {
+  /**
+   * The private taxonomy rides OUTSIDE shapePayload — a `private:` value on the
+   * shared `program` select, split by the private actions, and `private_skills`
+   * inputs shapePayload never reads. So the MSDB body must not have gained a
+   * key, and shapePayload must not mention the private store at all.
+   */
+  const start = ACTIONS.indexOf('function shapePayload(');
+  assert.notEqual(start, -1, 'shapePayload moved');
+  const ret = ACTIONS.indexOf('return {', start);
+  let depth = 0;
+  let end = ret + 'return '.length;
+  for (; end < ACTIONS.length; end += 1) {
+    if (ACTIONS[end] === '{') depth += 1;
+    else if (ACTIONS[end] === '}') { depth -= 1; if (depth === 0) break; }
+  }
+  const body = ACTIONS.slice(start, end);
+  const keys = [...ACTIONS.slice(ret, end).matchAll(/^\s*([a-z_]+):/gm)].map((m) => m[1]);
+  assert.deepEqual(keys, [
+    'course_name', 'course_id', 'course_teaser', 'course_trainingdays', 'course_traininghours',
+    'course_levels', 'course_price', 'course_netprice', 'course_cover_url', 'sort_order',
+    'course_type_public', 'course_type_inhouse', 'course_workshop_status', 'course_certificate_status',
+    'course_promote_status', 'program', 'skills', 'previous_course', 'related_courses',
+    'course_objectives', 'course_target_audience', 'course_prerequisites', 'course_system_requirements',
+    'training_topics', 'course_outline_th', 'course_outline_en',
+  ]);
+  assert.doesNotMatch(body, /private/i, 'shapePayload mentions the private store');
 });
 
 test('CONTROL: the allowlist scan sees a real body and a real MSDB call', () => {

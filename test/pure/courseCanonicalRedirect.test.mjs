@@ -70,6 +70,9 @@ function deps(extensions = EXTENSIONS) {
     // Supplied so nothing falls through to the real db-backed dep; see
     // test/fs/injectedDepCoverage for why an unsupplied one is a defect.
     fetchExtensionByFormerCode: async () => null,
+    // Round 3's private-course lookup — db-backed by default; nothing here is
+    // private, so it always misses.
+    fetchPrivateCourse: async () => null,
   };
 }
 

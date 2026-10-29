@@ -51,6 +51,8 @@ export const SWEPT = Object.freeze([
   { file: 'src/lib/actions/courses.js', menus: ['courses'] },
   { file: 'src/lib/actions/schedules.js', menus: ['schedules'] },
   { file: 'src/lib/actions/course-extensions.js', menus: ['courses'] },
+  // Custom private programs/skills — round 2b of private courses.
+  { file: 'src/lib/actions/private-taxonomy.js', menus: ['courses'] },
 
   // ── Round 4 — articles, the only menu where ONE action writes MANY rows ──
   // A step can rebalance a span; a pin renumbers the block behind it. All of
