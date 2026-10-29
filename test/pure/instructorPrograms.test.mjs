@@ -8,6 +8,8 @@ import {
   toProgramOptions,
   resolveInstructorPrograms,
   resolveSubmittedPrograms,
+  programCardHref,
+  instructorProgramLinks,
 } from '@/lib/instructors/instructorPrograms';
 
 /**
@@ -92,4 +94,36 @@ test('loader: ids resolve to name + icon in stored order; missing ids are droppe
   ]);
   assert.deepEqual(resolveInstructorPrograms([], options), []);
   assert.deepEqual(resolveInstructorPrograms(['p1'], []), []);
+});
+
+// ── the card icon links (AB-2f) ─────────────────────────────────────────────
+// Linkability is getPageLinkability()'s shape: slug maps keyed by the
+// lower-cased id or code, and the ids whose page is explicitly unpublished.
+
+const PBI = { _id: '68d3c5b02c6a2f1315c0bce5', program_id: 'POWER-BI', program_name: 'Power BI', programiconurl: 'https://x/pbi.png' };
+const XL = { _id: '68d3c5b02c6a2f1315c0bce4', program_id: 'MSE', program_name: 'Microsoft Excel', programiconurl: 'https://x/xl.png' };
+const linkability = (over = {}) => ({ programSlugs: {}, programBlocked: new Set(), ...over });
+
+test('a program with a page links to it — its slug, matched by code or by _id', () => {
+  const [pbi] = toProgramOptions([PBI]);
+  assert.equal(programCardHref(pbi, linkability({ programSlugs: { 'power-bi': 'power-bi-all-courses' } })), '/power-bi-all-courses');
+  assert.equal(programCardHref(pbi, linkability({ programSlugs: { [PBI._id]: 'pbi-by-id' } })), '/pbi-by-id');
+  assert.equal(programCardHref(pbi, linkability()), '/program/power-bi', 'no config → the legacy path the site resolves');
+});
+
+test('a program whose page is unpublished gets no link (null)', () => {
+  const [pbi] = toProgramOptions([PBI]);
+  assert.equal(programCardHref(pbi, linkability({ programBlocked: new Set(['power-bi']) })), null);
+  assert.equal(programCardHref(pbi, linkability({ programBlocked: new Set([PBI._id]) })), null);
+  assert.equal(programCardHref(pbi, null), null, 'no linkability → no link');
+});
+
+test('instructorProgramLinks: stored order, icons only, each with its href or null', () => {
+  const options = toProgramOptions([PBI, XL, { _id: 'p3', program_name: 'No icon', programiconurl: '' }]);
+  const links = instructorProgramLinks([XL._id, 'gone', PBI._id, 'p3'], options,
+    linkability({ programSlugs: { 'power-bi': 'power-bi-all-courses' }, programBlocked: new Set(['mse']) }));
+  assert.deepEqual(links, [
+    { name: 'Microsoft Excel', iconUrl: 'https://x/xl.png', href: null },
+    { name: 'Power BI', iconUrl: 'https://x/pbi.png', href: '/power-bi-all-courses' },
+  ]);
 });

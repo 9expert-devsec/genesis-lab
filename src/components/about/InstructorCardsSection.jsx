@@ -1,5 +1,8 @@
 import Image from 'next/image';
+import Link from 'next/link';
 import { specialtiesLine } from '@/lib/instructors/instructorSpecialties';
+import { photoCropValues } from '@/lib/instructors/photoCrop';
+import InstructorPhotoPanel from './InstructorPhotoPanel';
 
 /**
  * /about-us "เรียนกับผู้เชี่ยวชาญตัวจริง" — instructor cards in the Company
@@ -13,8 +16,7 @@ import { specialtiesLine } from '@/lib/instructors/instructorSpecialties';
  * per card (snapping on THIS ROW only, never the page). Hover only — no
  * entrance animation. Hover/scroll CSS: globals.css, .about-instructor-*.
  *
- * The brief's arrow_logo watermark behind the photo is omitted: no SVG of the
- * mark exists in the repo (only raster logos), so it cannot be recoloured.
+ * The arrow_logo watermark behind each photo lives in InstructorPhotoPanel.
  */
 export default function InstructorCardsSection({ cards = [] }) {
   if (!cards.length) return null;
@@ -55,38 +57,48 @@ export default function InstructorCardsSection({ cards = [] }) {
                 <p className="mt-1 text-sm leading-snug text-white/[0.72]">{c.title}</p>
               )}
 
-              {/* Head-and-chest crop: the photo renders far larger than the
-                  panel (see .about-instructor-crop), anchored top-centre, and
-                  the panel's overflow:hidden cuts it around mid-chest. The
-                  frame is ~1.3× the panel width, so `sizes` asks for that. */}
-              <div className="about-instructor-panel mt-5">
-                {c.imageUrl && (
-                  <div className="about-instructor-crop">
-                    <Image
-                      src={c.imageUrl}
-                      alt={c.name}
-                      fill
-                      sizes="(min-width: 1024px) 440px, (min-width: 768px) 60vw, 110vw"
-                      className="about-instructor-photo object-contain object-top"
-                    />
-                  </div>
-                )}
-              </div>
+              {/* Per-instructor crop (defaults when unset) — the same panel the
+                  admin previews in /admin/instructors. */}
+              <InstructorPhotoPanel
+                imageUrl={c.imageUrl}
+                alt={c.name}
+                scale={(c.crop ?? photoCropValues()).scale}
+                offsetY={(c.crop ?? photoCropValues()).offsetY}
+                offsetX={(c.crop ?? photoCropValues()).offsetX}
+                className="mt-5"
+              />
 
               {c.specialties.length > 0 && (
                 <div className="mt-5 text-left">
-                  <p className="text-sm font-bold text-9e-lime">เชี่ยวชาญด้าน:</p>
-                  <p className="mt-1 text-[13px] leading-relaxed text-white/[0.85]">
+                  <p className="text-[15px] font-bold text-9e-lime">เชี่ยวชาญด้าน:</p>
+                  <p className="mt-1 text-[15px] leading-[1.6] text-white/[0.85]">
                     {specialtiesLine(c.specialties)}
                   </p>
                 </div>
               )}
 
+              {/* Bare icons, no tile: each links to its program's listing
+                  page, or is a plain image when that page is unpublished.
+                  The MSDB icon artwork itself carries a ring on a white disc;
+                  no plain-logo source exists, so that is what shows. */}
               {c.programs.length > 0 && (
-                <ul className="mt-auto flex flex-wrap gap-2 pt-5" aria-label={`โปรแกรมที่ ${c.name} สอน`}>
+                <ul className="about-instructor-programs mt-auto pt-5" aria-label={`โปรแกรมที่ ${c.name} สอน`}>
                   {c.programs.map((p) => (
-                    <li key={p.name} title={p.name} className="about-instructor-tile">
-                      <Image src={p.iconUrl} alt={p.name} width={20} height={20} className="h-5 w-5 object-contain" />
+                    <li key={p.name}>
+                      {p.href ? (
+                        <Link
+                          href={p.href}
+                          title={p.name}
+                          aria-label={`ดูหลักสูตร ${p.name}`}
+                          className="about-instructor-program"
+                        >
+                          <Image src={p.iconUrl} alt="" width={36} height={36} className="about-instructor-program-icon" />
+                        </Link>
+                      ) : (
+                        <span title={p.name} className="about-instructor-program">
+                          <Image src={p.iconUrl} alt={p.name} width={36} height={36} className="about-instructor-program-icon" />
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
