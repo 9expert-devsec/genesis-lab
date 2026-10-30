@@ -141,6 +141,11 @@ test('the preview is hidden from assistive tech — it duplicates the textarea',
  * changing BulletTextarea's default for every OTHER consumer (career-path,
  * masterclass), which still want it. See CourseForm.jsx's own Section 6
  * comment and BulletTextarea.jsx's `showCount` note.
+ *
+ * ADM-1: the four textareas are no longer rendered at all — each is a hidden
+ * `LegacyPlainList` carrying the loaded value (test/render/courseSection6Legacy
+ * Hidden proves the payload). So the assertion is now that each field is that
+ * hidden carrier, still with no marker.
  */
 test('CourseForm no longer asks for a marker on any of the four section-6 fields', () => {
   const { code } = readSource('src/app/admin/courses/_components/CourseForm.jsx');
@@ -158,8 +163,8 @@ test('CourseForm no longer asks for a marker on any of the four section-6 fields
     );
     assert.match(
       flat,
-      new RegExp(`name="${field}"[^>]*showCount=\\{false\\}`),
-      `${field} must suppress BulletTextarea's own "รวม N รายการ" counter`,
+      new RegExp(`<LegacyPlainList name="${field}" items=\\{initial\\?\\.${field}\\} />`),
+      `${field} must ride the save as a hidden LegacyPlainList seeded from initial`,
     );
   }
 

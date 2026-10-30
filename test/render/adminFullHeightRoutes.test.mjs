@@ -411,7 +411,10 @@ test('CONTROL: a course id that merely CONTAINS "edit" is not opted out', () => 
  */
 
 test('the layout makes `main` overflow-y-CLIP on full-height routes and AUTO elsewhere', () => {
-  const { code } = readSource('src/app/admin/layout.jsx');
+  // ADM-1b: the decision moved from layout.jsx into AdminMain (a client
+  // component reading usePathname) — the layout is not re-rendered on client
+  // navigation. See test/render/adminMainFollowsRoute.
+  const { code } = readSource('src/components/layout/AdminMain.jsx');
   assert.match(
     code, /isFullHeightRoute\(pathname\)\s*\?\s*'overflow-y-clip'\s*:\s*'overflow-y-auto'/,
     'the layout no longer picks main\u2019s overflow from the route',
@@ -430,19 +433,19 @@ test('CLIP, not HIDDEN — and the distinction is the whole fix', () => {
   // focus(), scrollIntoView and `scrollTop =`. MEASURED: with hidden on main,
   // focusing that same checkbox still moved it 133. This pins the value so a
   // later "tidy-up" to `overflow-hidden` cannot silently restore the bug.
-  const { code } = readSource('src/app/admin/layout.jsx');
+  const { code } = readSource('src/components/layout/AdminMain.jsx');
   const at = code.indexOf('isFullHeightRoute(pathname)');
   assert.ok(at > 0, 'the route check is gone');
   const expr = code.slice(at, at + 120);
   assert.doesNotMatch(expr, /overflow-hidden|overflow-y-hidden/, 'hidden is not sufficient here');
 });
 
-test('the route list has ONE definition, read by both the layout and the wrapper', () => {
+test('the route list has ONE definition, read by both AdminMain and the wrapper', () => {
   // It used to live inside the wrapper (a client module) and now has a server
   // reader too. Two copies would be two lists obliged to agree about every
   // route forever.
   for (const rel of [
-    'src/app/admin/layout.jsx',
+    'src/components/layout/AdminMain.jsx',
     'src/components/layout/AdminContentWrapper.jsx',
   ]) {
     // The USAGE, not the import line: readSource strips imports, and what

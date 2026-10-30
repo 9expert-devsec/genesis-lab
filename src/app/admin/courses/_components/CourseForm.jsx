@@ -23,7 +23,8 @@ import { CourseGalleryEditor } from './CourseGalleryEditor';
 // rule in this repo.
 import { CourseVersionHistory } from './CourseVersionHistory';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
-import { BulletTextarea } from '@/components/admin/BulletTextarea';
+import { formatBulletLines } from '@/lib/courses/bulletLines';
+import { legacyFallbackCount, legacyFallbackNote } from '@/lib/courses/legacyPlainFallback';
 import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
 import { CourseBodyEditor } from '@/components/admin/CourseBodyEditor';
 import { seedTopicEditorRows } from '@/lib/courses/topicEditorSeed';
@@ -50,7 +51,7 @@ import { courseLinkHref } from '@/lib/courses/courseLinkHref';
  * Layout follows the upstream MSDB admin form so admins moving between
  * the two have a familiar mental model. The form collects FormData
  * via `new FormData(form)` on submit, so every input below — including
- * the hidden inputs rendered by ImageUploadField, BulletTextarea, and
+ * the hidden inputs rendered by ImageUploadField, LegacyPlainList, and
  * TrainingTopicsEditor — is picked up automatically. The server-side
  * `shapePayload()` in `src/lib/actions/courses.js` is the source of
  * truth for field names; keep the `name=` attributes here in sync.
@@ -1434,27 +1435,38 @@ export function CourseForm({
       ─────────────────────────────────────────────────────────── */}
       <Section title="6. รายละเอียดคอร์ส">
         {/*
-          EACH FIELD BELOW IS NOW TWO CONTROLS, NOT ONE — THE PLAIN LIST STAYS
-          FIRST-CLASS, THE RICH EDITOR SITS ALONGSIDE IT.
+          ── ADM-1: THE PLAIN TEXTAREAS ARE HIDDEN, THEIR VALUES ARE NOT ────────
+          Each field used to be two controls: the legacy plain textarea (the
+          real MSDB string[] field) and the rich editor. The textareas are no
+          longer RENDERED — but the plain values must survive a save, and they
+          cannot simply be dropped from the form: `shapePayload` always emits
+          all four via `linesOf`, which returns `[]` for a missing key, and
+          `updateCourse` hands that to MSDB's unfiltered `findByIdAndUpdate`
+          (the private store gets the same body). Omitting the inputs would
+          blank every course on its next save.
 
-          The textarea keeps editing the real MSDB string[] field exactly as
-          before — same `name`, same `linesOf` split on submit, no migration,
-          no backfill. `marker` and the preview box it drew are GONE (see
-          BulletTextarea.jsx's own `showCount` note): a WYSIWYG editor sitting
-          right below a hand-drawn preview of the SAME content was two views
-          of one thing, and the real preview is the public page.
+          So each one is a HIDDEN input carrying the loaded value through the
+          same `formatBulletLines` an untouched textarea was seeded with — the
+          payload is byte-for-byte what it was when the admin did not touch
+          the textarea. Create has no `initial`, so it sends `[]`, as an empty
+          textarea did. The public fallback, the model and every import/export
+          path are untouched; MSDB's own admin can still edit the plain list.
 
-          The `CourseBodyEditor` beside it is a second, genesis-owned field —
+          Under each rich editor, a read-only note says when the public page is
+          showing the plain list instead (rich empty, plain non-empty) — see
+          lib/courses/legacyPlainFallback.js.
+
+          The `CourseBodyEditor` is a second, genesis-owned field —
           `objectivesRich` / `targetAudienceRich` / `prerequisitesRich` /
           `systemRequirementsRich` on CourseExtension, the exact
           `descriptionRich` pattern (seed once, controlled state, named on
           every save so clearing it actually clears the stored value). When it
           holds real content the public page renders it INSTEAD OF the plain
           list; when empty, the plain list is what renders — see
-          CourseObjectives.jsx (and its three siblings) for the swap. The two
-          controls are independent: leaving one field's rich body empty does
-          not affect the other three, and does not touch this field's own
-          plain list.
+          CourseObjectives.jsx (and its three siblings) for the swap. The four
+          fields are independent: leaving one field's rich body empty does not
+          affect the other three, and does not touch this field's own plain
+          list.
 
           `plain` on every one of these four `Field`s is NOT optional — see
           the `Field` component's own header and test/fs/
@@ -1464,16 +1476,10 @@ export function CourseForm({
           to the first one (Undo) exactly the way it did for the section-1
           rich body before that was fixed.
         */}
-        <BulletTextarea
-          name="course_objectives"
-          label={COURSE_SECTION_LABELS.objective}
-          hint="แต่ละบรรทัดคือหนึ่งวัตถุประสงค์ — หน้าเว็บจะใส่ลำดับให้เอง ไม่ต้องพิมพ์เลข"
-          defaultValue={initial?.course_objectives}
-          showCount={false}
-        />
+        <LegacyPlainList name="course_objectives" items={initial?.course_objectives} />
         <Field
           label={`${COURSE_SECTION_LABELS.objective} (รูปแบบ Rich text)`}
-          hint="แสดงแทนรายการด้านบนบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
+          hint="แสดงแทนรายการเดิมบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
           plain
         >
           <CourseBodyEditor
@@ -1481,18 +1487,13 @@ export function CourseForm({
             value={objectivesRich}
             onChange={markTouched(setObjectivesRich)}
           />
+          <LegacyFallbackNote rich={objectivesRich} plain={initial?.course_objectives} />
         </Field>
 
-        <BulletTextarea
-          name="course_target_audience"
-          label={COURSE_SECTION_LABELS.target}
-          hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
-          defaultValue={initial?.course_target_audience}
-          showCount={false}
-        />
+        <LegacyPlainList name="course_target_audience" items={initial?.course_target_audience} />
         <Field
           label={`${COURSE_SECTION_LABELS.target} (รูปแบบ Rich text)`}
-          hint="แสดงแทนรายการด้านบนบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
+          hint="แสดงแทนรายการเดิมบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
           plain
         >
           <CourseBodyEditor
@@ -1500,18 +1501,13 @@ export function CourseForm({
             value={targetAudienceRich}
             onChange={markTouched(setTargetAudienceRich)}
           />
+          <LegacyFallbackNote rich={targetAudienceRich} plain={initial?.course_target_audience} />
         </Field>
 
-        <BulletTextarea
-          name="course_prerequisites"
-          label={COURSE_SECTION_LABELS.prerequisite}
-          hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
-          defaultValue={initial?.course_prerequisites}
-          showCount={false}
-        />
+        <LegacyPlainList name="course_prerequisites" items={initial?.course_prerequisites} />
         <Field
           label={`${COURSE_SECTION_LABELS.prerequisite} (รูปแบบ Rich text)`}
-          hint="แสดงแทนรายการด้านบนบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
+          hint="แสดงแทนรายการเดิมบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
           plain
         >
           <CourseBodyEditor
@@ -1519,18 +1515,13 @@ export function CourseForm({
             value={prerequisitesRich}
             onChange={markTouched(setPrerequisitesRich)}
           />
+          <LegacyFallbackNote rich={prerequisitesRich} plain={initial?.course_prerequisites} />
         </Field>
 
-        <BulletTextarea
-          name="course_system_requirements"
-          label={COURSE_SECTION_LABELS.requirement}
-          hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
-          defaultValue={initial?.course_system_requirements}
-          showCount={false}
-        />
+        <LegacyPlainList name="course_system_requirements" items={initial?.course_system_requirements} />
         <Field
           label={`${COURSE_SECTION_LABELS.requirement} (รูปแบบ Rich text)`}
-          hint="แสดงแทนรายการด้านบนบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
+          hint="แสดงแทนรายการเดิมบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
           plain
         >
           <CourseBodyEditor
@@ -1538,6 +1529,7 @@ export function CourseForm({
             value={systemRequirementsRich}
             onChange={markTouched(setSystemRequirementsRich)}
           />
+          <LegacyFallbackNote rich={systemRequirementsRich} plain={initial?.course_system_requirements} />
         </Field>
       </Section>
 
@@ -2033,6 +2025,27 @@ function Field({ label, hint, children, plain = false }) {
       )}
       <div className="mt-1">{children}</div>
     </Tag>
+  );
+}
+
+/**
+ * A section-6 legacy plain list, carried through the save UNCHANGED — see the
+ * Section 6 note. Hidden, not omitted: `linesOf` turns a missing key into `[]`
+ * and MSDB would store it. The value is exactly what the old textarea was
+ * seeded with, so `linesOf` hands MSDB the same array an untouched textarea did.
+ */
+function LegacyPlainList({ name, items }) {
+  return <input type="hidden" name={name} value={formatBulletLines(items)} />;
+}
+
+/** "The page is showing the old list" — only when rich is empty and plain is not. */
+function LegacyFallbackNote({ rich, plain }) {
+  const note = legacyFallbackNote(legacyFallbackCount(rich, plain));
+  if (!note) return null;
+  return (
+    <span data-legacy-fallback-note="" className="mt-1 block text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+      {note}
+    </span>
   );
 }
 

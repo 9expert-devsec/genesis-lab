@@ -33,7 +33,7 @@ test('order is fixed by COURSE_LIST_PARAMS, not by insertion', () => {
     courseListQuery({ type: 'public', q: 'excel', program: 'p1' }),
     courseListQuery({ q: 'excel', program: 'p1', type: 'public' })
   );
-  assert.deepEqual(COURSE_LIST_PARAMS, ['q', 'program', 'type']);
+  assert.deepEqual(COURSE_LIST_PARAMS, ['q', 'program', 'type', 'tab']);
 });
 
 test('CONTROL: no filters produces an EMPTY string, not "?"', () => {

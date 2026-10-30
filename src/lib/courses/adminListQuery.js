@@ -19,8 +19,12 @@
  * exactly that step, which is indistinguishable from the bug this replaces.
  */
 
-/** The only params that belong to the list's filter state. */
-export const COURSE_LIST_PARAMS = ['q', 'program', 'type'];
+/**
+ * The only params that belong to the list's filter state. `tab` is which list
+ * (`private` or absent) — carried like a filter so a private editor's ← link
+ * lands back on the Private Courses tab rather than the public list.
+ */
+export const COURSE_LIST_PARAMS = ['q', 'program', 'type', 'tab'];
 
 /**
  * The filter query string for a set of search params, or '' when nothing is set.
