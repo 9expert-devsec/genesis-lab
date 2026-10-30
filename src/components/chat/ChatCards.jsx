@@ -407,48 +407,57 @@ export function sortPromotions(items) {
 }
 
 /**
- * The promotion image frame, decided by the IMAGE, not by the payload.
+ * ONE image frame for every promotion card: `aspect-[16/9]` on the muted
+ * ground, so every card's image block — and the title under it — sits at the
+ * same height across the carousel, from the first paint (no layout shift).
  *
- * The chat agent builds the card payload and does not forward `source`
- * (CB-1 relied on it; on staging a Masterclass card fell into the square
- * frame), so the loaded image's natural aspect decides:
- *   ratio ≥ 1.3  landscape — a Masterclass 16:9 cover — the original
- *                `aspect-[16/9] object-cover` course-card frame;
+ * Only the FIT depends on the image, read from its natural aspect once loaded
+ * (the chat agent does not forward `source`, so the payload cannot say):
+ *   ratio ≥ 1.3  landscape — a Masterclass 16:9 cover — `object-cover`, as the
+ *                course card renders it;
  *   ratio < 1.3  square/portrait — a builder page's `promotionCover`, art with
- *                text in it that a 16:9 frame would cut — shown whole
- *                (`object-contain`) on the muted ground, capped at 220px so one
- *                card stays readable in the compact panel without scrolling.
+ *                text in it — `object-contain`, centred, whole image visible.
+ * Before load the fit is `object-contain`, so nothing is cropped meanwhile.
  */
 export const LANDSCAPE_MIN_RATIO = 1.3;
 
-const LANDSCAPE_FRAME = { kind: 'landscape', frame: 'aspect-[16/9] w-full', img: 'object-cover' };
-const SQUARE_FRAME = { kind: 'square', frame: 'aspect-square max-h-[220px] w-full', img: 'object-contain' };
-
-export function frameForRatio(ratio) {
-  return Number.isFinite(ratio) && ratio >= LANDSCAPE_MIN_RATIO ? LANDSCAPE_FRAME : SQUARE_FRAME;
+export function fitForRatio(ratio) {
+  return Number.isFinite(ratio) && ratio >= LANDSCAPE_MIN_RATIO ? 'object-cover' : 'object-contain';
 }
 
-/**
- * Before the image loads: `source` is only a hint. Masterclass → landscape.
- * Anything else → square, because square builder covers are most of the live
- * promotions (4 of 6 at CB-1b) and the guess only costs a 16px (420w) / 27px
- * (343w) height change when it is wrong.
- */
-export function initialPromotionFrame(item) {
-  return item?.source === 'masterclass' ? LANDSCAPE_FRAME : SQUARE_FRAME;
+/** The image block, or nothing when there is no image or it failed to load. */
+export function PromotionImage({ img, title, badge, fit = 'object-contain', failed = false, imgRef, onLoad, onError }) {
+  if (!img || failed) return null;
+  return (
+    <div className="relative bg-[var(--surface-muted)]">
+      <div data-promo-frame={fit} className="aspect-[16/9] w-full">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          ref={imgRef}
+          src={img}
+          alt={title}
+          className={`h-full w-full ${fit}`}
+          loading="lazy"
+          onLoad={onLoad}
+          onError={onError}
+        />
+      </div>
+      {badge ? <div className={`absolute left-3 top-3 ${OVERLAY_BADGE}`}>{badge}</div> : null}
+    </div>
+  );
 }
 
-/** One small state per card: the frame from the image once it has loaded, or `failed`. */
-function usePromotionFrame(item, img) {
+/** One small state per card: the fit once the image has loaded, or `failed`. */
+function usePromotionFit(img) {
   const ref = useRef(null);
-  const [state, setState] = useState({ img, frame: null, failed: false });
+  const [state, setState] = useState({ img, fit: null, failed: false });
   // A new image URL starts over (a restored message can be re-rendered with another item).
-  const current = state.img === img ? state : { img, frame: null, failed: false };
+  const current = state.img === img ? state : { img, fit: null, failed: false };
 
   const measure = (el) => {
     if (!el || !el.naturalWidth || !el.naturalHeight) return;
-    const frame = frameForRatio(el.naturalWidth / el.naturalHeight);
-    setState((s) => (s.img === img && s.frame === frame ? s : { img, frame, failed: false }));
+    const fit = fitForRatio(el.naturalWidth / el.naturalHeight);
+    setState((s) => (s.img === img && s.fit === fit ? s : { img, fit, failed: false }));
   };
 
   // A cached image can finish before React attaches onLoad.
@@ -458,11 +467,11 @@ function usePromotionFrame(item, img) {
   }, [img]);
 
   return {
-    ref,
-    shape: current.frame ?? initialPromotionFrame(item),
+    imgRef: ref,
+    fit: current.fit ?? 'object-contain',
     failed: current.failed,
     onLoad: (e) => measure(e.currentTarget),
-    onError: () => setState({ img, frame: null, failed: true }),
+    onError: () => setState({ img, fit: null, failed: true }),
   };
 }
 
@@ -472,29 +481,13 @@ export function PromotionCard({ item }) {
   const badge = cleanText(item?.badge || item?.tag || '');
   const img = cleanText(item?.image_url || item?.imageUrl || item?.cover || '');
   const url = cleanText(item?.url || item?.link || '');
-  const { ref, shape, failed, onLoad, onError } = usePromotionFrame(item, img);
+  const image = usePromotionFit(img);
 
   if (!item) return null;
 
   return (
     <div className={CARD_SHELL}>
-      {img && !failed ? (
-        <div className="relative bg-[var(--surface-muted)]">
-          <div data-promo-frame={shape.kind} className={shape.frame}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              ref={ref}
-              src={img}
-              alt={title}
-              className={`h-full w-full ${shape.img}`}
-              loading="lazy"
-              onLoad={onLoad}
-              onError={onError}
-            />
-          </div>
-          {badge ? <div className={`absolute left-3 top-3 ${OVERLAY_BADGE}`}>{badge}</div> : null}
-        </div>
-      ) : null}
+      <PromotionImage img={img} title={title} badge={badge} {...image} />
 
       <div className="p-4">
         <div className="text-[15px] font-semibold text-[var(--text-primary)]">{title}</div>
