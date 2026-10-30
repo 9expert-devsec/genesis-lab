@@ -101,11 +101,14 @@ not visible) is still served, with the page URL only if the page is publicly lin
           "dates": ["2026-09-26"], "time": "09:00–17:00" | null, "venue": "Asia Hotel | Bangkok" | null }
       ],                                         // [] when none; bundle items list each member course
       "bundle": null | { "label", "list_price", "net_price", "discount_code", "registration_open": true },
-      "description": "…" | null
+      "description": "…" | null,
+      "image_url": "https://res.cloudinary.com/…" | null   // masterclass: course cover_image_url (16:9); builder_page / early_bird_config: the page's promotionCover (square)
     }
   ]
 }
 ```
+
+`image_url` is now set for `builder_page` and `early_bird_config` items from the page's live `promotionCover` (CB-1; an early_bird_config item uses its owning page's, `null` without one).
 
 Scalar fields with no data are `null`; list fields are `[]`. `discount_pct` is the whole-percent
 `round((1 − special/normal) × 100)` and is `null` unless both prices are known and special ≤ normal.

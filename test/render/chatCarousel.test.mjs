@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { CourseCarousel, PromotionCarousel } from '@/components/chat/ChatCards';
+import { CourseCarousel, PromotionCarousel, PromotionCard, promotionImageFrame } from '@/components/chat/ChatCards';
 import { MasterclassCard, MasterclassCarousel } from '@/components/chat/ChatCards';
 import { CareerPathCard, CareerPathCarousel } from '@/components/chat/ChatCards';
 import { ChatPanel } from '@/components/chat/ChatPanel';
@@ -281,4 +281,37 @@ test('panel: a `masterclasses` array on the message renders its own carousel, af
   assert.ok(ordered.every((i) => i >= 0));
   assert.deepEqual([...ordered].sort((a, b) => a - b), ordered, 'courses first, then the masterclasses as received');
   assert.equal(chevrons(m.slice(m.indexOf('data-chat-masterclasses'))), 2, 'two cards page');
+});
+
+// ── CB-1: the promotion image frame follows the item's source ───────────────
+
+const promo = (item) => renderToStaticMarkup(createElement(PromotionCard, { item }));
+const frameOf = (markup) => /data-promo-frame="" class="([^"]*)"/.exec(markup)?.[1] ?? null;
+const imgClassOf = (markup) => /<img [^>]*class="([^"]*)"/.exec(markup)?.[1] ?? null;
+const SQUARE_COVER = 'https://res.cloudinary.com/ddva7xvdt/image/upload/v1/9exp-genesis/promotions/duo.png';
+
+test('promotion card: a masterclass item keeps the 16:9 cover frame, unchanged', () => {
+  const m = promo({ id: 'masterclass:b', source: 'masterclass', title: 'DMC', image_url: COVER, badge: 'Early Bird' });
+  assert.equal(frameOf(m), 'aspect-[16/9] w-full');
+  assert.equal(imgClassOf(m), 'h-full w-full object-cover');
+  assert.match(m, /loading="lazy"/);
+  assert.match(m, />Early Bird</, 'the badge overlay stays');
+});
+
+test('promotion card: a builder_page item gets the capped square frame, art contained not cropped', () => {
+  for (const source of ['builder_page', 'early_bird_config', undefined]) {
+    const m = promo({ id: 'x', source, title: 'CLAUDE CODE BUILDER DUO', image_url: SQUARE_COVER });
+    assert.equal(frameOf(m), 'aspect-square max-h-[220px] w-full', `source ${source}`);
+    assert.equal(imgClassOf(m), 'h-full w-full object-contain');
+    assert.match(m, /loading="lazy"/);
+  }
+  assert.deepEqual(promotionImageFrame({ source: 'masterclass' }), { frame: 'aspect-[16/9] w-full', img: 'object-cover' });
+});
+
+test('promotion card: no image → no frame at all', () => {
+  for (const source of ['masterclass', 'builder_page']) {
+    const m = promo({ id: 'x', source, title: 'ไม่มีรูป', image_url: null });
+    assert.equal(frameOf(m), null);
+    assert.doesNotMatch(m, /<img /);
+  }
 });

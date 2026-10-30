@@ -406,6 +406,22 @@ export function sortPromotions(items) {
   return decorated.map((x) => x.p);
 }
 
+/**
+ * The promotion image frame, chosen from the item's `source` (the corpus
+ * contract), never guessed from the image. Masterclass covers are 16:9 and
+ * keep the course-card frame. Everything else — a builder page's or an
+ * early-bird row's `promotionCover` — is SQUARE art with text in it, which a
+ * 16:9 cover frame would cut top and bottom. The square frame is capped so one
+ * card stays readable in the compact panel without scrolling, and the art is
+ * `object-contain` so the cap letterboxes on the muted ground instead of
+ * cropping the text.
+ */
+export function promotionImageFrame(item) {
+  return item?.source === 'masterclass'
+    ? { frame: 'aspect-[16/9] w-full', img: 'object-cover' }
+    : { frame: 'aspect-square max-h-[220px] w-full', img: 'object-contain' };
+}
+
 export function PromotionCard({ item }) {
   if (!item) return null;
 
@@ -414,14 +430,15 @@ export function PromotionCard({ item }) {
   const badge = cleanText(item.badge || item.tag || '');
   const img = cleanText(item.image_url || item.imageUrl || item.cover || '');
   const url = cleanText(item.url || item.link || '');
+  const shape = promotionImageFrame(item);
 
   return (
     <div className={CARD_SHELL}>
       {img ? (
         <div className="relative bg-[var(--surface-muted)]">
-          <div className="aspect-[16/9] w-full">
+          <div data-promo-frame="" className={shape.frame}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={img} alt={title} className="h-full w-full object-cover" loading="lazy" />
+            <img src={img} alt={title} className={`h-full w-full ${shape.img}`} loading="lazy" />
           </div>
           {badge ? <div className={`absolute left-3 top-3 ${OVERLAY_BADGE}`}>{badge}</div> : null}
         </div>
