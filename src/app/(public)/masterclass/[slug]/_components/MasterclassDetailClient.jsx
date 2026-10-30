@@ -21,6 +21,7 @@ import { FaqAccordionSection } from "@/components/faq/FaqAccordionSection";
 import { setOccupiedBox, clearOccupiedBox } from "@/lib/viewportBottomInset";
 import { stickyBarOccupancyHeight } from "@/lib/stickyBarOccupancy";
 import { sanitizeRichHtml } from "@/lib/sanitizeRichHtml";
+import { MasterclassInstructors } from "./MasterclassInstructors";
 
 const LEVEL_MAP = {
   beginner: "Beginner",
@@ -883,81 +884,7 @@ export function MasterclassDetailClient({
       )}
 
       {/* [K] Instructor */}
-      {instructors.length > 0 && (
-        <section id="mc-instructor" className="bg-9e-navy px-4 py-10 md:py-16">
-          <div className="max-w-[1200px] mx-auto text-center">
-            <p className="text-xs font-semibold uppercase tracking-widest text-9e-lime">
-              INSTRUCTOR
-            </p>
-            <h2 className="mt-2 text-xl md:text-3xl font-bold text-white">
-              วิทยากรผู้สอน
-            </h2>
-            <p className="mt-2 text-xs md:text-sm text-9e-air">
-              ผู้เชี่ยวชาญประสบการณ์สอนมากกว่า 20 ปี ทั้งภาครัฐและภาคเอกชน
-            </p>
-            <div
-              className={`mt-10 grid items-stretch gap-6 ${
-                instructors.length === 1
-                  ? "mx-auto max-w-[420px]"
-                  : "mx-auto max-w-3xl grid-cols-1 sm:grid-cols-2"
-              }`}
-            >
-              {instructors.map((inst) => (
-                <div key={inst._id} className="relative flex h-full flex-col">
-                  {inst.image_url && (
-                    <div className="relative z-20 mx-auto -mb-20 h-[320px] w-[260px] overflow-visible">
-                      <Image
-                        src={inst.image_url}
-                        alt={inst.name}
-                        fill
-                        className="object-contain object-top [mask-image:linear-gradient(to_bottom,#121f2e_72%,rgba(0,0,0,0)_100%)]"
-                        sizes="(max-width:768px) 100vw, 400px"
-                      />
-                    </div>
-                  )}
-
-                  <div className="relative z-10 flex flex-1 rounded-[30px] bg-gradient-to-t from-9e-lime to-9e-lime/5 p-0.5">
-                    <div className="flex h-full w-full flex-col rounded-[28px] bg-gradient-to-t from-[#24303e] to-[#0e1c2b] px-5 pb-8 pt-[85px] text-center">
-                      <h3 className="text-xl md:text-2xl font-bold text-white">
-                        {inst.name}
-                      </h3>
-
-                      <p className="mt-0.5 text-base md:text-[18px] font-medium text-9e-brand">
-                        {inst.title}
-                      </p>
-
-                      <div className="flex justify-center">
-                        {(() => {
-                          const bioLines = inst.bio
-                            ? inst.bio
-                                .split("\n")
-                                .map((s) => s.trim())
-                                .filter(Boolean)
-                            : (inst.specialties ?? []);
-
-                          return bioLines.length > 0 ? (
-                            <ul className="mt-3 space-y-1">
-                              {bioLines.map((s, idx) => (
-                                <li
-                                  key={idx}
-                                  className="flex items-start gap-2 text-sm md:text-base text-9e-slate-lt-50"
-                                >
-                                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-9e-lime" />
-                                  {s}
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null;
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+      <MasterclassInstructors instructors={instructors} />
 
       {/* [L] FAQ */}
       <FaqAccordionSection faqs={faqs} id="mc-faq" />
