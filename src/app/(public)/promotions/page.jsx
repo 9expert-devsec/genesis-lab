@@ -5,9 +5,9 @@ import {
   getActiveCustomPagePromotions,
 } from '@/lib/promotions/getPromotions';
 import { getActivePromotionBanners } from '@/lib/actions/promotion-banner';
-import {
-  promotionPageToCard, orderedPromotionCards, selectVisiblePromotionPages,
-} from '@/lib/pages/promotionMode';
+// MCP round 4: the card union moved to a pure module so /api/mcp lists exactly
+// these cards. Behaviour unchanged.
+import { buildPromotionCards } from '@/lib/promotions/promotionCards';
 import { PromotionBannerCarousel } from '@/components/promotions/PromotionBannerCarousel';
 // ROUND 43, ADDED beside the statements above rather than folded into one —
 // the standing rule in this repo. The two date helpers that used to live in
@@ -94,22 +94,6 @@ function PromotionCard({ card }) {
   );
 }
 
-// MSDB promotion → the same card view-model as promotionPageToCard. slug
-// resolves via the config slugMap, falling back to the raw promotion_id.
-function cardFromMsdb(promotion, slugMap) {
-  const slug = slugMap[promotion.promotion_id] || promotion.promotion_id;
-  return {
-    key: `msdb:${promotion.promotion_id}`,
-    href: `/promotions/${slug}`,
-    title: promotion.title,
-    cover: promotion.thumbnail_url,
-    alt: promotion.image_alt || promotion.title || '',
-    start: promotion.start_date,
-    end: promotion.end_date,
-    source: 'msdb',
-  };
-}
-
 export default async function PromotionsListPage() {
   const [promotions, slugMap, banners, builderPromotions, customPromotions] =
     await Promise.all([
@@ -120,40 +104,9 @@ export default async function PromotionsListPage() {
       getActiveCustomPagePromotions(),
     ]);
 
-  /**
-   * Read-time union (§6 — no collection is written).
-   *
-   * ── THE GENESIS HALF IS ONE BLOCK, SORTED ACROSS BOTH COLLECTIONS ────────
-   * Builder promotions and Advanced HTML promotions INTERLEAVE on
-   * `promotionOrder`. They are both Genesis-owned pages carrying the same
-   * admin-controlled order field, so the admin arranges them himself rather than
-   * the code deciding which collection outranks the other — a builder promo at
-   * order 2 sits between two Advanced HTML promos at 1 and 3.
-   *
-   * That requires ONE `selectVisiblePromotionPages` call over the UNION. Each
-   * loader already gates and sorts its own half, and sorting two sorted lists
-   * separately then concatenating them is two blocks by construction, which is
-   * exactly what this is not. The gate is idempotent, so re-running it over the
-   * union costs a filter pass and buys one ordering.
-   *
-   * The `promotionSource` tag is attached HERE, where the two loaders are named,
-   * and read back by `promotionPageToCard` — which takes the source as a
-   * required argument because it namespaces the React key, and an `_id` is
-   * unique within a collection but not across two.
-   *
-   * MSDB still follows as its own block. `promotionOrder` and MSDB
-   * `display_order` are independent scales nobody has reconciled; see
-   * orderedPromotionCards.
-   */
-  const genesisPages = [
-    ...builderPromotions.map((p) => ({ ...p, promotionSource: 'builder' })),
-    ...customPromotions.map((p) => ({ ...p, promotionSource: 'custom' })),
-  ];
-  const cards = orderedPromotionCards(
-    selectVisiblePromotionPages(genesisPages)
-      .map((p) => promotionPageToCard(p, p.promotionSource)),
-    promotions.map((p) => cardFromMsdb(p, slugMap)),
-  );
+  // Read-time union of the three sources — see lib/promotions/promotionCards.js
+  // for the ordering rules. /api/mcp list_live_promotions lists these same cards.
+  const cards = buildPromotionCards({ promotions, slugMap, builderPromotions, customPromotions });
 
   return (
     <div className="bg-[#F8FAFD] dark:bg-9e-border">

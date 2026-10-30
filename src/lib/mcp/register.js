@@ -1,5 +1,5 @@
 /**
- * Wires the five pure tools to the real read paths and registers them on an
+ * Wires the six pure tools to the real read paths and registers them on an
  * MCP server instance.
  *
  * ── THE SPLIT IS THE POINT ─────────────────────────────────────────────────
@@ -27,11 +27,17 @@ import { z } from 'zod';
 import { getOnlineCourses } from '@/lib/api/online-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { getPublicCourseByCode, listPublicCourses } from '@/lib/api/public-courses';
-import { loadHiddenCourseIds } from '@/lib/courses/hiddenCourses';
+import { loadCourseAliasMap, loadHiddenCourseIds } from '@/lib/courses/hiddenCourses';
 import { listSchedules } from '@/lib/api/schedules';
 import { listSkills } from '@/lib/api/skills';
 import { buildPromotionsCorpus } from '@/lib/corpus/promotions';
 import { getNavMenuData } from '@/lib/navmenu/getNavMenuData';
+// Round 4, ADDED beside the statements above rather than folded into them.
+import { getPublishedMasterclasses } from '@/lib/masterclass/getMasterclass';
+import {
+  getActiveBuilderPromotions, getActiveCustomPagePromotions, getActivePromotions, getSlugMap,
+} from '@/lib/promotions/getPromotions';
+import { buildPromotionCards } from '@/lib/promotions/promotionCards';
 
 import { McpToolError } from '@/lib/mcp/shape';
 import {
@@ -53,8 +59,15 @@ import {
 } from '@/lib/mcp/tools/listTrainingRounds';
 import {
   LIST_LIVE_PROMOTIONS_DESCRIPTION,
+  LIST_LIVE_PROMOTIONS_KINDS,
   listLivePromotions,
 } from '@/lib/mcp/tools/listLivePromotions';
+import {
+  LIST_MASTERCLASS_ROUNDS_DESCRIPTION,
+  LIST_MASTERCLASS_ROUNDS_LIMIT_DEFAULT,
+  LIST_MASTERCLASS_ROUNDS_LIMIT_MAX,
+  listMasterclassRounds,
+} from '@/lib/mcp/tools/listMasterclassRounds';
 
 export const MCP_SERVER_NAME = '9expert';
 export const MCP_SERVER_VERSION = '0.1.0';
@@ -73,8 +86,23 @@ export const productionDeps = {
   // an unknown code. The plain resolver's direct leg never saw the hidden flag.
   getCourseByCodeInsensitive: getPublicCourseByCode,
   loadHiddenCourseIds,
+  // Round 4: rounds and course detail give a course its admin alias, so their
+  // course URL is the one search_courses (listPublicCourses) already emits.
+  loadCourseAliasMap,
   listSchedules,
   buildPromotionsCorpus,
+  // Round 4: the /promotions grid's own cards — the page's loaders, unioned by
+  // the same pure function the page calls. Banners are not cards and are not read.
+  loadPromotionCards: async () => {
+    const [promotions, slugMap, builderPromotions, customPromotions] = await Promise.all([
+      getActivePromotions(),
+      getSlugMap(),
+      getActiveBuilderPromotions(),
+      getActiveCustomPagePromotions(),
+    ]);
+    return buildPromotionCards({ promotions, slugMap, builderPromotions, customPromotions });
+  },
+  getPublishedMasterclasses,
 };
 
 /**
@@ -103,7 +131,7 @@ async function runTool(name, fn, args, deps) {
 }
 
 /**
- * Register all five tools on an MCP server.
+ * Register all six tools on an MCP server.
  *
  * @param {object} server the McpServer handed over by mcp-handler
  * @param {object} [deps] injectable read paths; production passes nothing
@@ -174,10 +202,26 @@ export function registerMcpTools(server, deps = productionDeps) {
     'list_live_promotions',
     LIST_LIVE_PROMOTIONS_DESCRIPTION,
     {
-      kind: z.enum(['early_bird', 'page', 'all']).default('all')
-        .describe('Narrow to priced early-bird offers, or to promotional landing pages.'),
+      kind: z.enum(LIST_LIVE_PROMOTIONS_KINDS).default('all')
+        .describe('Narrow to early-bird offers on one course, multi-course bundles, or promotional landing pages.'),
     },
     async (args) => runTool('list_live_promotions', listLivePromotions, args, deps)
+  );
+
+  server.tool(
+    'list_masterclass_rounds',
+    LIST_MASTERCLASS_ROUNDS_DESCRIPTION,
+    {
+      course: z.string().trim().min(1).max(80).optional()
+        .describe('Restrict to one masterclass course, by its slug or course code. Matched without regard to case.'),
+      from: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+        .describe('Earliest training day, YYYY-MM-DD.'),
+      to: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+        .describe('Latest training day, YYYY-MM-DD.'),
+      limit: z.number().int().min(1).max(LIST_MASTERCLASS_ROUNDS_LIMIT_MAX).default(LIST_MASTERCLASS_ROUNDS_LIMIT_DEFAULT)
+        .describe(`Maximum rounds to return (max ${LIST_MASTERCLASS_ROUNDS_LIMIT_MAX}).`),
+    },
+    async (args) => runTool('list_masterclass_rounds', listMasterclassRounds, args, deps)
   );
 
   return server;
@@ -190,4 +234,5 @@ export const MCP_TOOL_NAMES = [
   'get_course_detail',
   'list_training_rounds',
   'list_live_promotions',
+  'list_masterclass_rounds',
 ];

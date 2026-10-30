@@ -23,7 +23,10 @@ import { readSource, countCallSites } from '../sourceScan.mjs';
 
 const CATCHALL = 'src/app/(public)/[...slug]/page.jsx';
 const DETAIL = 'src/app/(public)/promotions/[slug]/page.jsx';
-const GRID = 'src/app/(public)/promotions/page.jsx';
+// MCP round 4 moved the grid's card union out of the page into a pure module
+// both the page and /api/mcp call; the rules below follow the code there.
+const GRID = 'src/lib/promotions/promotionCards.js';
+const GRID_PAGE = 'src/app/(public)/promotions/page.jsx';
 const LOADER = 'src/lib/promotions/getPromotions.js';
 const SITEMAP = 'src/app/sitemap.js';
 
@@ -166,6 +169,12 @@ test('the custom branch forces its canonical, ignoring the authored one', () => 
 });
 
 // ── 3. THE GRID: ONE SORTED BLOCK, NOT TWO ──────────────────────────────────
+
+test('the /promotions page builds its cards through the shared module, not a copy', () => {
+  const { code } = readSource(GRID_PAGE);
+  assert.match(code, /const cards = buildPromotionCards\(\{ promotions, slugMap, builderPromotions, customPromotions \}\)/);
+  assert.equal(countCallSites(code, 'selectVisiblePromotionPages'), 0, 'the page re-implements the union again');
+});
 
 test('the grid sorts the UNION of both collections in one call', () => {
   const { code } = readSource(GRID);

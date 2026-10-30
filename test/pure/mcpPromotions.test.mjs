@@ -105,9 +105,12 @@ test('a failed source is reported, not silently read as "no promotions"', async 
     sources: { masterclass: { ok: false, count: 0, error: 'read_failed' }, builder_page: { ok: true, count: 1 } },
     items: [],
   };
-  const out = await listLivePromotions({}, deps(degraded));
+  const out = await listLivePromotions({}, { ...deps(degraded), warn: () => {} });
   assert.equal(out.total, 0);
-  assert.match(out.warning, /masterclass/, 'an outage must be distinguishable from an empty promotions calendar');
+  // Round 4: the warning is generic — the model relayed source names to staff.
+  // Which source failed goes to the server log (see mcpRound4.test.mjs).
+  assert.ok(out.warning, 'an outage must be distinguishable from an empty promotions calendar');
+  assert.doesNotMatch(out.warning, /masterclass/);
 });
 
 test('a healthy read carries no warning', async () => {

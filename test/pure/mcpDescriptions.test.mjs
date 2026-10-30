@@ -5,6 +5,7 @@ import { GET_COURSE_DETAIL_DESCRIPTION } from '../../src/lib/mcp/tools/getCourse
 import { LIST_LIVE_PROMOTIONS_DESCRIPTION } from '../../src/lib/mcp/tools/listLivePromotions.js';
 import { LIST_PROGRAMS_AND_SKILLS_DESCRIPTION } from '../../src/lib/mcp/tools/listProgramsAndSkills.js';
 import { LIST_TRAINING_ROUNDS_DESCRIPTION } from '../../src/lib/mcp/tools/listTrainingRounds.js';
+import { LIST_MASTERCLASS_ROUNDS_DESCRIPTION } from '../../src/lib/mcp/tools/listMasterclassRounds.js';
 import { SEARCH_COURSES_DESCRIPTION } from '../../src/lib/mcp/tools/searchCourses.js';
 
 /**
@@ -28,6 +29,7 @@ const DESCRIPTIONS = {
   get_course_detail: GET_COURSE_DETAIL_DESCRIPTION,
   list_training_rounds: LIST_TRAINING_ROUNDS_DESCRIPTION,
   list_live_promotions: LIST_LIVE_PROMOTIONS_DESCRIPTION,
+  list_masterclass_rounds: LIST_MASTERCLASS_ROUNDS_DESCRIPTION,
 };
 
 /** Internal system / storage names the user never sees. Matched case-insensitively. */
@@ -46,8 +48,8 @@ const ALLOWED_OUTPUT_FIELDS = {
   // e.g. list_live_promotions: ['cache'],  // only if the output had a `cache` field
 };
 
-test('there are exactly five tool descriptions and none is empty', () => {
-  assert.equal(Object.keys(DESCRIPTIONS).length, 5);
+test('there are exactly six tool descriptions and none is empty', () => {
+  assert.equal(Object.keys(DESCRIPTIONS).length, 6);
   for (const [name, text] of Object.entries(DESCRIPTIONS)) {
     assert.equal(typeof text, 'string', `${name} description must be a string`);
     assert.ok(text.length > 100, `${name} description is suspiciously short`);
