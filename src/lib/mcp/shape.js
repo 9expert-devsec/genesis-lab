@@ -19,6 +19,7 @@
 
 import { coursePriceLabel } from '@/lib/coursePriceLabel';
 import { courseCanonicalPath } from '@/lib/courses/courseCanonicalPath';
+import { attachAliases } from '@/lib/courses/hiddenCourses';
 import { onlineCourseHref } from '@/lib/onlineCourseHref';
 
 /**
@@ -56,6 +57,19 @@ export function publicCourseUrl(course) {
   // canonical tag rather than re-deriving a second spelling of the same page.
   const path = courseCanonicalPath(course, course?.urlAlias ? { urlAlias: course.urlAlias } : null);
   return path ? `${SITE_ORIGIN}${path}` : null;
+}
+
+/**
+ * A course row from a by-code read or a round's populated course carries no
+ * `urlAlias` — only `listPublicCourses` rows do. This gives such a row the
+ * same alias, through the same `attachAliases`, so `publicCourseUrl` emits the
+ * URL www actually lands on (the derived `/<id>-training-course` path of an
+ * aliased course redirects). `aliasByCode` is loaded ONCE per tool call
+ * (loadCourseAliasMap); a missing map leaves the row as it was.
+ */
+export function withCourseAlias(course, aliasByCode) {
+  if (!course || !aliasByCode) return course;
+  return attachAliases([course], aliasByCode)[0];
 }
 
 /** The program name, from either a populated object or a bare string. */

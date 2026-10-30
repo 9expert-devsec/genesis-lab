@@ -31,7 +31,7 @@
  * gets. test/fs/hiddenCourseLeaks pins that wiring.
  */
 
-import { McpToolError, dropEmpty, onlineCourseCard, publicCourseCard } from '@/lib/mcp/shape';
+import { McpToolError, dropEmpty, onlineCourseCard, publicCourseCard, withCourseAlias } from '@/lib/mcp/shape';
 
 export const GET_COURSE_DETAIL_DESCRIPTION =
   'Return the full published detail of one 9Expert course: name, teaser, price label, ' +
@@ -92,6 +92,9 @@ function topics(list) {
  * @param {object} deps
  * @param {Function} deps.getCourseByCodeInsensitive (code) → course|null
  * @param {Function} deps.listOnlineCourses          () → { items }
+ * @param {Function} [deps.loadCourseAliasMap]       () → Map COURSE-ID → urlAlias. The by-code
+ *   row carries no `urlAlias`, so without it an aliased course's url would be
+ *   the derived path www redirects — and disagree with search_courses.
  */
 export async function getCourseDetail(input, deps) {
   const { course_id: courseId, include_outline: includeOutline = true } = input ?? {};
@@ -100,7 +103,8 @@ export async function getCourseDetail(input, deps) {
 
   const course = await deps.getCourseByCodeInsensitive(wanted);
   if (course) {
-    const card = publicCourseCard(course);
+    const aliasByCode = deps.loadCourseAliasMap ? await deps.loadCourseAliasMap() : null;
+    const card = publicCourseCard(withCourseAlias(course, aliasByCode));
     return dropEmpty({
       ...card,
       level: levelLabel(course.course_levels),

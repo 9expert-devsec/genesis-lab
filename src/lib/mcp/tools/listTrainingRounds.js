@@ -63,13 +63,17 @@
  * Built by shape.js `publicCourseUrl`, the same helper get_course_detail uses,
  * so a round with no registration_url (full, started, or a fallback that was
  * omitted) still gives the model a real link rather than one it would guess.
- * The course a round is populated with carries no `urlAlias`, so an aliased
- * course gets its derived `/<id>-training-course` path here — a URL
- * `resolveCourse` also serves, though not the canonical one.
+ * The course a round is populated with carries no `urlAlias`, and the derived
+ * `/<id>-training-course` path of an aliased course REDIRECTS on www (measured
+ * 2026-10-30: VIBE-CODE-L2, POWER-BI, SQL-PG-QUERY, CC-AI). So the alias map
+ * is loaded ONCE per call (`loadCourseAliasMap`, beside the hidden set) and
+ * each round's course gets its alias through shape.js `withCourseAlias` before
+ * the URL is built — the same `attachAliases` listPublicCourses applies, so
+ * this tool, search_courses and get_course_detail emit one URL per course.
  */
 
 import { siteTodayKey } from '@/lib/articlePublishTime';
-import { McpToolError, SITE_ORIGIN, dropEmpty, publicCourseUrl } from '@/lib/mcp/shape';
+import { McpToolError, SITE_ORIGIN, dropEmpty, publicCourseUrl, withCourseAlias } from '@/lib/mcp/shape';
 import { roundHasEnded, roundHasStarted, roundFirstDayKey, roundLastDayKey } from '@/lib/schedule/roundHasStarted';
 import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';
 import { scheduleStatusLabel } from '@/lib/scheduleStatus';
@@ -139,6 +143,7 @@ function dayKeys(dates) {
  * @param {Function} deps.listSchedules                ({ from, to, courses, status }) → { items }
  * @param {Function} deps.getCourseByCodeInsensitive   (code) → course|null
  * @param {Function} deps.loadHiddenCourseIds          () → Set of hidden course codes
+ * @param {Function} [deps.loadCourseAliasMap]         () → Map COURSE-ID → urlAlias; see (7)
  * @param {Function} [deps.todayKey]                   () → 'YYYY-MM-DD' in Asia/Bangkok
  * @param {Function} [deps.warn]                       server-side log; defaults to console.warn
  */
@@ -175,7 +180,7 @@ export async function listTrainingRounds(input, deps) {
     resolvedCourseId = course.course_id ?? null;
   }
 
-  const [res, hidden] = await Promise.all([
+  const [res, hidden, aliasByCode] = await Promise.all([
     deps.listSchedules({
       from: fromDay,
       to: toDay,
@@ -186,6 +191,8 @@ export async function listTrainingRounds(input, deps) {
     // `/schedules` has never heard of CourseExtension.isPublished, so without a
     // course_id every round of a hidden course would come back.
     deps.loadHiddenCourseIds(),
+    // (7) — once per call, not per round.
+    deps.loadCourseAliasMap ? deps.loadCourseAliasMap() : null,
   ]);
 
   let droppedOrphans = 0;
@@ -234,7 +241,7 @@ export async function listTrainingRounds(input, deps) {
         registration_url: href ? `${SITE_ORIGIN}${href}` : null,
         // (7) — always present, so a round with no registration_url still has
         // a real link to hand out.
-        course_url: publicCourseUrl(row.course),
+        course_url: publicCourseUrl(withCourseAlias(row.course, aliasByCode)),
       })
     );
   }
