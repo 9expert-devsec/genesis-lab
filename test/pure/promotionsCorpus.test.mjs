@@ -10,6 +10,7 @@ import {
 } from '@/lib/corpus/promotions';
 import { corpusAuthStatus } from '@/lib/corpus/promotionsAuth';
 import { GET } from '@/app/api/corpus/promotions/route';
+import { readSource } from '../sourceScan.mjs';
 
 /**
  * WHAT /api/corpus/promotions IS ALLOWED TO SAY IS ON SALE.
@@ -183,7 +184,7 @@ test('masterclass gates: draft batch, unpublished course, and a deadline past th
     'liveness is judged against the injected now, not the wall clock');
 });
 
-test('a masterclass item carries image_url = the course cover_image_url, raw; null when the course has none; no other kind gains an image key', () => {
+test('a masterclass item carries image_url = the course cover_image_url, raw; null when the course has none; coverless pages say null too', () => {
   const cover = 'https://res.cloudinary.com/ddva7xvdt/image/upload/v1783333443/9exp-genesis/masterclass/wgnrofx9womyejd0crx9.webp';
   const withCover = COURSES.map((c) => (c._id === 'c-dmc' ? { ...c, cover_image_url: cover } : c));
   const [item] = masterclassItems({ batches: [DMC_BATCH_1], courses: withCover }, NOW);
@@ -194,11 +195,63 @@ test('a masterclass item carries image_url = the course cover_image_url, raw; nu
     const [bare] = masterclassItems({ batches: [DMC_BATCH_1], courses: COURSES.map((c) => ({ ...c, cover_image_url: v })) }, NOW);
     assert.equal(bare.image_url, null, `cover ${JSON.stringify(v)}`);
   }
-  // CONTROL: the other two sources are untouched — no image key of any name
+  // CONTROL: the other two sources use the SAME key (CB-1) and, with no cover, the same null — no second image name
   const [page] = builderPageItems([livePage()], NOW);
-  assert.equal('image_url' in page, false);
+  assert.equal(page.image_url, null);
   const [eb] = earlyBirdConfigItems([{ _id: 'eb-x', course_id: 'X', special_price: 1, deadline: FUTURE }], { pages: [], now: NOW });
-  assert.equal('image_url' in eb, false);
+  assert.equal(eb.image_url, null);
+  for (const it of [page, eb]) {
+    assert.deepEqual(Object.keys(it).filter((k) => /image|cover/i.test(k)), ['image_url']);
+  }
+});
+
+// ── CB-1: builder covers reach the chat card ───────────────────────────────
+
+const PROMO_COVER = 'https://res.cloudinary.com/ddva7xvdt/image/upload/v1/9exp-genesis/promotions/duo.png';
+
+test('every item a builder page yields — page, early_bird, each bundle section — carries the page promotionCover', () => {
+  const asPage = builderPageItems([livePage({ promotionCover: PROMO_COVER })], NOW);
+  assert.deepEqual(asPage.map((i) => [i.kind, i.image_url]), [['page', PROMO_COVER]]);
+
+  const eb = builderPageItems([livePage({ promotionCover: PROMO_COVER, promotionKind: 'early_bird',
+    earlyBird: { courseRef: '6a0000', courseCode: 'X', scheduleId: 's', specialPrice: 1, deadline: FUTURE } })], NOW);
+  assert.deepEqual(eb.map((i) => [i.kind, i.image_url]), [['early_bird', PROMO_COVER]]);
+
+  const section = (id) => ({ id, type: 'promotion_bundle', content: { name: id, listPrice: 2, netPrice: 1, registrationOpen: true, items: [] } });
+  const bundle = builderPageItems([livePage({ promotionCover: PROMO_COVER, promotionKind: 'bundle', sections: [section('s1'), section('s2')] })], NOW);
+  assert.deepEqual(bundle.map((i) => [i.id, i.image_url]), [
+    ['builder_page:page-1:s1', PROMO_COVER],
+    ['builder_page:page-1:s2', PROMO_COVER],
+  ]);
+
+  for (const v of ['', '  ', undefined, null]) {
+    const [bare] = builderPageItems([livePage({ promotionCover: v })], NOW);
+    assert.equal(bare.image_url, null, `cover ${JSON.stringify(v)}`);
+  }
+});
+
+test('the draft partition cover is never served — only the live top-level promotionCover', () => {
+  const [item] = builderPageItems([livePage({ promotionCover: '', draft: { promotionCover: 'https://x/draft.png' } })], NOW);
+  assert.equal(item.image_url, null);
+});
+
+test('an early_bird_config item takes its owning page cover; no owner → null', () => {
+  const row = { _id: 'eb-cop-adv', course_id: 'COPILOT-STU-ADV', special_price: 12665, deadline: FUTURE, owner_page_id: 'page-copilot' };
+  const owner = livePage({ _id: 'page-copilot', slug: 'promotion-copilot', promotionCover: PROMO_COVER });
+  const [owned] = earlyBirdConfigItems([row], { pages: [owner], now: NOW });
+  assert.equal(owned.image_url, PROMO_COVER);
+  const [orphan] = earlyBirdConfigItems([{ ...row, owner_page_id: 'page-gone' }], { pages: [owner], now: NOW });
+  assert.equal(orphan.image_url, null);
+});
+
+test('readBuilderPageRows selects promotionCover and still never selects draft', () => {
+  const { code } = readSource('src/lib/corpus/promotions.js');
+  const body = /async function readBuilderPageRows[^]*?\n\}/.exec(code)?.[0] ?? '';
+  // \x27 rather than a literal quote: injectedDepCoverage blanks string bodies
+  // and would read a quote inside this regex as the start of a string.
+  const select = /\.select\(\x27([^\x27]*)\x27\)/.exec(body)?.[1]?.split(/\s+/) ?? [];
+  assert.ok(select.includes('promotionCover'), `projection: ${select.join(' ')}`);
+  assert.ok(!select.some((f) => f === 'draft' || f.startsWith('draft.')), 'the unpublished draft partition leaked into the read');
 });
 
 // ── builder pages ───────────────────────────────────────────────────────────

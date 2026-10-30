@@ -5,6 +5,7 @@
 import { dbConnect } from '@/lib/db/connect';
 import MasterclassCourse   from '@/models/MasterclassCourse';
 import MasterclassBatch    from '@/models/MasterclassBatch';
+import { orderByIds }      from '@/lib/masterclass/orderByIds';
 
 function serialize(v) {
   return JSON.parse(JSON.stringify(v));
@@ -128,6 +129,8 @@ export async function getInstructorsByIds(ids) {
   if (!ids?.length) return [];
   await dbConnect();
   const Instructor = (await import('@/models/Instructor')).default;
-  const docs = await Instructor.find({ _id: { $in: ids } }).lean();
+  const found = await Instructor.find({ _id: { $in: ids } }).lean();
+  // In the admin's order (course.instructor_ids), not the collection's.
+  const docs = orderByIds(ids, found);
   return serialize(docs);
 }

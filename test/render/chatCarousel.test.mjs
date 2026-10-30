@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { CourseCarousel, PromotionCarousel } from '@/components/chat/ChatCards';
+import {
+  CourseCarousel, PromotionCarousel, PromotionCard, frameForRatio, initialPromotionFrame, LANDSCAPE_MIN_RATIO,
+} from '@/components/chat/ChatCards';
 import { MasterclassCard, MasterclassCarousel } from '@/components/chat/ChatCards';
 import { CareerPathCard, CareerPathCarousel } from '@/components/chat/ChatCards';
 import { ChatPanel } from '@/components/chat/ChatPanel';
@@ -281,4 +283,52 @@ test('panel: a `masterclasses` array on the message renders its own carousel, af
   assert.ok(ordered.every((i) => i >= 0));
   assert.deepEqual([...ordered].sort((a, b) => a - b), ordered, 'courses first, then the masterclasses as received');
   assert.equal(chevrons(m.slice(m.indexOf('data-chat-masterclasses'))), 2, 'two cards page');
+});
+
+// ── CB-1 / CB-1b: the promotion image frame follows the IMAGE's aspect ──────
+// The agent does not forward `source`; the final frame comes from the loaded
+// image (frameForRatio). `source` only picks the pre-load guess.
+
+const promo = (item) => renderToStaticMarkup(createElement(PromotionCard, { item }));
+const frameOf = (markup) => /data-promo-frame="([^"]*)" class="([^"]*)"/.exec(markup)?.slice(1) ?? null;
+const imgClassOf = (markup) => /<img [^>]*class="([^"]*)"/.exec(markup)?.[1] ?? null;
+const SQUARE_COVER = 'https://res.cloudinary.com/ddva7xvdt/image/upload/v1/9exp-genesis/promotions/duo.png';
+
+test('frameForRatio: 16:9 is the original cover frame; 1:1 and 4:5 are the capped contained square; 1.3 is the boundary', () => {
+  assert.deepEqual(frameForRatio(16 / 9), { kind: 'landscape', frame: 'aspect-[16/9] w-full', img: 'object-cover' });
+  assert.deepEqual(frameForRatio(1920 / 1200), frameForRatio(16 / 9), 'the live 1920×1200 Masterclass cover is landscape');
+  assert.deepEqual(frameForRatio(1), { kind: 'square', frame: 'aspect-square max-h-[220px] w-full', img: 'object-contain' });
+  assert.equal(frameForRatio(4 / 5).kind, 'square');
+  assert.equal(LANDSCAPE_MIN_RATIO, 1.3);
+  assert.equal(frameForRatio(1.3).kind, 'landscape', '1.3 itself is landscape');
+  assert.equal(frameForRatio(1.2999).kind, 'square');
+  for (const bad of [NaN, Infinity, undefined, 0]) assert.equal(frameForRatio(bad).kind, 'square', String(bad));
+});
+
+test('promotion card WITHOUT source and with an image still renders the image block (lazy, badge kept)', () => {
+  const m = promo({ id: 'x', title: 'CLAUDE CODE BUILDER DUO', image_url: SQUARE_COVER, badge: 'Bundle' });
+  assert.ok(frameOf(m), 'no image block when source is absent');
+  assert.match(m, new RegExp(`<img [^>]*src="${SQUARE_COVER}"`));
+  assert.match(m, /loading="lazy"/);
+  assert.match(m, />Bundle</, 'the badge overlay stays');
+});
+
+test('promotion card pre-load guess: masterclass hint → 16:9 cover frame; no hint → square (the frame is final only after onLoad)', () => {
+  const mc = promo({ id: 'masterclass:b', source: 'masterclass', title: 'DMC', image_url: COVER });
+  assert.deepEqual(frameOf(mc), ['landscape', 'aspect-[16/9] w-full']);
+  assert.equal(imgClassOf(mc), 'h-full w-full object-cover');
+  for (const source of ['builder_page', undefined]) {
+    const m = promo({ id: 'x', source, title: 'DUO', image_url: SQUARE_COVER });
+    assert.deepEqual(frameOf(m), ['square', 'aspect-square max-h-[220px] w-full'], `source ${source}`);
+    assert.equal(imgClassOf(m), 'h-full w-full object-contain');
+  }
+  assert.deepEqual(initialPromotionFrame({ source: 'masterclass' }), frameForRatio(16 / 9));
+});
+
+test('promotion card: no image → no frame at all', () => {
+  for (const source of ['masterclass', undefined]) {
+    const m = promo({ id: 'x', source, title: 'ไม่มีรูป', image_url: null });
+    assert.equal(frameOf(m), null);
+    assert.doesNotMatch(m, /<img /);
+  }
 });

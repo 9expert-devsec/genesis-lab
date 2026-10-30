@@ -161,8 +161,9 @@ export function masterclassItems({ batches = [], courses = [] } = {}, now) {
       bundle:      null,
       description: text(c.subtitle_th),
       // The course's cover, raw — the same URL the /masterclass listing card
-      // renders (docs/masterclass-chat-card-phase-a.md §A2). Masterclass items
-      // only: a builder page and an early_bird_config row store no image.
+      // renders (docs/masterclass-chat-card-phase-a.md §A2). 16:9 artwork;
+      // builder and early_bird_config items carry their page's SQUARE
+      // `promotionCover` instead (see builderPageItems).
       image_url:   text(c.cover_image_url),
     });
   }
@@ -192,6 +193,10 @@ export function builderPageItems(pages = [], now) {
       is_live:    true,
       bundle:     null,
       description: null,
+      // The page's listing cover — the square image /promotions renders
+      // (getActiveBuilderPromotions). The LIVE top-level field: the draft
+      // partition's copy is never read here. Every item of the page carries it.
+      image_url:  text(page.promotionCover),
     };
 
     if (page.promotionKind === 'early_bird' && hasEarlyBirdBinding(page)) {
@@ -310,6 +315,7 @@ export function earlyBirdConfigItems(rows = [], { pages = [], now, servedPageIds
       courses:    [course({ course_code: row.course_id, schedule_id: row.schedule_id })],
       bundle:      null,
       description: null,
+      image_url:   owner ? text(owner.promotionCover) : null, // the owning page's cover, as its page item would carry
     });
   }
   return items;
@@ -361,7 +367,7 @@ async function readBuilderPageRows() {
     pageType: 'promotion',
     status: { $in: ['published', 'scheduled'] },
   })
-    .select('slug title pageType status promotionKind earlyBird sections publishStartDate publishEndDate createdAt')
+    .select('slug title pageType status promotionKind earlyBird sections promotionCover publishStartDate publishEndDate createdAt')
     .lean();
 }
 
