@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
-  CourseCarousel, PromotionCarousel, PromotionCard, frameForRatio, initialPromotionFrame, LANDSCAPE_MIN_RATIO,
+  CourseCarousel, PromotionCarousel, PromotionCard, PromotionImage, fitForRatio, LANDSCAPE_MIN_RATIO,
 } from '@/components/chat/ChatCards';
 import { MasterclassCard, MasterclassCarousel } from '@/components/chat/ChatCards';
 import { CareerPathCard, CareerPathCarousel } from '@/components/chat/ChatCards';
@@ -285,50 +285,57 @@ test('panel: a `masterclasses` array on the message renders its own carousel, af
   assert.equal(chevrons(m.slice(m.indexOf('data-chat-masterclasses'))), 2, 'two cards page');
 });
 
-// ── CB-1 / CB-1b: the promotion image frame follows the IMAGE's aspect ──────
-// The agent does not forward `source`; the final frame comes from the loaded
-// image (frameForRatio). `source` only picks the pre-load guess.
+// ── CB-1 / CB-1b / CB-1c: one 16:9 frame; the image's aspect picks only the fit ──
+// Every card's image block is the Masterclass cover's 16:9 height, so titles
+// line up across the carousel. The agent does not forward `source`, so the
+// fit comes from the loaded image (fitForRatio); before load it is contain.
 
 const promo = (item) => renderToStaticMarkup(createElement(PromotionCard, { item }));
 const frameOf = (markup) => /data-promo-frame="([^"]*)" class="([^"]*)"/.exec(markup)?.slice(1) ?? null;
 const imgClassOf = (markup) => /<img [^>]*class="([^"]*)"/.exec(markup)?.[1] ?? null;
 const SQUARE_COVER = 'https://res.cloudinary.com/ddva7xvdt/image/upload/v1/9exp-genesis/promotions/duo.png';
 
-test('frameForRatio: 16:9 is the original cover frame; 1:1 and 4:5 are the capped contained square; 1.3 is the boundary', () => {
-  assert.deepEqual(frameForRatio(16 / 9), { kind: 'landscape', frame: 'aspect-[16/9] w-full', img: 'object-cover' });
-  assert.deepEqual(frameForRatio(1920 / 1200), frameForRatio(16 / 9), 'the live 1920×1200 Masterclass cover is landscape');
-  assert.deepEqual(frameForRatio(1), { kind: 'square', frame: 'aspect-square max-h-[220px] w-full', img: 'object-contain' });
-  assert.equal(frameForRatio(4 / 5).kind, 'square');
+test('fitForRatio decides only cover vs contain: 16:9 → cover; 1:1 and 4:5 → contain; 1.3 is the boundary', () => {
+  assert.equal(fitForRatio(16 / 9), 'object-cover');
+  assert.equal(fitForRatio(1920 / 1200), 'object-cover', 'the live 1920×1200 Masterclass cover');
+  assert.equal(fitForRatio(1), 'object-contain');
+  assert.equal(fitForRatio(4 / 5), 'object-contain');
   assert.equal(LANDSCAPE_MIN_RATIO, 1.3);
-  assert.equal(frameForRatio(1.3).kind, 'landscape', '1.3 itself is landscape');
-  assert.equal(frameForRatio(1.2999).kind, 'square');
-  for (const bad of [NaN, Infinity, undefined, 0]) assert.equal(frameForRatio(bad).kind, 'square', String(bad));
+  assert.equal(fitForRatio(1.3), 'object-cover', '1.3 itself is landscape');
+  assert.equal(fitForRatio(1.2999), 'object-contain');
+  for (const bad of [NaN, Infinity, undefined, 0]) assert.equal(fitForRatio(bad), 'object-contain', String(bad));
 });
 
-test('promotion card WITHOUT source and with an image still renders the image block (lazy, badge kept)', () => {
-  const m = promo({ id: 'x', title: 'CLAUDE CODE BUILDER DUO', image_url: SQUARE_COVER, badge: 'Bundle' });
-  assert.ok(frameOf(m), 'no image block when source is absent');
-  assert.match(m, new RegExp(`<img [^>]*src="${SQUARE_COVER}"`));
-  assert.match(m, /loading="lazy"/);
-  assert.match(m, />Bundle</, 'the badge overlay stays');
+test('every promotion card with an image renders the SAME 16:9 frame, whatever its source (or none)', () => {
+  const frames = [
+    { id: 'masterclass:b', source: 'masterclass', title: 'DMC', image_url: COVER },
+    { id: 'b', source: 'builder_page', title: 'DUO', image_url: SQUARE_COVER },
+    { id: 'e', source: 'early_bird_config', title: 'EB', image_url: SQUARE_COVER },
+    { id: 'x', title: 'CLAUDE CODE BUILDER DUO', image_url: SQUARE_COVER },
+  ].map((it) => frameOf(promo(it)));
+  for (const f of frames) assert.deepEqual(f, ['object-contain', 'aspect-[16/9] w-full'], 'pre-load: one frame, contained (nothing cropped while loading)');
+  assert.doesNotMatch(promo({ id: 'x', title: 'DUO', image_url: SQUARE_COVER }), /max-h-|aspect-square/, 'the CB-1 square cap is gone');
 });
 
-test('promotion card pre-load guess: masterclass hint → 16:9 cover frame; no hint → square (the frame is final only after onLoad)', () => {
-  const mc = promo({ id: 'masterclass:b', source: 'masterclass', title: 'DMC', image_url: COVER });
-  assert.deepEqual(frameOf(mc), ['landscape', 'aspect-[16/9] w-full']);
-  assert.equal(imgClassOf(mc), 'h-full w-full object-cover');
-  for (const source of ['builder_page', undefined]) {
-    const m = promo({ id: 'x', source, title: 'DUO', image_url: SQUARE_COVER });
-    assert.deepEqual(frameOf(m), ['square', 'aspect-square max-h-[220px] w-full'], `source ${source}`);
-    assert.equal(imgClassOf(m), 'h-full w-full object-contain');
+test('the image block: the fit lands on the <img>, inside the same frame; lazy; badge kept', () => {
+  for (const fit of ['object-cover', 'object-contain']) {
+    const m = renderToStaticMarkup(createElement(PromotionImage, { img: SQUARE_COVER, title: 'DUO', badge: 'Bundle', fit }));
+    assert.deepEqual(frameOf(m), [fit, 'aspect-[16/9] w-full']);
+    assert.equal(imgClassOf(m), `h-full w-full ${fit}`);
+    assert.match(m, /loading="lazy"/);
+    assert.match(m, />Bundle</, 'the badge overlay stays');
+    assert.match(m, /^<div class="relative bg-\[var\(--surface-muted\)\]">/, 'the muted ground behind a contained image');
   }
-  assert.deepEqual(initialPromotionFrame({ source: 'masterclass' }), frameForRatio(16 / 9));
+  const m = promo({ id: 'x', title: 'CLAUDE CODE BUILDER DUO', image_url: SQUARE_COVER, badge: 'Bundle' });
+  assert.match(m, new RegExp(`<img [^>]*src="${SQUARE_COVER}"`), 'no source still renders the image block');
 });
 
-test('promotion card: no image → no frame at all', () => {
+test('promotion card: no image → no frame; an image that failed to load → no frame', () => {
   for (const source of ['masterclass', undefined]) {
     const m = promo({ id: 'x', source, title: 'ไม่มีรูป', image_url: null });
     assert.equal(frameOf(m), null);
     assert.doesNotMatch(m, /<img /);
   }
+  assert.equal(renderToStaticMarkup(createElement(PromotionImage, { img: SQUARE_COVER, title: 'DUO', failed: true })), '');
+  assert.equal(renderToStaticMarkup(createElement(PromotionImage, { img: '', title: 'DUO' })), '');
 });
