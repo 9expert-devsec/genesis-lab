@@ -3,21 +3,31 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Search } from 'lucide-react';
 import { deletePrivateCourse } from '@/lib/actions/courses';
 import { withListQuery } from '@/lib/courses/adminListQuery';
 
 /**
- * The genesis-only PRIVATE courses on /admin/courses.
+ * The genesis-only PRIVATE courses — the `?tab=private` tab of /admin/courses.
  *
- * Its own section rather than rows inside CoursesAdminClient: that table is
+ * Its own list rather than rows inside CoursesAdminClient: that table is
  * grouped by MSDB program and drag-reordered into MSDB's course order, and a
  * private course belongs to neither. Each row carries a Private badge and
  * links to the private editor — never the MSDB-`_id` one, which would 404.
  *
- * `rows` arrive already filtered by the page (search + type), as plain objects.
+ * `rows` arrive already filtered by the page (search only), as plain objects.
+ * The search box is CoursesAdminClient's pattern: uncontrolled, keyed on the
+ * URL's `q`, committing on Enter or blur — and it keeps `tab=private`.
  */
-export function PrivateCoursesTable({ rows = [], listQuery = '' }) {
+export function PrivateCoursesTable({ rows = [], q = '', listQuery = '' }) {
   const router = useRouter();
+
+  function search(value) {
+    const params = new URLSearchParams({ tab: 'private' });
+    const term = String(value ?? '').trim();
+    if (term) params.set('q', term);
+    startTransition(() => router.push(`/admin/courses?${params}`));
+  }
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState(null);
 
@@ -38,7 +48,34 @@ export function PrivateCoursesTable({ rows = [], listQuery = '' }) {
   }
 
   return (
-    <section className="mt-10" aria-labelledby="private-courses-heading">
+    <section aria-labelledby="private-courses-heading">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[240px] flex-1">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50"
+            aria-hidden="true"
+          />
+          <input
+            key={q}
+            type="text"
+            defaultValue={q}
+            aria-label="ค้นหา Private Course"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                search(e.currentTarget.value);
+              }
+            }}
+            onBlur={(e) => e.target.value !== q && search(e.target.value)}
+            placeholder="ค้นหาชื่อหลักสูตรหรือ Course ID... (Enter เพื่อค้นหา)"
+            className="w-full rounded-9e-md border border-[var(--surface-border)] bg-white pl-8 pr-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+          />
+        </div>
+        <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          {rows.length} หลักสูตร
+        </span>
+      </div>
+
       <h2 id="private-courses-heading" className="mb-1 text-lg font-bold text-[var(--text-primary)]">
         Private Courses
       </h2>
@@ -54,7 +91,9 @@ export function PrivateCoursesTable({ rows = [], listQuery = '' }) {
       )}
 
       {rows.length === 0 ? (
-        <p className="text-sm text-[var(--text-secondary)]">ยังไม่มี Private Course</p>
+        <p className="text-sm text-[var(--text-secondary)]">
+          {q ? 'ไม่พบ Private Course ที่ตรงกับคำค้น' : 'ยังไม่มี Private Course'}
+        </p>
       ) : (
         <div className="overflow-x-auto rounded-9e-md border border-[var(--surface-border)]">
           <table className="w-full text-sm">

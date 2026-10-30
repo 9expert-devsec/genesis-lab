@@ -815,8 +815,9 @@ export function ArticleForm({
             />
           </div>
 
-          {/* Scrollable editor body — title, excerpt, Tiptap. */}
-          <div className="flex-1 overflow-y-auto px-8 py-6">
+          {/* Scrollable editor body — title, excerpt, Tiptap. `relative` for
+              the same reason as the sidebar's below. */}
+          <div className="relative flex-1 overflow-y-auto px-8 py-6">
             <textarea
               ref={titleRef}
               value={title}
@@ -907,8 +908,19 @@ export function ArticleForm({
           </div>
         </div>
 
-        {/* Sidebar (right) — independent scroll. */}
-        <aside className="w-72 flex-shrink-0 space-y-5 overflow-y-auto border-l border-[var(--surface-border)] bg-white p-4 dark:bg-[#111d2c]">
+        {/* Sidebar (right) — independent scroll.
+
+            `relative` IS LOAD-BEARING. Without it the nearest positioned
+            ancestor of an absolute descendant is the admin layout's
+            `<main class="relative">`, so SeoChecklist's `sr-only` span (1px,
+            position:absolute) escaped this scroller's clipping and sat at the
+            sidebar's full CONTENT height — measured `main.scrollHeight` 2936
+            against a 1080 viewport (2449 on /new). After a client navigation
+            from the list, `<main>` is still `overflow-y-auto` (the layout's
+            x-pathname is read once and not re-rendered), so the outer area
+            scrolled into an empty band. Anchored here, the span is clipped
+            with the rest of the sidebar and `main` is exactly one viewport. */}
+        <aside className="relative w-72 flex-shrink-0 space-y-5 overflow-y-auto border-l border-[var(--surface-border)] bg-white p-4 dark:bg-[#111d2c]">
           {/* 1. Cover */}
           <Section title="รูปปก">
             <ImageUploadField

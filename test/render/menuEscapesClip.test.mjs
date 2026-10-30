@@ -401,7 +401,8 @@ test('the admin shell is the only scrollport, and it still is — read from sour
   assert.ok(rowDecls.some((d) => CLIPS.test(d)),
     `the shell row stopped clipping, so the document may now scroll: [${rowDecls.join(', ')}]`);
 
-  const main = /<main className="([^"]*)"/.exec(code);
+  // ADM-1b: <main> now lives in AdminMain (client, usePathname).
+  const main = /<main className="([^"]*)"/.exec(readSource('src/components/layout/AdminMain.jsx').code);
   assert.ok(main, 'the admin shell no longer has a <main> — the scrollport moved');
   const mainDecls = declsFor(classesOf(main[1]));
   assert.ok(mainDecls.some((d) => CLIPS.test(d)),

@@ -15,6 +15,7 @@ import { listPrivateCourses } from '@/lib/courses/privateCourseStore';
 import { courseListQuery } from '@/lib/courses/adminListQuery';
 import { CoursesAdminClient } from './_components/CoursesAdminClient';
 import { PrivateCoursesTable } from './_components/PrivateCoursesTable';
+import { CourseListTabs } from './_components/CourseListTabs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,12 @@ export default async function AdminCoursesPage({ searchParams }) {
   };
   const q = one('q');
   const program = one('program');
-  const type = one('type');
+  // `type=private` predates the tab (it narrowed the page to the private
+  // section); an old link carrying it opens the Private Courses tab instead.
+  const legacyPrivate = one('type') === 'private';
+  const type = legacyPrivate ? '' : one('type');
+  // The active list, from the URL on every render — never copied into state.
+  const tab = one('tab') === 'private' || legacyPrivate ? 'private' : '';
 
   const [coursesRes, extensionsRes, programsRes, privateRes] = await Promise.allSettled([
     // includeHidden — this IS the management table. It carries the สถานะ
@@ -77,18 +83,16 @@ export default async function AdminCoursesPage({ searchParams }) {
     extensions.map((ext) => [ext.courseId, ext])
   );
 
-  // The private section honours the same search and type filter as the main
-  // table; plain objects only, so they can cross into the client component.
+  // The Private Courses tab honours the search box only — its toolbar has no
+  // program or type select, so a type left in the URL by the other tab must not
+  // narrow it invisibly. Plain objects only, so they can cross into the client.
   const needle = q.trim().toLowerCase();
-  const privateRows = (privateRes.status === 'fulfilled' ? privateRes.value : [])
+  const privateAll = privateRes.status === 'fulfilled' ? privateRes.value : [];
+  const privateRows = privateAll
     .filter((c) =>
-      (!needle
+      !needle
         || (c.course_name || '').toLowerCase().includes(needle)
-        || (c.course_id || '').toLowerCase().includes(needle))
-      && (!type
-        || type === 'private'
-        || (type === 'public' && c.course_type_public)
-        || (type === 'inhouse' && c.course_type_inhouse))
+        || (c.course_id || '').toLowerCase().includes(needle)
     )
     .map((c) => ({
       _id: String(c._id),
@@ -144,23 +148,33 @@ export default async function AdminCoursesPage({ searchParams }) {
         </Link>
       </div>
 
-      <CoursesAdminClient
-        courses={courses}
-        extensions={extByCourseId}
-        programs={programs}
-        programCourseOrder={programCourseOrder}
-        programNames={programNames}
-        programColors={programColors}
-        programIcons={programIcons}
-        q={q}
-        program={program}
-        type={type}
+      <CourseListTabs
+        active={tab}
+        query={courseListQuery({ q, program, type })}
+        counts={{ all: courses.length, private: privateAll.length }}
       />
 
-      {/* A program filter narrows to MSDB programs, which private courses do
-          not belong to in the list's sense — the section steps aside. */}
-      {!program && (
-        <PrivateCoursesTable rows={privateRows} listQuery={courseListQuery(sp)} />
+      {/* ONE list per tab. The private courses used to trail the grouped table
+          at the very bottom of the page, where nobody found them. */}
+      {tab === 'private' ? (
+        <PrivateCoursesTable
+          rows={privateRows}
+          q={q}
+          listQuery={courseListQuery({ q, tab })}
+        />
+      ) : (
+        <CoursesAdminClient
+          courses={courses}
+          extensions={extByCourseId}
+          programs={programs}
+          programCourseOrder={programCourseOrder}
+          programNames={programNames}
+          programColors={programColors}
+          programIcons={programIcons}
+          q={q}
+          program={program}
+          type={type}
+        />
       )}
     </div>
   );

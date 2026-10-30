@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { X, Plus, Trash2 } from 'lucide-react';
 import {
@@ -13,6 +12,7 @@ import { MAX_PROGRAMS, appendProgramsToForm } from '@/lib/instructors/instructor
 import { MAX_SPECIALTIES, MAX_SPECIALTY_LENGTH } from '@/lib/instructors/instructorSpecialties';
 import { PHOTO_SCALE, PHOTO_OFFSET_Y, PHOTO_OFFSET_X, photoCropValues } from '@/lib/instructors/photoCrop';
 import InstructorPhotoPanel from '@/components/about/InstructorPhotoPanel';
+import { InstructorGroups } from './InstructorCards';
 
 export function InstructorsAdminClient({ instructors, programs = [], programsUnavailable = false }) {
   const router = useRouter();
@@ -71,75 +71,19 @@ export function InstructorsAdminClient({ instructors, programs = [], programsUna
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {instructors.length === 0 && (
-            <p className="col-span-full rounded-9e-lg border border-dashed border-[var(--surface-border)] py-10 text-center text-sm text-9e-slate-dp-50">
-              ยังไม่มีวิทยากร — กด <strong>+ เพิ่มวิทยากร</strong>
-            </p>
-          )}
-          {instructors.map((i) => {
-            const busy = busyId === i._id;
-            return (
-              <div
-                key={i._id}
-                className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c]"
-              >
-                <div className="relative h-40 bg-9e-ice dark:bg-[#0D1B2A]">
-                  {i.image_url ? (
-                    <Image
-                      src={i.image_url}
-                      alt={i.name}
-                      fill
-                      sizes="(max-width: 640px) 100vw, 33vw"
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-xs text-9e-slate-dp-50">
-                      ไม่มีรูป
-                    </div>
-                  )}
-                  {!i.is_active && (
-                    <span className="absolute right-2 top-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-700">
-                      Inactive
-                    </span>
-                  )}
-                </div>
-                <div className="space-y-2 p-4">
-                  <h3 className="text-sm font-bold text-9e-navy dark:text-white">{i.name}</h3>
-                  {i.title && (
-                    <p className="text-xs text-9e-slate-dp-50">{i.title}</p>
-                  )}
-                  {Array.isArray(i.specialties) && i.specialties.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {i.specialties.slice(0, 4).map((s) => (
-                        <span key={s} className="rounded-full bg-9e-ice px-2 py-0.5 text-[10px] text-9e-navy dark:bg-[#0D1B2A] dark:text-white">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex gap-1 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditing(i)}
-                      className="flex-1 rounded border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
-                    >
-                      แก้ไข
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(i)}
-                      disabled={busy}
-                      className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100 disabled:opacity-50"
-                    >
-                      {busy ? '…' : 'ลบ'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {instructors.length === 0 && (
+          <p className="rounded-9e-lg border border-dashed border-[var(--surface-border)] py-10 text-center text-sm text-9e-slate-dp-50">
+            ยังไม่มีวิทยากร — กด <strong>+ เพิ่มวิทยากร</strong>
+          </p>
+        )}
+
+        <InstructorGroups
+          instructors={instructors}
+          programs={programs}
+          busyId={busyId}
+          onEdit={setEditing}
+          onDelete={handleDelete}
+        />
       </div>
 
       {/*

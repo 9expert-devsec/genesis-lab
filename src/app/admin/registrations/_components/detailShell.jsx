@@ -848,7 +848,7 @@ export function OverflowItem({ children, onClick, disabled, busy, icon: Icon, to
  * selected tab is distinguished by its label colour alone. Stated because a
  * future tidy-up will otherwise read the shadow as ornament.
  */
-const tabVariants = cva(
+export const tabVariants = cva(
   'flex h-[39px] flex-1 items-center justify-center gap-[6px] rounded-9e-md text-[13px] font-semibold transition-colors',
   {
     variants: {
@@ -869,7 +869,7 @@ const tabVariants = cva(
  * selected badge is the blue at 12% behind the same blue text — no new colour,
  * and it reads as part of the label rather than as a second chip.
  */
-const tabCountVariants = cva(
+export const tabCountVariants = cva(
   'flex h-[18px] w-[21px] items-center justify-center rounded-full text-[10px] font-bold tabular-nums',
   {
     variants: {
