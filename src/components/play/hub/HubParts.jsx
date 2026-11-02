@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { BookOpenText, Lock, Play, Plus, Sparkles } from 'lucide-react';
 
 import { STAR_FILLED } from '../Stars';
-import { follow, usePointerVars } from './usePointerVars';
 
 /** Display heading with the lime italic accent tucked under its right end. */
 export function SectionHeading({ title, accent, sub, id, as: Tag = 'h2' }) {
@@ -37,19 +36,15 @@ export function scrollToMap(e) {
 }
 
 const ORBIT_ICONS = [
-  { src: '/play/programs/excel.webp', pos: 'left-[6%] top-[58%]', size: 'w-16', depth: 22 },
-  { src: '/play/programs/power-bi.webp', pos: 'left-[18%] top-[10%]', size: 'w-14', depth: 14 },
-  { src: '/play/programs/power-apps.webp', pos: 'right-[6%] top-[22%]', size: 'w-14', depth: 30 },
-  { src: '/play/programs/power-automate.webp', pos: 'right-[12%] bottom-[8%]', size: 'w-16', depth: 18 },
+  { src: '/play/programs/excel.webp', pos: 'left-[6%] top-[58%]', size: 'w-16' },
+  { src: '/play/programs/power-bi.webp', pos: 'left-[18%] top-[10%]', size: 'w-14' },
+  { src: '/play/programs/power-apps.webp', pos: 'right-[6%] top-[22%]', size: 'w-14' },
+  { src: '/play/programs/power-automate.webp', pos: 'right-[12%] bottom-[8%]', size: 'w-16' },
 ];
 
 export function HubHero({ startHref, levelCount, chapterCount }) {
-  const fx = usePointerVars();
   return (
     <section
-      ref={fx.ref}
-      onPointerMove={fx.onPointerMove}
-      onPointerLeave={fx.onPointerLeave}
       aria-labelledby="play-hero-title"
       className="grid items-center gap-10 pt-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:pt-16"
     >
@@ -95,24 +90,34 @@ export function HubHero({ startHref, levelCount, chapterCount }) {
         </dl>
       </div>
 
+      {/* EDGE-LESS: the container has no background, border or clip. The glow
+          is a closest-side radial gradient that reaches full transparency at
+          70% of the way to the box edge — no blur filter, no rounded mask —
+          so no straight or curved edge can show against the page. */}
       <div className="relative mx-auto aspect-square w-full max-w-[520px]" aria-hidden="true">
-        <div className="absolute inset-[12%] rounded-full bg-[radial-gradient(circle,rgba(72,176,255,0.35),rgba(212,247,63,0.12)_55%,transparent_72%)] blur-2xl" />
-        <svg viewBox="0 0 520 520" className="absolute inset-0 h-full w-full" fill="none">
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              'radial-gradient(closest-side, rgba(72,176,255,0.30) 0%, rgba(72,176,255,0.14) 35%, rgba(212,247,63,0.06) 55%, rgba(212,247,63,0) 70%)',
+          }}
+        />
+        <svg viewBox="0 0 520 520" className="absolute inset-0 h-full w-full" fill="none" overflow="visible">
           <ellipse cx="260" cy="270" rx="236" ry="120" stroke="rgba(72,176,255,0.45)" strokeWidth="1.5" strokeDasharray="6 10" transform="rotate(-14 260 270)" />
           <ellipse cx="260" cy="270" rx="190" ry="210" stroke="rgba(212,247,63,0.25)" strokeWidth="1.5" strokeDasharray="4 12" transform="rotate(24 260 270)" />
         </svg>
-        <div className="absolute inset-[8%]" style={follow(10, 8, 3)}>
+        <div className="absolute inset-[8%]">
           <Image src="/play/hero-rocket.webp" alt="" width={1240} height={1240} priority className="h-full w-full object-contain" />
         </div>
         {ORBIT_ICONS.map((ic) => (
-          <div key={ic.src} className={`absolute ${ic.pos} ${ic.size}`} style={follow(ic.depth, ic.depth * 0.7)}>
+          <div key={ic.src} className={`absolute ${ic.pos} ${ic.size}`}>
             <Image src={ic.src} alt="" width={384} height={384} className="h-auto w-full object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.4)]" />
           </div>
         ))}
-        <div className="absolute left-[2%] top-[30%] rounded-[10px] border border-white/15 bg-[#132638]/90 px-3 py-1.5 font-mono text-sm text-[#D4F73F] shadow-lg" style={follow(-14, -10)}>
+        <div className="absolute left-[2%] top-[30%] rounded-[10px] border border-white/15 bg-[#132638]/90 px-3 py-1.5 font-mono text-sm text-[#D4F73F] shadow-lg">
           =SUM(D2:D6)
         </div>
-        <div className="absolute bottom-[18%] right-[0%] inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-bold text-[#0D1B2A] shadow-lg" style={follow(-20, -12)}>
+        <div className="absolute bottom-[18%] right-[0%] inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-bold text-[#0D1B2A] shadow-lg">
           ผ่านด่าน! <span className="text-[#FACC15] [text-shadow:0_0_1px_rgba(0,0,0,0.25)]">★★★</span>
         </div>
       </div>
@@ -127,23 +132,33 @@ export const PLANETS = [
   { key: 'power-automate', title: 'Power Automate', sub: 'ดาวอัตโนมัติ', meta: 'กำลังสร้างภารกิจ', logo: '/play/programs/power-automate.webp', grad: ['#7AB8FF', '#1A6FD6', '#082A5E'] },
 ];
 
+// The brand card hover — lift 4px and a stronger glow in the card's own colour,
+// 200ms standard easing — only where it means something: a real hovering
+// pointer and motion allowed. Nothing inside the card moves.
+// Spelled out in full (not built from a variable) so Tailwind's scanner sees each class.
+const CARD_HOVER =
+  '[@media(hover:hover)_and_(pointer:fine)_and_(prefers-reduced-motion:no-preference)]:transition-[transform,box-shadow] [@media(hover:hover)_and_(pointer:fine)_and_(prefers-reduced-motion:no-preference)]:duration-200 [@media(hover:hover)_and_(pointer:fine)_and_(prefers-reduced-motion:no-preference)]:ease-9e ' +
+  '[@media(hover:hover)_and_(pointer:fine)_and_(prefers-reduced-motion:no-preference)]:hover:-translate-y-1 [@media(hover:hover)_and_(pointer:fine)_and_(prefers-reduced-motion:no-preference)]:hover:[box-shadow:var(--card-glow-hover)]';
+const rgba = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
 function PlanetCard({ planet, index, total }) {
-  const fx = usePointerVars();
   const num = String(index + 1).padStart(2, '0');
   return (
-    <li className="[perspective:900px]">
+    <li>
       <article
-        ref={fx.ref}
-        onPointerMove={fx.onPointerMove}
-        onPointerLeave={fx.onPointerLeave}
+        data-play-planet={planet.key}
         aria-label={`${planet.title} ${planet.sub} · ${planet.open ? 'เปิดแล้ว' : 'เร็วๆ นี้'}`}
-        className={`group relative flex h-[500px] flex-col overflow-hidden rounded-[28px] p-5 text-white ${
-          planet.open ? 'border-2 border-[#D4F73F] shadow-[0_0_48px_rgba(79,209,143,0.35)]' : 'border border-white/10'
+        className={`relative flex h-[500px] flex-col overflow-hidden rounded-[28px] p-5 text-white [box-shadow:var(--card-glow)] ${CARD_HOVER} ${
+          // Same 2px width on every card so the content boxes line up; only the colour differs.
+          planet.open ? 'border-2 border-[#D4F73F]' : 'border-2 border-white/10'
         }`}
         style={{
           backgroundImage: `linear-gradient(180deg, ${planet.grad[0]} 0%, ${planet.grad[1]} 50%, ${planet.grad[2]} 100%)`,
-          transform: 'rotateX(calc(var(--py, 0) * -8deg)) rotateY(calc(var(--px, 0) * 8deg))',
-          transition: 'transform 240ms cubic-bezier(0, 0, 0.2, 1)',
+          '--card-glow': `0 0 ${planet.open ? 48 : 28}px ${rgba(planet.grad[0], planet.open ? 0.35 : 0.18)}`,
+          '--card-glow-hover': `0 12px 56px ${rgba(planet.grad[0], planet.open ? 0.55 : 0.4)}`,
         }}
       >
         <span aria-hidden="true" className="pointer-events-none absolute -right-2 top-10 font-en text-[180px] font-bold leading-none text-white/10">
@@ -165,14 +180,16 @@ function PlanetCard({ planet, index, total }) {
 
         <div className="relative flex flex-1 items-center justify-center">
           <div className="absolute h-40 w-40 rounded-full bg-white/25 blur-3xl" aria-hidden="true" />
-          <div className="relative transition-transform duration-300 ease-9e group-hover:-translate-y-2 motion-reduce:transition-none motion-reduce:group-hover:translate-y-0">
+          <div className="relative">
             <Image src={planet.logo} alt="" width={384} height={384} className="h-auto w-36 object-contain drop-shadow-[0_16px_24px_rgba(0,0,0,0.35)]" />
           </div>
           <div className="absolute bottom-6 h-4 w-28 rounded-[50%] bg-black/35 blur-md" aria-hidden="true" />
         </div>
 
         <div className="relative text-center">
-          <h3 className="font-en text-2xl font-bold uppercase tracking-wide">{planet.title}</h3>
+          {/* Two lines reserved, text bottom-aligned: POWER AUTOMATE wraps, the
+              others do not, and everything below must line up across cards. */}
+          <h3 className="flex h-16 items-end justify-center font-en text-2xl font-bold uppercase leading-8 tracking-wide">{planet.title}</h3>
           <p className="font-heading text-lg font-bold text-white/90">{planet.sub}</p>
           <p className="mt-1 text-xs text-white/70">{planet.meta}</p>
           <Plus className="mx-auto my-3 h-4 w-4 text-white/50" aria-hidden="true" strokeWidth={1.5} />

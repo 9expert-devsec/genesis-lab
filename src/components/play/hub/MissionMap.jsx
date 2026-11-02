@@ -11,23 +11,54 @@ import { SectionHeading } from './HubParts';
 /**
  * The Excel Beginner mission map: four nodes (CH.1–3, BOSS) on a curved path.
  *
- * Everything sits in one 1200×560 coordinate space. The SVG path uses it as
+ * Everything sits in one 1200×640 coordinate space. The SVG path uses it as
  * its viewBox; the nodes are placed at the same points as percentages, and the
- * panel keeps the 1200:560 ratio, so path and nodes line up at any width from
+ * panel keeps the 1200:640 ratio, so path and nodes line up at any width from
  * lg up. Below lg the nodes become a plain list — the curve has no room there.
+ *
+ * NODE GEOMETRY comes from the platform art (880×720, content in the lower
+ * half): the visible platform is centred at 50% across and PLATFORM_CY down,
+ * its top surface starts at ≈45% and its base ends at ≈93%. A node's (x, y)
+ * is that visible centre, so the path joins the platforms themselves. The orb
+ * is anchored by its BOTTOM to the top surface and the label by its TOP to the
+ * base, each via translate — they stay on the platform at any rendered size.
  *
  * Lock state comes from the soft rule in lib/play/game/map and is advisory:
  * a locked node is not a link, but the level URLs themselves stay open.
  */
 
 const W = 1200;
-const H = 560;
+const H = 640;
+const PLATFORM_RATIO = 720 / 880;
+const PLATFORM_CY = 0.69; // visible centre of the platform, down the image
+const PLATFORM_TOP_FACE = 0.5; // where an orb's bottom rests (rim at ≈0.45)
+const PLATFORM_BASE = 0.93; // bottom of the visible platform
+const PLATFORM_LEFT = 0.07; // visible left edge, across the image
+const LABEL_GAP = 10;
+// Rhythm: CH.1 low-left, CH.2 a little higher, CH.3 lower, BOSS highest and larger.
 const NODES = [
-  { chapter: 1, x: 170, y: 270 },
-  { chapter: 2, x: 460, y: 180 },
-  { chapter: 3, x: 750, y: 270 },
-  { chapter: BOSS_CHAPTER, x: 1030, y: 175 },
+  { chapter: 1, x: 230, y: 310, w: 220 },
+  { chapter: 2, x: 500, y: 240, w: 220 },
+  { chapter: 3, x: 780, y: 330, w: 220 },
+  { chapter: BOSS_CHAPTER, x: 1040, y: 210, w: 260 },
 ];
+
+const pct = (v, of) => `${(v / of) * 100}%`;
+
+/** The platform image box and the anchor points derived from it, in map units. */
+function nodeBox(n) {
+  const h = n.w * PLATFORM_RATIO;
+  const top = n.y - PLATFORM_CY * h;
+  const left = n.x - n.w / 2;
+  return {
+    left,
+    top,
+    h,
+    face: top + PLATFORM_TOP_FACE * h,
+    base: top + PLATFORM_BASE * h + LABEL_GAP,
+    visibleLeft: left + PLATFORM_LEFT * n.w,
+  };
+}
 
 function segment(a, b) {
   const mx = (a.x + b.x) / 2;
@@ -141,12 +172,14 @@ export function MissionMap({ levels, chapterNames, progress }) {
             backgroundSize: '300px 200px',
           }}
         />
+        {/* The horizon art is OPAQUE (its own dark sky), so its top edge is
+            faded out with a mask — otherwise it shows as a hard line. */}
         <Image
           src="/play/map/horizon.webp"
           alt=""
-          width={2400}
-          height={500}
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-auto w-full object-contain object-bottom"
+          width={1650}
+          height={340}
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-auto w-full object-contain object-bottom [mask-image:linear-gradient(to_bottom,transparent_0%,black_45%)]"
         />
 
         <div className="relative flex flex-wrap items-center justify-between gap-4 px-6 pt-6 md:px-8">
@@ -174,7 +207,7 @@ export function MissionMap({ levels, chapterNames, progress }) {
         </div>
 
         {/* lg+: the curved map */}
-        <div className="relative hidden aspect-[1200/560] w-full lg:block">
+        <div className="relative hidden aspect-[1200/640] w-full lg:block">
           <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 h-full w-full" fill="none" aria-hidden="true">
             <defs>
               <filter id="play-path-glow" x="-10%" y="-50%" width="120%" height="200%">
@@ -200,58 +233,72 @@ export function MissionMap({ levels, chapterNames, progress }) {
             })}
           </svg>
 
-          {mascotNode && (
-            <div
-              className="pointer-events-none absolute w-[9%]"
-              style={{
-                left: `${((mascotNode.chapter === BOSS_CHAPTER ? mascotNode.x - 230 : mascotNode.x + 95) / W) * 100}%`,
-                top: `${((mascotNode.y - 150) / H) * 100}%`,
-              }}
-              aria-hidden="true"
-            >
-              <span className="absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-[12px] bg-white px-3 py-1 text-sm font-bold text-[#0D1B2A] shadow-lg">
-                เริ่มภารกิจ!
-              </span>
-              <Image src="/play/mascot-wave.webp" alt="" width={720} height={800} className="h-auto w-full object-contain" />
-            </div>
-          )}
+          {mascotNode && (() => {
+            // Feet on the current platform's top surface, just left of it. The
+            // art has ~16% empty margin on its right, hence the overlap.
+            const box = nodeBox(mascotNode);
+            return (
+              <div
+                className="pointer-events-none absolute z-20 -translate-x-full -translate-y-full"
+                style={{ left: pct(box.visibleLeft + 24, W), top: pct(box.face, H), width: pct(120, W) }}
+                data-play-mascot=""
+                aria-hidden="true"
+              >
+                <span className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-[12px] bg-white px-3 py-1 text-sm font-bold text-[#0D1B2A] shadow-lg">
+                  เริ่มภารกิจ!
+                </span>
+                <Image src="/play/mascot-wave.webp" alt="" width={720} height={800} className="h-auto w-full object-contain" />
+              </div>
+            );
+          })()}
 
           <ol className="contents">
             {nodes.map((n) => {
               const label = nodeLabel(n.chapter, n.name, n.state, n.chapter === BOSS_CHAPTER ? null : counts[n.chapter]);
+              const box = nodeBox(n);
+              // Anchors are percentages OF THE PLATFORM BOX, so the orb and the
+              // label stay on the platform whatever width the map renders at.
               const body = (
                 <>
-                  <span className="relative z-10">
-                    <Orb chapter={n.chapter} state={n.state} />
-                  </span>
                   <Image
                     src={platformFor(n.chapter, n.state)}
                     alt=""
                     width={880}
                     height={720}
-                    className="-mt-8 h-auto w-[190px] object-contain"
+                    className="h-auto w-full object-contain"
                   />
-                  <span className="-mt-10">
+                  <span
+                    className="absolute left-1/2 z-10 -translate-x-1/2 -translate-y-full"
+                    style={{ top: `${PLATFORM_TOP_FACE * 100}%` }}
+                    data-play-orb=""
+                  >
+                    <Orb chapter={n.chapter} state={n.state} />
+                  </span>
+                  <span
+                    className="absolute left-1/2 z-10 -translate-x-1/2"
+                    style={{ top: `calc(${PLATFORM_BASE * 100}% + ${LABEL_GAP}px)` }}
+                    data-play-label=""
+                  >
                     <Label chapter={n.chapter} name={n.name} levels={levels} progress={progress} />
                   </span>
                 </>
               );
-              const place = {
-                left: `${(n.x / W) * 100}%`,
-                top: `${(n.y / H) * 100}%`,
-              };
-              const cls = 'absolute flex -translate-x-1/2 -translate-y-9 flex-col items-center';
               return (
-                <li key={n.chapter} style={place} className={cls} data-play-node={n.state}>
+                <li
+                  key={n.chapter}
+                  className="absolute"
+                  style={{ left: pct(box.left, W), top: pct(box.top, H), width: pct(n.w, W) }}
+                  data-play-node={n.state}
+                >
                   {n.state === 'locked' ? (
-                    <div aria-label={label} aria-disabled="true" className="flex flex-col items-center opacity-90">
+                    <div aria-label={label} aria-disabled="true" className="relative block">
                       {body}
                     </div>
                   ) : (
                     <Link
                       href={n.href}
                       aria-label={label}
-                      className="group flex flex-col items-center rounded-[20px] transition-transform duration-300 ease-9e hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4F73F] motion-reduce:transition-none"
+                      className="relative block rounded-[20px] transition-transform duration-200 ease-9e hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4F73F] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                     >
                       {body}
                     </Link>
