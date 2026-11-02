@@ -23,6 +23,13 @@ export const EXCEL_BEGINNER_LEVELS = [
   boss,
 ];
 
+export const EXCEL_BEGINNER_CHAPTERS = {
+  1: 'วางรากพื้นฐาน',
+  2: 'คิดเงินแบบอัตโนมัติ',
+  3: 'จัดการข้อมูลขั้นเทพ IF',
+  4: 'BOSS สรุปยอดร้านมืออาชีพ',
+};
+
 export function getLevel(id) {
   return EXCEL_BEGINNER_LEVELS.find((l) => l.id === id) || null;
 }

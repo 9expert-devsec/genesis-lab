@@ -120,7 +120,7 @@ export const RESERVED_PATHS = Object.freeze([
   // its neighbours, and an alias that loses to a static file loses SILENTLY,
   // with no error and no symptom. The cost is named: no course can use /avatar.
   { segment: 'avatar', source: 'static' },
-  // ══ THE ONE SEGMENT WITH TWO ORIGINS ══════════════════════════════════════
+  // ══ A SEGMENT WITH TWO ORIGINS (the first; `play` below is the second) ════
   // public/brand/ holds the header lockups (logo-blue.png, logo-white.png and
   // eight more), AND src/app/(public)/brand is the brand hub route. Both
   // reserve this segment, and the parity checks derive it from both places —
@@ -142,6 +142,10 @@ export const RESERVED_PATHS = Object.freeze([
   { segment: 'hero-img', source: 'static' },
   { segment: 'logo', source: 'static' },
   { segment: 'mock-article', source: 'static' },
+  // 9Expert Play: public/play/ holds the game's mascots and icons AND
+  // src/app/(public)/play is the game route — two origins, declared the same
+  // way as `brand` above (one entry, the extra origin in alsoSource).
+  { segment: 'play', source: 'static', alsoSource: ['tree'] },
   // The Home motto band's wallpaper (src/app/_components/home/InstructorQuote.jsx
   // renders /motto/wallpaper-motto.png). Listed on the same conservative basis
   // as /avatar above: public/motto/ makes Next serve the file but does not claim
