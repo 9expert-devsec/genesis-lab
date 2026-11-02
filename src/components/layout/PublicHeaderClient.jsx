@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Logo } from '@/components/brand/Logo';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
+import { PlayHeaderLink } from '@/components/layout/PlayHeaderLink';
 import { mainNav, skills, careerPaths, siteConfig } from '@/config/site';
 import { cn, programHref, skillHref } from '@/lib/utils';
 import { courseLinkHref } from '@/lib/courses/courseLinkHref';
@@ -85,6 +86,7 @@ export function PublicHeaderClient({
   navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {}, skillOrder: {} },
   navMasterclasses = [],
   overlay = false,
+  playEnabled = false,
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -280,6 +282,14 @@ export function PublicHeaderClient({
             <Search className="h-5 w-5" strokeWidth={1.75} />
           </Link>
 
+          {/* 9Expert Play — between search and the theme toggle, desktop only;
+              the drawer carries a เล่นเกม item instead. */}
+          {playEnabled && (
+            <span className="hidden lg:inline-flex">
+              <PlayHeaderLink onHero={overlayTransparent} />
+            </span>
+          )}
+
           <ThemeToggle />
 
           {/* Hamburger — mobile only */}
@@ -324,6 +334,7 @@ export function PublicHeaderClient({
           navOnlineCourses={navOnlineCourses}
           navMenuData={navMenuData}
           navMasterclasses={navMasterclasses}
+          playEnabled={playEnabled}
           onClose={() => setDrawerOpen(false)}
         />,
         document.body
@@ -1418,6 +1429,7 @@ export function MobileDrawer({
   navOnlineCourses = [],
   navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {}, skillOrder: {} },
   navMasterclasses = [],
+  playEnabled = false,
   onClose,
 }) {
   // Always mounted so the translate-x slide animation has a stable
@@ -1499,6 +1511,15 @@ export function MobileDrawer({
               </Link>
             );
           })}
+          {playEnabled && (
+            <Link
+              href="/play"
+              onClick={onClose}
+              className="rounded-9e-sm px-3 py-3 text-base font-medium text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
+            >
+              เล่นเกม
+            </Link>
+          )}
         </nav>
       </aside>
     </div>

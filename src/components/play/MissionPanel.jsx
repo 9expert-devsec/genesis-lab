@@ -1,6 +1,8 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { Check, Lightbulb, Star } from 'lucide-react';
+import { Check, Lightbulb } from 'lucide-react';
+
+import { StarIcons } from './Stars';
 
 function goalOf(task) {
   return task.fill || task.anchor;
@@ -107,14 +109,8 @@ export function MissionPanel({
           </button>
         )}
 
-        <p className="mt-3 flex items-center justify-center gap-1" aria-label={`ดาวที่จะได้ ${stars} ดาว`}>
-          {Array.from({ length: 3 }, (_, i) => (
-            <Star
-              key={i}
-              aria-hidden="true"
-              className={i < stars ? 'h-4 w-4 fill-[#D4F73F] text-[#D4F73F]' : 'h-4 w-4 text-white/25'}
-            />
-          ))}
+        <p className="mt-3 flex items-center justify-center" aria-label={`ดาวที่จะได้ ${stars} ดาว`}>
+          <StarIcons stars={stars} />
         </p>
       </section>
     </div>

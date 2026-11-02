@@ -2,18 +2,24 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Check, ChevronLeft, Star } from 'lucide-react';
 
+import { STAR_FILLED } from './Stars';
+
 /**
  * The bar under the site header: back to the map, which game/series/chapter
  * this is, the chapter's level dots, and the player's star total over every
  * Beginner level (the max is computed from the level count, boss included).
+ *
+ * Dots: current = lime, passed = lime outline + check, otherwise the level
+ * number. `chapterUnlocked` (the soft rule in lib/play/game/map) only changes
+ * the look of the unpassed dots — dashed and dimmer — never whether they link.
  */
-export function PlayHud({ level, chapterName, chapterLevels, progress, starsTotal, starsMax }) {
+export function PlayHud({ level, chapterName, chapterLevels, chapterUnlocked, progress, starsTotal, starsMax }) {
   const chapterLabel = level.chapter === 4 ? chapterName : `CH.${level.chapter} ${chapterName}`;
   return (
     <div className="border-b border-white/10 bg-[#0D1B2A]/80 backdrop-blur">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 md:px-6">
         <Link
-          href="/play"
+          href="/play#map"
           className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-sm text-white/70 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4F73F]"
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -35,8 +41,8 @@ export function PlayHud({ level, chapterName, chapterLevels, progress, starsTota
             {chapterLevels.map((l) => {
               const current = l.id === level.id;
               const passed = !!progress[l.id];
-              const state = current ? 'ด่านปัจจุบัน' : passed ? 'ผ่านแล้ว' : 'ยังไม่ผ่าน';
-              let cls = 'border border-white/30 text-white/60';
+              const state = current ? 'ด่านปัจจุบัน' : passed ? 'ผ่านแล้ว' : chapterUnlocked ? 'ยังไม่ผ่าน' : 'ยังไม่ปลดล็อก';
+              let cls = chapterUnlocked ? 'border border-white/30 text-white/60' : 'border border-dashed border-white/20 text-white/30';
               if (current) cls = 'bg-[#D4F73F] text-[#0D1B2A]';
               else if (passed) cls = 'border-2 border-[#D4F73F] text-[#D4F73F]';
               return (
@@ -45,6 +51,7 @@ export function PlayHud({ level, chapterName, chapterLevels, progress, starsTota
                     href={`/play/excel/beginner/${l.id}`}
                     aria-current={current ? 'page' : undefined}
                     aria-label={`ด่าน ${l.id} · ${state}`}
+                    data-play-dot={passed ? 'passed' : current ? 'current' : 'open'}
                     className={`flex h-8 w-8 items-center justify-center rounded-full font-en text-xs font-bold transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${cls}`}
                   >
                     {passed && !current ? <Check className="h-4 w-4" aria-hidden="true" /> : l.id === 'boss' ? 'B' : l.order}
@@ -54,7 +61,7 @@ export function PlayHud({ level, chapterName, chapterLevels, progress, starsTota
             })}
           </ol>
           <p className="inline-flex items-center gap-1.5 font-en text-sm font-bold text-white" aria-label={`ดาวทั้งหมด ${starsTotal} จาก ${starsMax}`}>
-            <Star className="h-5 w-5 fill-[#D4F73F] text-[#D4F73F]" aria-hidden="true" />
+            <Star className={`h-5 w-5 ${STAR_FILLED}`} aria-hidden="true" />
             {starsTotal}
             <span className="text-white/40">/ {starsMax}</span>
           </p>

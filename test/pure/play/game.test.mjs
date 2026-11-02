@@ -5,7 +5,7 @@ import { getLevel } from '@/lib/play/levels/excel/beginner';
 import { maxStarsFor, starsFor, xpFor } from '@/lib/play/game/stars';
 import { hintsForTask, maskFormula } from '@/lib/play/game/hints';
 import { PROGRESS_KEY, loadProgress, progressReducer, saveProgress, totalStars } from '@/lib/play/game/progress';
-import { normalizeFormula, sameFormula } from '@/lib/play/game/normalize';
+import { displayFormula, normalizeFormula, sameFormula } from '@/lib/play/game/normalize';
 
 /**
  * 9Expert Play game logic: stars, the hint ladder, stored progress and formula
@@ -99,4 +99,11 @@ test('normalize: case and spaces outside strings do not matter, text inside does
     assert.equal(sameFormula(a, b), same, `${a} vs ${b}`);
   }
   assert.equal(normalizeFormula(' =average( B2:b6 ) '), '=AVERAGE(B2:B6)');
+
+  // The display form for the input on Run: names upper-cased, spacing and quoted text kept.
+  assert.equal(displayFormula('=b2+c2'), '=B2+C2');
+  assert.equal(displayFormula(' =sum( b2:b6 ) '), '=SUM( B2:B6 )');
+  assert.equal(displayFormula('=if(b2="เย็น abc",c2+10,c2)'), '=IF(B2="เย็น abc",C2+10,C2)');
+  assert.equal(displayFormula('=$b$7*b2'), '=$B$7*B2');
+  assert.equal(displayFormula('=b2+"x'), '=b2+"x', 'untokenizable input is left alone');
 });

@@ -12,6 +12,10 @@ import { getPublishedMasterclasses } from '@/lib/masterclass/getMasterclass';
 // lib/navmenu/headerProps.js for the measurement and the field lists.
 import { projectHeaderProps } from '@/lib/navmenu/headerProps';
 import { PublicHeaderClient } from './PublicHeaderClient';
+// 9Expert Play's header entry is shown only when PLAY_ENABLED is "true". The
+// flag module is server-only, so it is read HERE and crosses into the client
+// as a plain boolean.
+import { isPlayEnabled } from '@/lib/play/flag';
 
 /**
  * Public site header — Server Component shell.
@@ -101,6 +105,7 @@ export async function PublicHeader({ overlay = false }) {
       navMenuData={clientProps.navMenuData}
       navMasterclasses={clientProps.navMasterclasses}
       overlay={overlay}
+      playEnabled={isPlayEnabled()}
     />
   );
 }

@@ -3,7 +3,9 @@
 import { useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Lightbulb, RotateCcw, Star } from 'lucide-react';
+import { Lightbulb, RotateCcw } from 'lucide-react';
+
+import { StarIcons } from './Stars';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -11,6 +13,12 @@ const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1
  * Modal shell for the two result cards: focus moves in on open, Tab cycles
  * inside, Esc calls onClose, and focus goes back where it came from on close.
  * z-70 so it paints above the site header (z-60, see test/pure/zIndexStack).
+ *
+ * FITS THE VIEWPORT. The panel is capped at 100dvh minus a 16px margin each
+ * side; the card body scrolls inside that cap and the button row is a fixed
+ * footer, so the actions stay reachable on a 768px-tall window. The mascot
+ * sits OUTSIDE the scroll area (a scroller would clip its overlap) and
+ * shrinks below 800px of height.
  */
 function DialogShell({ labelledBy, onClose, children }) {
   const panelRef = useRef(null);
@@ -46,7 +54,7 @@ function DialogShell({ labelledBy, onClose, children }) {
 
   return (
     <div
-      className="fixed inset-0 z-70 flex items-center justify-center overflow-y-auto bg-[#060E17]/80 px-4 py-24 backdrop-blur-sm"
+      className="fixed inset-0 z-70 flex items-center justify-center bg-[#060E17]/80 p-4 backdrop-blur-sm"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -57,7 +65,8 @@ function DialogShell({ labelledBy, onClose, children }) {
         aria-modal="true"
         aria-labelledby={labelledBy}
         onKeyDown={onKeyDown}
-        className="relative w-full max-w-[440px]"
+        data-play-dialog=""
+        className="relative flex max-h-[calc(100dvh-32px)] w-full max-w-[440px] flex-col"
       >
         {children}
       </div>
@@ -65,17 +74,41 @@ function DialogShell({ labelledBy, onClose, children }) {
   );
 }
 
-function StarRow({ stars, max = 3 }) {
+/**
+ * The card: a mascot overlapping its top edge, a scrolling body, a fixed
+ * footer. Offsets come in tall/short pairs — the mascot's overhang (`-top`),
+ * the card's matching top margin, and the body's top padding that clears the
+ * part of the mascot hanging inside the card.
+ */
+function Card({ tone, mascot, mascotAlt = '', size, children, footer }) {
+  const sizes = {
+    lg: {
+      img: 'w-44 -top-24 [@media(max-height:800px)]:w-28 [@media(max-height:800px)]:-top-14',
+      card: 'mt-24 [@media(max-height:800px)]:mt-14',
+      body: 'pt-28 [@media(max-height:800px)]:pt-[76px]',
+    },
+    md: {
+      img: 'w-36 -top-20 [@media(max-height:800px)]:w-24 [@media(max-height:800px)]:-top-12',
+      card: 'mt-20 [@media(max-height:800px)]:mt-12',
+      body: 'pt-24 [@media(max-height:800px)]:pt-16',
+    },
+  }[size];
   return (
-    <div className="flex justify-center gap-2" role="img" aria-label={`ได้ ${stars} จาก ${max} ดาว`}>
-      {Array.from({ length: max }, (_, i) => (
-        <Star
-          key={i}
-          aria-hidden="true"
-          className={i < stars ? 'h-10 w-10 fill-[#D4F73F] text-[#D4F73F]' : 'h-10 w-10 text-[#D4F73F]/40'}
-          strokeWidth={1.75}
-        />
-      ))}
+    <div
+      className={`relative flex min-h-0 flex-col rounded-[24px] border bg-[#132638] text-center text-white shadow-[0_24px_64px_rgba(0,0,0,0.5)] ${tone} ${sizes.card}`}
+    >
+      <Image
+        src={mascot}
+        alt={mascotAlt}
+        width={360}
+        height={400}
+        className={`pointer-events-none absolute left-1/2 z-10 h-auto -translate-x-1/2 ${sizes.img}`}
+        priority
+      />
+      <div data-play-dialog-body="" className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-2 ${sizes.body}`}>
+        {children}
+      </div>
+      <div className="shrink-0 border-t border-white/5 px-6 pb-5 pt-4">{footer}</div>
     </div>
   );
 }
@@ -83,29 +116,50 @@ function StarRow({ stars, max = 3 }) {
 export function MissionCompleteDialog({ level, stars, xp, secrets, nextHref, nextLabel, coursesHref, onClose }) {
   return (
     <DialogShell labelledBy="play-complete-title" onClose={onClose}>
-      <div className="relative mt-20 rounded-[24px] border border-[#D4F73F]/30 bg-[#132638] px-6 pb-6 pt-28 text-center text-white shadow-[0_24px_64px_rgba(0,0,0,0.5)]">
-        <Image
-          src="/play/mascot-thumbs-up.webp"
-          alt=""
-          width={360}
-          height={400}
-          className="absolute -top-24 left-1/2 h-auto w-44 -translate-x-1/2"
-          priority
-        />
+      <Card
+        tone="border-[#D4F73F]/30"
+        mascot="/play/mascot-thumbs-up.webp"
+        size="lg"
+        footer={
+          <>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link
+                href={nextHref}
+                className="flex-1 rounded-full bg-[#D4F73F] px-5 py-3 font-bold text-[#0D1B2A] transition-colors hover:bg-[#D8F852] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              >
+                {nextLabel}
+              </Link>
+              <Link
+                href={coursesHref}
+                className="flex-1 rounded-full border border-white/30 px-5 py-3 font-bold text-white transition-colors hover:border-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              >
+                ดูหลักสูตร Excel
+              </Link>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-3 text-sm text-white/50 underline-offset-4 hover:text-white hover:underline"
+            >
+              อยู่ที่ด่านนี้ต่อ
+            </button>
+          </>
+        }
+      >
         <h2 id="play-complete-title" className="font-en font-bold uppercase leading-none tracking-wide">
           <span className="block text-2xl text-white/80">Mission</span>
-          <span className="block text-5xl text-[#D4F73F]">Complete!</span>
+          <span className="block text-5xl text-[#D4F73F] [@media(max-height:800px)]:text-4xl">Complete!</span>
         </h2>
-        <div className="mt-5">
-          <StarRow stars={stars} />
+        <div className="mt-4 flex justify-center">
+          <StarIcons stars={stars} className="h-10 w-10 [@media(max-height:800px)]:h-8 [@media(max-height:800px)]:w-8" emptyClass="text-[#D4F73F]/40" label />
         </div>
-        <p className="mt-4">
+        <p className="mt-3">
           <span className="inline-block rounded-full bg-[#D4F73F] px-4 py-1 font-en text-lg font-bold text-[#0D1B2A]">
             +{xp} XP
           </span>
         </p>
 
-        <div className="mt-6 rounded-[16px] bg-white/5 p-4 text-left">
+        <div className="mt-5 rounded-[16px] bg-white/5 p-4 text-left">
           <p className="font-en text-xs font-bold uppercase tracking-widest text-[#48B0FF]">What you learned</p>
           <p className="mt-1 text-[15px] leading-relaxed text-white/90">{level.learn}</p>
         </div>
@@ -125,29 +179,7 @@ export function MissionCompleteDialog({ level, stars, xp, secrets, nextHref, nex
             </ul>
           </div>
         )}
-
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          <Link
-            href={nextHref}
-            className="flex-1 rounded-full bg-[#D4F73F] px-5 py-3 font-bold text-[#0D1B2A] transition-colors hover:bg-[#D8F852] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-          >
-            {nextLabel}
-          </Link>
-          <Link
-            href={coursesHref}
-            className="flex-1 rounded-full border border-white/30 px-5 py-3 font-bold text-white transition-colors hover:border-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-          >
-            ดูหลักสูตร Excel
-          </Link>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-3 text-sm text-white/50 underline-offset-4 hover:text-white hover:underline"
-        >
-          อยู่ที่ด่านนี้ต่อ
-        </button>
-      </div>
+      </Card>
     </DialogShell>
   );
 }
@@ -155,14 +187,32 @@ export function MissionCompleteDialog({ level, stars, xp, secrets, nextHref, nex
 export function AlmostThereDialog({ message, canHint, onRetry, onHint }) {
   return (
     <DialogShell labelledBy="play-almost-title" onClose={onRetry}>
-      <div className="relative mt-16 rounded-[24px] border border-[#48B0FF]/40 bg-[#132638] px-6 pb-6 pt-24 text-center text-white shadow-[0_24px_64px_rgba(0,0,0,0.5)]">
-        <Image
-          src="/play/mascot-pleading.webp"
-          alt=""
-          width={360}
-          height={400}
-          className="absolute -top-20 left-1/2 h-auto w-36 -translate-x-1/2"
-        />
+      <Card
+        tone="border-[#48B0FF]/40"
+        mascot="/play/mascot-pleading.webp"
+        size="md"
+        footer={
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[#D4F73F] px-5 py-3 font-bold text-[#0D1B2A] transition-colors hover:bg-[#D8F852] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              ลองใหม่
+            </button>
+            <button
+              type="button"
+              onClick={onHint}
+              disabled={!canHint}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-[#48B0FF] px-5 py-3 font-bold text-[#48B0FF] transition-colors hover:bg-[#48B0FF]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Lightbulb className="h-4 w-4" aria-hidden="true" />
+              {canHint ? 'ขอคำใบ้' : 'ใช้คำใบ้ครบแล้ว'}
+            </button>
+          </div>
+        }
+      >
         <h2 id="play-almost-title" className="font-en text-4xl font-bold uppercase leading-none text-[#48B0FF]">
           Almost there!
         </h2>
@@ -174,26 +224,7 @@ export function AlmostThereDialog({ message, canHint, onRetry, onHint }) {
             {' '}แต่ต้องได้ <strong className="text-[#22C55E]">{message.want}</strong>
           </p>
         )}
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          <button
-            type="button"
-            onClick={onRetry}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[#D4F73F] px-5 py-3 font-bold text-[#0D1B2A] transition-colors hover:bg-[#D8F852] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-          >
-            <RotateCcw className="h-4 w-4" aria-hidden="true" />
-            ลองใหม่
-          </button>
-          <button
-            type="button"
-            onClick={onHint}
-            disabled={!canHint}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-[#48B0FF] px-5 py-3 font-bold text-[#48B0FF] transition-colors hover:bg-[#48B0FF]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Lightbulb className="h-4 w-4" aria-hidden="true" />
-            {canHint ? 'ขอคำใบ้' : 'ใช้คำใบ้ครบแล้ว'}
-          </button>
-        </div>
-      </div>
+      </Card>
     </DialogShell>
   );
 }

@@ -7,6 +7,8 @@ import { hintsForTask } from '@/lib/play/game/hints';
 import { loadProgress, progressReducer, saveProgress, totalStars } from '@/lib/play/game/progress';
 import { maxStarsFor, starsFor, xpFor } from '@/lib/play/game/stars';
 import { failureMessage, formatMap, formulaRefSpans, gridBounds, levelFunctions, secretFormulas } from '@/lib/play/game/view';
+import { displayFormula } from '@/lib/play/game/normalize';
+import { isChapterUnlocked } from '@/lib/play/game/map';
 
 import { PlayHud } from './PlayHud';
 import { MissionPanel } from './MissionPanel';
@@ -151,11 +153,14 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
 
   function run() {
     if (running || complete) return;
-    const typed = formula.trim();
+    // Excel's own Enter behaviour: `=b2+c2` becomes `=B2+C2` in the box, and
+    // that form is what is checked and quoted back in ALMOST THERE.
+    const typed = displayFormula(formula);
     if (!typed) {
       focusInput();
       return;
     }
+    if (typed !== formula) setFormula(typed);
     setNotice('');
     const result = checkTask(level, task.id, typed, filled);
     clearTaskResults(activeCells);
@@ -203,6 +208,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
         level={level}
         chapterName={chapterName}
         chapterLevels={chapterLevels}
+        chapterUnlocked={isChapterUnlocked(level.chapter, levels, progress)}
         progress={progress}
         starsTotal={starsTotal}
         starsMax={starsMax}

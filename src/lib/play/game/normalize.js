@@ -37,6 +37,29 @@ export function normalizeFormula(formula) {
   return out;
 }
 
+/**
+ * The display form Excel gives a formula on Enter: refs and function names
+ * upper-cased, everything else — spacing, text inside quotes — kept byte for
+ * byte. Unlike normalizeFormula it does not strip spaces, so the input still
+ * reads as what the player typed. Untokenizable input comes back trimmed only.
+ */
+export function displayFormula(formula) {
+  const text = String(formula ?? '').trim();
+  if (!text.startsWith('=')) return text;
+  const lexed = tokenize(text.slice(1));
+  if (lexed.error) return text;
+  let out = '';
+  let cursor = 0;
+  for (const t of lexed.tokens) {
+    if (t.type !== 'ref' && t.type !== 'func' && t.type !== 'name') continue;
+    const start = t.start + 1;
+    const end = t.end + 1;
+    out += text.slice(cursor, start) + text.slice(start, end).toUpperCase();
+    cursor = end;
+  }
+  return out + text.slice(cursor);
+}
+
 export function sameFormula(a, b) {
   return normalizeFormula(a) === normalizeFormula(b);
 }

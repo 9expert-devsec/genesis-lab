@@ -60,7 +60,7 @@ export function FormulaBar({ inputRef, anchor, value, spans, disabled, running, 
           spellCheck={false}
           value={value}
           disabled={disabled}
-          placeholder="=B2*C2"
+          placeholder="พิมพ์สูตร เริ่มด้วย ="
           onChange={(e) => onChange(e.target.value)}
           onScroll={(e) => {
             if (mirrorRef.current) mirrorRef.current.scrollLeft = e.currentTarget.scrollLeft;
@@ -71,7 +71,7 @@ export function FormulaBar({ inputRef, anchor, value, spans, disabled, running, 
               onRun();
             }
           }}
-          className="relative w-full bg-transparent px-3 py-2.5 font-mono text-base leading-6 text-transparent caret-white outline-none placeholder:text-white/25 disabled:cursor-not-allowed"
+          className="relative w-full bg-transparent px-3 py-2.5 font-mono text-base leading-6 text-transparent caret-white outline-none placeholder:font-thai placeholder:text-white/30 disabled:cursor-not-allowed"
         />
       </div>
       <button
