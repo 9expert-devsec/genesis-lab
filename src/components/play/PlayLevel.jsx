@@ -98,19 +98,32 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
       const next = formula.slice(0, start) + lead + text + formula.slice(end);
       const caret = start + lead.length + text.length;
       setFormula(next);
+      // Focus now, inside the tap's own gesture (iOS keeps the keyboard up);
+      // the caret moves once React has rendered the new value.
+      el?.focus({ preventScroll: true });
       requestAnimationFrame(() => {
         if (!inputRef.current) return;
-        inputRef.current.focus();
+        inputRef.current.focus({ preventScroll: true });
         inputRef.current.setSelectionRange(caret, caret);
       });
     },
     [formula],
   );
 
-  function onCellMouseDown(e, ref) {
+  // Tap-cell insert. pointerdown: if the input is focused, prevent the blur
+  // (this also suppresses the compat mousedown on touch) and remember the cell.
+  // click: insert — it only arrives for a tap, not for a drag that scrolled.
+  const pendingCell = useRef(null);
+  function onCellPointerDown(e, ref) {
+    pendingCell.current = null;
     if (complete || running) return;
     if (document.activeElement !== inputRef.current) return;
-    e.preventDefault(); // keep focus and caret in the input
+    e.preventDefault();
+    pendingCell.current = ref;
+  }
+  function onCellClick(ref) {
+    if (pendingCell.current !== ref) return;
+    pendingCell.current = null;
     insertAtCaret(ref);
   }
 
@@ -214,7 +227,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
         starsMax={starsMax}
       />
 
-      <div className="mx-auto grid max-w-[1440px] gap-6 px-4 py-6 md:grid-cols-[280px_minmax(0,1fr)] md:px-6 xl:grid-cols-[320px_minmax(0,1fr)_280px]">
+      <div className="mx-auto grid max-w-[1440px] gap-6 px-4 py-6 md:px-6 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_280px]">
         <MissionPanel
           level={level}
           taskIndex={taskIndex}
@@ -252,7 +265,8 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
             activeCells={complete ? [] : activeCells}
             anchor={complete ? null : task.anchor}
             refCells={refCells}
-            onCellMouseDown={onCellMouseDown}
+            onCellPointerDown={onCellPointerDown}
+            onCellClick={onCellClick}
           />
           <SheetLegend />
           <QuickKeys functions={functions} disabled={complete} onInsert={insertAtCaret} />
@@ -261,7 +275,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
           </p>
         </div>
 
-        <div className="md:col-span-2 xl:col-span-1">
+        <div className="lg:col-span-2 xl:col-span-1">
           <Scoreboard level={level} results={results} formats={formats} />
         </div>
       </div>

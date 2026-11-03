@@ -10,9 +10,9 @@ import { STAR_FILLED } from '../Stars';
 export function SectionHeading({ title, accent, sub, id, as: Tag = 'h2' }) {
   return (
     <div className="text-center">
-      <Tag id={id} className="relative inline-block font-en text-4xl font-bold uppercase leading-none tracking-tight text-white md:text-5xl">
+      <Tag id={id} className="relative inline-block max-w-full font-en text-[clamp(1.75rem,8vw,3rem)] font-bold uppercase leading-none tracking-tight text-white">
         {title}
-        <span className="absolute -bottom-6 right-0 block -rotate-6 whitespace-nowrap font-en text-2xl font-bold normal-case italic text-[#D4F73F] md:text-3xl">
+        <span className="absolute -bottom-[0.55em] right-0 block -rotate-6 whitespace-nowrap font-en text-[0.62em] font-bold normal-case italic text-[#D4F73F]">
           {accent}
         </span>
       </Tag>
@@ -46,24 +46,26 @@ export function HubHero({ startHref, levelCount, chapterCount }) {
   return (
     <section
       aria-labelledby="play-hero-title"
-      className="grid items-center gap-10 pt-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:pt-16"
+      className="grid items-center gap-8 pt-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-10 md:pt-16"
     >
-      <div>
-        <h1 id="play-hero-title" className="relative inline-block font-en text-6xl font-bold uppercase leading-[0.9] tracking-tight text-white sm:text-7xl lg:text-8xl">
+      <div className="min-w-0">
+        {/* clamp(): "LEVEL UP" scales with the viewport and never overflows a
+            360px phone (≈ 54px there), up to the 96px desktop size. */}
+        <h1 id="play-hero-title" className="relative inline-block font-en text-[clamp(3rem,14vw,6rem)] font-bold uppercase leading-[0.9] tracking-tight text-white">
           Level up
-          <span className="absolute -bottom-8 right-0 block -rotate-6 whitespace-nowrap text-3xl normal-case italic text-[#D4F73F] sm:text-4xl lg:text-5xl">
+          <span className="absolute -bottom-[0.33em] right-0 block -rotate-6 whitespace-nowrap text-[0.5em] normal-case italic text-[#D4F73F]">
             your skills!
           </span>
         </h1>
-        <p className="mt-14 font-heading text-2xl font-bold text-white">ฝึก Excel ผ่านภารกิจในอวกาศ ทีละด่าน</p>
+        <p className="mt-12 font-heading text-xl font-bold text-white sm:text-2xl">ฝึก Excel ผ่านภารกิจในอวกาศ ทีละด่าน</p>
         <p className="mt-3 max-w-lg text-base leading-relaxed text-white/70">
           เล่นเป็นนักบินอวกาศของร้านกาแฟ พิมพ์สูตรจริงลงในตารางจริง ถ้าสูตรถูก ช่องจะเขียว แล้วเก็บดาวไปปลดล็อกบทต่อไป
           ไม่ต้องติดตั้งอะไร เล่นได้ทันทีบนเบราว์เซอร์
         </p>
-        <div className="mt-7 flex flex-wrap gap-3">
+        <div className="mt-7 flex flex-col gap-3 min-[480px]:flex-row min-[480px]:flex-wrap">
           <Link
             href={startHref}
-            className="inline-flex items-center gap-2 rounded-full bg-[#D4F73F] px-6 py-3 font-bold text-[#0D1B2A] transition-colors hover:bg-[#D8F852] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-[#D4F73F] px-6 py-3 font-bold text-[#0D1B2A] transition-colors hover:bg-[#D8F852] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             <Play className="h-4 w-4 fill-current" aria-hidden="true" />
             เริ่มภารกิจแรก
@@ -71,12 +73,12 @@ export function HubHero({ startHref, levelCount, chapterCount }) {
           <a
             href="#map"
             onClick={scrollToMap}
-            className="inline-flex items-center rounded-full border border-white/30 px-6 py-3 font-bold text-white transition-colors hover:border-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex items-center justify-center rounded-full border border-white/30 px-6 py-3 font-bold text-white transition-colors hover:border-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             ดูแผนที่ภารกิจ
           </a>
         </div>
-        <dl className="mt-8 flex flex-wrap gap-x-8 gap-y-3">
+        <dl className="mt-8 flex flex-wrap gap-x-6 gap-y-3 sm:gap-x-8">
           {[
             [String(levelCount), 'ด่าน รวมบอส'],
             [String(chapterCount), 'บท + บอส'],
@@ -94,7 +96,7 @@ export function HubHero({ startHref, levelCount, chapterCount }) {
           is a closest-side radial gradient that reaches full transparency at
           70% of the way to the box edge — no blur filter, no rounded mask —
           so no straight or curved edge can show against the page. */}
-      <div className="relative mx-auto aspect-square w-full max-w-[520px]" aria-hidden="true">
+      <div className="relative mx-auto aspect-square w-full max-w-[min(520px,88vw)] md:max-w-[520px]" aria-hidden="true">
         <div
           className="absolute inset-0"
           style={{
@@ -144,10 +146,10 @@ const rgba = (hex, a) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
-function PlanetCard({ planet, index, total }) {
+function PlanetCard({ planet, index }) {
   const num = String(index + 1).padStart(2, '0');
   return (
-    <li>
+    <li className="w-[80%] max-w-[320px] shrink-0 snap-center md:w-auto md:max-w-none">
       <article
         data-play-planet={planet.key}
         aria-label={`${planet.title} ${planet.sub} · ${planet.open ? 'เปิดแล้ว' : 'เร็วๆ นี้'}`}
@@ -156,7 +158,13 @@ function PlanetCard({ planet, index, total }) {
           planet.open ? 'border-2 border-[#D4F73F]' : 'border-2 border-white/10'
         }`}
         style={{
+          // border-box + no-repeat: by default the gradient is sized to the
+          // PADDING box and tiles under the 2px border, so the next tile's top
+          // colour showed as a bright straight line along the bottom edge of
+          // every card whose border is translucent (all but Excel's lime).
           backgroundImage: `linear-gradient(180deg, ${planet.grad[0]} 0%, ${planet.grad[1]} 50%, ${planet.grad[2]} 100%)`,
+          backgroundOrigin: 'border-box',
+          backgroundRepeat: 'no-repeat',
           '--card-glow': `0 0 ${planet.open ? 48 : 28}px ${rgba(planet.grad[0], planet.open ? 0.35 : 0.18)}`,
           '--card-glow-hover': `0 12px 56px ${rgba(planet.grad[0], planet.open ? 0.55 : 0.4)}`,
         }}
@@ -164,7 +172,7 @@ function PlanetCard({ planet, index, total }) {
         <span aria-hidden="true" className="pointer-events-none absolute -right-2 top-10 font-en text-[180px] font-bold leading-none text-white/10">
           {num}
         </span>
-        <div className="relative flex items-center justify-between">
+        <div className="relative flex items-center">
           {planet.open ? (
             <span className="rounded-full bg-[#D4F73F] px-3 py-1 text-xs font-bold text-[#0D1B2A]">เปิดแล้ว</span>
           ) : (
@@ -173,9 +181,6 @@ function PlanetCard({ planet, index, total }) {
               เร็วๆ นี้
             </span>
           )}
-          <span className="font-en text-xs font-bold text-white/70">
-            {num} / {String(total).padStart(2, '0')}
-          </span>
         </div>
 
         <div className="relative flex flex-1 items-center justify-center">
@@ -215,9 +220,12 @@ export function PlanetCards({ excelLevelCount }) {
   return (
     <section aria-labelledby="play-planets-title" className="mt-28">
       <SectionHeading id="play-planets-title" title="Choose your planet" accent="missions" sub="เลือกดาวที่อยากฝึก แต่ละดาวคือหนึ่งโปรแกรม ตอนนี้เปิดดาว Excel แล้ว" />
-      <ul className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {/* <768: a scroll-snap row, one card ≈80% wide with the next peeking.
+          768–1199: 2×2. ≥1200: four across. -mx/px keep the row edge-to-edge
+          on phones while the cards still start at the page gutter. */}
+      <ul className="-mx-4 mt-12 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-6 pt-2 [scrollbar-width:none] md:mx-0 md:grid md:snap-none md:grid-cols-2 md:gap-5 md:overflow-visible md:px-0 md:pb-0 md:pt-0 min-[1200px]:grid-cols-4 [&::-webkit-scrollbar]:hidden">
         {PLANETS.map((p, i) => (
-          <PlanetCard key={p.key} planet={p.meta ? p : { ...p, meta: `Beginner · ${excelLevelCount} ด่าน` }} index={i} total={PLANETS.length} />
+          <PlanetCard key={p.key} planet={p.meta ? p : { ...p, meta: `Beginner · ${excelLevelCount} ด่าน` }} index={i} />
         ))}
       </ul>
     </section>
@@ -261,13 +269,13 @@ export function HubCta({ coursesHref }) {
       className="relative mt-28 overflow-hidden rounded-[32px] bg-[linear-gradient(120deg,#005CFF_0%,#2486FF_60%,#48B0FF_100%)] px-6 py-10 md:px-12 md:py-14"
     >
       <div className="relative z-10 max-w-xl">
-        <h2 id="play-cta-title" className="font-en text-3xl font-bold uppercase leading-tight text-white md:text-5xl">
+        <h2 id="play-cta-title" className="font-en text-[clamp(1.75rem,7vw,3rem)] font-bold uppercase leading-tight text-white">
           Ready for real missions?
         </h2>
         <p className="mt-3 font-heading text-lg text-white/90">เล่นจบแล้วอยากใช้จริงในงาน มาเรียน Excel กับผู้เชี่ยวชาญตัวจริงที่ 9Expert</p>
         <Link
           href={coursesHref}
-          className="mt-6 inline-flex items-center rounded-full bg-[#D4F73F] px-6 py-3 font-bold text-[#0D1B2A] transition-colors hover:bg-[#D8F852] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          className="mt-6 flex w-full items-center justify-center rounded-full bg-[#D4F73F] px-6 py-3 min-[480px]:inline-flex min-[480px]:w-auto font-bold text-[#0D1B2A] transition-colors hover:bg-[#D8F852] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
         >
           ดูหลักสูตร Excel ทั้งหมด
         </Link>
@@ -277,7 +285,9 @@ export function HubCta({ coursesHref }) {
         alt=""
         width={720}
         height={800}
-        className="pointer-events-none absolute -bottom-6 right-4 hidden h-auto w-56 object-contain md:block lg:right-12 lg:w-64"
+        // Phones: under the text, smaller, standing on the panel's bottom edge.
+        // md+: beside the text, as before.
+        className="pointer-events-none relative mx-auto -mb-10 mt-6 block h-auto w-40 object-contain md:absolute md:-bottom-6 md:right-4 md:mb-0 md:mt-0 md:w-56 lg:right-12 lg:w-64"
       />
     </section>
   );

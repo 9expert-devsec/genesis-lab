@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Check, Crown, Lock, Trophy } from 'lucide-react';
@@ -7,45 +8,78 @@ import { Check, Crown, Lock, Trophy } from 'lucide-react';
 import { BOSS_CHAPTER, chapterProgress, currentChapter, firstUnpassedLevel, isChapterComplete, isChapterUnlocked } from '@/lib/play/game/map';
 
 import { SectionHeading } from './HubParts';
+import m from './mapMotion.module.css';
 
 /**
  * The Excel Beginner mission map: four nodes (CH.1–3, BOSS) on a curved path.
  *
- * Everything sits in one 1200×640 coordinate space. The SVG path uses it as
- * its viewBox; the nodes are placed at the same points as percentages, and the
- * panel keeps the 1200:640 ratio, so path and nodes line up at any width from
- * lg up. Below lg the nodes become a plain list — the curve has no room there.
+ * TWO STAGES, ONE SET OF RULES. ≥768px the nodes run left→right on a
+ * 1200×640 stage; below 768px they run top→bottom, zig-zagging, on a 360×1110
+ * stage. Each stage is laid out in its own fixed pixel space — the SVG viewBox
+ * and the HTML nodes share those units 1:1 — and the whole stage is scaled to
+ * the panel width (ResizeObserver → `--s`). So the geometry is exact at every
+ * width and the labels never collide as the panel narrows.
  *
  * NODE GEOMETRY comes from the platform art (880×720, content in the lower
  * half): the visible platform is centred at 50% across and PLATFORM_CY down,
  * its top surface starts at ≈45% and its base ends at ≈93%. A node's (x, y)
  * is that visible centre, so the path joins the platforms themselves. The orb
  * is anchored by its BOTTOM to the top surface and the label by its TOP to the
- * base, each via translate — they stay on the platform at any rendered size.
+ * base — they stay on the platform whatever the scale.
+ *
+ * MOTION lives in mapMotion.module.css (entrance once at 30% visibility,
+ * ambient loops paused off-screen, mouse-only hover, all static under reduced
+ * motion). Nothing follows the pointer.
  *
  * Lock state comes from the soft rule in lib/play/game/map and is advisory:
  * a locked node is not a link, but the level URLs themselves stay open.
  */
 
-const W = 1200;
-const H = 640;
 const PLATFORM_RATIO = 720 / 880;
 const PLATFORM_CY = 0.69; // visible centre of the platform, down the image
 const PLATFORM_TOP_FACE = 0.5; // where an orb's bottom rests (rim at ≈0.45)
 const PLATFORM_BASE = 0.93; // bottom of the visible platform
-const PLATFORM_LEFT = 0.07; // visible left edge, across the image
+const PLATFORM_SIDE = 0.07; // visible left/right edge inset, across the image
 const LABEL_GAP = 10;
+const LABEL_W = 168;
+
 // Rhythm: CH.1 low-left, CH.2 a little higher, CH.3 lower, BOSS highest and larger.
-const NODES = [
-  { chapter: 1, x: 230, y: 310, w: 220 },
-  { chapter: 2, x: 500, y: 240, w: 220 },
-  { chapter: 3, x: 780, y: 330, w: 220 },
-  { chapter: BOSS_CHAPTER, x: 1040, y: 210, w: 260 },
-];
+const WIDE = {
+  key: 'wide',
+  W: 1200,
+  H: 640,
+  vertical: false,
+  nodes: [
+    { chapter: 1, x: 230, y: 310, w: 220 },
+    { chapter: 2, x: 500, y: 240, w: 220 },
+    { chapter: 3, x: 780, y: 330, w: 220 },
+    { chapter: BOSS_CHAPTER, x: 1040, y: 210, w: 260 },
+  ],
+  mascotW: 120,
+};
 
-const pct = (v, of) => `${(v / of) * 100}%`;
+// Phones: top→bottom, zig-zagging between two columns. Each leg leaves its
+// node sideways toward the next column and then turns down into the next
+// platform, so it never runs under its own node. Labels sit under each
+// platform pushed to the panel's OUTER edge, which keeps them clear of the
+// path; the mascot stands on the inner side. Rows are 280px apart so the
+// mascot's bubble clears the label above it.
+const TALL = {
+  key: 'tall',
+  W: 360,
+  H: 1260,
+  vertical: true,
+  nodes: [
+    { chapter: 1, x: 100, y: 180, w: 150 },
+    { chapter: 2, x: 260, y: 460, w: 150 },
+    { chapter: 3, x: 100, y: 740, w: 150 },
+    { chapter: BOSS_CHAPTER, x: 260, y: 1020, w: 170 },
+  ],
+  mascotW: 80,
+  labelInset: 12,
+};
 
-/** The platform image box and the anchor points derived from it, in map units. */
+/** The platform image box and the anchor points derived from it, in stage px. */
 function nodeBox(n) {
   const h = n.w * PLATFORM_RATIO;
   const top = n.y - PLATFORM_CY * h;
@@ -55,14 +89,26 @@ function nodeBox(n) {
     top,
     h,
     face: top + PLATFORM_TOP_FACE * h,
-    base: top + PLATFORM_BASE * h + LABEL_GAP,
-    visibleLeft: left + PLATFORM_LEFT * n.w,
+    visibleLeft: left + PLATFORM_SIDE * n.w,
+    visibleRight: left + (1 - PLATFORM_SIDE) * n.w,
   };
 }
 
-function segment(a, b) {
+/**
+ * One leg of the route. Wide stage: a horizontal S-curve. Tall stage: out
+ * sideways along the node's own row, then down into the next platform (both
+ * control points at the corner give a smooth quarter bend).
+ */
+function segment(a, b, vertical) {
+  if (vertical) return `C ${b.x} ${a.y}, ${b.x} ${a.y}, ${b.x} ${b.y}`;
   const mx = (a.x + b.x) / 2;
-  return `M${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`;
+  return `C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`;
+}
+
+function route(nodes, upto, vertical) {
+  let d = `M${nodes[0].x} ${nodes[0].y}`;
+  for (let i = 1; i <= upto; i += 1) d += ` ${segment(nodes[i - 1], nodes[i], vertical)}`;
+  return d;
 }
 
 function nodeState(chapter, levels, progress, current) {
@@ -85,7 +131,8 @@ function Orb({ chapter, state }) {
   if (state === 'locked') {
     return (
       <span className={`${base} border-2 border-[#48B0FF] bg-[#0D1B2A] text-[#48B0FF]`}>
-        <Lock className="h-6 w-6" aria-hidden="true" />
+        <span className={`absolute -inset-1.5 rounded-full shadow-[0_0_18px_rgba(72,176,255,0.7)] ${m.breathe}`} aria-hidden="true" />
+        <Lock className="relative h-6 w-6" aria-hidden="true" />
       </span>
     );
   }
@@ -99,7 +146,7 @@ function Orb({ chapter, state }) {
   return (
     <span className={`${base} bg-[radial-gradient(circle_at_35%_30%,#E9FF8A,#D4F73F_45%,#9DBA1F)] text-[#0D1B2A] shadow-[0_0_32px_rgba(212,247,63,0.55)]`}>
       {state === 'current' && (
-        <span className="absolute -inset-2 rounded-full border-2 border-dashed border-[#D4F73F]/70" aria-hidden="true" />
+        <span className={`absolute -inset-2 rounded-full border-2 border-dashed border-[#D4F73F]/70 ${m.spin}`} aria-hidden="true" />
       )}
       {chapter}
     </span>
@@ -110,7 +157,10 @@ function Label({ chapter, name, levels, progress }) {
   const boss = chapter === BOSS_CHAPTER;
   const ls = levels.filter((l) => l.chapter === chapter).sort((a, b) => a.order - b.order);
   return (
-    <span className="mt-1 flex w-[168px] flex-col items-center rounded-[14px] border border-white/10 bg-[#0D1B2A]/90 px-3 py-2 text-center">
+    <span
+      className="flex flex-col items-center rounded-[14px] border border-white/10 bg-[#0D1B2A]/90 px-3 py-2 text-center"
+      style={{ width: LABEL_W }}
+    >
       <span className="inline-flex items-center gap-1 rounded-full bg-[#D4F73F]/15 px-2 py-0.5 font-en text-[11px] font-bold text-[#D4F73F]">
         {boss ? (
           <>
@@ -145,198 +195,352 @@ function nodeLabel(chapter, name, state, counts) {
   return `${what} · ${status}${counts ? ` · ผ่าน ${counts.passed}/${counts.total} ด่าน` : ''}`;
 }
 
+function lockedHint(chapter) {
+  return chapter === BOSS_CHAPTER ? 'ผ่านครบ 3 บทเพื่อปลดล็อก' : `ผ่าน CH.${chapter - 1} ให้ครบก่อน`;
+}
+
+/** Scales a fixed W×H stage to its container's width. Height is set by aspect-ratio, so nothing jumps before JS. */
+function ScaledStage({ W, H, children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width;
+      if (w > 0) el.style.setProperty('--s', String(w / W));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [W]);
+  return (
+    <div ref={ref} className="relative w-full" style={{ aspectRatio: `${W} / ${H}` }}>
+      <div className="absolute left-0 top-0 origin-top-left" style={{ width: W, height: H, transform: 'scale(var(--s, 1))' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Stage({ layout, states, levels, progress, chapterNames, counts, currentIndex, allDone }) {
+  const { W, H, vertical, key } = layout;
+  const nodes = layout.nodes.map((n, i) => ({ ...n, ...states[i] }));
+  const full = route(nodes, nodes.length - 1, vertical);
+  const doneUpto = allDone ? nodes.length - 1 : currentIndex;
+  const mascotNode = nodes[currentIndex];
+  const maskId = `play-map-${key}-reveal`;
+  const glowId = `play-map-${key}-glow`;
+
+  return (
+    <ScaledStage W={W} H={H}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="absolute inset-0" fill="none" aria-hidden="true">
+        <defs>
+          <filter id={glowId} x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="6" />
+          </filter>
+          {/* Entrance: a solid copy of the whole route, drawn CH.1 → BOSS, masks the real path in. */}
+          <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width={W} height={H}>
+            <path d={full} stroke="white" strokeWidth="60" strokeLinecap="round" pathLength="1" strokeDasharray="1" className={m.drawMask} />
+          </mask>
+        </defs>
+        <g mask={`url(#${maskId})`}>
+          {nodes.slice(1).map((n, i) => {
+            const d = `M${nodes[i].x} ${nodes[i].y} ${segment(nodes[i], n, vertical)}`;
+            const solid = i < doneUpto;
+            return (
+              <g key={n.chapter} data-play-segment={solid ? 'solid' : 'dashed'}>
+                <path d={d} stroke="#D4F73F" strokeOpacity={solid ? 0.5 : 0.25} strokeWidth="10" filter={`url(#${glowId})`} />
+                <path
+                  d={d}
+                  stroke="#D4F73F"
+                  strokeOpacity={solid ? 1 : 0.7}
+                  strokeWidth={solid ? 5 : 3}
+                  strokeLinecap="round"
+                  strokeDasharray={solid ? undefined : '10 12'}
+                  className={solid ? undefined : m.flow}
+                />
+              </g>
+            );
+          })}
+        </g>
+      </svg>
+
+      {doneUpto > 0 && (
+        // Stage px == SVG units, so the completed route works directly as an offset-path.
+        <span
+          aria-hidden="true"
+          className={`absolute left-0 top-0 h-2.5 w-2.5 rounded-full bg-[#ECFF9C] shadow-[0_0_10px_3px_rgba(212,247,63,0.85)] ${m.spark}`}
+          style={{ offsetPath: `path("${route(nodes, doneUpto, vertical)}")`, marginLeft: -5, marginTop: -5 }}
+        />
+      )}
+
+      {mascotNode && (() => {
+        // Feet on the current platform's top surface, beside it. The art has
+        // ~16% empty margin on each side, hence the overlap. On the tall stage a
+        // node on the left takes the mascot on its open right side.
+        const box = nodeBox(mascotNode);
+        const right = vertical && mascotNode.x < W / 2;
+        const left = right ? box.visibleRight - 0.2 * layout.mascotW : box.visibleLeft + 0.2 * layout.mascotW;
+        return (
+          <div
+            className={`pointer-events-none absolute z-20 ${right ? '' : '-translate-x-full'} -translate-y-full`}
+            style={{ left, top: box.face, width: layout.mascotW }}
+            data-play-mascot=""
+            aria-hidden="true"
+          >
+            <div className={m.bob}>
+              <span className={`absolute -top-8 left-1/2 -ml-[45px] whitespace-nowrap rounded-[12px] bg-white px-3 py-1 text-sm font-bold text-[#0D1B2A] shadow-lg ${m.bubble}`}>
+                เริ่มภารกิจ!
+              </span>
+              <Image src="/play/mascot-wave.webp" alt="" width={720} height={800} className="h-auto w-full object-contain" />
+            </div>
+          </div>
+        );
+      })()}
+
+      <ol className="contents">
+        {nodes.map((n, i) => {
+          const label = nodeLabel(n.chapter, n.name, n.state, n.chapter === BOSS_CHAPTER ? null : counts[n.chapter]);
+          const box = nodeBox(n);
+          const boss = n.chapter === BOSS_CHAPTER;
+          const live = n.state === 'current';
+          const body = (
+            <>
+              {/* hover glow — opacity only */}
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none absolute left-1/2 h-[46%] w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] bg-[radial-gradient(closest-side,rgba(212,247,63,0.45),rgba(212,247,63,0))] ${m.nodeGlow}`}
+                style={{ top: `${PLATFORM_TOP_FACE * 100}%` }}
+              />
+              <Image src={platformFor(n.chapter, n.state)} alt="" width={880} height={720} className="relative h-auto w-full object-contain" />
+              {boss && n.state !== 'locked' && (
+                <Image
+                  src="/play/map/base-boss.webp"
+                  alt=""
+                  width={880}
+                  height={720}
+                  aria-hidden="true"
+                  className={`pointer-events-none absolute inset-x-0 top-0 h-auto w-full object-contain brightness-[1.8] saturate-150 ${m.glint}`}
+                />
+              )}
+              {live && (
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none absolute left-1/2 aspect-[3.2/1] w-[64%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-2 border-[#D4F73F]/80 ${m.ripple}`}
+                  style={{ top: `${(PLATFORM_TOP_FACE + 0.06) * 100}%` }}
+                />
+              )}
+              <span
+                className="absolute left-1/2 z-10 -translate-x-1/2 -translate-y-full"
+                style={{ top: `${PLATFORM_TOP_FACE * 100}%` }}
+                data-play-orb=""
+              >
+                <span className={`block ${live ? m.float : boss && n.state !== 'locked' ? m.floatLate : ''}`}>
+                  <Orb chapter={n.chapter} state={n.state} />
+                </span>
+              </span>
+              <span
+                className={`absolute z-10 ${layout.labelInset ? '' : 'left-1/2 -translate-x-1/2'}`}
+                style={{
+                  top: `calc(${PLATFORM_BASE * 100}% + ${LABEL_GAP}px)`,
+                  // tall stage: pinned to the panel's outer edge on this node's side
+                  ...(layout.labelInset
+                    ? { left: (n.x < W / 2 ? layout.labelInset : W - layout.labelInset - LABEL_W) - box.left }
+                    : // wide stage on a tablet: the stage shrinks to ~0.6, so the labels are
+                      // scaled back up (to at most 1.4×) to stay readable; 1 on desktop.
+                      { scale: 'clamp(1, calc(0.85 / var(--s, 1)), 1.4)', transformOrigin: '0 0' } /* origin = the left:50% anchor, so translateX(-50%) keeps it centred */),
+                }}
+                data-play-label=""
+              >
+                <span className={`block ${m.labelReveal}`} style={{ '--i': i }}>
+                  <Label chapter={n.chapter} name={n.name} levels={levels} progress={progress} />
+                </span>
+              </span>
+            </>
+          );
+          return (
+            <li key={n.chapter} className="absolute" style={{ left: box.left, top: box.top, width: n.w }} data-play-node={n.state}>
+              <div className={m.reveal} style={{ '--i': i }}>
+                {n.state === 'locked' ? (
+                  // Focusable so keyboard users get the same hint the mouse tooltip gives.
+                  <div tabIndex={0} aria-label={`${label} · ${lockedHint(n.chapter)}`} className={`relative block rounded-[20px] outline-none focus-visible:ring-2 focus-visible:ring-[#48B0FF] ${m.locked}`}>
+                    {body}
+                    <span
+                      role="tooltip"
+                      className={`pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-[10px] bg-[#0D1B2A] px-3 py-1.5 text-xs font-bold text-[#48B0FF] shadow-lg ring-1 ring-[#48B0FF]/40 ${m.tip}`}
+                      style={{ top: `calc(${PLATFORM_TOP_FACE * 100}% - 108px)` }}
+                    >
+                      {lockedHint(n.chapter)}
+                    </span>
+                  </div>
+                ) : (
+                  <Link
+                    href={n.href}
+                    aria-label={label}
+                    className={`relative block rounded-[20px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4F73F] focus-visible:ring-offset-4 focus-visible:ring-offset-[#0D1B2A] ${m.nodeLink}`}
+                  >
+                    {body}
+                  </Link>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </ScaledStage>
+  );
+}
+
+// Deterministic "random" stars — the same on the server and the client.
+function starField(count, seed) {
+  let a = seed;
+  const rnd = () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  return Array.from({ length: count }, () => ({
+    left: `${(rnd() * 100).toFixed(2)}%`,
+    top: `${(rnd() * 70).toFixed(2)}%`,
+    size: rnd() < 0.2 ? 2 : 1,
+    delay: `${(-rnd() * 6).toFixed(2)}s`,
+  }));
+}
+const STARS_A = starField(22, 7);
+const STARS_B = starField(16, 23);
+
 export function MissionMap({ levels, chapterNames, progress }) {
+  const panelRef = useRef(null);
+  const pausedRef = useRef(true);
+  const [shot, setShot] = useState(null);
+
   const current = currentChapter(levels, progress);
   const counts = chapterProgress(levels, progress);
-  const nodes = NODES.map((n) => ({
-    ...n,
+  const states = WIDE.nodes.map((n) => ({
     name: chapterNames[n.chapter],
     state: nodeState(n.chapter, levels, progress, current),
     href: `/play/excel/beginner/${firstUnpassedLevel(n.chapter, levels, progress)}`,
   }));
-  const currentIndex = Math.max(0, nodes.findIndex((n) => n.chapter === current));
-  const allDone = nodes.every((n) => n.state === 'passed');
-  const mascotNode = nodes[currentIndex];
+  const currentIndex = Math.max(0, WIDE.nodes.findIndex((n) => n.chapter === current));
+  const allDone = states.every((s) => s.state === 'passed');
+
+  // Entrance once at 30% visible; loops pause whenever the panel is off-screen.
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return undefined;
+    el.dataset.anim = 'ready';
+    el.dataset.paused = '';
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.intersectionRatio >= 0.3) el.dataset.entered = '';
+        pausedRef.current = !e.isIntersecting;
+        if (e.isIntersecting) delete el.dataset.paused;
+        else el.dataset.paused = '';
+      },
+      { threshold: [0, 0.3] },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  // One shooting star every 8–12s, only while the map is on screen.
+  useEffect(() => {
+    let reduced = false;
+    try {
+      reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch {
+      /* assume motion is fine */
+    }
+    if (reduced) return undefined;
+    let timer;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        if (!pausedRef.current) {
+          setShot({ k: Date.now(), left: `${8 + Math.random() * 40}%`, top: `${4 + Math.random() * 14}%` });
+        }
+        schedule();
+      }, 8000 + Math.random() * 4000);
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, []);
+
+  const stageProps = { states, levels, progress, chapterNames, counts, currentIndex, allDone };
 
   return (
     <section id="map" aria-labelledby="play-map-title" className="mt-28 scroll-mt-28">
       <SectionHeading id="play-map-title" title="Mission map" accent="beginner" sub="แผนที่ภารกิจของดาวที่คุณเลือก · ตอนนี้คือดาว Excel" />
 
-      <div className="relative mt-12 overflow-hidden rounded-[32px] border border-[#48B0FF]/30 bg-[linear-gradient(180deg,#0B1726_0%,#0D1B2A_45%,#102a45_100%)]">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-70"
-          style={{
-            backgroundImage:
-              'radial-gradient(1px 1px at 30px 40px, rgba(255,255,255,0.5), transparent), radial-gradient(1px 1px at 150px 120px, rgba(255,255,255,0.35), transparent), radial-gradient(1.5px 1.5px at 260px 60px, rgba(212,247,63,0.4), transparent)',
-            backgroundSize: '300px 200px',
-          }}
-        />
+      <div
+        ref={panelRef}
+        className={`relative mt-12 overflow-hidden rounded-[32px] border border-[#48B0FF]/30 bg-[linear-gradient(180deg,#0B1726_0%,#0D1B2A_45%,#102a45_100%)] ${m.map}`}
+      >
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+          {STARS_A.map((s, i) => (
+            <span key={`a${i}`} className={`absolute rounded-full bg-white ${m.twinkleA}`} style={{ left: s.left, top: s.top, width: s.size, height: s.size, animationDelay: s.delay }} />
+          ))}
+          {STARS_B.map((s, i) => (
+            <span key={`b${i}`} className={`absolute rounded-full bg-[#D4F73F] ${m.twinkleB}`} style={{ left: s.left, top: s.top, width: s.size, height: s.size, animationDelay: s.delay }} />
+          ))}
+          {shot && (
+            <span
+              key={shot.k}
+              // `rotate` (not transform) so the keyframes' `translate` composes with it;
+              // the 380×120 travel matches the 18° tilt.
+              className={`absolute h-px w-24 origin-right bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,0.9))] ${m.shoot}`}
+              style={{ left: shot.left, top: shot.top, rotate: '18deg' }}
+              data-play-shooting-star=""
+            />
+          )}
+        </div>
         {/* The horizon art is OPAQUE (its own dark sky), so its top edge is
-            faded out with a mask — otherwise it shows as a hard line. */}
+            faded out with a mask — otherwise it shows as a hard line. Taller and
+            cropped on phones, where the panel is narrow. */}
         <Image
           src="/play/map/horizon.webp"
           alt=""
           width={1650}
           height={340}
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-auto w-full object-contain object-bottom [mask-image:linear-gradient(to_bottom,transparent_0%,black_45%)]"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-40 w-full object-cover object-bottom [mask-image:linear-gradient(to_bottom,transparent_0%,black_45%)] md:h-auto md:object-contain"
+        />
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-[radial-gradient(ellipse_60%_55%_at_60%_100%,rgba(72,176,255,0.28),rgba(212,247,63,0.06)_55%,transparent_75%)] ${m.horizonGlow}`}
         />
 
-        <div className="relative flex flex-wrap items-center justify-between gap-4 px-6 pt-6 md:px-8">
-          <div className="flex items-center gap-3">
-            <span className="h-10 w-1.5 rounded-full bg-[#D4F73F]" aria-hidden="true" />
-            <Image src="/play/icon-excel.webp" alt="" width={96} height={96} className="h-10 w-10 rounded-[8px]" />
-            <div className="leading-tight">
+        <div className="relative flex flex-wrap items-center justify-between gap-4 px-5 pt-5 md:px-8 md:pt-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="h-10 w-1.5 shrink-0 rounded-full bg-[#D4F73F]" aria-hidden="true" />
+            <Image src="/play/icon-excel.webp" alt="" width={96} height={96} className="h-10 w-10 shrink-0 rounded-[8px]" />
+            <div className="min-w-0 leading-tight">
               <p className="font-en text-sm font-bold uppercase tracking-widest text-[#D4F73F]">Planet 01 : Excel</p>
               <p className="font-heading text-base font-bold text-white">Excel แสนสนุก</p>
             </div>
           </div>
-          <ul className="flex items-center gap-1 rounded-full bg-white/5 p-1 text-sm" aria-label="ระดับ">
-            <li>
-              <span aria-current="true" className="block rounded-full bg-[#D4F73F] px-4 py-1.5 font-bold text-[#0D1B2A]">Beginner</span>
-            </li>
-            {['Intermediate', 'Advanced'].map((s) => (
-              <li key={s}>
-                <span className="inline-flex items-center gap-1 rounded-full px-4 py-1.5 text-white/40" aria-label={`${s} · ยังไม่เปิด`}>
-                  <Lock className="h-3 w-3" aria-hidden="true" />
-                  {s}
-                </span>
+          {/* Phones: the tabs scroll sideways rather than wrap. */}
+          <div className="-mx-5 w-[calc(100%+2.5rem)] overflow-x-auto px-5 [scrollbar-width:none] md:mx-0 md:w-auto md:px-0 [&::-webkit-scrollbar]:hidden">
+            <ul className="flex w-max items-center gap-1 rounded-full bg-white/5 p-1 text-sm" aria-label="ระดับ">
+              <li>
+                <span aria-current="true" className="block whitespace-nowrap rounded-full bg-[#D4F73F] px-4 py-1.5 font-bold text-[#0D1B2A]">Beginner</span>
               </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* lg+: the curved map */}
-        <div className="relative hidden aspect-[1200/640] w-full lg:block">
-          <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 h-full w-full" fill="none" aria-hidden="true">
-            <defs>
-              <filter id="play-path-glow" x="-10%" y="-50%" width="120%" height="200%">
-                <feGaussianBlur stdDeviation="6" />
-              </filter>
-            </defs>
-            {nodes.slice(1).map((n, i) => {
-              const d = segment(nodes[i], n);
-              const solid = allDone || i < currentIndex;
-              return (
-                <g key={n.chapter} data-play-segment={solid ? 'solid' : 'dashed'}>
-                  <path d={d} stroke="#D4F73F" strokeOpacity={solid ? 0.5 : 0.25} strokeWidth="10" filter="url(#play-path-glow)" />
-                  <path
-                    d={d}
-                    stroke="#D4F73F"
-                    strokeOpacity={solid ? 1 : 0.7}
-                    strokeWidth={solid ? 5 : 3}
-                    strokeLinecap="round"
-                    strokeDasharray={solid ? undefined : '10 12'}
-                  />
-                </g>
-              );
-            })}
-          </svg>
-
-          {mascotNode && (() => {
-            // Feet on the current platform's top surface, just left of it. The
-            // art has ~16% empty margin on its right, hence the overlap.
-            const box = nodeBox(mascotNode);
-            return (
-              <div
-                className="pointer-events-none absolute z-20 -translate-x-full -translate-y-full"
-                style={{ left: pct(box.visibleLeft + 24, W), top: pct(box.face, H), width: pct(120, W) }}
-                data-play-mascot=""
-                aria-hidden="true"
-              >
-                <span className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-[12px] bg-white px-3 py-1 text-sm font-bold text-[#0D1B2A] shadow-lg">
-                  เริ่มภารกิจ!
-                </span>
-                <Image src="/play/mascot-wave.webp" alt="" width={720} height={800} className="h-auto w-full object-contain" />
-              </div>
-            );
-          })()}
-
-          <ol className="contents">
-            {nodes.map((n) => {
-              const label = nodeLabel(n.chapter, n.name, n.state, n.chapter === BOSS_CHAPTER ? null : counts[n.chapter]);
-              const box = nodeBox(n);
-              // Anchors are percentages OF THE PLATFORM BOX, so the orb and the
-              // label stay on the platform whatever width the map renders at.
-              const body = (
-                <>
-                  <Image
-                    src={platformFor(n.chapter, n.state)}
-                    alt=""
-                    width={880}
-                    height={720}
-                    className="h-auto w-full object-contain"
-                  />
-                  <span
-                    className="absolute left-1/2 z-10 -translate-x-1/2 -translate-y-full"
-                    style={{ top: `${PLATFORM_TOP_FACE * 100}%` }}
-                    data-play-orb=""
-                  >
-                    <Orb chapter={n.chapter} state={n.state} />
+              {['Intermediate', 'Advanced'].map((s) => (
+                <li key={s}>
+                  <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-4 py-1.5 text-white/40" aria-label={`${s} · ยังไม่เปิด`}>
+                    <Lock className="h-3 w-3" aria-hidden="true" />
+                    {s}
                   </span>
-                  <span
-                    className="absolute left-1/2 z-10 -translate-x-1/2"
-                    style={{ top: `calc(${PLATFORM_BASE * 100}% + ${LABEL_GAP}px)` }}
-                    data-play-label=""
-                  >
-                    <Label chapter={n.chapter} name={n.name} levels={levels} progress={progress} />
-                  </span>
-                </>
-              );
-              return (
-                <li
-                  key={n.chapter}
-                  className="absolute"
-                  style={{ left: pct(box.left, W), top: pct(box.top, H), width: pct(n.w, W) }}
-                  data-play-node={n.state}
-                >
-                  {n.state === 'locked' ? (
-                    <div aria-label={label} aria-disabled="true" className="relative block">
-                      {body}
-                    </div>
-                  ) : (
-                    <Link
-                      href={n.href}
-                      aria-label={label}
-                      className="relative block rounded-[20px] transition-transform duration-200 ease-9e hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4F73F] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-                    >
-                      {body}
-                    </Link>
-                  )}
                 </li>
-              );
-            })}
-          </ol>
+              ))}
+            </ul>
+          </div>
         </div>
 
-        {/* below lg: the same nodes as a list */}
-        <ol className="relative flex flex-col gap-3 p-6 lg:hidden">
-          {nodes.map((n) => {
-            const inner = (
-              <>
-                <span className="shrink-0 scale-75">
-                  <Orb chapter={n.chapter} state={n.state} />
-                </span>
-                <Label chapter={n.chapter} name={n.name} levels={levels} progress={progress} />
-              </>
-            );
-            const label = nodeLabel(n.chapter, n.name, n.state, n.chapter === BOSS_CHAPTER ? null : counts[n.chapter]);
-            return (
-              <li key={n.chapter}>
-                {n.state === 'locked' ? (
-                  <div aria-label={label} aria-disabled="true" className="flex items-center gap-3">
-                    {inner}
-                  </div>
-                ) : (
-                  <Link href={n.href} aria-label={label} className="flex items-center gap-3 rounded-[16px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4F73F]">
-                    {inner}
-                  </Link>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-        <div className="h-6 lg:hidden" />
+        <div className="relative hidden md:block" data-play-stage="wide">
+          <Stage layout={WIDE} {...stageProps} />
+        </div>
+        <div className="relative px-1 pb-2 md:hidden" data-play-stage="tall">
+          <Stage layout={TALL} {...stageProps} />
+        </div>
       </div>
     </section>
   );

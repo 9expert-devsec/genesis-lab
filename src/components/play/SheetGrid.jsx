@@ -9,9 +9,11 @@ import { displayValue } from '@/lib/play/game/view';
  * icon or text, not colour alone.
  *
  * Cells are not focusable on purpose: while the formula input has focus, a
- * mousedown on a cell inserts its ref (the parent prevents the blur).
+ * tap or click on a cell inserts its ref. The parent prevents the blur on
+ * POINTERDOWN (mouse and touch alike) and inserts on CLICK, so a finger that
+ * starts on a cell to scroll the grid sideways never inserts anything.
  */
-export function SheetGrid({ cols, rows, sheet, formats, answers, results, activeCells, anchor, refCells, onCellMouseDown }) {
+export function SheetGrid({ cols, rows, sheet, formats, answers, results, activeCells, anchor, refCells, onCellPointerDown, onCellClick }) {
   const refSet = new Set(refCells);
   const activeSet = new Set(activeCells);
   return (
@@ -82,7 +84,8 @@ export function SheetGrid({ cols, rows, sheet, formats, answers, results, active
                   key={ref}
                   role="gridcell"
                   aria-label={label}
-                  onMouseDown={(e) => onCellMouseDown(e, ref)}
+                  onPointerDown={(e) => onCellPointerDown(e, ref)}
+                  onClick={() => onCellClick(ref)}
                   className={`flex min-h-[40px] cursor-cell items-center border-b border-r border-white/10 px-3 py-2 last:border-r-0 ${
                     numeric ? 'justify-end' : 'justify-start'
                   } ${tone} ${ring}`}

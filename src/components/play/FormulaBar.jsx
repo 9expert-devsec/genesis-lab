@@ -12,6 +12,9 @@ const REF_TEXT = 'text-[#48B0FF]';
  * characters with refs in blue — the only way to colour part of an <input>.
  * Both use the same font, size and padding, and the mirror follows the input's
  * horizontal scroll, so the caret always sits on the painted text.
+ *
+ * Phones: one row — name box, input, Run, icon-only reset; "fx" hides. The
+ * input stays at 16px (text-base) so iOS does not zoom on focus.
  */
 export function FormulaBar({ inputRef, anchor, value, spans, disabled, running, onChange, onRun, onReset }) {
   const mirrorRef = useRef(null);
@@ -26,17 +29,17 @@ export function FormulaBar({ inputRef, anchor, value, spans, disabled, running, 
   if (cursor < value.length) parts.push({ text: value.slice(cursor) });
 
   return (
-    <div className="flex flex-wrap items-stretch gap-2 rounded-[16px] border border-white/10 bg-[#132638] p-2">
+    <div className="flex items-stretch gap-1.5 rounded-[16px] border border-white/10 bg-[#132638] p-1.5 sm:gap-2 sm:p-2">
       <div
-        className="flex min-w-[64px] items-center justify-center rounded-[10px] bg-[#0D1B2A] px-3 font-mono text-sm font-bold text-[#D4F73F]"
+        className="flex min-w-[44px] shrink-0 items-center justify-center rounded-[10px] bg-[#0D1B2A] px-2 font-mono text-sm font-bold text-[#D4F73F] sm:min-w-[64px] sm:px-3"
         aria-label={`ช่องที่กำลังพิมพ์ ${anchor}`}
       >
         {anchor}
       </div>
-      <span className="flex items-center px-1 font-en text-sm font-bold italic text-white/50" aria-hidden="true">
+      <span className="hidden items-center px-1 font-en text-sm font-bold italic text-white/50 sm:flex" aria-hidden="true">
         fx
       </span>
-      <div className="relative min-w-[200px] flex-1 rounded-[10px] bg-[#0D1B2A] focus-within:ring-2 focus-within:ring-[#D4F73F]">
+      <div className="relative min-w-0 flex-1 rounded-[10px] bg-[#0D1B2A] focus-within:ring-2 focus-within:ring-[#D4F73F]">
         <label htmlFor="play-formula" className="sr-only">
           สูตรสำหรับช่อง {anchor}
         </label>
@@ -78,7 +81,7 @@ export function FormulaBar({ inputRef, anchor, value, spans, disabled, running, 
         type="button"
         onClick={onRun}
         disabled={disabled || running}
-        className="inline-flex items-center gap-2 rounded-[10px] bg-[#D4F73F] px-5 font-bold text-[#0D1B2A] transition-colors hover:bg-[#D8F852] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-[#D4F73F] px-3 font-bold sm:gap-2 sm:px-5 text-[#0D1B2A] transition-colors hover:bg-[#D8F852] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Play className="h-4 w-4 fill-current" aria-hidden="true" />
         รันสูตร
@@ -89,7 +92,7 @@ export function FormulaBar({ inputRef, anchor, value, spans, disabled, running, 
         disabled={running}
         aria-label="ล้างสูตรและผลลัพธ์"
         title="ล้างสูตร"
-        className="inline-flex w-11 items-center justify-center rounded-[10px] border border-white/20 text-white/70 transition-colors hover:border-white hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50"
+        className="inline-flex w-10 shrink-0 items-center justify-center rounded-[10px] sm:w-11 border border-white/20 text-white/70 transition-colors hover:border-white hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50"
       >
         <RotateCcw className="h-4 w-4" aria-hidden="true" />
       </button>
@@ -100,17 +103,18 @@ export function FormulaBar({ inputRef, anchor, value, spans, disabled, running, 
 const SYMBOLS = ['=', '*', '(', ')', ',', '"', '<', '>', '+', '-'];
 
 /**
- * Keys that insert at the caret. mousedown is prevented so the input keeps
- * focus (and its selection) while the key is pressed.
+ * Keys that insert at the caret. pointerdown (mouse AND touch) is prevented so
+ * the input keeps focus and its selection while a key is pressed; 40×40 tap
+ * targets, wrapping onto as many rows as the width needs.
  */
 export function QuickKeys({ functions, disabled, onInsert }) {
   const key =
-    'min-w-[40px] rounded-[8px] border border-white/15 bg-white/5 px-3 py-1.5 font-mono text-sm transition-colors hover:border-[#D4F73F] hover:text-[#D4F73F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4F73F] disabled:opacity-40';
+    'inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-[8px] border border-white/15 bg-white/5 px-3 font-mono text-sm transition-colors hover:border-[#D4F73F] hover:text-[#D4F73F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4F73F] disabled:opacity-40';
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="ปุ่มลัดพิมพ์สูตร">
-      <span className="mr-1 font-en text-xs font-bold uppercase tracking-widest text-white/40">Quick keys</span>
+      <span className="mr-1 w-full font-en text-xs font-bold uppercase tracking-widest text-white/40 sm:w-auto">Quick keys</span>
       {SYMBOLS.map((s) => (
-        <button key={s} type="button" disabled={disabled} className={`${key} text-white`} onMouseDown={(e) => e.preventDefault()} onClick={() => onInsert(s)} aria-label={`พิมพ์ ${s}`}>
+        <button key={s} type="button" disabled={disabled} className={`${key} text-white`} onPointerDown={(e) => e.preventDefault()} onClick={() => onInsert(s)} aria-label={`พิมพ์ ${s}`}>
           {s}
         </button>
       ))}
@@ -120,7 +124,7 @@ export function QuickKeys({ functions, disabled, onInsert }) {
           type="button"
           disabled={disabled}
           className={`${key} text-[#48B0FF]`}
-          onMouseDown={(e) => e.preventDefault()}
+          onPointerDown={(e) => e.preventDefault()}
           onClick={() => onInsert(`${fn}(`)}
           aria-label={`พิมพ์ฟังก์ชัน ${fn}`}
         >
