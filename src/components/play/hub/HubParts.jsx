@@ -50,10 +50,13 @@ export function HubHero({ startHref, levelCount, chapterCount }) {
     >
       <div className="min-w-0">
         {/* clamp(): "LEVEL UP" scales with the viewport and never overflows a
-            360px phone (≈ 54px there), up to the 96px desktop size. */}
-        <h1 id="play-hero-title" className="relative inline-block font-en text-[clamp(3rem,14vw,6rem)] font-bold uppercase leading-[0.9] tracking-tight text-white">
-          Level up
-          <span className="absolute -bottom-[0.33em] right-0 block -rotate-6 whitespace-nowrap text-[0.5em] normal-case italic text-[#D4F73F]">
+            360px phone (≈ 54px there), up to the 96px desktop size. Only the
+            words are Anton; the h1 is an inline box exactly as wide as them, so
+            the accent, positioned from its right, ends under the word's end. */}
+        <h1 id="play-hero-title" className="relative inline-block font-en text-[clamp(3rem,14vw,6rem)] font-bold uppercase leading-[0.9] text-white">
+          {/* `!`: globals.css pins every span to Google Sans with !important. */}
+          <span className="!font-[family-name:var(--font-play-display)] font-normal tracking-normal">Level up</span>
+          <span className="absolute -bottom-[0.33em] right-0 block -rotate-6 whitespace-nowrap text-[0.5em] normal-case italic tracking-tight text-[#D4F73F]">
             your skills!
           </span>
         </h1>

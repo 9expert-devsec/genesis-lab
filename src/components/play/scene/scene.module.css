@@ -1,0 +1,46 @@
+/* Simulator scene motion. Each runs once when its element mounts or gains the
+   class; nothing loops, and all of it is off under reduced motion. */
+
+.pop {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: scene-pop 200ms ease-out;
+}
+
+.float {
+  animation: scene-float 900ms ease-out forwards;
+}
+
+@keyframes scene-pop {
+  from {
+    transform: scale(0.9);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes scene-float {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(28px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pop {
+    animation: none;
+  }
+  .float {
+    display: none;
+  }
+}

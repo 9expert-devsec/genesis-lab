@@ -9,12 +9,14 @@ import { maxStarsFor, starsFor, xpFor } from '@/lib/play/game/stars';
 import { failureMessage, formatMap, formulaRefSpans, gridBounds, levelFunctions, secretFormulas } from '@/lib/play/game/view';
 import { displayFormula } from '@/lib/play/game/normalize';
 import { isChapterUnlocked } from '@/lib/play/game/map';
+import { sceneFor } from '@/lib/play/game/scene';
 
 import { PlayHud } from './PlayHud';
 import { MissionPanel } from './MissionPanel';
 import { FormulaBar, QuickKeys } from './FormulaBar';
 import { SheetGrid, SheetLegend } from './SheetGrid';
 import { Scoreboard } from './Scoreboard';
+import { SceneCard } from './scene/SceneCard';
 import { AlmostThereDialog, MissionCompleteDialog } from './ResultDialog';
 
 const CELL_STEP_MS = 180;
@@ -56,6 +58,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
   const [complete, setComplete] = useState(false);
   const [dialog, setDialog] = useState(null); // null | { kind: 'fail', message } | { kind: 'complete' }
   const [notice, setNotice] = useState('');
+  const [ranFormula, setRanFormula] = useState(''); // the formula behind `results`, for the 2-5 scene
   const [progress, setProgress] = useState({});
 
   // Storage is read after mount so the server HTML and first client render agree.
@@ -77,6 +80,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
   }, [level]);
   const activeCells = useMemo(() => taskCells(task), [task]);
   const { spans, cells: refCells } = useMemo(() => formulaRefSpans(formula), [formula]);
+  const scene = sceneFor(level);
 
   const chapterLevels = levels.filter((l) => l.chapter === level.chapter).sort((a, b) => a.order - b.order);
   const starsTotal = totalStars(progress, levels);
@@ -175,6 +179,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
     }
     if (typed !== formula) setFormula(typed);
     setNotice('');
+    setRanFormula(typed);
     const result = checkTask(level, task.id, typed, filled);
     clearTaskResults(activeCells);
     if (result.cells.length === 0) {
@@ -197,7 +202,10 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
     setRunning(false);
     setFormula('');
     setDialog(null);
-    if (!complete) clearTaskResults(activeCells);
+    if (!complete) {
+      clearTaskResults(activeCells);
+      setRanFormula('');
+    }
     focusInput();
   }
 
@@ -276,7 +284,11 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
         </div>
 
         <div className="lg:col-span-2 xl:col-span-1">
-          <Scoreboard level={level} results={results} formats={formats} />
+          {scene ? (
+            <SceneCard kind={scene} level={level} results={results} running={running} formats={formats} formula={ranFormula} />
+          ) : (
+            <Scoreboard level={level} results={results} formats={formats} />
+          )}
         </div>
       </div>
 

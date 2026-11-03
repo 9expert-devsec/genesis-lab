@@ -1,5 +1,6 @@
 import { ARITY } from '../engine/parse.js';
 import { expandRange, parseRef } from '../engine/refs.js';
+import { SCENE_KINDS } from '../game/scene.js';
 
 /**
  * Structural check for one level. Returns a list of human-readable problems;
@@ -92,6 +93,14 @@ export function validateLevel(level) {
         if (!expandRange(k)) problems.push(`format key "${k}" is not a ref or range`);
         if (!FORMATS.has(v)) problems.push(`format "${v}" for ${k} is not one of ${[...FORMATS].join(', ')}`);
       }
+    }
+  }
+
+  // Optional simulator scene. Scenes act out one fill-down task row by row.
+  if (level.scene !== undefined) {
+    if (!SCENE_KINDS.includes(level.scene)) problems.push(`scene "${level.scene}" is not one of ${SCENE_KINDS.join(', ')}`);
+    else if (!Array.isArray(level.tasks) || level.tasks.length !== 1 || !level.tasks[0]?.fill) {
+      problems.push('a scene level must have exactly one fill-down task');
     }
   }
 
