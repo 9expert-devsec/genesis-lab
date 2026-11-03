@@ -277,7 +277,7 @@ export function RegisterWizard({
       // The registration exists — the one moment register_public is true.
       // Not on step 3's mount, which a refresh repeats.
       trackRegisterPublic({
-        formType: "public_quote",
+        formType: "public",
         registrationId: body.registrationId,
         courseCode: formData.courseCode || formData.courseId,
         attendeeCount: formData.attendeesCount,

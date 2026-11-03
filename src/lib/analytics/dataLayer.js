@@ -115,10 +115,20 @@ function alreadySent(key) {
   return false;
 }
 
+/**
+ * True the FIRST time `event` + `key` is claimed in this tab, false after.
+ * The once-guard every deduped sender shares, so a dataLayer push and its Meta
+ * twin fire together or not at all. A missing key always claims (true): no id
+ * to dedupe on is not a reason to drop the event.
+ */
+export function claimOnce(event, key) {
+  if (typeof window === 'undefined' || !key) return true;
+  return !alreadySent(`${event}:${key}`);
+}
+
 /** pushEvent, at most once per `key` per tab. */
 export function pushEventOnce(key, event, params = {}) {
-  if (typeof window === 'undefined' || !key) return pushEvent(event, params);
-  if (alreadySent(`${event}:${key}`)) return;
+  if (!claimOnce(event, key)) return;
   pushEvent(event, params);
 }
 
@@ -128,22 +138,25 @@ export function pushEventOnce(key, event, params = {}) {
  * pushes, so without the reset a second ecommerce event in the same page would
  * inherit the previous one's items.
  *
- * Once per transaction id per tab — see alreadySent.
+ * Once per transaction id per tab — see alreadySent. Returns true when this
+ * call is the one that sent it, so a caller can send the same purchase to
+ * other destinations under the SAME dedupe decision.
  */
 export function pushPurchase({ transactionId, value, currency = DEFAULT_CURRENCY, items = [], paymentMethod, formType }) {
-  if (typeof window === 'undefined' || !transactionId) return;
-  if (alreadySent(`purchase:${transactionId}`)) return;
+  if (typeof window === 'undefined' || !transactionId) return false;
+  if (alreadySent(`purchase:${transactionId}`)) return false;
   try {
     window.dataLayer = window.dataLayer || [];
     window.dataLayer.push({ ecommerce: null });
   } catch {
-    return;
+    /* the event below still goes; pushEvent never throws */
   }
   pushEvent(EVENTS.purchase, {
     ecommerce: { transaction_id: String(transactionId), value, currency, items },
     payment_method: paymentMethod,
     form_type: formType,
   });
+  return true;
 }
 
 /**

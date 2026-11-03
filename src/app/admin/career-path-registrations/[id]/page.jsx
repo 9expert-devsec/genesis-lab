@@ -9,7 +9,7 @@ import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { typedAttendeeRows } from '@/lib/registration/careerPathRoster';
 import { isTransfer } from '@/lib/career-paths/prerequisiteOrder';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
-import { attributionSummary } from '@/lib/attribution/attribution';
+import { attributionSummary, ATTRIBUTION_EMPTY_LABEL } from '@/lib/attribution/attribution';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'รายละเอียดการลงทะเบียน' };
@@ -274,10 +274,16 @@ function Row({ label, value }) {
   );
 }
 
-/** ที่มา — see attributionSummary. Nothing at all for a record without it. */
+/** ที่มา — see attributionSummary. A record without it says so. */
 function AttributionSection({ attribution }) {
   const summary = attributionSummary(attribution);
-  if (!summary) return null;
+  if (!summary) {
+    return (
+      <Section title="ที่มา">
+        <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">{ATTRIBUTION_EMPTY_LABEL}</p>
+      </Section>
+    );
+  }
   return (
     <Section title="ที่มา">
       {summary.rows.map((row) => (

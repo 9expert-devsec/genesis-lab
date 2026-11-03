@@ -55,7 +55,7 @@ import {
   DETAIL_FIELD_VALUE,
 } from './detailShell';
 import { readNotes } from '@/lib/registrations/internalNotes';
-import { attributionSummary } from '@/lib/attribution/attribution';
+import { attributionSummary, ATTRIBUTION_EMPTY_LABEL } from '@/lib/attribution/attribution';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -2941,14 +2941,20 @@ function ConsentLine({ ok, label }) {
 /**
  * ที่มา — which campaign or referrer brought this registration in.
  *
- * Read-only and rendered only when the record has attribution; every record
- * filed before the field existed shows no card rather than an empty one. The
- * rows come from attributionSummary, the one display model the four
- * registration detail views share.
+ * Read-only. A record filed before the field existed still gets the card,
+ * saying so in ATTRIBUTION_EMPTY_LABEL, so "nothing captured" is visible as a
+ * fact rather than as a missing card. The rows come from attributionSummary,
+ * the one display model the four registration detail views share.
  */
 function AttributionCard({ attribution }) {
   const summary = attributionSummary(attribution);
-  if (!summary) return null;
+  if (!summary) {
+    return (
+      <SectionCard icon={Megaphone} title="ที่มา">
+        <p className="text-sm text-[var(--text-muted)]">{ATTRIBUTION_EMPTY_LABEL}</p>
+      </SectionCard>
+    );
+  }
   return (
     <SectionCard icon={Megaphone} title="ที่มา">
       <DL>

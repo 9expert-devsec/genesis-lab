@@ -24,7 +24,7 @@ import {
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { siteTodayKey } from '@/lib/articlePublishTime';
 import { isTransfer, resolveSubmittedPicks } from '@/lib/career-paths/prerequisiteOrder';
-import { buildAttribution } from '@/lib/attribution/attribution';
+import { careerPathCreatePayload } from '@/lib/registration/careerPathPayload';
 
 const ADMIN_PATH = '/admin/career-path-registrations';
 
@@ -96,14 +96,9 @@ export async function createCareerPathRegistration(data) {
   // than spread into the call so the create below stays `create(data)`, which
   // test/fs/registrationNoteFieldWiring pins (no note rule of its own here).
   //
-  // `attribution` is REPLACED, never passed through: this action takes any
-  // payload, and buildAttribution is the only thing allowed to decide what is
-  // stored. undefined when nothing usable was sent, which Mongoose skips.
-  data = {
-    ...data,
-    selectedCourses: resolved.selectedCourses,
-    attribution: buildAttribution(data?.attribution),
-  };
+  // `attribution` is REPLACED, never passed through — see careerPathCreatePayload,
+  // which is pure so test/fs/attributionReachesCreate can execute it.
+  data = careerPathCreatePayload(data, resolved.selectedCourses);
   const doc = await CareerPathRegistration.create(data);
   revalidatePath(ADMIN_PATH);
 

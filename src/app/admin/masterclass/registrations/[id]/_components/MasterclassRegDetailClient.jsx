@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { formatTHB } from '@/lib/pricing';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { refNo } from '@/lib/refNo';
-import { attributionSummary } from '@/lib/attribution/attribution';
+import { attributionSummary, ATTRIBUTION_EMPTY_LABEL } from '@/lib/attribution/attribution';
 import { withListQuery } from '@/lib/masterclass/registrationListQuery';
 import {
   updateMasterclassRegistrationStatus,
@@ -607,10 +607,16 @@ function Row({ label, value }) {
   );
 }
 
-/** ที่มา — see attributionSummary. Nothing at all for a record without it. */
+/** ที่มา — see attributionSummary. A record without it says so. */
 function AttributionCard({ attribution }) {
   const summary = attributionSummary(attribution);
-  if (!summary) return null;
+  if (!summary) {
+    return (
+      <Card title="ที่มา">
+        <p className="text-sm italic text-[var(--text-muted)]">{ATTRIBUTION_EMPTY_LABEL}</p>
+      </Card>
+    );
+  }
   return (
     <Card title="ที่มา">
       {summary.rows.map((row) => (

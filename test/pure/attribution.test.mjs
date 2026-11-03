@@ -7,6 +7,7 @@ import {
   buildAttribution,
   attributionField,
   attributionSummary,
+  ATTRIBUTION_EMPTY_LABEL,
   CHANNELS,
   FIRST_TOUCH_TTL_DAYS,
 } from '@/lib/attribution/attribution';
@@ -22,10 +23,10 @@ import {
 const NOW = new Date('2026-11-03T03:00:00.000Z');
 const DAY = 24 * 60 * 60 * 1000;
 const at = (daysAgo) => new Date(NOW.getTime() - daysAgo * DAY);
-const SITE = 'https://www.9expert.co.th';
+const SITE = 'https://www.9experttraining.com';
 
 const touch = (href, referrer = '', now = NOW) =>
-  readTouch({ href: `${SITE}${href}`, referrer, ownHost: 'www.9expert.co.th', now });
+  readTouch({ href: `${SITE}${href}`, referrer, ownHost: 'www.9experttraining.com', now });
 
 // ── readTouch ──────────────────────────────────────────────────────────────
 
@@ -49,9 +50,21 @@ test('referrer: external host kept (www stripped), path never stored', () => {
   assert.equal(JSON.stringify(t).includes('power+bi'), false);
 });
 
-test('referrer: own site and any 9expert subdomain are not a source', () => {
-  assert.equal(touch('/', 'https://www.9expert.co.th/schedule').referrer_host, undefined);
-  assert.equal(touch('/', 'https://shop.9expert.co.th/').referrer_host, undefined);
+test('referrer: the host the page is served from is not a source (www ignored both sides)', () => {
+  const own = (href, referrer) =>
+    readTouch({ href: `https://www.9experttraining.com${href}`, referrer, ownHost: 'www.9experttraining.com', now: NOW });
+  assert.equal(own('/', 'https://www.9experttraining.com/schedule').referrer_host, undefined);
+  assert.equal(own('/', 'https://9experttraining.com/schedule').referrer_host, undefined);
+});
+
+test('referrer: the CORPORATE site 9expert.co.th is external — a Referral, counted', () => {
+  const own = (referrer) =>
+    readTouch({ href: 'https://www.9experttraining.com/', referrer, ownHost: 'www.9experttraining.com', now: NOW });
+  for (const ref of ['https://www.9expert.co.th/about', 'https://9expert.co.th/']) {
+    const t = own(ref);
+    assert.equal(t.referrer_host, '9expert.co.th', ref);
+    assert.equal(classifyChannel(t), 'Referral', ref);
+  }
 });
 
 test('referrer: payment return legs and Omise are not a source', () => {
@@ -179,6 +192,24 @@ test('server: non-strings, arrays and huge values are neutralised', () => {
   assert.equal(out.channel, 'Other Campaign');
 });
 
+test('server: ASCII control characters are stripped from every value', () => {
+  const out = buildAttribution({
+    last: { utm_source: 'line\u0000\u0007', utm_campaign: '\u001Bnov\u007F', referrer_host: 'a.com\n' },
+  }, NOW);
+  assert.equal(out.last.utm_source, 'line');
+  assert.equal(out.last.utm_campaign, 'nov');
+  assert.equal(out.last.referrer_host, 'a.com');
+});
+
+test('server: captured_at more than 5 minutes ahead of the server clock is dropped', () => {
+  const at = (ms) => new Date(NOW.getTime() + ms).toISOString();
+  const keep = buildAttribution({ last: { utm_source: 'a', captured_at: at(4 * 60 * 1000) } }, NOW);
+  const drop = buildAttribution({ last: { utm_source: 'a', captured_at: at(6 * 60 * 1000) } }, NOW);
+  assert.ok(keep.last.captured_at instanceof Date);
+  assert.equal(drop.last.captured_at, undefined);
+  assert.equal(drop.last.utm_source, 'a', 'the rest of the touch survives');
+});
+
 test('server: last falls back to first when only first was sent', () => {
   const out = buildAttribution({ first: { referrer_host: 'Google.com' } });
   assert.equal(out.last.referrer_host, 'google.com');
@@ -207,4 +238,18 @@ test('summary: headline is channel / source / campaign of the last touch', () =>
   });
   assert.equal(s.headline, 'Email / test / gtm_check');
   assert.equal(s.rows.find((r) => r.label === 'First touch').value, 'google.com');
+});
+
+test('summary: click ids are PRESENCE only — the value never reaches the card', () => {
+  const s = attributionSummary({
+    first: { fbclid: 'IwAR-secret-fbclid-value' },
+    last: { gclid: 'Cj0KCQ-secret-gclid-value' },
+    channel: 'Paid Search',
+  });
+  assert.equal(s.rows.find((r) => r.label === 'Click ID').value, 'มี gclid, มี fbclid');
+  assert.equal(/secret/.test(JSON.stringify(s)), false);
+});
+
+test('summary: the empty-state label names why there is no data', () => {
+  assert.equal(ATTRIBUTION_EMPTY_LABEL, 'ไม่มีข้อมูล (ลงทะเบียนก่อนเริ่มเก็บข้อมูลที่มา)');
 });

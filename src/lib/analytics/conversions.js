@@ -21,12 +21,14 @@
 // silent and GTM fires Google's tags off the push. Meta is sent from here in
 // both modes (plan D6).
 //
-// The register* helpers at the bottom are dataLayer-ONLY. Those flows sent
-// nothing to any vendor before, and "no GTM id = no change" means they still
-// send nothing without one.
+// The register* helpers at the bottom send the dataLayer event AND a Meta
+// Lead. Meta is code-owned in both modes, so anything Meta should hear must be
+// sent from here — GTM never will. They send nothing to Google directly: in
+// gtag mode those flows never had a Google conversion (no Ads label exists for
+// them yet), and in GTM mode the container maps the dataLayer event.
 
 import { gtagEvent } from '@/lib/analytics/gtag';
-import { EVENTS, pushEvent, pushEventOnce, pushPurchase } from '@/lib/analytics/dataLayer';
+import { EVENTS, claimOnce, pushEvent, pushEventOnce, pushPurchase } from '@/lib/analytics/dataLayer';
 import {
   metaEventOptions,
   metaPixelTrack,
@@ -148,68 +150,108 @@ export function trackLandingView({ slug } = {}) {
   metaPixelTrack('ViewContent');
 }
 
-// ── Registration events: dataLayer only ──────────────────────────────────────
+// ── Registration events: dataLayer + Meta Lead ───────────────────────────────
 //
 // Fired by each flow AFTER its API reported the registration created — never
 // on the thank-you step's mount, which a refresh repeats and which a failed
 // write never reaches. Each is once per registration id per tab
-// (pushEventOnce). `leadChannel` is the channel the SERVER derived from the
+// (claimOnce). `leadChannel` is the channel the SERVER derived from the
 // stored attribution and returned in the response; it is what lets a GA4 count
 // be reconciled against the admin's records.
 
-/** Public registration — quote or paid. formType: 'public_quote' | 'public_paid'. */
-export function trackRegisterPublic({ formType, registrationId, courseCode, attendeeCount, value, leadChannel } = {}) {
-  pushEventOnce(registrationId, EVENTS.registerPublic, {
-    form_type: formType,
+/**
+ * One registration: the dataLayer event and a Meta Lead, under ONE dedupe
+ * decision — both or neither, once per registration id per tab.
+ *
+ * Meta Lead follows trackFormSubmitLead's rules: `eventID` is the same
+ * registration_id the dataLayer event carries (so a future Conversions API can
+ * deduplicate against it), and value/currency are sent only when the value is
+ * KNOWN — a Lead worth ฿0 and a Lead of unknown worth are different facts.
+ */
+function trackRegistration(event, params, { registrationId, value }) {
+  if (!claimOnce(event, registrationId)) return;
+  pushEvent(event, {
+    ...params,
     registration_id: registrationId,
+    ...(value != null ? { value, currency: DEFAULT_CURRENCY } : {}),
+  });
+  metaPixelTrack(
+    'Lead',
+    value != null ? { value, currency: DEFAULT_CURRENCY } : {},
+    metaEventOptions(registrationId),
+  );
+}
+
+/** Public registration. formType: 'public' (no online payment) | 'public_paid'. */
+export function trackRegisterPublic({ formType, registrationId, courseCode, attendeeCount, value, leadChannel } = {}) {
+  trackRegistration(EVENTS.registerPublic, {
+    form_type: formType,
     course_code: courseCode,
     attendee_count: attendeeCount,
-    ...(value != null ? { value, currency: DEFAULT_CURRENCY } : {}),
     lead_channel: leadChannel,
-  });
+  }, { registrationId, value });
 }
 
 /** A bundle quotation request — one event for the request, not one per leg. */
 export function trackRegisterBundle({ registrationId, bundleId, courseCodes, attendeeCount, value, leadChannel } = {}) {
-  pushEventOnce(registrationId, EVENTS.registerBundle, {
+  trackRegistration(EVENTS.registerBundle, {
     form_type: 'bundle',
-    registration_id: registrationId,
     bundle_id: bundleId,
     course_codes: courseCodes,
     course_code: Array.isArray(courseCodes) ? courseCodes.join(',') : undefined,
     attendee_count: attendeeCount,
-    ...(value != null ? { value, currency: DEFAULT_CURRENCY } : {}),
     lead_channel: leadChannel,
-  });
+  }, { registrationId, value });
 }
 
+/** In-house quotation request. No value: the price is quoted later, by hand. */
 export function trackRegisterInhouse({ registrationId, courseCode, attendeeCount, leadChannel } = {}) {
-  pushEventOnce(registrationId, EVENTS.registerInhouse, {
+  trackRegistration(EVENTS.registerInhouse, {
     form_type: 'inhouse',
-    registration_id: registrationId,
     course_code: courseCode,
     attendee_count: attendeeCount,
     lead_channel: leadChannel,
-  });
+  }, { registrationId });
 }
 
+/** Career path registration. No value: quoted later, by hand. */
 export function trackRegisterCareerPath({ registrationId, careerPath, leadChannel } = {}) {
-  pushEventOnce(registrationId, EVENTS.registerCareerPath, {
+  trackRegistration(EVENTS.registerCareerPath, {
     form_type: 'career_path',
-    registration_id: registrationId,
     career_path: careerPath,
     lead_channel: leadChannel,
-  });
+  }, { registrationId });
 }
 
 /**
- * A paid public registration. dataLayer only — the public flow never sent a
- * purchase to gtag or Meta, and still does not without GTM. Once per
- * transaction per tab, which is what keeps a refreshed step-3 from counting
- * the sale twice.
+ * A paid public registration — the dataLayer purchase, a Meta Purchase and,
+ * in gtag mode, the GA4 purchase, all under the dataLayer's once-per-
+ * transaction decision (pushPurchase returns false for a repeat), so a
+ * refreshed step-3 counts the sale nowhere twice.
+ *
+ * GA4 via gtagEvent: silent in GTM mode (the container maps the dataLayer
+ * event); in gtag mode it is what keeps a rollback from losing public
+ * purchases. NO Google Ads conversion — there is no label for public purchases
+ * yet; the label comes from marketing (plan D5) and is added in the container.
+ *
+ * Meta: `eventID` is the same transaction id the dataLayer event uses, as for
+ * masterclass. formType is 'public'; bundles take no payment (a quotation
+ * request only), so there is no bundle purchase to send.
  */
 export function trackPublicPurchase({ transactionId, value, method, items } = {}) {
-  pushPurchase({ transactionId, value, items: items ?? [], paymentMethod: method, formType: 'public' });
+  const sent = pushPurchase({ transactionId, value, items: items ?? [], paymentMethod: method, formType: 'public' });
+  if (!sent) return;
+  gtagEvent('purchase', {
+    currency: DEFAULT_CURRENCY,
+    value,
+    transaction_id: transactionId,
+    items: items ?? [],
+  });
+  metaPixelTrack(
+    'Purchase',
+    value != null ? { value, currency: DEFAULT_CURRENCY } : { currency: DEFAULT_CURRENCY },
+    metaEventOptions(transactionId),
+  );
 }
 
 /** A tel: / mailto: / LINE link click, anywhere on the site. */

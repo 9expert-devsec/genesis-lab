@@ -94,9 +94,17 @@ function hostMatches(host, list) {
   );
 }
 
+/**
+ * ASCII control characters (U+0000–U+001F, U+007F). Stripped from every value
+ * before it is stored or shown: a NUL or an escape sequence in a UTM is never a
+ * real campaign name, and the admin card renders these values verbatim.
+ */
+// eslint-disable-next-line no-control-regex -- matching them is the point
+const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
+
 function clean(value) {
   if (typeof value !== 'string') return '';
-  return value.trim().slice(0, MAX_VALUE);
+  return value.replace(CONTROL_CHARS, '').trim().slice(0, MAX_VALUE);
 }
 
 function hostOf(url) {
@@ -108,12 +116,24 @@ function hostOf(url) {
   }
 }
 
-/** Same site: identical host, or both under the same registrable 9expert domain. */
+/**
+ * Same site: the host the page is being served from, `www.` ignored on both
+ * sides (hostOf strips it from the referrer; it is stripped here from ours).
+ * That is the WHOLE self list — every other host is external.
+ *
+ * ── THE CORPORATE SITE IS A REFERRER, ON PURPOSE ─────────────────────────
+ * `9expert.co.th` / `www.9expert.co.th` is the company's corporate website, a
+ * different site from this one, and the team wants to count the leads it
+ * sends. So it is NOT treated as self: a visitor arriving from it is
+ * `referrer_host: 9expert.co.th` and classifies as Referral. No other
+ * `*.9expert.co.th` host takes part in a payment or login round-trip with this
+ * site, so none is listed; the round-trips that do exist (Omise, Google
+ * sign-in, the payment-return pages) are excluded above, by name.
+ */
 function isOwnHost(host, ownHost) {
   const own = String(ownHost ?? '').toLowerCase().replace(/^www\./, '');
   if (!host) return true;
-  if (host === own) return true;
-  return host === '9expert.co.th' || host.endsWith('.9expert.co.th');
+  return host === own;
 }
 
 /** Does this touch carry a campaign parameter or a click id? */
@@ -238,7 +258,14 @@ export function classifyChannel(touch) {
   return 'Direct';
 }
 
-function sanitizeTouch(raw) {
+/**
+ * How far ahead of the server clock a `captured_at` may be. A few minutes covers
+ * a visitor's clock running fast; anything later is not a time the visit could
+ * have happened, and is dropped rather than stored.
+ */
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+function sanitizeTouch(raw, now) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const out = {};
   for (const key of TOUCH_KEYS) {
@@ -248,15 +275,16 @@ function sanitizeTouch(raw) {
   }
   if (out.referrer_host) out.referrer_host = out.referrer_host.toLowerCase();
   const at = Date.parse(typeof raw.captured_at === 'string' ? raw.captured_at : '');
-  if (Number.isFinite(at)) out.captured_at = new Date(at);
+  if (Number.isFinite(at) && at <= now.getTime() + MAX_CLOCK_SKEW_MS) out.captured_at = new Date(at);
   return Object.keys(out).length ? out : null;
 }
 
 /**
  * The server's ONE entry point: whatever the browser sent → what is stored.
  *
- * Only known keys, strings only, capped, and the channel recomputed here —
- * a client-supplied `channel` is ignored. Returns `undefined` when there is
+ * Only known keys, strings only, control characters stripped, capped, a
+ * `captured_at` more than five minutes in the future dropped, and the channel
+ * recomputed here — a client-supplied `channel` is ignored. Returns `undefined` when there is
  * nothing usable, so callers spread it conditionally and an untracked
  * registration writes no key at all (the same convention `bundle` and
  * `earlyBird` follow on RegisterPublic).
@@ -264,11 +292,11 @@ function sanitizeTouch(raw) {
  * It never throws: attribution is not what the customer came for, and a
  * malformed blob must cost the registration nothing.
  */
-export function buildAttribution(raw) {
+export function buildAttribution(raw, now = new Date()) {
   try {
     if (!raw || typeof raw !== 'object') return undefined;
-    const first = sanitizeTouch(raw.first);
-    const last = sanitizeTouch(raw.last) ?? first;
+    const first = sanitizeTouch(raw.first, now);
+    const last = sanitizeTouch(raw.last, now) ?? first;
     if (!first && !last) return undefined;
     return {
       ...(first ? { first } : {}),
@@ -291,9 +319,15 @@ export function attributionField(raw) {
  * each render it inside their own card component.
  *
  * Returns null when the record has no attribution (every registration filed
- * before this field existed), and the views render nothing for null rather
- * than an empty card.
+ * before this field existed). The views still render the card for null, with
+ * ATTRIBUTION_EMPTY_LABEL as its only content — an absent card would read as a
+ * screen that forgot to show the field, not as "nothing was captured".
+ *
+ * Click ids are reported as PRESENCE only ("มี gclid"). The value identifies
+ * one ad click and nobody reading this card needs it.
  */
+export const ATTRIBUTION_EMPTY_LABEL = 'ไม่มีข้อมูล (ลงทะเบียนก่อนเริ่มเก็บข้อมูลที่มา)';
+
 export function attributionSummary(attribution) {
   if (!attribution || typeof attribution !== 'object') return null;
   const { first, last } = attribution;
@@ -312,7 +346,7 @@ export function attributionSummary(attribution) {
   };
   const headline = [channel, last?.utm_source, last?.utm_campaign].filter(Boolean).join(' / ');
   const clickIds = CLICK_ID_KEYS.filter((k) => last?.[k] || first?.[k])
-    .map((k) => `${k}=${String(last?.[k] || first?.[k]).slice(0, 24)}…`)
+    .map((k) => `มี ${k}`)
     .join(', ');
   return {
     headline,
