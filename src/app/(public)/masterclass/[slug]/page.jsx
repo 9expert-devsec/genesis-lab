@@ -81,37 +81,18 @@ export async function generateMetadata({ params }) {
   }
 
   /**
-   * THE LIVE TITLE. Two values, because two consumers — the same split, for the
-   * same reason, as the not-found branch above.
+   * THE LIVE TITLE — the course title alone. The root layout's template
+   * ("%s | <brand>") appends the brand once. No "Masterclass" segment: many
+   * masterclass titles already contain the word, so a segment would repeat it.
    *
-   * ── THE BRAND APPEARED TWICE, ON EVERY MASTERCLASS DETAIL PAGE ─────────────
-   * This was one string, "<title_th> | Masterclass — 9Expert Training", used for
-   * metadata.title AND openGraph.title AND twitter.title. The root layout's
-   * template is "%s | <brand>", so the served <title> read, MEASURED on a
-   * production build:
-   *
-   *     Claude AI for Data Analyst | Masterclass — 9Expert Training | 9Expert Training
-   *
-   * Unlike the not-found branch above — whose metadata Next discards when the
-   * segment calls notFound(), so its identical defect was latent — THIS one
-   * shipped, on every published masterclass. It now renders
-   *
-   *     Claude AI for Data Analyst | Masterclass | 9Expert Training
-   *
-   * The brand belongs to the template and appears once. The segment is
-   * MASTERCLASS_TITLE, the same constant /masterclass's metadata.title,
-   * CollectionPage.name and the not-found branch read, so the four are ONE
-   * spelling rather than four that happen to agree.
-   *
-   * ── WHY og/twitter GET shareTitle AND NOT title ───────────────────────────
-   * No template applies to them: the root sets openGraph.title as a plain
-   * string, so a page-level one REPLACES it outright and the un-composed value
-   * would ship a card with no brand on it at all. shareTitle is the string the
-   * <title> resolves to, composed once — the same construction the not-found
-   * branch and lib/seo/masterclassListJsonLd's CollectionPage.name use.
+   * og/twitter get shareTitle, not title: no template applies to them (the
+   * root sets openGraph.title as a plain string, which a page-level one
+   * replaces), so the brand is composed in here — the same string the <title>
+   * resolves to. lib/masterclass/generateJsonLd names the Course node with the
+   * course title alone as well.
    */
-  const title = `${course.title_th} | ${MASTERCLASS_TITLE}`;
-  const shareTitle = `${title} | ${siteConfig.name}`;
+  const title = course.title_th;
+  const shareTitle = `${course.title_th} | ${siteConfig.name}`;
   const description = course.subtitle_th || '';
   /**
    * THE canonical, from the shared function — the same one

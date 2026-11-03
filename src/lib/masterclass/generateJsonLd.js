@@ -81,7 +81,9 @@ export function generateMasterclassJsonLd(course, instructors, faqs, siteUrl) {
      * own tag and the `@id` above minus the fragment.
      */
     url: courseUrl,
-    name: `${course.title_th} | Masterclass`,
+    // The course title alone, as the page's <title> (before the template's
+    // brand) — many masterclass titles already contain "Masterclass".
+    name: course.title_th,
     description: course.subtitle_th || '',
     courseCode: course.course_code || '',
     educationalCredentialAwarded: 'e-Certificate',
