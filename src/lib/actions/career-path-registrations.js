@@ -136,7 +136,9 @@ export async function createCareerPathRegistration(data) {
    */
   await sendCareerPathRegistrationEmail(doc.toObject());
 
-  return { ok: true, id: String(doc._id) };
+  // `leadChannel` — the server-derived channel, for the client's
+  // register_career_path dataLayer event.
+  return { ok: true, id: String(doc._id), leadChannel: doc.attribution?.channel ?? null };
 }
 
 export async function getCareerPathRegistrations({

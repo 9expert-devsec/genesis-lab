@@ -44,6 +44,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { withAttribution } from "@/lib/attribution/attributionStore";
+import { trackPublicPurchase, trackRegisterPublic } from "@/lib/analytics/conversions";
 // ADDED beside the statements above rather than folded into any — the
 // standing rule in this repo. One cap and one placeholder for every flow's note.
 import { CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_PLACEHOLDER, customerNoteCounterLabel } from "@/lib/registration/noteField";
@@ -273,6 +274,16 @@ export function RegisterWizard({
         setSubmitting(false);
         return;
       }
+      // The registration exists — the one moment register_public is true.
+      // Not on step 3's mount, which a refresh repeats.
+      trackRegisterPublic({
+        formType: "public_quote",
+        registrationId: body.registrationId,
+        courseCode: formData.courseCode || formData.courseId,
+        attendeeCount: formData.attendeesCount,
+        value: pricing?.total,
+        leadChannel: body.leadChannel,
+      });
       // Draft + confirmed payload are consumed; persist the result so the
       // step-3 route can render it.
       try {
@@ -304,6 +315,23 @@ export function RegisterWizard({
   // and advance to the step-3 receipt screen.
   const handlePaid = useCallback(
     (paid) => {
+      // Called only when a charge has actually settled (card, PromptPay poll),
+      // never by step 3 itself. The transaction id is the เลขอ้างอิง — the
+      // 3-D Secure return page derives the same one from the registration id,
+      // so the two paths cannot count one sale under two ids.
+      trackPublicPurchase({
+        transactionId: paid?.referenceNumber,
+        value: paid?.amount,
+        method: paid?.method,
+        items: [
+          {
+            item_id: formData?.courseCode || formData?.courseId,
+            item_name: course?.course_name,
+            price: pricing?.pricePerSeat,
+            quantity: formData?.attendeesCount ?? 1,
+          },
+        ],
+      });
       try {
         sessionStorage.removeItem(STORAGE_KEY);
       } catch {}
@@ -322,7 +350,7 @@ export function RegisterWizard({
       router.push(stepHref(3));
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
-    [formData, router, stepHref],
+    [formData, router, stepHref, course, pricing],
   );
 
   return (

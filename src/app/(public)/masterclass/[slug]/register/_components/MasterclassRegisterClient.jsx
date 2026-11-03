@@ -1133,6 +1133,8 @@ export function MasterclassRegisterClient({ course, batch, step = 1 }) {
       trackFormSubmitLead({
         value: pricing?.total,
         transactionId: data.registrationId,
+        courseCode: course?.slug,
+        leadChannel: data.leadChannel,
       });
     }
 

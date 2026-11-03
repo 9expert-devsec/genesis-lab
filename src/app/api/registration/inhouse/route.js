@@ -154,5 +154,8 @@ export async function POST(req) {
     ok: true,
     referenceNumber,
     registrationId: String(doc._id),
+    // The channel the server derived from the stored attribution, for the
+    // client's dataLayer event — so a GA4 count can be reconciled with this row.
+    leadChannel: doc.attribution?.channel ?? null,
   });
 }

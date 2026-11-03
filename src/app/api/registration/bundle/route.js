@@ -509,6 +509,13 @@ export async function POST(req) {
     referenceNumber: refNo(requestId),
     requestId: String(requestId),
     legCount: created.length,
+    /**
+     * For the client's ONE register_bundle event: the courses as COMMITTED,
+     * and the channel the server derived. Every leg carries the same
+     * attribution copy, so any leg's channel is the request's.
+     */
+    courseCodes: created.map((leg) => leg.courseId),
+    leadChannel: created[0]?.attribution?.channel ?? null,
   });
 }
 

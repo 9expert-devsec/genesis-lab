@@ -54,6 +54,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { BundleTermsModal } from '@/components/registration/BundleTermsModal';
 import { withAttribution } from '@/lib/attribution/attributionStore';
+import { trackRegisterBundle } from '@/lib/analytics/conversions';
 import { BUNDLE_TERMS_TITLE } from '@/lib/registration/bundleTerms';
 
 /**
@@ -551,6 +552,20 @@ export function BundleWizard({
       const json = await res.json().catch(() => null);
 
       if (res.ok && json?.ok) {
+        /*
+          ONE event for the request, not one per leg. A preview run wrote
+          nothing (`json.preview`), so it reports nothing.
+        */
+        if (!json.preview) {
+          trackRegisterBundle({
+            registrationId: json.requestId,
+            bundleId: `${pageId}:${sectionId}`,
+            courseCodes: json.courseCodes,
+            attendeeCount: formData?.attendeesCount,
+            value: typeof netPrice === 'number' ? netPrice : undefined,
+            leadChannel: json.leadChannel,
+          });
+        }
         try {
           sessionStorage.removeItem(STORAGE_KEY);
         } catch {}

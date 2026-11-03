@@ -4,6 +4,8 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { XCircle, Loader2 } from 'lucide-react';
 import { SuccessPulseIcon } from '@/components/ui/SuccessPulseIcon';
+import { trackPublicPurchase } from '@/lib/analytics/conversions';
+import { refNo } from '@/lib/refNo';
 
 /**
  * Return page after the Omise 3DS / bank redirect for a PUBLIC registration.
@@ -46,6 +48,14 @@ function PaymentCompleteInner() {
         const body = await res.json().catch(() => ({}));
         if (body?.status === 'paid') {
           clearInterval(timer);
+          // The 3-D Secure path's purchase. Keyed on refNo(registrationId) —
+          // the same เลขอ้างอิง the in-wizard path uses — and once per tab, so
+          // a refresh of this page does not count the sale again.
+          trackPublicPurchase({
+            transactionId: refNo(registrationId),
+            value: body.purchase?.value,
+            method: body.purchase?.method,
+          });
           setStatus('paid');
         } else if (body?.paymentStatus === 'failed') {
           clearInterval(timer);

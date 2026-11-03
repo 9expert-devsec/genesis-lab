@@ -13,8 +13,20 @@
 // gtagEvent has, and a busier one in practice: gtag.js loads for everyone under
 // Consent Mode advanced, while fbevents.js is only there for a visitor who
 // granted marketing consent. See src/lib/analytics/metaPixel.js.
+//
+// ── AND THE dataLayer CONTRACT IS PUSHED FROM HERE TOO ──────────────────────
+// Each helper also pushes its business event (src/lib/analytics/dataLayer.js),
+// in both analytics modes. Without NEXT_PUBLIC_GTM_ID the push is inert and the
+// gtag calls below do the work, exactly as before; with it, gtagEvent is
+// silent and GTM fires Google's tags off the push. Meta is sent from here in
+// both modes (plan D6).
+//
+// The register* helpers at the bottom are dataLayer-ONLY. Those flows sent
+// nothing to any vendor before, and "no GTM id = no change" means they still
+// send nothing without one.
 
 import { gtagEvent } from '@/lib/analytics/gtag';
+import { EVENTS, pushEvent, pushEventOnce, pushPurchase } from '@/lib/analytics/dataLayer';
 import {
   metaEventOptions,
   metaPixelTrack,
@@ -28,7 +40,7 @@ import {
 
 // GA4 purchase event + Google Ads purchase conversion, fired together.
 // method: 'credit_card' | 'promptpay'
-export function trackPurchase({ method, value, transactionId, items }) {
+export function trackPurchase({ method, value, transactionId, items, formType = 'masterclass' }) {
   const label =
     method === 'credit_card'
       ? ADS_CONVERSION_LABELS.masterclassCard
@@ -48,6 +60,9 @@ export function trackPurchase({ method, value, transactionId, items }) {
     currency: DEFAULT_CURRENCY,
     transaction_id: transactionId,
   });
+  // The contract's purchase — GTM's GA4 purchase and Ads card/QR conversions
+  // fire off this, split by payment_method. Once per transaction per tab.
+  pushPurchase({ transactionId, value, items: items ?? [], paymentMethod: method, formType });
   /*
    * Meta Purchase. `eventID` carries the SAME transaction id the Ads
    * conversion above uses, so if a Conversions API is ever added server-side
@@ -67,7 +82,7 @@ export function trackPurchase({ method, value, transactionId, items }) {
 }
 
 // Form-submit lead — fired once when a registration is created (before payment).
-export function trackFormSubmitLead({ value, transactionId } = {}) {
+export function trackFormSubmitLead({ value, transactionId, courseCode, leadChannel } = {}) {
   gtagEvent('conversion', {
     send_to: adsSendTo(ADS_CONVERSION_LABELS.masterclassFormSubmit),
     ...(value != null ? { value, currency: DEFAULT_CURRENCY } : {}),
@@ -76,6 +91,13 @@ export function trackFormSubmitLead({ value, transactionId } = {}) {
   // GA4 standard lead event (nice for funnels)
   gtagEvent('generate_lead', {
     ...(value != null ? { value, currency: DEFAULT_CURRENCY } : {}),
+  });
+  pushEventOnce(transactionId, EVENTS.registerMasterclass, {
+    form_type: 'masterclass',
+    registration_id: transactionId,
+    course_code: courseCode,
+    ...(value != null ? { value, currency: DEFAULT_CURRENCY } : {}),
+    lead_channel: leadChannel,
   });
   /*
    * Meta Lead. value/currency are OMITTED rather than sent as null when the
@@ -96,6 +118,7 @@ export function trackDownload({ fileName } = {}) {
     send_to: adsSendTo(ADS_CONVERSION_LABELS.masterclassDownload),
   });
   gtagEvent('file_download', { file_name: fileName ?? 'course_outline' }); // GA4
+  pushEvent(EVENTS.fileDownload, { file_name: fileName ?? 'course_outline' });
   /*
    * trackCustom, not track: there is no standard Meta event for "downloaded a
    * document". A standard event bent to fit (Lead, ViewContent) would land in
@@ -109,10 +132,11 @@ export function trackDownload({ fileName } = {}) {
 }
 
 // Landing-page view conversion (scoped to a specific landing slug by the caller).
-export function trackLandingView() {
+export function trackLandingView({ slug } = {}) {
   gtagEvent('conversion', {
     send_to: adsSendTo(ADS_CONVERSION_LABELS.masterclassLanding),
   });
+  pushEvent(EVENTS.viewLanding, { landing_slug: slug });
   /*
    * ViewContent, with no parameters. Meta's ViewContent accepts
    * content_ids/content_type for catalogue matching; there is no Meta
@@ -122,4 +146,73 @@ export function trackLandingView() {
    * page we buy traffic for".
    */
   metaPixelTrack('ViewContent');
+}
+
+// ── Registration events: dataLayer only ──────────────────────────────────────
+//
+// Fired by each flow AFTER its API reported the registration created — never
+// on the thank-you step's mount, which a refresh repeats and which a failed
+// write never reaches. Each is once per registration id per tab
+// (pushEventOnce). `leadChannel` is the channel the SERVER derived from the
+// stored attribution and returned in the response; it is what lets a GA4 count
+// be reconciled against the admin's records.
+
+/** Public registration — quote or paid. formType: 'public_quote' | 'public_paid'. */
+export function trackRegisterPublic({ formType, registrationId, courseCode, attendeeCount, value, leadChannel } = {}) {
+  pushEventOnce(registrationId, EVENTS.registerPublic, {
+    form_type: formType,
+    registration_id: registrationId,
+    course_code: courseCode,
+    attendee_count: attendeeCount,
+    ...(value != null ? { value, currency: DEFAULT_CURRENCY } : {}),
+    lead_channel: leadChannel,
+  });
+}
+
+/** A bundle quotation request — one event for the request, not one per leg. */
+export function trackRegisterBundle({ registrationId, bundleId, courseCodes, attendeeCount, value, leadChannel } = {}) {
+  pushEventOnce(registrationId, EVENTS.registerBundle, {
+    form_type: 'bundle',
+    registration_id: registrationId,
+    bundle_id: bundleId,
+    course_codes: courseCodes,
+    course_code: Array.isArray(courseCodes) ? courseCodes.join(',') : undefined,
+    attendee_count: attendeeCount,
+    ...(value != null ? { value, currency: DEFAULT_CURRENCY } : {}),
+    lead_channel: leadChannel,
+  });
+}
+
+export function trackRegisterInhouse({ registrationId, courseCode, attendeeCount, leadChannel } = {}) {
+  pushEventOnce(registrationId, EVENTS.registerInhouse, {
+    form_type: 'inhouse',
+    registration_id: registrationId,
+    course_code: courseCode,
+    attendee_count: attendeeCount,
+    lead_channel: leadChannel,
+  });
+}
+
+export function trackRegisterCareerPath({ registrationId, careerPath, leadChannel } = {}) {
+  pushEventOnce(registrationId, EVENTS.registerCareerPath, {
+    form_type: 'career_path',
+    registration_id: registrationId,
+    career_path: careerPath,
+    lead_channel: leadChannel,
+  });
+}
+
+/**
+ * A paid public registration. dataLayer only — the public flow never sent a
+ * purchase to gtag or Meta, and still does not without GTM. Once per
+ * transaction per tab, which is what keeps a refreshed step-3 from counting
+ * the sale twice.
+ */
+export function trackPublicPurchase({ transactionId, value, method, items } = {}) {
+  pushPurchase({ transactionId, value, items: items ?? [], paymentMethod: method, formType: 'public' });
+}
+
+/** A tel: / mailto: / LINE link click, anywhere on the site. */
+export function trackContactClick({ method, pagePath } = {}) {
+  pushEvent(EVENTS.contactClick, { contact_method: method, page_path: pagePath });
 }

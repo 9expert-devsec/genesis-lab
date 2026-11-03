@@ -143,6 +143,7 @@ export async function POST(req) {
       method,
       referenceNumber,
       registrationId: String(doc._id),
+      leadChannel: doc.attribution?.channel ?? null,
       chargeId: charge.id,
       qrUrl: getPromptPayQrUrl(charge),
       amount: pricing.total,
@@ -157,6 +158,8 @@ export async function POST(req) {
     method,
     referenceNumber,
     registrationId: String(doc._id),
+    // See the quote route: the server-derived channel, for the dataLayer.
+    leadChannel: doc.attribution?.channel ?? null,
     chargeId: charge.id,
     amount: pricing.total,
     paid,

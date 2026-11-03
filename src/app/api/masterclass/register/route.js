@@ -139,7 +139,13 @@ export async function POST(req) {
       }
     }
 
-    return NextResponse.json({ ok: true, registrationId: String(reg._id), referenceNumber });
+    return NextResponse.json({
+      ok: true,
+      registrationId: String(reg._id),
+      referenceNumber,
+      // Server-derived channel for the client's register_masterclass event.
+      leadChannel: reg.attribution?.channel ?? null,
+    });
   } catch (err) {
     console.error('[POST /api/masterclass/register]', err);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
