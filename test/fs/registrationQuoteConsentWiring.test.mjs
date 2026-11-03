@@ -58,7 +58,9 @@ test('handleConfirm accepts a consent argument', () => {
 
 test('handleConfirm merges consent into the POST body', () => {
   assert.ok(
-    flat(WIZARD).includes('JSON.stringify(consent ? { ...formData, consent } : formData)'),
+    // Wrapped in withAttribution since the attribution round — the consent
+    // merge inside it is what this hop pins.
+    flat(WIZARD).includes('JSON.stringify(withAttribution(consent ? { ...formData, consent } : formData))'),
     'expected the body to carry consent when present',
   );
 });

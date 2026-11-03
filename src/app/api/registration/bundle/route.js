@@ -357,6 +357,9 @@ export async function POST(req) {
     attendees,
     bundle,
     ipAddress,
+    // Raw — the shared bundle schema does not carry it; the leg builder
+    // sanitises it once and gives every leg the same copy.
+    attribution: body?.attribution,
   });
   if (!built.ok) return refusal('unresolved_items');
 

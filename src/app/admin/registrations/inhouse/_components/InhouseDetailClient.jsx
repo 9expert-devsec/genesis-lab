@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Trash2, Check, X, Copy, Building2, GraduationCap, CalendarClock,
-  Receipt, MessageSquare, StickyNote, Database, ClipboardList, History,
+  Receipt, MessageSquare, StickyNote, Database, ClipboardList, History, Megaphone,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { withListQuery } from '@/lib/registrations/listQuery';
@@ -52,6 +52,7 @@ import {
   LegacyInvoiceAddressRow,
 } from '../../_components/detailShell';
 import { personCopyText } from '@/lib/registrations/copyText';
+import { attributionSummary } from '@/lib/attribution/attribution';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -1414,6 +1415,8 @@ export function InhouseDetailClient({ doc, courses = [], history = null, listQue
             />
           </SectionCard>
 
+          <AttributionCard attribution={doc.attribution} />
+
           <SystemCard icon={Database} title="ข้อมูลระบบ">
             {/*
               เลขอ้างอิง — MOVED HERE FROM THE HEADING. Same ruling as the public
@@ -1509,3 +1512,29 @@ function CourseList({ courses }) {
  * a salesperson the address is on their clipboard when it is not. The docstring
  * that used to be here, including the can-fail reasoning, went with it.
  */
+
+/**
+ * ที่มา — which campaign or referrer brought this registration in.
+ *
+ * Read-only and rendered only when the record has attribution; every record
+ * filed before the field existed shows no card rather than an empty one. The
+ * rows come from attributionSummary, the one display model the four
+ * registration detail views share.
+ */
+function AttributionCard({ attribution }) {
+  const summary = attributionSummary(attribution);
+  if (!summary) return null;
+  return (
+    <SectionCard icon={Megaphone} title="ที่มา">
+      <DL>
+        {summary.rows.map((row) => (
+          <DLRow
+            key={row.label}
+            label={row.label}
+            value={row.isDate ? (row.value ? fmtDate(row.value) : '') : row.value}
+          />
+        ))}
+      </DL>
+    </SectionCard>
+  );
+}

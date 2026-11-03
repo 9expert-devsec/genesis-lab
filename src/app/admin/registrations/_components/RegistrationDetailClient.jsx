@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Trash2, X, Plus, Pencil, Copy, GraduationCap, User, Users, Receipt,
-  CreditCard, StickyNote, Database, ClipboardList, History, Lock,
+  CreditCard, StickyNote, Database, ClipboardList, History, Lock, Megaphone,
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -55,6 +55,7 @@ import {
   DETAIL_FIELD_VALUE,
 } from './detailShell';
 import { readNotes } from '@/lib/registrations/internalNotes';
+import { attributionSummary } from '@/lib/attribution/attribution';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -1683,6 +1684,8 @@ export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], hi
             />
           </SectionCard>
 
+          <AttributionCard attribution={doc.attribution} />
+
           <SystemCard icon={Database} title="ข้อมูลระบบ">
             {/*
               เลขอ้างอิง — MOVED HERE FROM THE HEADING, and it is now the ONLY
@@ -2932,5 +2935,31 @@ function ConsentLine({ ok, label }) {
       <span className={ok ? 'text-emerald-600' : 'text-[var(--text-muted)]'}>{ok ? '✓' : '—'}</span>
       <span>{label}</span>
     </div>
+  );
+}
+
+/**
+ * ที่มา — which campaign or referrer brought this registration in.
+ *
+ * Read-only and rendered only when the record has attribution; every record
+ * filed before the field existed shows no card rather than an empty one. The
+ * rows come from attributionSummary, the one display model the four
+ * registration detail views share.
+ */
+function AttributionCard({ attribution }) {
+  const summary = attributionSummary(attribution);
+  if (!summary) return null;
+  return (
+    <SectionCard icon={Megaphone} title="ที่มา">
+      <DL>
+        {summary.rows.map((row) => (
+          <DLRow
+            key={row.label}
+            label={row.label}
+            value={row.isDate ? (row.value ? fmtDate(row.value) : '') : row.value}
+          />
+        ))}
+      </DL>
+    </SectionCard>
   );
 }

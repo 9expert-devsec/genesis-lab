@@ -24,6 +24,7 @@ import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatThaiAddress } from '@/lib/address/formatThaiAddress';
 import { cn } from '@/lib/utils';
 import { phoneInputProps } from '@/lib/registration/phoneInputProps';
+import { withAttribution } from '@/lib/attribution/attributionStore';
 import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 
 // ── Storage keys (mirror the Public wizard pattern) ────────────────
@@ -208,7 +209,7 @@ export function InhouseWizard({
       const res = await fetch('/api/registration/inhouse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(withAttribution(formData)),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {

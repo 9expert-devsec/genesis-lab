@@ -38,6 +38,7 @@ import { CardPanelFull } from "@/components/payment/CardPanelFull";
 import { Step2MobileBar } from "@/components/payment/Step2MobileBar";
 import { TermsModal } from "@/components/payment/TermsModal";
 import { trackPurchase, trackFormSubmitLead } from "@/lib/analytics/conversions";
+import { withAttribution } from "@/lib/attribution/attributionStore";
 
 const STORAGE_KEY = "masterclass-register-v1";
 // Each step is its own route, so the success result has to survive the
@@ -1109,7 +1110,7 @@ export function MasterclassRegisterClient({ course, batch, step = 1 }) {
     const res = await fetch("/api/masterclass/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(withAttribution(payload)),
     });
     const data = await res.json();
     if (!res.ok || !data.ok) {

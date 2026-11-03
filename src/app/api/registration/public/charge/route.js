@@ -66,6 +66,8 @@ export async function POST(req) {
     method,
     consent: data.consent,
     ipAddress,
+    // The raw body field; the zod schema does not carry it.
+    attribution: body?.attribution,
     supersedesRegistrationId,
   });
   const referenceNumber = refNo(doc._id);

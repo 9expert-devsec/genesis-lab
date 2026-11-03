@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { formatTHB } from '@/lib/pricing';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { refNo } from '@/lib/refNo';
+import { attributionSummary } from '@/lib/attribution/attribution';
 import { withListQuery } from '@/lib/masterclass/registrationListQuery';
 import {
   updateMasterclassRegistrationStatus,
@@ -244,6 +245,8 @@ export function MasterclassRegDetailClient({ reg, listQuery = '' }) {
             </>
           )}
         </Card>
+
+        <AttributionCard attribution={reg.attribution} />
 
       </div>
 
@@ -601,5 +604,22 @@ function Row({ label, value }) {
       <dt className="w-full text-xs font-medium uppercase tracking-wide text-[var(--text-muted)] sm:w-40 sm:flex-none">{label}</dt>
       <dd className="text-sm text-[var(--text-primary)] break-words">{value || '—'}</dd>
     </div>
+  );
+}
+
+/** ที่มา — see attributionSummary. Nothing at all for a record without it. */
+function AttributionCard({ attribution }) {
+  const summary = attributionSummary(attribution);
+  if (!summary) return null;
+  return (
+    <Card title="ที่มา">
+      {summary.rows.map((row) => (
+        <Row
+          key={row.label}
+          label={row.label}
+          value={row.isDate ? (row.value ? fmtDate(row.value) : '') : row.value}
+        />
+      ))}
+    </Card>
   );
 }

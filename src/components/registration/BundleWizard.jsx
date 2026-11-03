@@ -53,6 +53,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { BundleTermsModal } from '@/components/registration/BundleTermsModal';
+import { withAttribution } from '@/lib/attribution/attributionStore';
 import { BUNDLE_TERMS_TITLE } from '@/lib/registration/bundleTerms';
 
 /**
@@ -531,7 +532,7 @@ export function BundleWizard({
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify(withAttribution({
           ...formData,
           pageId,
           sectionId,
@@ -545,7 +546,7 @@ export function BundleWizard({
             ? { picks: Object.entries(picks).map(([itemId, roundId]) => ({ itemId, roundId })) }
             : {}),
           consent: consentFanOut(consented),
-        }),
+        })),
       });
       const json = await res.json().catch(() => null);
 

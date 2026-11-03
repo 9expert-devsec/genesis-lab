@@ -23,6 +23,7 @@ import { CardPanelFull } from "@/components/payment/CardPanelFull";
 import { QrPanelFull } from "@/components/payment/QrPanelFull";
 import { Step2MobileBar } from "@/components/payment/Step2MobileBar";
 import { TermsModal } from "@/components/payment/TermsModal";
+import { withAttribution } from "@/lib/attribution/attributionStore";
 import { AttendeeListView, InvoiceView, ReadOnlyRow } from "./PreviewRows";
 
 const CHARGE_URL = "/api/registration/public/charge";
@@ -183,7 +184,7 @@ export function ReviewAndPayStep({
     const res = await fetch(CHARGE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...data, ...extra, consent: consentPayload }),
+      body: JSON.stringify(withAttribution({ ...data, ...extra, consent: consentPayload })),
     });
     const body = await res.json().catch(() => ({}));
     return { ok: res.ok && body.ok, body };

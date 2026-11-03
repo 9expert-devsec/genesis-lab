@@ -113,7 +113,7 @@ export async function POST(req) {
   // Step 2 shows a consent checkbox on the quote path too, so the acceptance
   // is recorded here rather than being displayed and thrown away.
   const doc = await RegisterPublic.create(
-    buildQuoteRegistration({ data, attendees, ipAddress, earlyBird })
+    buildQuoteRegistration({ data, attendees, ipAddress, earlyBird, attribution: body?.attribution })
   );
 
   const referenceNumber = refNo(doc._id);

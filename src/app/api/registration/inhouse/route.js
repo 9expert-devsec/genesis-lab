@@ -8,6 +8,7 @@ import { getCourseByCode } from '@/lib/api/public-courses';
 import { refNo } from '@/lib/refNo';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { namesHiddenCourse, HIDDEN_COURSE_RESPONSE } from '@/lib/registration/hiddenCourseGuard';
+import { attributionField } from '@/lib/attribution/attribution';
 
 /**
  * Cover image AND display title for the first course of interest, from ONE
@@ -110,6 +111,8 @@ export async function POST(req) {
     status: 'pending',
     source: 'inhouse',
     ipAddress,
+    // The raw body field — not on the zod schema — sanitised and classified.
+    ...attributionField(body?.attribution),
   });
 
   const referenceNumber = refNo(doc._id);

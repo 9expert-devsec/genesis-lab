@@ -13,6 +13,10 @@
  */
 
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Attribution is sanitised and classified by ONE function,
+// whatever the browser sent; see src/lib/attribution/attribution.js.
+import { attributionField } from '@/lib/attribution/attribution';
 
 /**
  * Build the merged attendees array (coordinator-as-attendee folded in).
@@ -221,11 +225,14 @@ export function buildEarlyBirdTag(config, { classId } = {}) {
  * `bundle` key at all.
  */
 export function buildQuoteRegistration({
-  data, attendees, ipAddress = null, bundle = undefined, earlyBird = undefined,
+  data, attendees, ipAddress = null, bundle = undefined, earlyBird = undefined, attribution = undefined,
 }) {
   return {
     ...baseRegistration({ data, attendees, ipAddress }),
     consent: buildConsentRecord(data.consent, ipAddress),
+    // `attribution` is the RAW body field — the zod schema strips it from
+    // `data` — and attributionField is what makes it safe to store.
+    ...attributionField(attribution),
     ...(bundle ? { bundle } : {}),
     /**
      * Spread conditionally for the same reason `bundle` is: an ordinary
@@ -257,9 +264,11 @@ export function buildPaidRegistration({
   consent,
   ipAddress = null,
   supersedesRegistrationId = null,
+  attribution = undefined,
 }) {
   return {
     ...baseRegistration({ data, attendees, ipAddress }),
+    ...attributionField(attribution),
     pricing,
     payment: { method, omiseStatus: 'pending' },
     consent: buildConsentRecord(consent, ipAddress),

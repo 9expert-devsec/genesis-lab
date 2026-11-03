@@ -9,6 +9,7 @@ import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { typedAttendeeRows } from '@/lib/registration/careerPathRoster';
 import { isTransfer } from '@/lib/career-paths/prerequisiteOrder';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+import { attributionSummary } from '@/lib/attribution/attribution';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'รายละเอียดการลงทะเบียน' };
@@ -244,6 +245,8 @@ export default async function RegistrationDetailPage({ params }) {
         </Section>
       )}
 
+      <AttributionSection attribution={reg.attribution} />
+
       <RecordHistory menu="career_path_registrations" entity="registration" recordId={String(reg._id)} />
     </div>
   );
@@ -268,5 +271,22 @@ function Row({ label, value }) {
       </div>
       <div className="text-sm text-9e-navy dark:text-white">{value || '—'}</div>
     </div>
+  );
+}
+
+/** ที่มา — see attributionSummary. Nothing at all for a record without it. */
+function AttributionSection({ attribution }) {
+  const summary = attributionSummary(attribution);
+  if (!summary) return null;
+  return (
+    <Section title="ที่มา">
+      {summary.rows.map((row) => (
+        <Row
+          key={row.label}
+          label={row.label}
+          value={row.isDate ? (row.value ? fmtDate(row.value) : '') : row.value}
+        />
+      ))}
+    </Section>
   );
 }

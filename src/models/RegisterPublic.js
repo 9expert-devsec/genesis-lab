@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { InternalNoteSchema } from './internalNoteSchema';
 import { LegacyImportSchema } from './legacyImportSchema';
+import { AttributionSchema } from './attributionSchema';
 
 /**
  * Sub-schema for a single attendee (person actually attending).
@@ -639,6 +640,9 @@ const RegisterPublicSchema = new mongoose.Schema(
     // Audit
     source:    { type: String, default: 'web' },
     ipAddress: { type: String },
+    // Where the visitor came from — written once at create from the browser's
+    // stored touches, re-validated by buildAttribution. See attributionSchema.js.
+    attribution: { type: AttributionSchema },
 
     /**
      * ══ CARRIED ACROSS FROM DRUPAL, OR NOT. `null` IS "NOT IMPORTED". ═══════

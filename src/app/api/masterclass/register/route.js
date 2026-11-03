@@ -8,6 +8,7 @@ import { isQuoteEnabled }    from '@/lib/masterclass/quoteAccess';
 import { computePricing }    from '@/lib/pricing';
 import { headers }           from 'next/headers';
 import { refNo } from '@/lib/refNo';
+import { attributionField } from '@/lib/attribution/attribution';
 
 export const dynamic = 'force-dynamic';
 
@@ -116,6 +117,7 @@ export async function POST(req) {
       status:  'pending',
       source:  'web',
       ipAddress,
+      ...attributionField(body?.attribution),
     });
 
     const referenceNumber = refNo(reg._id);

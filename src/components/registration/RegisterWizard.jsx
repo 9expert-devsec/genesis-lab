@@ -43,6 +43,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { withAttribution } from "@/lib/attribution/attributionStore";
 // ADDED beside the statements above rather than folded into any — the
 // standing rule in this repo. One cap and one placeholder for every flow's note.
 import { CUSTOMER_NOTE_MAX_LENGTH, CUSTOMER_NOTE_PLACEHOLDER, customerNoteCounterLabel } from "@/lib/registration/noteField";
@@ -259,7 +260,7 @@ export function RegisterWizard({
       const res = await fetch("/api/registration/public", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(consent ? { ...formData, consent } : formData),
+        body: JSON.stringify(withAttribution(consent ? { ...formData, consent } : formData)),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {

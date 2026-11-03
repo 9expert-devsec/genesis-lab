@@ -96,8 +96,14 @@ const COOKIE_TYPES = [
      * category is for. The old "โดยจัดเก็บเฉพาะช่วงที่ใช้งาน (Session)" was
      * dropped with it: the consent cookie (180 days) and the theme key outlive
      * a session, so the clause would now be untrue.
+     *
+     * The second sentence is localStorage['9e_attribution']
+     * (src/lib/attribution/attributionStore.js): link parameters and a
+     * referrer host, kept first-party for 90 days and sent only inside a form
+     * the visitor submits. Listed here, not under การตลาด, for that reason
+     * (plan D3) — the wording is pending legal review.
      */
-    purpose: 'ทำให้เว็บไซต์ทำงานได้ปกติ เช่น การเข้าสู่ระบบ ตะกร้าสินค้า และจดจำสิ่งที่ท่านเลือกเอง เช่น การตั้งค่าคุกกี้ และโหมดการแสดงผลสว่าง/มืดที่ท่านเลือกไว้',
+    purpose: 'ทำให้เว็บไซต์ทำงานได้ปกติ เช่น การเข้าสู่ระบบ ตะกร้าสินค้า และจดจำสิ่งที่ท่านเลือกเอง เช่น การตั้งค่าคุกกี้ และโหมดการแสดงผลสว่าง/มืดที่ท่านเลือกไว้ รวมถึงบันทึกช่องทางที่ท่านเข้าสู่เว็บไซต์ (เช่น ลิงก์แคมเปญหรือชื่อเว็บไซต์ต้นทาง) ไว้ในเบราว์เซอร์ของท่านไม่เกิน 90 วัน เพื่อแนบไปกับใบสมัครเฉพาะเมื่อท่านกดส่งเอง โดยไม่เปิดเผยให้บุคคลภายนอก',
     provider: 'ระบบของ 9Expert เอง',
   },
   {
