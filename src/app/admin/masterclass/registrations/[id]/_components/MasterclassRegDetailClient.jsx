@@ -9,6 +9,9 @@ import { formatTHB } from '@/lib/pricing';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { refNo } from '@/lib/refNo';
 import { attributionSummary, ATTRIBUTION_EMPTY_LABEL } from '@/lib/attribution/attribution';
+import {
+  requestMetaSummary, REQUEST_META_TITLE, REQUEST_META_EMPTY_LABEL, UNTRUSTED_ORIGIN_LABEL,
+} from '@/lib/registration/requestMeta';
 import { withListQuery } from '@/lib/masterclass/registrationListQuery';
 import {
   updateMasterclassRegistrationStatus,
@@ -246,7 +249,7 @@ export function MasterclassRegDetailClient({ reg, listQuery = '' }) {
           )}
         </Card>
 
-        <AttributionCard attribution={reg.attribution} />
+        <AttributionCard attribution={reg.attribution} requestMeta={reg.requestMeta} />
 
       </div>
 
@@ -608,24 +611,48 @@ function Row({ label, value }) {
 }
 
 /** ที่มา — see attributionSummary. A record without it says so. */
-function AttributionCard({ attribution }) {
+function AttributionCard({ attribution, requestMeta }) {
   const summary = attributionSummary(attribution);
-  if (!summary) {
-    return (
-      <Card title="ที่มา">
-        <p className="text-sm italic text-[var(--text-muted)]">{ATTRIBUTION_EMPTY_LABEL}</p>
-      </Card>
-    );
-  }
+  const meta = requestMetaSummary(requestMeta);
   return (
-    <Card title="ที่มา">
-      {summary.rows.map((row) => (
-        <Row
-          key={row.label}
-          label={row.label}
-          value={row.isDate ? (row.value ? fmtDate(row.value) : '') : row.value}
-        />
-      ))}
+    <Card
+      title={meta?.untrusted
+        ? <>ที่มา<span className="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-300">{UNTRUSTED_ORIGIN_LABEL}</span></>
+        : 'ที่มา'}
+    >
+      {summary ? (
+        summary.rows.map((row) => (
+          <Row
+            key={row.label}
+            label={row.label}
+            value={row.isDate ? (row.value ? fmtDate(row.value) : '') : row.value}
+          />
+        ))
+      ) : (
+        <p className="text-sm italic text-[var(--text-muted)]">{ATTRIBUTION_EMPTY_LABEL}</p>
+      )}
+      <RequestMetaDetails meta={meta} />
     </Card>
+  );
+}
+
+/**
+ * ข้อมูลคำขอ — the request headers the registration arrived with, for fraud
+ * investigation (src/lib/registration/requestMeta.js). Collapsed: native
+ * <details>, keyboard-operable with no script. Every field is listed; a record
+ * filed before capture began says so.
+ */
+function RequestMetaDetails({ meta }) {
+  return (
+    <details className="group mt-3 border-t border-[var(--surface-border)] pt-3">
+      <summary className="cursor-pointer text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+        {REQUEST_META_TITLE}
+      </summary>
+      <div className="mt-2">
+        {meta
+          ? <div className="space-y-3">{meta.rows.map((row) => <Row key={row.label} label={row.label} value={row.value} />)}</div>
+          : <p className="text-sm italic text-[var(--text-muted)]">{REQUEST_META_EMPTY_LABEL}</p>}
+      </div>
+    </details>
   );
 }

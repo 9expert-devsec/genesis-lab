@@ -9,6 +9,7 @@ import { refNo } from '@/lib/refNo';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { namesHiddenCourse, HIDDEN_COURSE_RESPONSE } from '@/lib/registration/hiddenCourseGuard';
 import { attributionField } from '@/lib/attribution/attribution';
+import { requestMetaField, requestMetaFor } from '@/lib/registration/requestMeta';
 
 /**
  * Cover image AND display title for the first course of interest, from ONE
@@ -68,6 +69,8 @@ export async function POST(req) {
     headersList.get('x-forwarded-for')?.split(',')[0].trim() ||
     headersList.get('x-real-ip') ||
     null;
+  // Forensics from the request HEADERS — flagged, never refused. See requestMeta.js.
+  const requestMeta = requestMetaFor('inhouse', headersList);
 
   await dbConnect();
   const doc = await RegisterInhouse.create({
@@ -113,6 +116,7 @@ export async function POST(req) {
     ipAddress,
     // The raw body field — not on the zod schema — sanitised and classified.
     ...attributionField(body?.attribution),
+    ...requestMetaField(requestMeta),
   });
 
   const referenceNumber = refNo(doc._id);

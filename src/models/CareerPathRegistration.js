@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { AttributionSchema } from './attributionSchema';
+import { RequestMetaSchema } from './requestMetaSchema';
 
 /**
  * CareerPathRegistration — user-submitted enrollments from the public
@@ -165,6 +166,9 @@ const CareerPathRegistrationSchema = new mongoose.Schema(
     // Where the visitor came from — written once at create from the browser's
     // stored touches, re-validated by buildAttribution. See attributionSchema.js.
     attribution: { type: AttributionSchema },
+    // The request headers it arrived with, server-captured for fraud
+    // investigation. See requestMetaSchema.js.
+    requestMeta: { type: RequestMetaSchema },
   },
   { timestamps: true, collection: 'career_path_registrations' }
 );

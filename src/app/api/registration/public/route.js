@@ -7,6 +7,7 @@ import { sendPublicRegistrationEmails } from '@/lib/email/template-senders/publi
 import { resolveScheduleStatus } from '@/lib/schedule-status';
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { buildAttendees, buildQuoteRegistration } from '@/lib/registration/build-public';
+import { requestMetaFor } from '@/lib/registration/requestMeta';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo. The Early Bird tag is DERIVED HERE, at submit, from the
 // server's own read — never from the request body.
@@ -72,6 +73,8 @@ export async function POST(req) {
     headersList.get('x-forwarded-for')?.split(',')[0].trim() ||
     headersList.get('x-real-ip') ||
     null;
+  // Forensics from the request HEADERS — flagged, never refused. See requestMeta.js.
+  const requestMeta = requestMetaFor('public', headersList);
 
   // When the coordinator is also an attendee, they fill the first
   // attendee slot server-side so the attendees[] array always matches
@@ -113,7 +116,7 @@ export async function POST(req) {
   // Step 2 shows a consent checkbox on the quote path too, so the acceptance
   // is recorded here rather than being displayed and thrown away.
   const doc = await RegisterPublic.create(
-    buildQuoteRegistration({ data, attendees, ipAddress, earlyBird, attribution: body?.attribution })
+    buildQuoteRegistration({ data, attendees, ipAddress, earlyBird, attribution: body?.attribution, requestMeta })
   );
 
   const referenceNumber = refNo(doc._id);

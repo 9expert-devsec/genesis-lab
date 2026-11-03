@@ -12,6 +12,7 @@ import { roundFieldsFor } from '@/lib/registrations/roundSelection';
 // record from claiming an acceptance the customer did not give.
 import { buildConsentRecord } from '@/lib/registration/build-public';
 import { attributionField } from '@/lib/attribution/attribution';
+import { requestMetaField } from '@/lib/registration/requestMeta';
 
 /**
  * ONE BUNDLE REQUEST → N LEG PAYLOADS. Pure.
@@ -66,10 +67,12 @@ import { attributionField } from '@/lib/attribution/attribution';
  * @param {object}   p.bundle         the tag, already built and complete
  * @param {string|null} p.ipAddress
  * @param {object} [p.attribution]  the RAW body field; every leg carries the same copy
+ * @param {object} [p.requestMeta]  server-read request headers; every leg carries the same copy
  * @returns {{ok: true, legs: Array<object>} | {ok: false, index: number, courseId: string}}
  */
-export function buildBundleLegs({ items, resolved, todayKey, data, attendees, bundle, picks = null, ipAddress = null, attribution = undefined }) {
+export function buildBundleLegs({ items, resolved, todayKey, data, attendees, bundle, picks = null, ipAddress = null, attribution = undefined, requestMeta = undefined }) {
   const attributionKey = attributionField(attribution);
+  const requestMetaKey = requestMetaField(requestMeta);
   const list = Array.isArray(items) ? items : [];
   const entries = Array.isArray(resolved) ? resolved : [];
   const legs = [];
@@ -125,6 +128,7 @@ export function buildBundleLegs({ items, resolved, todayKey, data, attendees, bu
       source: 'web',
       ipAddress,
       ...attributionKey,
+      ...requestMetaKey,
       bundle,
       /**
        * ── NO `earlyBird` KEY ON A LEG. EVER. AND IT IS SAID HERE ───────────

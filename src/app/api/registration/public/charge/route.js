@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { headers } from 'next/headers';
 import { publicRegistrationSchema } from '@/lib/schemas/register-public';
 import { resolveScheduleStatus } from '@/lib/schedule-status';
 import { resolveCheckoutPricing } from '@/lib/registration/resolve-price';
@@ -7,6 +8,7 @@ import { createCardCharge, createPromptPayCharge, getPromptPayQrUrl } from '@/li
 import { toSatang } from '@/lib/pricing';
 import RegisterPublic from '@/models/RegisterPublic';
 import { refNo } from '@/lib/refNo';
+import { requestMetaFor } from '@/lib/registration/requestMeta';
 
 export async function POST(req) {
   const body = await req.json().catch(() => null);
@@ -38,6 +40,8 @@ export async function POST(req) {
   }
 
   const ipAddress = await getClientIp();
+  // Forensics from the request HEADERS — flagged, never refused. See requestMeta.js.
+  const requestMeta = requestMetaFor('public_paid', await headers());
   const method = data.paymentMethod;
 
   // ── Audit annotation: which registration this one replaced ────────────────
@@ -68,6 +72,7 @@ export async function POST(req) {
     ipAddress,
     // The raw body field; the zod schema does not carry it.
     attribution: body?.attribution,
+    requestMeta,
     supersedesRegistrationId,
   });
   const referenceNumber = refNo(doc._id);

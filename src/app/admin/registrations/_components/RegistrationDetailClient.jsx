@@ -56,6 +56,9 @@ import {
 } from './detailShell';
 import { readNotes } from '@/lib/registrations/internalNotes';
 import { attributionSummary, ATTRIBUTION_EMPTY_LABEL } from '@/lib/attribution/attribution';
+import {
+  requestMetaSummary, REQUEST_META_TITLE, REQUEST_META_EMPTY_LABEL, UNTRUSTED_ORIGIN_LABEL,
+} from '@/lib/registration/requestMeta';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -1684,7 +1687,7 @@ export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], hi
             />
           </SectionCard>
 
-          <AttributionCard attribution={doc.attribution} />
+          <AttributionCard attribution={doc.attribution} requestMeta={doc.requestMeta} />
 
           <SystemCard icon={Database} title="ข้อมูลระบบ">
             {/*
@@ -2946,26 +2949,51 @@ function ConsentLine({ ok, label }) {
  * fact rather than as a missing card. The rows come from attributionSummary,
  * the one display model the four registration detail views share.
  */
-function AttributionCard({ attribution }) {
+function AttributionCard({ attribution, requestMeta }) {
   const summary = attributionSummary(attribution);
-  if (!summary) {
-    return (
-      <SectionCard icon={Megaphone} title="ที่มา">
-        <p className="text-sm text-[var(--text-muted)]">{ATTRIBUTION_EMPTY_LABEL}</p>
-      </SectionCard>
-    );
-  }
+  const meta = requestMetaSummary(requestMeta);
   return (
-    <SectionCard icon={Megaphone} title="ที่มา">
-      <DL>
-        {summary.rows.map((row) => (
-          <DLRow
-            key={row.label}
-            label={row.label}
-            value={row.isDate ? (row.value ? fmtDate(row.value) : '') : row.value}
-          />
-        ))}
-      </DL>
+    <SectionCard
+      icon={Megaphone}
+      title={meta?.untrusted
+        ? <>ที่มา<span className="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-300">{UNTRUSTED_ORIGIN_LABEL}</span></>
+        : 'ที่มา'}
+    >
+      {summary ? (
+        <DL>
+          {summary.rows.map((row) => (
+            <DLRow
+              key={row.label}
+              label={row.label}
+              value={row.isDate ? (row.value ? fmtDate(row.value) : '') : row.value}
+            />
+          ))}
+        </DL>
+      ) : (
+        <p className="text-sm text-[var(--text-muted)]">{ATTRIBUTION_EMPTY_LABEL}</p>
+      )}
+      <RequestMetaDetails meta={meta} />
     </SectionCard>
+  );
+}
+
+/**
+ * ข้อมูลคำขอ — the request headers the registration arrived with, for fraud
+ * investigation (src/lib/registration/requestMeta.js). Collapsed: native
+ * <details>, keyboard-operable with no script. Every field is listed; a record
+ * filed before capture began says so.
+ */
+function RequestMetaDetails({ meta }) {
+  return (
+    <details className="group mt-3 border-t border-[var(--surface-border)] pt-3">
+      <summary className="cursor-pointer text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+        {REQUEST_META_TITLE}
+      </summary>
+      <div className="mt-2">
+        {meta
+          ? <DL>{meta.rows.map((row) => <DLRow key={row.label} label={row.label} value={row.value} />)}</DL>
+          : <p className="text-sm text-[var(--text-muted)]">{REQUEST_META_EMPTY_LABEL}</p>}
+      </div>
+    </details>
   );
 }

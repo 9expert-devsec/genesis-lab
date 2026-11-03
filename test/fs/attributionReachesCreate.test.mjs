@@ -174,7 +174,7 @@ test('career path: a forged blob with nothing usable is removed, not passed thro
 });
 
 test('career path: the action builds through it', () => {
-  assert.ok(src('src/lib/actions/career-path-registrations.js').includes('careerPathCreatePayload(data, resolved.selectedCourses)'));
+  assert.ok(src('src/lib/actions/career-path-registrations.js').includes('careerPathCreatePayload(data, resolved.selectedCourses, requestMeta)'));
 });
 
 // ── 6. masterclass — /api/masterclass/register, run whole ─────────────────

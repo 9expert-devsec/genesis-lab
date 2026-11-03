@@ -25,6 +25,8 @@ import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { siteTodayKey } from '@/lib/articlePublishTime';
 import { isTransfer, resolveSubmittedPicks } from '@/lib/career-paths/prerequisiteOrder';
 import { careerPathCreatePayload } from '@/lib/registration/careerPathPayload';
+import { headers } from 'next/headers';
+import { requestMetaFor } from '@/lib/registration/requestMeta';
 
 const ADMIN_PATH = '/admin/career-path-registrations';
 
@@ -98,7 +100,10 @@ export async function createCareerPathRegistration(data) {
   //
   // `attribution` is REPLACED, never passed through — see careerPathCreatePayload,
   // which is pure so test/fs/attributionReachesCreate can execute it.
-  data = careerPathCreatePayload(data, resolved.selectedCourses);
+  // `requestMeta` is the request HEADERS, read here — headers() is allowed in a
+  // server action and leaves the root layout's static rendering untouched.
+  const requestMeta = requestMetaFor('career_path', await headers());
+  data = careerPathCreatePayload(data, resolved.selectedCourses, requestMeta);
   const doc = await CareerPathRegistration.create(data);
   revalidatePath(ADMIN_PATH);
 

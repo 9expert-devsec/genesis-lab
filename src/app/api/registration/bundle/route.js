@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { NextResponse } from 'next/server';
+import { requestMetaFor } from '@/lib/registration/requestMeta';
 import { headers } from 'next/headers';
 
 import { dbConnect } from '@/lib/db/connect';
@@ -301,6 +302,8 @@ export async function POST(req) {
     headersList.get('x-forwarded-for')?.split(',')[0].trim() ||
     headersList.get('x-real-ip') ||
     null;
+  // Forensics from the request HEADERS — flagged, never refused. See requestMeta.js.
+  const requestMeta = requestMetaFor('bundle', headersList);
 
   /**
    * THE REQUEST ID IS MINTED BEFORE ANY WRITE, and this is what closes the gap
@@ -360,6 +363,7 @@ export async function POST(req) {
     // Raw — the shared bundle schema does not carry it; the leg builder
     // sanitises it once and gives every leg the same copy.
     attribution: body?.attribution,
+    requestMeta,
   });
   if (!built.ok) return refusal('unresolved_items');
 

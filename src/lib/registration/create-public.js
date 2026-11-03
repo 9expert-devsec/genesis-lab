@@ -40,6 +40,7 @@ export async function createPaidRegistration({
   ipAddress,
   supersedesRegistrationId = null,
   attribution = undefined,
+  requestMeta = undefined,
 }) {
   await dbConnect();
   const doc = await RegisterPublic.create(
@@ -55,6 +56,7 @@ export async function createPaidRegistration({
       ipAddress,
       supersedesRegistrationId,
       attribution,
+      requestMeta,
     })
   );
   return doc;
