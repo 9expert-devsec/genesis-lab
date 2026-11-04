@@ -97,6 +97,14 @@ export const ROUTE_WINDOWS = Object.freeze([
     why: 'Same shape as /terms — no export, no fetch, 1h from the chrome.',
   },
   {
+    path: '/play/excel/beginner/[level]',
+    file: 'src/app/(public)/play/excel/beginner/[level]/page.jsx',
+    exported: null,
+    effective: '1h',
+    divergence: DIVERGENCE.LOWERED_BY_LAYOUT,
+    why: 'Exports no revalidate. generateStaticParams enumerates the 16 levels at build and dynamicParams = false makes any other level a 404, so 1h can only come from the chrome. Newer than MEASURED_COMMIT: this row follows the /terms shape and was not read off that build.',
+  },
+  {
     path: '/search',
     file: 'src/app/(public)/search/page.jsx',
     exported: 'revalidate = 1800',
