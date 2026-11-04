@@ -1,0 +1,10 @@
+/* Players type formulas literally: `>=` must never paint as a single glyph, on
+   any face. font-feature-settings has to be set too, since globals.css turns
+   calt on through it and it outranks font-variant-ligatures. The universal
+   selector is for <input>: the UA `font` shorthand resets font-variant-ligatures
+   there, so inheriting from the root is not enough. */
+.root,
+.root * {
+  font-variant-ligatures: none;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+}

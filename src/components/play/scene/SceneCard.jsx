@@ -58,8 +58,6 @@ const VB_H = 190;
 // `!`: globals.css pins every p and span to Google Sans with !important.
 const MONO = '!font-[family-name:var(--font-play-mono)]';
 const MONO_STYLE = { fontFamily: 'var(--font-play-mono), ui-monospace, monospace' };
-// JetBrains Mono ligates >= into one glyph through calt; formulas stay as typed.
-const NO_LIGATURES = { fontFeatureSettings: '"calt" 0, "liga" 0' };
 
 const IMAGES = {
   'counter-register': [421, 248],
@@ -295,7 +293,7 @@ function ToppingsProps({ row, rows, sheet }) {
 }
 
 function ToppingsTotal({ rows }) {
-  const done = rows.filter((r) => r.state === 'match' || r.state === 'current').length;
+  const done = rows.filter((r) => r.state === 'match').length;
   return (
     <>
       <p className="text-xs text-white/60">คิดราคาแล้ว</p>
@@ -1001,7 +999,7 @@ function BossTotal({ level, rows, results, cfg, progress, fmt }) {
     const tone = !result ? 'text-white/30' : result.ok ? 'text-[#86EFAC]' : 'text-[#F87171]';
     return (
       <>
-        <p className={`text-xs text-white/60 ${MONO}`} style={NO_LIGATURES}>
+        <p className={`text-xs text-white/60 ${MONO}`}>
           ขั้น 3 · =IF({sumCell}&gt;={cfg.target},…)
         </p>
         <BigNumber value={result ? displayValue(result.value) : '—'} tone={tone} plain />
