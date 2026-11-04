@@ -5,7 +5,8 @@ import { assertPlayEnabled } from '@/lib/play/flag';
 import styles from './play.module.css';
 
 // Play-only faces, loaded here so no page outside /play fetches them. Anton is
-// the hub's "LEVEL UP" display face; JetBrains Mono sets the scene numbers.
+// the hub's "LEVEL UP" display face; JetBrains Mono sets every formula and number
+// (play.module.css maps font-mono to it).
 const anton = Anton({ weight: '400', subsets: ['latin'], display: 'swap', variable: '--font-play-display' });
 const playMono = JetBrains_Mono({ weight: ['400', '700'], subsets: ['latin'], display: 'swap', variable: '--font-play-mono' });
 

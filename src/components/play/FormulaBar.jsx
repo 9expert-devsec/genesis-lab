@@ -4,14 +4,18 @@ import { useRef } from 'react';
 import { Play, RotateCcw } from 'lucide-react';
 
 const REF_TEXT = 'text-[#48B0FF]';
+// Shared by the input and its mirror: any difference here moves the caret off
+// the painted text. The face itself is set in the /play layout's play.module.css.
+const FORMULA_TEXT = 'px-3 py-2.5 font-mono text-base leading-6';
 
 /**
  * Name box, fx, the formula input, Run and Reset.
  *
  * The input's own text is transparent and a mirror underneath paints the same
  * characters with refs in blue — the only way to colour part of an <input>.
- * Both use the same font, size and padding, and the mirror follows the input's
- * horizontal scroll, so the caret always sits on the painted text.
+ * Both take FORMULA_TEXT, so JetBrains Mono for Latin and LINE Seed Sans TH for
+ * Thai in each, and the mirror follows the input's horizontal scroll, so the
+ * caret sits on the painted text.
  *
  * Phones: one row — name box, input, Run, icon-only reset; "fx" hides. The
  * input stays at 16px (text-base) so iOS does not zoom on focus.
@@ -46,7 +50,7 @@ export function FormulaBar({ inputRef, anchor, value, spans, disabled, running, 
         <div
           ref={mirrorRef}
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre px-3 py-2.5 font-mono text-base leading-6 text-white"
+          className={`pointer-events-none absolute inset-0 overflow-hidden whitespace-pre ${FORMULA_TEXT} text-white`}
         >
           {parts.map((p, i) => (
             <span key={i} className={p.ref ? REF_TEXT : undefined}>
@@ -74,7 +78,7 @@ export function FormulaBar({ inputRef, anchor, value, spans, disabled, running, 
               onRun();
             }
           }}
-          className="relative w-full bg-transparent px-3 py-2.5 font-mono text-base leading-6 text-transparent caret-white outline-none placeholder:font-thai placeholder:text-white/30 disabled:cursor-not-allowed"
+          className={`relative w-full bg-transparent ${FORMULA_TEXT} text-transparent caret-white outline-none placeholder:font-thai placeholder:text-white/30 disabled:cursor-not-allowed`}
         />
       </div>
       <button

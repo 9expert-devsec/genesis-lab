@@ -165,10 +165,10 @@ export function tierPlacement(rows, config) {
   );
 }
 
-/** 3-5: `≥ 1000` for a zone, `< 500` for the last one. Zones run highest first. */
+/** 3-5: `>= 1000` for a zone, `< 500` for the last one, as the player types them. Zones run highest first. */
 export function tierLabel(i, config) {
   const { zones } = config;
-  return i < zones.length - 1 ? `≥ ${zones[i].min}` : `< ${zones[i - 1].min}`;
+  return i < zones.length - 1 ? `>= ${zones[i].min}` : `< ${zones[i - 1].min}`;
 }
 
 /** 3-5: the range an amount really falls in, as a phrase for the total box. */

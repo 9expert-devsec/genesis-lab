@@ -22,7 +22,7 @@ export function SheetGrid({ cols, rows, sheet, formats, answers, results, active
         role="grid"
         aria-label="ตารางข้อมูลของด่าน"
         aria-readonly="true"
-        className="grid min-w-max font-en text-sm"
+        className="grid min-w-max font-mono text-sm"
         style={{ gridTemplateColumns: `44px repeat(${cols.length}, minmax(112px, 1fr))` }}
       >
         <div role="row" className="contents">

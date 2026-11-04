@@ -16,6 +16,7 @@ import {
   sceneFor,
   sceneRows,
   statusTag,
+  tierLabel,
   tierPlacement,
   tierRange,
 } from '@/lib/play/game/scene';
@@ -163,6 +164,8 @@ test('scene config: change a parameter in a fixture and the scene changes with i
   assert.equal(tierRange(800, tiers), 'อยู่ระหว่าง 500–999');
   const lower = { zones: tiers.zones.map((z) => (z.value === 'Silver' ? { ...z, min: 700 } : z)) };
   assert.equal(tierRange(800, lower), 'อยู่ระหว่าง 700–999');
+  // Labels read the way the player types them; the engine does not accept ≥.
+  assert.deepEqual([0, 1, 2].map((i) => tierLabel(i, tiers)), ['>= 1000', '>= 500', '< 500']);
 
   // Boss: the same amount fills less of the bar against a higher target.
   const boss = getLevel('boss');

@@ -8,3 +8,13 @@
   font-variant-ligatures: none;
   font-feature-settings: 'liga' 0, 'calt' 0;
 }
+
+/* Tailwind's font-mono is a system stack; under /play it means JetBrains Mono.
+   !important because globals.css pins every p and span to Google Sans with it.
+   JetBrains Mono has no Thai, so Thai is named here too: the system's own
+   fallback can differ between an <input> and a <div>, and FormulaBar needs both
+   to paint the same widths. */
+.root :global(.font-mono),
+.root :global(.font-mono) span {
+  font-family: var(--font-play-mono), var(--font-thai), ui-monospace, monospace !important;
+}
