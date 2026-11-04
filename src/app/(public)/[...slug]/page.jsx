@@ -19,7 +19,6 @@ import { getCareerPathBySlug } from '@/lib/career-paths/getCareerPaths';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { CareerPathDetail } from './_components/CareerPathDetail';
 import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
-import { CourseCard } from '@/components/course/CourseCard';
 import { CourseHero } from './_components/CourseHero';
 import { SkillBreadcrumb } from './_components/SkillBreadcrumb';
 import { ScheduleSection } from './_components/ScheduleSection';
@@ -114,12 +113,13 @@ import { stripDraft } from '@/lib/pageBuilder/draftState';
  *   /<custom-alias>           → same course, but matched by
  *                               CourseExtension.urlAlias
  *   /<slug>-career-path       → career path detail (Phase 3 placeholder)
- *   /<slug>-all-courses       → catalog by skill or program (Phase 3 placeholder)
+ *   /<slug>-all-courses       → program or skill page, by its admin urlSlug;
+ *                               anything else goes to the redirect/404 boundary
  *
  * Resolution flow:
  *   resolveCourse() tries alias first, then the `-training-course`
  *   suffix. If neither hits, fall through to the placeholder branches
- *   so career-path / all-courses URLs keep working.
+ *   so career-path URLs keep working.
  */
 
 export const revalidate = 3600;
@@ -678,33 +678,15 @@ export default async function CatchAllPage({ params, searchParams }) {
     return <CareerPathDetail careerPath={careerPath} faqs={faqs} />;
   }
 
-  // All-courses catalog — public listing filtered by skill or program.
-  // We can't tell up-front which one `catalogSlug` refers to, so call
-  // listPublicCourses() unfiltered and let the user scan the grid.
-  if (segment.endsWith('-all-courses')) {
-    const catalogSlug = segment.slice(0, -'-all-courses'.length);
-    const { items: courses = [] } = await listPublicCourses().catch(() => ({
-      items: [],
-    }));
-    if (courses.length === 0) notFound();
-    return (
-      <section className="mx-auto max-w-[1200px] px-4 py-12">
-        <header className="mb-8">
-          <p className="text-sm font-medium uppercase tracking-wider text-9e-action">
-            หลักสูตรทั้งหมด
-          </p>
-          <h1 className="mt-1 text-2xl font-bold text-[var(--text-primary)] md:text-3xl">
-            {catalogSlug.replace(/-/g, ' ')}
-          </h1>
-        </header>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {courses.map((course) => (
-            <CourseCard key={course.course_id} course={course} />
-          ))}
-        </div>
-      </section>
-    );
-  }
+  /**
+   * ── EXIT 3: AN `-all-courses` SLUG THAT IS NOT A PROGRAM OR A SKILL ───────
+   * Every real one has returned above, through loadProgram or loadSkill. This
+   * used to render the whole catalog under an H1 of the raw slug, HTTP 200 — a
+   * soft 404 that also kept the URL from ever reaching a redirect rule.
+   *
+   * Does not return.
+   */
+  if (segment.endsWith('-all-courses')) await notFoundOrRedirect(slug);
 
   // Course resolver handles both alias and `-training-course` suffix.
   //
