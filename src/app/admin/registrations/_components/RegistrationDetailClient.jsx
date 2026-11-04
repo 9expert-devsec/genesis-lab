@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Trash2, X, Plus, Pencil, Copy, GraduationCap, User, Users, Receipt,
-  CreditCard, StickyNote, Database, ClipboardList, History, Lock,
+  CreditCard, StickyNote, Database, ClipboardList, History, Lock, Megaphone,
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -55,6 +55,10 @@ import {
   DETAIL_FIELD_VALUE,
 } from './detailShell';
 import { readNotes } from '@/lib/registrations/internalNotes';
+import { attributionSummary, ATTRIBUTION_EMPTY_LABEL } from '@/lib/attribution/attribution';
+import {
+  requestMetaSummary, REQUEST_META_TITLE, REQUEST_META_EMPTY_LABEL, UNTRUSTED_ORIGIN_LABEL,
+} from '@/lib/registration/requestMeta';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -1683,6 +1687,8 @@ export function RegistrationDetailClient({ doc, rounds = [], bundleLegs = [], hi
             />
           </SectionCard>
 
+          <AttributionCard attribution={doc.attribution} requestMeta={doc.requestMeta} />
+
           <SystemCard icon={Database} title="ข้อมูลระบบ">
             {/*
               เลขอ้างอิง — MOVED HERE FROM THE HEADING, and it is now the ONLY
@@ -2932,5 +2938,62 @@ function ConsentLine({ ok, label }) {
       <span className={ok ? 'text-emerald-600' : 'text-[var(--text-muted)]'}>{ok ? '✓' : '—'}</span>
       <span>{label}</span>
     </div>
+  );
+}
+
+/**
+ * ที่มา — which campaign or referrer brought this registration in.
+ *
+ * Read-only. A record filed before the field existed still gets the card,
+ * saying so in ATTRIBUTION_EMPTY_LABEL, so "nothing captured" is visible as a
+ * fact rather than as a missing card. The rows come from attributionSummary,
+ * the one display model the four registration detail views share.
+ */
+function AttributionCard({ attribution, requestMeta }) {
+  const summary = attributionSummary(attribution);
+  const meta = requestMetaSummary(requestMeta);
+  return (
+    <SectionCard
+      icon={Megaphone}
+      title={meta?.untrusted
+        ? <>ที่มา<span className="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-300">{UNTRUSTED_ORIGIN_LABEL}</span></>
+        : 'ที่มา'}
+    >
+      {summary ? (
+        <DL>
+          {summary.rows.map((row) => (
+            <DLRow
+              key={row.label}
+              label={row.label}
+              value={row.isDate ? (row.value ? fmtDate(row.value) : '') : row.value}
+            />
+          ))}
+        </DL>
+      ) : (
+        <p className="text-sm text-[var(--text-muted)]">{ATTRIBUTION_EMPTY_LABEL}</p>
+      )}
+      <RequestMetaDetails meta={meta} />
+    </SectionCard>
+  );
+}
+
+/**
+ * ข้อมูลคำขอ — the request headers the registration arrived with, for fraud
+ * investigation (src/lib/registration/requestMeta.js). Collapsed: native
+ * <details>, keyboard-operable with no script. Every field is listed; a record
+ * filed before capture began says so.
+ */
+function RequestMetaDetails({ meta }) {
+  return (
+    <details className="group mt-3 border-t border-[var(--surface-border)] pt-3">
+      <summary className="cursor-pointer text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+        {REQUEST_META_TITLE}
+      </summary>
+      <div className="mt-2">
+        {meta
+          ? <DL>{meta.rows.map((row) => <DLRow key={row.label} label={row.label} value={row.value} />)}</DL>
+          : <p className="text-sm text-[var(--text-muted)]">{REQUEST_META_EMPTY_LABEL}</p>}
+      </div>
+    </details>
   );
 }

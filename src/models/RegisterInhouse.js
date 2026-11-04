@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import { InternalNoteSchema } from './internalNoteSchema';
 import { LegacyImportSchema } from './legacyImportSchema';
+import { AttributionSchema } from './attributionSchema';
+import { RequestMetaSchema } from './requestMetaSchema';
 
 const ThaiAddressSchema = new mongoose.Schema(
   {
@@ -257,6 +259,12 @@ const RegisterInhouseSchema = new mongoose.Schema(
     },
     source:     { type: String, default: 'web' },
     ipAddress:  { type: String },
+    // Where the visitor came from — written once at create from the browser's
+    // stored touches, re-validated by buildAttribution. See attributionSchema.js.
+    attribution: { type: AttributionSchema },
+    // The request headers it arrived with, server-captured for fraud
+    // investigation. See requestMetaSchema.js.
+    requestMeta: { type: RequestMetaSchema },
 
     /**
      * ══ CARRIED ACROSS FROM DRUPAL, OR NOT. `null` IS "NOT IMPORTED". ═══════

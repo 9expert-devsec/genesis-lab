@@ -20,6 +20,28 @@ export const META_PIXEL_ID = '1256361497884237';
 
 export const DEFAULT_CURRENCY = 'THB';
 
+/**
+ * Google Tag Manager — the switch between the two analytics modes.
+ *
+ *   unset  → gtag.js exactly as before. GA4 + Ads are configured in code.
+ *   set    → GTM owns EVERY Google tag (GA4 + Ads). The code stops sending
+ *            gtag events and pushes the dataLayer contract instead; there is no
+ *            window in which both send. See src/lib/analytics/gtag.js.
+ *
+ * The Meta Pixel is NOT part of this switch (plan D6): it stays in code, with
+ * its consent gate, in both modes.
+ *
+ * NEXT_PUBLIC_*, so it is inlined at BUILD time — changing it in Vercel needs a
+ * redeploy, and removing it plus a redeploy is the whole rollback.
+ *
+ * Validated, not trusted: the id is interpolated into a script URL on every
+ * page, so anything that is not the GTM-XXXX shape is treated as unset rather
+ * than shipped.
+ */
+const RAW_GTM_ID = String(process.env.NEXT_PUBLIC_GTM_ID ?? '').trim();
+export const GTM_ID = /^GTM-[A-Z0-9]{4,12}$/.test(RAW_GTM_ID) ? RAW_GTM_ID : '';
+export const GTM_ENABLED = GTM_ID !== '';
+
 // Google Ads conversion labels (send_to = `${ADS_ID}/${label}`)
 // Used in Batch 2 — defined here now so everything is in one config.
 export const ADS_CONVERSION_LABELS = {

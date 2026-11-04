@@ -24,6 +24,9 @@ import {
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { siteTodayKey } from '@/lib/articlePublishTime';
 import { isTransfer, resolveSubmittedPicks } from '@/lib/career-paths/prerequisiteOrder';
+import { careerPathCreatePayload } from '@/lib/registration/careerPathPayload';
+import { headers } from 'next/headers';
+import { requestMetaFor } from '@/lib/registration/requestMeta';
 
 const ADMIN_PATH = '/admin/career-path-registrations';
 
@@ -94,7 +97,13 @@ export async function createCareerPathRegistration(data) {
   // its live round — and nothing else about the payload changes. Rebound rather
   // than spread into the call so the create below stays `create(data)`, which
   // test/fs/registrationNoteFieldWiring pins (no note rule of its own here).
-  data = { ...data, selectedCourses: resolved.selectedCourses };
+  //
+  // `attribution` is REPLACED, never passed through — see careerPathCreatePayload,
+  // which is pure so test/fs/attributionReachesCreate can execute it.
+  // `requestMeta` is the request HEADERS, read here — headers() is allowed in a
+  // server action and leaves the root layout's static rendering untouched.
+  const requestMeta = requestMetaFor('career_path', await headers());
+  data = careerPathCreatePayload(data, resolved.selectedCourses, requestMeta);
   const doc = await CareerPathRegistration.create(data);
   revalidatePath(ADMIN_PATH);
 
@@ -127,7 +136,9 @@ export async function createCareerPathRegistration(data) {
    */
   await sendCareerPathRegistrationEmail(doc.toObject());
 
-  return { ok: true, id: String(doc._id) };
+  // `leadChannel` — the server-derived channel, for the client's
+  // register_career_path dataLayer event.
+  return { ok: true, id: String(doc._id), leadChannel: doc.attribution?.channel ?? null };
 }
 
 export async function getCareerPathRegistrations({

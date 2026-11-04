@@ -163,7 +163,21 @@ export function consentSignalsFor(categories) {
  * consentMigrationParity.test.mjs feeds both the same table of inputs. Nothing
  * here rewrites the cookie — the record becomes v2 on the next decision.
  *
- * @param {{ga4Id: string, adsId: string, cookieName: string, schemaVersion: number, legacySchemaVersion?: number}} opts
+ * ── GTM MODE (`gtmId`) ─────────────────────────────────────────────────────
+ * Same consent block, same `set` lines, in the same order — Google's own GTM
+ * guidance is exactly this: queue `consent default` through gtag BEFORE the
+ * container snippet, and GTM's Google tag honours it. What changes:
+ *
+ *   · NO `js` and NO `config` commands. The Google tag inside the container
+ *     is the one configuration; a `config` left queued here would be
+ *     processed by it as a second one, with its own page_view.
+ *   · the `gtm.js` start event, which is what the container snippet would
+ *     otherwise push before loading gtm.js. Analytics.jsx loads the script.
+ *
+ * So "consent default runs before the tag" holds in both modes, and
+ * test/pure/consentBootstrap.test.mjs executes both.
+ *
+ * @param {{ga4Id: string, adsId: string, cookieName: string, schemaVersion: number, legacySchemaVersion?: number, gtmId?: string}} opts
  * @returns {string} JavaScript source, for a <script> tag's inner HTML.
  */
 export function consentBootstrapScript({
@@ -172,8 +186,14 @@ export function consentBootstrapScript({
   cookieName,
   schemaVersion,
   legacySchemaVersion = LEGACY_CONSENT_SCHEMA_VERSION,
+  gtmId = '',
 }) {
   const denied = JSON.stringify(DENIED_DEFAULTS);
+  const tail = gtmId
+    ? "window.dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });"
+    : `gtag('js', new Date());
+gtag('config', '${ga4Id}', { send_page_view: false });
+gtag('config', '${adsId}');`;
   const keys = JSON.stringify([...OPTIONAL_CATEGORY_KEYS].sort());
   const legacyKeys = JSON.stringify([...LEGACY_V1_CATEGORY_KEYS].sort());
   return `
@@ -212,8 +232,6 @@ try {
 gtag('consent', 'default', c);
 gtag('set', 'url_passthrough', true);
 gtag('set', 'ads_data_redaction', true);
-gtag('js', new Date());
-gtag('config', '${ga4Id}', { send_page_view: false });
-gtag('config', '${adsId}');
+${tail}
 `.trim();
 }

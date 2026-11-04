@@ -1,5 +1,5 @@
 import Script from 'next/script';
-import { GA4_ID, ADS_ID } from '@/lib/analytics/config';
+import { GA4_ID, ADS_ID, GTM_ID, GTM_ENABLED } from '@/lib/analytics/config';
 import { consentBootstrapScript } from '@/lib/analytics/consentMode';
 import { CONSENT_COOKIE, CONSENT_SCHEMA_VERSION } from '@/lib/cookieConsentStore';
 
@@ -41,7 +41,25 @@ import { CONSENT_COOKIE, CONSENT_SCHEMA_VERSION } from '@/lib/cookieConsentStore
  * Advanced mode. Removing the loader for non-consenting visitors looks like a
  * privacy improvement and is really a downgrade to basic mode: it forfeits the
  * cookieless modelling that advanced mode buys, silently and permanently.
+ *
+ * ── GTM MODE (NEXT_PUBLIC_GTM_ID set) ──────────────────────────────────────
+ * The same two things, in the same order: the bootstrap (consent default, then
+ * the gtm.js start event — no gtag config, see consentMode.js), and then
+ * gtm.js INSTEAD of gtag/js. Never both: two loaders would be two Google
+ * tags, and the container's own Google tag is the only one there should be.
+ *
+ * No <noscript> iframe. Google's snippet has one, and it loads the container
+ * for visitors without JavaScript with no consent state at all — the exact
+ * window this component exists to close.
+ *
+ * The loader is ONE unconditional <Script> whose URL is chosen at build time —
+ * not two elements behind a condition — so the advanced-mode guard in
+ * test/fs/consentWiring.test.mjs still sees a tag that always loads.
  */
+const LOADER = GTM_ENABLED
+  ? { id: 'gtm-src', src: `https://www.googletagmanager.com/gtm.js?id=${GTM_ID}` }
+  : { id: 'gtag-src', src: `https://www.googletagmanager.com/gtag/js?id=${GA4_ID}` };
+
 export function Analytics() {
   return (
     <>
@@ -56,13 +74,14 @@ export function Analytics() {
             adsId: ADS_ID,
             cookieName: CONSENT_COOKIE,
             schemaVersion: CONSENT_SCHEMA_VERSION,
+            gtmId: GTM_ID,
           }),
         }}
       />
       <Script
-        id="gtag-src"
+        id={LOADER.id}
         strategy="afterInteractive"
-        src={`https://www.googletagmanager.com/gtag/js?id=${GA4_ID}`}
+        src={LOADER.src}
         async
       />
     </>

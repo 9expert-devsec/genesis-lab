@@ -55,6 +55,8 @@ import { createCareerPathRegistration } from '@/lib/actions/career-path-registra
 import { isValidThaiPhone } from '@/lib/registration/thaiPhone';
 import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 import { cn } from '@/lib/utils';
+import { withAttribution } from '@/lib/attribution/attributionStore';
+import { trackRegisterCareerPath } from '@/lib/analytics/conversions';
 import {
   itemCode,
   isChoiceGroup,
@@ -906,8 +908,13 @@ export function CareerPathRegisterClient({
         note: formData.note,
       };
 
-      const res = await createCareerPathRegistration(payload);
+      const res = await createCareerPathRegistration(withAttribution(payload));
       if (res?.ok) {
+        trackRegisterCareerPath({
+          registrationId: res.id,
+          careerPath: careerSlug,
+          leadChannel: res.leadChannel,
+        });
         // `res.id` is deliberately NOT kept. It was carried only to print on the
         // success screen, and that line is gone; state whose last reader has
         // been deleted is how a value comes back looking like it was always

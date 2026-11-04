@@ -8,6 +8,8 @@ import { AnalyticsPageTracker } from '@/components/analytics/AnalyticsPageTracke
 import { LinkerParamCleaner } from '@/components/analytics/LinkerParamCleaner';
 import { MetaPixel } from '@/components/analytics/MetaPixel';
 import { MetaPixelPageTracker } from '@/components/analytics/MetaPixelPageTracker';
+import { AttributionCapture } from '@/components/analytics/AttributionCapture';
+import { ContactClickTracker } from '@/components/analytics/ContactClickTracker';
 import { FloatingActionDock } from '@/components/ui/FloatingActionDock';
 import { ChatLauncher } from '@/components/chat/ChatLauncher';
 import { ReadingProgressRing } from '@/components/ui/ReadingProgressRing';
@@ -135,6 +137,14 @@ export default function RootLayout({ children }) {
         {/* Outside the Suspense: usePathname only. Removes `_gl` from the
             address bar after gtag has read it — see the component. */}
         <LinkerParamCleaner />
+        {/* Not analytics and not consent-gated: records which campaign or
+            referrer brought the visitor, in first-party storage, for the
+            registration they may submit later. Nothing leaves the browser
+            until they do. usePathname only — see the component. */}
+        <AttributionCapture />
+        {/* contact_click for every tel: / mailto: / LINE link — one delegated
+            listener, inert without GTM. See the component. */}
+        <ContactClickTracker />
         <ThemeProvider>
           {children}
           {/* ── THE FLOATING DOCK IS MOUNTED HERE, ONCE ──────────────────

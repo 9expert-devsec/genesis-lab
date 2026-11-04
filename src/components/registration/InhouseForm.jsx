@@ -24,6 +24,8 @@ import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatThaiAddress } from '@/lib/address/formatThaiAddress';
 import { cn } from '@/lib/utils';
 import { phoneInputProps } from '@/lib/registration/phoneInputProps';
+import { withAttribution } from '@/lib/attribution/attributionStore';
+import { trackRegisterInhouse } from '@/lib/analytics/conversions';
 import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 
 // ── Storage keys (mirror the Public wizard pattern) ────────────────
@@ -208,7 +210,7 @@ export function InhouseWizard({
       const res = await fetch('/api/registration/inhouse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(withAttribution(formData)),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -216,6 +218,12 @@ export function InhouseWizard({
         setSubmitting(false);
         return;
       }
+      trackRegisterInhouse({
+        registrationId: body.registrationId,
+        courseCode: formData?.coursesInterested?.[0],
+        attendeeCount: formData?.participantsCount,
+        leadChannel: body.leadChannel,
+      });
       // Draft + confirmed payload are consumed; persist the result so the
       // step-3 route can render it.
       try { sessionStorage.removeItem(STORAGE_KEY); } catch {}

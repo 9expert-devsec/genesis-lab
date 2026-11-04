@@ -183,9 +183,9 @@ test('the title SEGMENT does not itself contain the brand', () => {
  * does. Same split, same stated limitation.
  *
  * It lives in THIS file rather than beside the detail route's own tests because
- * the claim is about MASTERCLASS_TITLE having ONE spelling. Four consumers now:
+ * the claim is about MASTERCLASS_TITLE having ONE spelling. Three consumers:
  * /masterclass's metadata.title, CollectionPage.name, and the detail route's
- * two branches.
+ * not-found branch. The found-course title is the course title alone.
  *
  * ── WHY THE SCAN IS WHOLE-FILE, WRITTEN THE HARD WAY ───────────────────────
  * It was scoped to a single statement when it was written, with a comment
@@ -203,10 +203,11 @@ test('the title SEGMENT does not itself contain the brand', () => {
  * on every published masterclass — curl'd on a production build, the served
  * title read
  *     Claude AI for Data Analyst | Masterclass — 9Expert Training | 9Expert Training
- * and now reads
- *     Claude AI for Data Analyst | Masterclass | 9Expert Training
+ * and now reads (the "| Masterclass" segment since dropped too — many titles
+ * already contain the word)
+ *     Claude AI for Data Analyst | 9Expert Training
  */
-test('neither masterclass detail title carries the brand — both read the shared segment', () => {
+test('neither masterclass detail title carries the brand; the live one is the course title alone', () => {
   const { code, withImports } = readSource("src/app/(public)/masterclass/[slug]/page.jsx");
 
   // 1. THE BRAND IS NOT SPELLED ANYWHERE IN THE ROUTE'S CODE — whole file, not
@@ -241,8 +242,8 @@ test('neither masterclass detail title carries the brand — both read the share
     'the not-found metadata.title is not the shared segment'
   );
   assert.ok(
-    code.includes('const title = `${course.title_th} | ${MASTERCLASS_TITLE}`;'),
-    'the found-course metadata.title is not built from the shared segment'
+    code.includes('const title = course.title_th;'),
+    'the found-course metadata.title is not the course title alone'
   );
 
   // 3. the share titles are the COMPOSED form, in BOTH branches. No template
@@ -254,8 +255,8 @@ test('neither masterclass detail title carries the brand — both read the share
     'the not-found share title is not composed from the segment and the brand'
   );
   assert.ok(
-    code.includes('const shareTitle = `${title} | ${siteConfig.name}`;'),
-    'the found-course share title is not composed from its title and the brand'
+    code.includes('const shareTitle = `${course.title_th} | ${siteConfig.name}`;'),
+    'the found-course share title is not composed from the course title and the brand'
   );
   // and og/twitter really CONSUME shareTitle — two keys in each of two
   // branches. Without this the composition above could be dead code while the

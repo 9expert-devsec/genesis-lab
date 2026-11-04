@@ -8,6 +8,8 @@ import { isQuoteEnabled }    from '@/lib/masterclass/quoteAccess';
 import { computePricing }    from '@/lib/pricing';
 import { headers }           from 'next/headers';
 import { refNo } from '@/lib/refNo';
+import { attributionField } from '@/lib/attribution/attribution';
+import { requestMetaField, requestMetaFor } from '@/lib/registration/requestMeta';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +62,8 @@ export async function POST(req) {
     const seats      = Math.max(1, Number(attendeesCount) || 1);
     const pricing    = computePricing(priceInfo.effective_price, seats);
     const ipAddress  = await getClientIp();
+    // Forensics from the request HEADERS — flagged, never refused. See requestMeta.js.
+    const requestMeta = requestMetaFor('masterclass', await headers());
 
     // Resolve coordinator — use first attendee slot as fallback for backward compat
     const resolvedCoordinator = coordinator ?? {
@@ -116,6 +120,8 @@ export async function POST(req) {
       status:  'pending',
       source:  'web',
       ipAddress,
+      ...attributionField(body?.attribution),
+      ...requestMetaField(requestMeta),
     });
 
     const referenceNumber = refNo(reg._id);
@@ -137,7 +143,13 @@ export async function POST(req) {
       }
     }
 
-    return NextResponse.json({ ok: true, registrationId: String(reg._id), referenceNumber });
+    return NextResponse.json({
+      ok: true,
+      registrationId: String(reg._id),
+      referenceNumber,
+      // Server-derived channel for the client's register_masterclass event.
+      leadChannel: reg.attribution?.channel ?? null,
+    });
   } catch (err) {
     console.error('[POST /api/masterclass/register]', err);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });

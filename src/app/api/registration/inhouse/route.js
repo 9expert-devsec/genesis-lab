@@ -8,6 +8,8 @@ import { getCourseByCode } from '@/lib/api/public-courses';
 import { refNo } from '@/lib/refNo';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { namesHiddenCourse, HIDDEN_COURSE_RESPONSE } from '@/lib/registration/hiddenCourseGuard';
+import { attributionField } from '@/lib/attribution/attribution';
+import { requestMetaField, requestMetaFor } from '@/lib/registration/requestMeta';
 
 /**
  * Cover image AND display title for the first course of interest, from ONE
@@ -67,6 +69,8 @@ export async function POST(req) {
     headersList.get('x-forwarded-for')?.split(',')[0].trim() ||
     headersList.get('x-real-ip') ||
     null;
+  // Forensics from the request HEADERS — flagged, never refused. See requestMeta.js.
+  const requestMeta = requestMetaFor('inhouse', headersList);
 
   await dbConnect();
   const doc = await RegisterInhouse.create({
@@ -110,6 +114,9 @@ export async function POST(req) {
     status: 'pending',
     source: 'inhouse',
     ipAddress,
+    // The raw body field — not on the zod schema — sanitised and classified.
+    ...attributionField(body?.attribution),
+    ...requestMetaField(requestMeta),
   });
 
   const referenceNumber = refNo(doc._id);
@@ -151,5 +158,8 @@ export async function POST(req) {
     ok: true,
     referenceNumber,
     registrationId: String(doc._id),
+    // The channel the server derived from the stored attribution, for the
+    // client's dataLayer event — so a GA4 count can be reconciled with this row.
+    leadChannel: doc.attribution?.channel ?? null,
   });
 }

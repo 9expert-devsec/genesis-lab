@@ -17,7 +17,7 @@ export function LandingConversion({ slug }) {
     if (fired.current) return;
     if (!LANDING_SLUGS.includes(slug)) return;
     fired.current = true;
-    trackLandingView();
+    trackLandingView({ slug });
   }, [slug]);
 
   return null;

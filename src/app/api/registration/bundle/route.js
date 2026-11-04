@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { NextResponse } from 'next/server';
+import { requestMetaFor } from '@/lib/registration/requestMeta';
 import { headers } from 'next/headers';
 
 import { dbConnect } from '@/lib/db/connect';
@@ -208,6 +209,7 @@ export async function POST(req) {
     page,
     sectionId: data.sectionId,
     resolved,
+    liveStatusById,
     todayKey,
     allowUnpublished: preview,
   });
@@ -301,6 +303,8 @@ export async function POST(req) {
     headersList.get('x-forwarded-for')?.split(',')[0].trim() ||
     headersList.get('x-real-ip') ||
     null;
+  // Forensics from the request HEADERS — flagged, never refused. See requestMeta.js.
+  const requestMeta = requestMetaFor('bundle', headersList);
 
   /**
    * THE REQUEST ID IS MINTED BEFORE ANY WRITE, and this is what closes the gap
@@ -357,6 +361,10 @@ export async function POST(req) {
     attendees,
     bundle,
     ipAddress,
+    // Raw — the shared bundle schema does not carry it; the leg builder
+    // sanitises it once and gives every leg the same copy.
+    attribution: body?.attribution,
+    requestMeta,
   });
   if (!built.ok) return refusal('unresolved_items');
 
@@ -506,6 +514,13 @@ export async function POST(req) {
     referenceNumber: refNo(requestId),
     requestId: String(requestId),
     legCount: created.length,
+    /**
+     * For the client's ONE register_bundle event: the courses as COMMITTED,
+     * and the channel the server derived. Every leg carries the same
+     * attribution copy, so any leg's channel is the request's.
+     */
+    courseCodes: created.map((leg) => leg.courseId),
+    leadChannel: created[0]?.attribution?.channel ?? null,
   });
 }
 

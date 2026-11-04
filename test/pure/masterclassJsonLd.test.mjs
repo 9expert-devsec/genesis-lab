@@ -363,7 +363,7 @@ test('the graph is Course then FAQPage, and the name/description are untouched',
   const graph = generateMasterclassJsonLd(course(), INSTRUCTORS, FAQS);
   assert.deepEqual(graph['@graph'].map((n) => n['@type']), ['Course', 'FAQPage']);
   const node = nodeOfType(graph, 'Course');
-  assert.equal(node.name, 'AI for Digital Marketing | Masterclass');
+  assert.equal(node.name, 'AI for Digital Marketing');
   assert.equal(node.description, 'ใช้ AI ทำการตลาดจริง');
   assert.equal(node.courseCode, 'MAS-AI-DMC');
   assert.equal(node.educationalCredentialAwarded, 'e-Certificate');

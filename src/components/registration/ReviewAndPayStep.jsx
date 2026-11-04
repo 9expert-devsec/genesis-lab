@@ -23,6 +23,8 @@ import { CardPanelFull } from "@/components/payment/CardPanelFull";
 import { QrPanelFull } from "@/components/payment/QrPanelFull";
 import { Step2MobileBar } from "@/components/payment/Step2MobileBar";
 import { TermsModal } from "@/components/payment/TermsModal";
+import { withAttribution } from "@/lib/attribution/attributionStore";
+import { trackRegisterPublic } from "@/lib/analytics/conversions";
 import { AttendeeListView, InvoiceView, ReadOnlyRow } from "./PreviewRows";
 
 const CHARGE_URL = "/api/registration/public/charge";
@@ -178,15 +180,35 @@ export function ReviewAndPayStep({
     return () => clearInterval(t);
   }, [qrCharge, qrExpired]);
 
+  /**
+   * register_public for the paid path, ONCE per mount. A QR regenerate or a
+   * card retry posts again and the route writes a NEW registration each time
+   * (see supersedesRegistrationId) — that is one customer registering once, so
+   * only the first created registration is reported.
+   */
+  const registerTracked = useRef(false);
+
   /** One-shot POST — creates the registration and the charge together. */
   async function postCharge(extra) {
     const res = await fetch(CHARGE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...data, ...extra, consent: consentPayload }),
+      body: JSON.stringify(withAttribution({ ...data, ...extra, consent: consentPayload })),
     });
     const body = await res.json().catch(() => ({}));
-    return { ok: res.ok && body.ok, body };
+    const ok = res.ok && body.ok;
+    if (ok && body.registrationId && !registerTracked.current) {
+      registerTracked.current = true;
+      trackRegisterPublic({
+        formType: "public_paid",
+        registrationId: body.registrationId,
+        courseCode: data?.courseCode || data?.courseId,
+        attendeeCount: data?.attendeesCount,
+        value: body.amount,
+        leadChannel: body.leadChannel,
+      });
+    }
+    return { ok, body };
   }
 
   /**

@@ -54,6 +54,7 @@ const OK_ARGS = {
   page: page([bundle()]),
   sectionId: 'sec-1',
   resolved: [entry()],
+  liveStatusById: { r1: { status: 'open', dates: ['2026-10-20', '2026-10-21'] } },
   todayKey: TODAY,
   now: NOW,
 };
@@ -85,14 +86,14 @@ test('CONTROL: the spoken refusals are NOT silent, so the split is doing work', 
   // `page_expired` joined this list when expiry was split out of
   // `page_not_public`: an ended promotion has a true sentence to say, so it
   // must never 404.
-  for (const r of ['page_not_public', 'page_expired', 'section_disabled', 'closed', 'unresolved_items']) {
+  for (const r of ['page_not_public', 'page_expired', 'section_disabled', 'closed', 'unresolved_items', 'no_open_rounds']) {
     assert.equal(isSilentRefusal(r), false, `${r} would 404 a visitor who deserves a sentence`);
   }
   // …and the two lists together are the whole enumeration, so a reason added
   // later cannot quietly fall into neither.
   assert.deepEqual(
     [...BUNDLE_REFUSAL_REASONS].sort(),
-    [...SILENT_REFUSALS, 'page_not_public', 'page_expired', 'section_disabled', 'closed', 'unresolved_items'].sort(),
+    [...SILENT_REFUSALS, 'page_not_public', 'page_expired', 'section_disabled', 'closed', 'unresolved_items', 'no_open_rounds'].sort(),
   );
 });
 
@@ -337,7 +338,7 @@ test('CONTROL: that same broken bundle reports unresolved_items when it is OPEN'
 
 // ── the item pass ─────────────────────────────────────────────────────────
 
-test('every way an item can be unquotable is caught, and they are named apart', () => {
+test('every way an item can be unnameable is caught, and they are named apart', () => {
   const rows = [
     item({ id: 'a', courseId: '' }),
     item({ id: 'b', courseId: 'GONE' }),
@@ -357,11 +358,184 @@ test('every way an item can be unquotable is caught, and they are named apart', 
   const bad = unresolvedBundleItems(rows, resolved, TODAY);
   assert.deepEqual(
     bad.map((b) => `${b.index}:${b.why}`),
-    ['0:no_course', '1:course_unresolved', '2:no_round', '3:round_elapsed', '4:round_missing'],
+    ['0:no_course', '1:course_unresolved', '2:no_round'],
   );
-  // Item f — a live round — is the one that is NOT in the list, which is what
-  // makes the five above discriminating rather than "everything is bad".
-  assert.equal(bad.some((b) => b.index === 5), false);
+  // Items d and e have rolled off and f is live. None of them is a fault in the
+  // document, which is what makes the three above discriminating rather than
+  // "everything is bad". d and e are the auto-close's to answer — pinned below.
+  assert.equal(bad.some((b) => b.index >= 3), false);
+});
+
+test('a single round that has rolled off is no_open_rounds, past or withdrawn', () => {
+  /**
+   * These two pinned `round_elapsed` and `round_missing` as `unresolved_items`.
+   * Nothing is wrong with the bundle: the schedule has simply run out, and the
+   * visitor is told that rather than to ring the sales team about a fault.
+   */
+  const cases = [
+    ['rolled-off', ['2026-08-01']],
+    ['withdrawn', ['2027-08-01']],
+  ];
+  for (const [id, dates] of cases) {
+    const it = item({ roundId: id, roundSnapshot: { id, dates, type: 'classroom' } });
+    const out = resolveBundleRequest({
+      ...OK_ARGS,
+      page: page([bundle({ items: [it] })]),
+      resolved: [entry({ rounds: [] })],
+      liveStatusById: {},
+    });
+    assert.equal(out.reason, 'no_open_rounds', id);
+    assert.equal(out.unresolved, undefined, 'no_open_rounds is not an item fault');
+  }
+});
+
+// ── a course offering several rounds: only "none open" closes the bundle ──
+
+const offer = (id, dates, over = {}) => ({ id, snapshot: { id, dates, type: 'classroom' }, ...over });
+const row = (id, dates, status = 'open') => ({ _id: id, status, dates, type: 'classroom' });
+const statusMap = (rows) => Object.fromEntries(rows.map((r) => [r._id, { status: r.status, dates: r.dates }]));
+
+const NOV = ['2026-11-12', '2026-11-13'];
+const DEC = ['2026-12-01', '2026-12-02'];
+const JAN = ['2027-01-05', '2027-01-06'];
+
+/** Two courses, the second always healthy, the first as the case demands. */
+const twoCourses = (rounds, rows, content = {}) => {
+  const items = [
+    { id: 'i1', courseId: 'C1', rounds },
+    { id: 'i2', courseId: 'C2', rounds: [offer('x', JAN)] },
+  ];
+  const second = [row('x', JAN)];
+  return {
+    ...OK_ARGS,
+    page: page([bundle({ items, ...content })]),
+    resolved: [entry({ id: 'i1', courseId: 'C1', rounds: rows }), entry({ id: 'i2', courseId: 'C2', rounds: second })],
+    liveStatusById: statusMap([...rows, ...second]),
+  };
+};
+
+test('THE REPORTED BUG: a first round gone from the feed does not refuse a course with a live one', () => {
+  /**
+   * The multi-round test further down passes `resolved: undefined`, which skips
+   * the item pass, so it could not see this: five rounds offered, the first
+   * absent from the feed, the card still offering the button and the form
+   * refusing the whole package.
+   */
+  const out = resolveBundleRequest(twoCourses([offer('gone', NOV), offer('open', DEC)], [row('open', DEC)]));
+  assert.equal(out.ok, true, `refused: ${out.reason}`);
+});
+
+test('CONTROL: a live first round with a later one gone is equally accepted', () => {
+  // Position must not matter. Without this the test above could pass on a guard
+  // that had merely moved from "the first" to "the last".
+  const out = resolveBundleRequest(twoCourses([offer('open', DEC), offer('gone', NOV)], [row('open', DEC)]));
+  assert.equal(out.ok, true, `refused: ${out.reason}`);
+});
+
+test('no_open_rounds when EVERY offered round of one course is gone from the feed', () => {
+  const out = resolveBundleRequest(twoCourses([offer('gone', NOV), offer('gone2', DEC)], []));
+  assert.equal(out.reason, 'no_open_rounds');
+});
+
+test('no_open_rounds when every round is in the feed but past its pick deadline', () => {
+  /**
+   * The inverse bug. These are all `live`, so no check of the feed alone can see
+   * them: the card closed and the form opened a wizard with nothing to pick.
+   */
+  const late = { pickUntil: '2026-09-01' };
+  const out = resolveBundleRequest(twoCourses(
+    [offer('a', NOV, late), offer('b', DEC, late)],
+    [row('a', NOV), row('b', DEC)],
+  ));
+  assert.equal(out.reason, 'no_open_rounds');
+});
+
+test('CONTROL: one round still inside its deadline keeps the same bundle open', () => {
+  const out = resolveBundleRequest(twoCourses(
+    [offer('a', NOV, { pickUntil: '2026-09-01' }), offer('b', DEC)],
+    [row('a', NOV), row('b', DEC)],
+  ));
+  assert.equal(out.ok, true, `refused: ${out.reason}`);
+});
+
+test('full and closed rounds are only unselectable until they are all there is', () => {
+  const open = resolveBundleRequest(twoCourses(
+    [offer('a', NOV), offer('b', DEC), offer('c', JAN)],
+    [row('a', NOV, 'full'), row('b', DEC, 'closed'), row('c', JAN)],
+  ));
+  assert.equal(open.ok, true, `refused: ${open.reason}`);
+  const shut = resolveBundleRequest(twoCourses(
+    [offer('a', NOV), offer('b', DEC)],
+    [row('a', NOV, 'full'), row('b', DEC, 'closed')],
+  ));
+  assert.equal(shut.reason, 'no_open_rounds');
+});
+
+test('a sequential chain nothing can satisfy is no_open_rounds, as it is on the card', () => {
+  // Each course has an open round, but course 2's starts before course 1's ends.
+  const late = ['2027-03-01'];
+  const args = twoCourses([offer('late', late)], [row('late', late)], { sequential: true });
+  assert.equal(resolveBundleRequest(args).reason, 'no_open_rounds');
+  // CONTROL: the flag is what closes it, so it is being read rather than ignored.
+  const free = twoCourses([offer('late', late)], [row('late', late)]);
+  assert.equal(resolveBundleRequest(free).ok, true);
+});
+
+test('CONTROL: a single live round is unchanged, in the new and the legacy shape', () => {
+  for (const one of [
+    { id: 'i1', courseId: 'MSE-L1', rounds: [{ id: 'r1' }] },
+    { id: 'i1', courseId: 'MSE-L1', roundId: 'r1' },
+  ]) {
+    const out = resolveBundleRequest({ ...OK_ARGS, page: page([bundle({ items: [one] })]) });
+    assert.equal(out.ok, true, `refused ${JSON.stringify(one)}: ${out.reason}`);
+  }
+});
+
+test('a course that cannot be resolved is still unresolved_items, not a schedule answer', () => {
+  /**
+   * Beside another course whose rounds have all gone, so this also pins the
+   * order: the fault is named first, because `no_open_rounds` would send the
+   * author looking at the schedule of a course that no longer exists.
+   */
+  const args = twoCourses([offer('gone', NOV)], []);
+  args.resolved = [args.resolved[0], entry({ id: 'i2', courseId: 'C2', course: null, rounds: [] })];
+  const out = resolveBundleRequest(args);
+  assert.equal(out.reason, 'unresolved_items');
+  assert.deepEqual(out.unresolved.map((u) => u.why), ['course_unresolved']);
+});
+
+test('an item offering no rounds at all is still unresolved_items', () => {
+  const out = resolveBundleRequest(twoCourses([], []));
+  assert.equal(out.reason, 'unresolved_items');
+  assert.deepEqual(out.unresolved.map((u) => u.why), ['no_round']);
+});
+
+test('a caller that forgets the status map fails CLOSED', () => {
+  // Nothing in the argument list would otherwise notice. An open-by-default here
+  // would quietly switch the auto-close off for that caller.
+  const { liveStatusById, ...rest } = OK_ARGS;
+  assert.equal(resolveBundleRequest(rest).reason, 'no_open_rounds');
+  assert.equal(resolveBundleRequest({ ...rest, liveStatusById }).ok, true);
+});
+
+test('the cheap pass still pays for no status map', () => {
+  const { liveStatusById, ...rest } = OK_ARGS;
+  assert.equal(liveStatusById.r1.status, 'open');
+  assert.equal(resolveBundleRequest({ ...rest, resolved: undefined }).ok, true);
+});
+
+test('an authorised PREVIEW takes the same round rules — only visibility is skipped', () => {
+  const withDraftPage = (args) => ({ ...args, page: { ...args.page, status: 'draft' }, allowUnpublished: true });
+
+  const bug = withDraftPage(twoCourses([offer('gone', NOV), offer('open', DEC)], [row('open', DEC)]));
+  assert.equal(resolveBundleRequest(bug).ok, true, 'a preview refuses the reported bug');
+
+  const shut = withDraftPage(twoCourses([offer('gone', NOV), offer('gone2', DEC)], []));
+  assert.equal(resolveBundleRequest(shut).reason, 'no_open_rounds');
+
+  // CONTROL: without the flag the same draft stops at visibility, so the two
+  // lines above really went through the preview path.
+  assert.equal(resolveBundleRequest({ ...shut, allowUnpublished: false }).reason, 'page_not_public');
 });
 
 test('CONTROL: a wholly good list yields NO unresolved items', () => {

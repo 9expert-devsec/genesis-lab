@@ -9,6 +9,10 @@ import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { typedAttendeeRows } from '@/lib/registration/careerPathRoster';
 import { isTransfer } from '@/lib/career-paths/prerequisiteOrder';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+import { attributionSummary, ATTRIBUTION_EMPTY_LABEL } from '@/lib/attribution/attribution';
+import {
+  requestMetaSummary, REQUEST_META_TITLE, REQUEST_META_EMPTY_LABEL, UNTRUSTED_ORIGIN_LABEL,
+} from '@/lib/registration/requestMeta';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'รายละเอียดการลงทะเบียน' };
@@ -244,6 +248,8 @@ export default async function RegistrationDetailPage({ params }) {
         </Section>
       )}
 
+      <AttributionSection attribution={reg.attribution} requestMeta={reg.requestMeta} />
+
       <RecordHistory menu="career_path_registrations" entity="registration" recordId={String(reg._id)} />
     </div>
   );
@@ -268,5 +274,52 @@ function Row({ label, value }) {
       </div>
       <div className="text-sm text-9e-navy dark:text-white">{value || '—'}</div>
     </div>
+  );
+}
+
+/** ที่มา — see attributionSummary. A record without it says so. */
+function AttributionSection({ attribution, requestMeta }) {
+  const summary = attributionSummary(attribution);
+  const meta = requestMetaSummary(requestMeta);
+  return (
+    <Section
+      title={meta?.untrusted
+        ? <>ที่มา<span className="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-300">{UNTRUSTED_ORIGIN_LABEL}</span></>
+        : 'ที่มา'}
+    >
+      {summary ? (
+        summary.rows.map((row) => (
+          <Row
+            key={row.label}
+            label={row.label}
+            value={row.isDate ? (row.value ? fmtDate(row.value) : '') : row.value}
+          />
+        ))
+      ) : (
+        <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">{ATTRIBUTION_EMPTY_LABEL}</p>
+      )}
+      <RequestMetaDetails meta={meta} />
+    </Section>
+  );
+}
+
+/**
+ * ข้อมูลคำขอ — the request headers the registration arrived with, for fraud
+ * investigation (src/lib/registration/requestMeta.js). Collapsed: native
+ * <details>, keyboard-operable with no script. Every field is listed; a record
+ * filed before capture began says so.
+ */
+function RequestMetaDetails({ meta }) {
+  return (
+    <details className="group mt-3 border-t border-[var(--surface-border)] pt-3">
+      <summary className="cursor-pointer text-sm font-semibold text-9e-navy dark:text-white">
+        {REQUEST_META_TITLE}
+      </summary>
+      <div className="mt-2">
+        {meta
+          ? meta.rows.map((row) => <Row key={row.label} label={row.label} value={row.value} />)
+          : <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">{REQUEST_META_EMPTY_LABEL}</p>}
+      </div>
+    </details>
   );
 }
