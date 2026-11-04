@@ -5,34 +5,42 @@ import { EXCEL_BEGINNER_LEVELS, getLevel } from '@/lib/play/levels/excel/beginne
 import { checkTask } from '@/lib/play/levels/check';
 import { validateLevel } from '@/lib/play/levels/schema';
 import {
+  answerState,
   bossGoal,
   bossSteps,
   crateCount,
+  dataRows,
   meetsThreshold,
+  orderCell,
   platesFor,
+  podiumTags,
   rateRefs,
   receiptScale,
   sceneConfig,
   sceneFor,
   sceneRows,
+  stackCoins,
   statusTag,
   tierLabel,
   tierPlacement,
   tierRange,
+  zeroDay,
 } from '@/lib/play/game/scene';
 
 /**
  * The simulator scene card: which levels get one, 2-5's broken-reference
  * detection when the player forgets $, 1-4's plate cap, 3-5's placement by the
- * player's own result, the boss goal bar, and thresholds read from config.
+ * player's own result, the boss goal bar, CH.2's data scenes, and thresholds
+ * read from config.
  */
 
-test('scene: routed by the level `scene` field — CH.1, 2-5, CH.3 and the boss; the rest keep the scoreboard', () => {
+test('scene: routed by the level `scene` field — every level has one; no scene keeps the scoreboard', () => {
   const routed = Object.fromEntries(EXCEL_BEGINNER_LEVELS.map((l) => [l.id, sceneFor(l)]));
   assert.deepEqual(
-    Object.entries(routed).filter(([, s]) => s),
+    Object.entries(routed),
     [
-      ['1-1', 'toppings'], ['1-2', 'checkout'], ['1-3', 'change'], ['1-4', 'split'], ['1-5', 'delivery'], ['2-5', 'vat'],
+      ['1-1', 'toppings'], ['1-2', 'checkout'], ['1-3', 'change'], ['1-4', 'split'], ['1-5', 'delivery'],
+      ['2-1', 'tipjar'], ['2-2', 'average'], ['2-3', 'podium'], ['2-4', 'spike'], ['2-5', 'vat'],
       ['3-1', 'stock'], ['3-2', 'receipts'], ['3-3', 'discount'], ['3-4', 'iced'], ['3-5', 'tiers'], ['boss', 'boss'],
     ],
   );
@@ -44,7 +52,13 @@ test('scene: routed by the level `scene` field — CH.1, 2-5, CH.3 and the boss;
   const { threshold, ...rest } = getLevel('3-2').scene;
   assert.equal(threshold, 200);
   assert.ok(validateLevel({ ...getLevel('3-2'), scene: rest }).some((p) => p.includes('missing threshold')));
-  assert.equal(sceneFor({ ...getLevel('2-1') }), null);
+  assert.equal(sceneFor({ ...getLevel('2-1'), scene: undefined }), null);
+  // A data scene needs a real range, and answers single cells.
+  const sum = getLevel('2-1');
+  assert.deepEqual(validateLevel(sum), []);
+  assert.ok(validateLevel({ ...sum, scene: { ...sum.scene, data: 'nope' } }).some((p) => p.includes('data is not a range')));
+  const filled = { ...sum, tasks: [{ ...sum.tasks[0], fill: 'B7:B7' }] };
+  assert.ok(validateLevel(filled).some((p) => p.includes('single cells')));
 });
 
 test('scene 2-5: =B2*B7 filled down is caught per row from the fill-down, =B2*$B$7 is not', () => {
@@ -136,6 +150,82 @@ test('scene boss: the goal bar is the matched step-1 sum before step 2 passes, i
   // The bar never runs past its end.
   results.D6 = { value: 5000, ok: true };
   assert.equal(bossGoal(level, sceneRows(level, results), results, { taskIndex: 2, complete: true }).fill, 1);
+});
+
+/** The answers a level's tasks produce, as the card reads them from `results`. */
+function ranAnswers(level, formulas) {
+  const results = {};
+  level.tasks.forEach((t, i) => {
+    if (!formulas[i]) return;
+    for (const c of checkTask(level, t.id, formulas[i]).cells) results[c.ref] = { value: c.value, ok: c.ok };
+  });
+  return level.tasks.map((t) => answerState(results, t.anchor));
+}
+
+test('scene range bar: follows the rows the ran formula references, the data range before a run', () => {
+  const level = getLevel('2-1');
+  const inRange = (formula) => dataRows(level, formula).filter((r) => r.inRange).map((r) => r.row);
+
+  assert.deepEqual(inRange(''), [2, 3, 4, 5, 6]);
+  assert.deepEqual(inRange('=SUM(B2:B6)'), [2, 3, 4, 5, 6]);
+  assert.deepEqual(inRange('=SUM(B2:B5)'), [2, 3, 4, 5]);
+  // Any way of naming the cells counts, and a gap stays a gap.
+  assert.deepEqual(inRange('=SUM($B$3:$B$4)'), [3, 4]);
+  assert.deepEqual(inRange('=B2+B3+B6'), [2, 3, 6]);
+  // A formula that reaches none of the data covers no row.
+  assert.deepEqual(inRange('=SUM(C2:C6)'), []);
+  // Rows are the input data.
+  assert.deepEqual(dataRows(level, '').map((r) => [r.label, r.value]), [['จ.', 1240], ['อ.', 980], ['พ.', 1560], ['พฤ.', 0], ['ศ.', 1110]]);
+  assert.deepEqual(dataRows(level, '').map((r) => stackCoins(r.value, level.scene)), [6, 5, 8, 0, 6]);
+  assert.equal(stackCoins(9000, level.scene), 8);
+});
+
+test('scene 2-2: the 0-day note appears only on a wrong answer', () => {
+  const level = getLevel('2-2');
+  const rows = dataRows(level, '');
+  const note = (formula) => zeroDay(rows, ranAnswers(level, [formula])[0]);
+
+  assert.equal(zeroDay(rows, answerState({}, 'B7')), null);
+  assert.equal(zeroDay(rows, answerState({}, 'B7', { running: true })), null);
+  assert.equal(note(level.tasks[0].model), null);
+  assert.equal(note('=SUM(B2:B6)/5'), null);
+  // Dividing by 4 skips the 0 day: the note points at Thursday.
+  const [wrong] = ranAnswers(level, ['=SUM(B2:B6)/4']);
+  assert.equal(wrong.value, 1222.5);
+  assert.equal(wrong.state, 'error');
+  assert.equal(note('=SUM(B2:B6)/4').label, 'พฤ.');
+});
+
+test('scene 2-3: MAX and MIN sit on the stack equal to the player\'s value, or nowhere', () => {
+  const level = getLevel('2-3');
+  const rows = dataRows(level, '');
+  const tags = (...formulas) => {
+    const answers = ranAnswers(level, formulas);
+    const { max, min } = podiumTags(rows, answers);
+    return { max: max?.label ?? null, min: min?.label ?? null, states: answers.map((a) => a.state) };
+  };
+
+  assert.deepEqual(tags(), { max: null, min: null, states: ['shadow', 'shadow'] });
+  // Step 1 done, step 2 not run: MAX stands alone.
+  assert.deepEqual(tags('=MAX(B2:B6)'), { max: 'พ.', min: null, states: ['match', 'shadow'] });
+  assert.deepEqual(tags('=MAX(B2:B6)', '=MIN(B2:B6)'), { max: 'พ.', min: 'พฤ.', states: ['match', 'match'] });
+  // A wrong range still lands on a real day: tagged there, the total goes red.
+  assert.deepEqual(tags('=MAX(B2:B3)', '=MIN(B2:B3)'), { max: 'จ.', min: 'อ.', states: ['error', 'error'] });
+  // A value equal to no day gets no tag.
+  assert.deepEqual(tags('=MAX(B2:B6)+1', '=MIN(B2:B6)+1'), { max: null, min: null, states: ['error', 'error'] });
+});
+
+test('scene 2-4: badges follow the cell type from the engine, not the answer', () => {
+  const level = getLevel('2-4');
+  const kinds = (lvl) => dataRows(lvl, '').map((r) => orderCell(lvl, r.ref));
+
+  assert.deepEqual(kinds(level), ['number', 'number', 'text', 'number', 'blank']);
+  // The player's answer changes nothing about what COUNT counts.
+  assert.equal(ranAnswers(level, ['=COUNT(B2:B3)'])[0].value, 2);
+  assert.deepEqual(dataRows(level, '=COUNT(B2:B3)').map((r) => orderCell(level, r.ref)), kinds(level));
+  // The cell's type does.
+  const edited = { ...level, sheet: { ...level.sheet, B4: 7, B2: 'ยกเลิก' } };
+  assert.deepEqual(kinds(edited), ['text', 'number', 'number', 'number', 'blank']);
 });
 
 test('scene config: change a parameter in a fixture and the scene changes with it', () => {

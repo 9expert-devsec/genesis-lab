@@ -4,24 +4,33 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 
 import {
+  answerState,
+  averageParts,
   bossGoal,
   bossSteps,
   capProps,
+  coinHeight,
   countTagged,
   crateCount,
+  dataRows,
   focusRow,
   matchedSum,
   meetsThreshold,
+  orderCell,
   platesFor,
+  podiumTags,
   rateRefs,
   receiptScale,
+  rowCoins,
   sceneConfig,
   sceneRows,
+  stackCoins,
   statusTag,
   tierLabel,
   tierPlacement,
   tierRange,
   tierZone,
+  zeroDay,
 } from '@/lib/play/game/scene';
 import { displayValue } from '@/lib/play/game/view';
 
@@ -31,6 +40,7 @@ import {
   C,
   Coin,
   ContactShadow,
+  CountBadge,
   Coupon,
   Crate,
   Glass,
@@ -38,6 +48,7 @@ import {
   MiniSvg,
   Person,
   Receipt,
+  SpikeSlip,
   StackCoin,
   StageTag,
   StatusTag,
@@ -51,6 +62,10 @@ import styles from './scene.module.css';
  * from the grid's own `results` (see sceneRows); the stage is an SVG overlay in
  * a 248×190 viewBox on top of a 3D backdrop image, so everything scales with
  * the card while keeping its aspect ratio.
+ *
+ * A `data` scene (CH.2's summaries) is the other shape: its rows are the input
+ * data, the answer's state lives in the total box, and a lime bar marks the rows
+ * the formula that ran references.
  */
 
 const VB_W = 248;
@@ -84,12 +99,16 @@ const SCENES = {
   iced: { name: 'Coffee counter', Stage: IcedStage, Props: IcedProps, Total: IcedTotal },
   tiers: { name: 'Member tiers', Stage: TiersStage, Props: TiersProps, Value: TiersValue, Total: TiersTotal },
   boss: { name: 'Shop summary', Stage: BossStage, Props: CupsProps, Total: BossTotal, float: true },
+  tipjar: { name: 'Tip jar', data: true, Stage: TipJarStage, Props: CoinProps, Total: TipJarTotal },
+  average: { name: 'Cash register', data: true, Stage: AverageStage, Props: CoinProps, Total: AverageTotal, tone: averageTone },
+  podium: { name: 'Sales podium', data: true, Stage: PodiumStage, Props: CoinProps, Total: PodiumTotal, tone: podiumTone },
+  spike: { name: 'Order spike', data: true, Stage: SpikeStage, Props: OrderProps, Value: OrderValue, Total: SpikeTotal, tone: orderTone },
 };
 
 export function SceneCard({ kind, level, results, running, formats, formula, taskIndex, complete }) {
   const scene = SCENES[kind];
   // Rows are the first task's, so only that task's run can make one blue.
-  const rows = sceneRows(level, results, { running: running && taskIndex === 0 });
+  const rows = scene.data ? dataRows(level, formula) : sceneRows(level, results, { running: running && taskIndex === 0 });
   const fmt = formats[rows[0].ref];
   const ctx = {
     level,
@@ -101,6 +120,7 @@ export function SceneCard({ kind, level, results, running, formats, formula, tas
     cfg: sceneConfig(level),
     progress: { taskIndex, complete },
     vat: kind === 'vat' ? vatContext(level, rows, formula) : null,
+    answers: scene.data ? level.tasks.map((t, i) => answerState(results, t.anchor, { running: running && taskIndex === i })) : null,
   };
   const { Stage, Props, Total, Value } = scene;
   return (
@@ -114,13 +134,17 @@ export function SceneCard({ kind, level, results, running, formats, formula, tas
         <Stage {...ctx} />
       </div>
 
-      <ul className="mt-4 flex flex-col gap-1" aria-label="ผลแต่ละแถว">
-        {rows.map((r) => (
-          <SceneRow key={r.ref} row={r} fmt={fmt} float={scene.float} value={Value ? <Value row={r} {...ctx} /> : null}>
-            <Props row={r} {...ctx} />
-          </SceneRow>
-        ))}
-      </ul>
+      {scene.data ? (
+        <DataRows scene={scene} ctx={ctx} />
+      ) : (
+        <ul className="mt-4 flex flex-col gap-1" aria-label="ผลแต่ละแถว">
+          {rows.map((r) => (
+            <SceneRow key={r.ref} row={r} fmt={fmt} float={scene.float} value={Value ? <Value row={r} {...ctx} /> : null}>
+              <Props row={r} {...ctx} />
+            </SceneRow>
+          ))}
+        </ul>
+      )}
 
       <div className="mt-4 rounded-[14px] bg-[#0D1B2A]/70 px-4 py-3" role="status" aria-live="polite">
         <Total {...ctx} />
@@ -614,6 +638,272 @@ function VatTotal({ rows, fmt, vat }) {
       <BigNumber value={matchedSum(rows)} unit="บาท" fmt={fmt} />
     </>
   );
+}
+
+// ── 2-1 to 2-4: data rows, coin stacks, the answer ───────────────────────────
+
+const DATA_TONE = {
+  plain: { bg: '', label: 'text-white/85', value: 'text-white/60' },
+  ok: { bg: 'bg-[#86EFAC]/10', label: 'text-white', value: 'text-[#86EFAC]' },
+  warn: { bg: 'bg-[#FBBF24]/10', label: 'text-white', value: 'text-[#FBBF24]' },
+  skip: { bg: '', label: 'text-white/35', value: 'text-white/35' },
+};
+
+function DataRows({ scene, ctx }) {
+  const { rows, cfg, formula } = ctx;
+  const { Props, Value } = scene;
+  return (
+    <>
+      <ul className="mt-4 flex flex-col gap-1 pl-3" aria-label="ข้อมูลแต่ละแถว">
+        {rows.map((r, i) => {
+          const tone = DATA_TONE[scene.tone?.(r, ctx) ?? 'plain'];
+          const top = !rows[i - 1]?.inRange ? 'rounded-t-full' : '';
+          const bottom = !rows[i + 1]?.inRange ? 'rounded-b-full' : '';
+          return (
+            <li key={r.ref} className={`relative grid grid-cols-[minmax(0,5rem)_minmax(0,1fr)_auto] items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-sm ${tone.bg}`}>
+              {/* One piece of the range bar; -bottom-1 closes the gap to the next row. */}
+              <span
+                aria-hidden="true"
+                data-range={r.inRange ? 'in' : 'out'}
+                className={`absolute -left-3 top-0 w-1 ${i < rows.length - 1 ? '-bottom-1' : 'bottom-0'} ${r.inRange ? `bg-[#D4F73F] ${top} ${bottom}` : 'bg-white/10'}`}
+              />
+              <span className={`truncate ${tone.label}`}>{r.label}</span>
+              <span className="relative flex min-w-0 items-center gap-1 overflow-hidden">
+                <Props row={r} {...ctx} />
+              </span>
+              {Value ? <Value row={r} tone={tone} {...ctx} /> : <span className={`${MONO} text-right text-sm tabular-nums ${tone.value}`}>{displayValue(r.value)}</span>}
+            </li>
+          );
+        })}
+      </ul>
+      {/* The formula that ran, never the solution: the data range until then. */}
+      <p className="mt-2 break-words font-mono text-[11px] text-[#D4F73F]">{formula || `ช่วงข้อมูล ${cfg.data}`}</p>
+    </>
+  );
+}
+
+function CoinProps({ row, cfg }) {
+  const n = rowCoins(row.value, cfg);
+  return (
+    <>
+      {Array.from({ length: Math.max(1, n) }, (_, i) => (
+        <MiniSvg key={i} w={11} h={11} viewBox="0 0 12 12">
+          <Coin x={0} y={0} state={n ? 'match' : 'shadow'} />
+        </MiniSvg>
+      ))}
+    </>
+  );
+}
+
+const answerText = ({ value }) => (value === null ? '—' : typeof value === 'number' ? money(value) : displayValue(value));
+
+function AnswerTotal({ label, answer, unit }) {
+  return (
+    <>
+      <p className="text-xs text-white/60">{label}</p>
+      <BigNumber value={answerText(answer)} unit={unit} tone={VALUE_TONE[answer.state]} />
+    </>
+  );
+}
+
+/** The answer on the stage, in its state's colour. */
+function AnswerChip({ x, y, w, h, text, state }) {
+  const color = VALUE_FILL[state];
+  return (
+    <g className={state === 'shadow' ? undefined : styles.pop}>
+      <rect x={x} y={y} width={w} height={h} rx="6" fill={state === 'shadow' ? 'transparent' : `${color}1F`} stroke={color} strokeWidth="1" />
+      <text x={x + w / 2} y={y + h / 2 + 3.2} textAnchor="middle" fontSize="9" fontWeight="700" fill={state === 'shadow' ? '#94A3B8' : color} style={MONO_STYLE}>
+        {text}
+      </text>
+    </g>
+  );
+}
+
+const STACK_STEP = 5;
+
+/** One stack per day from x, `gap` apart; `base` is the top of the lowest coin. */
+function CoinStacks({ rows, cfg, x, gap, base, looks = {} }) {
+  return rows.map((r, i) => {
+    const left = x + i * gap;
+    const n = stackCoins(r.value, cfg);
+    return (
+      <g key={r.ref} style={looks[r.ref]}>
+        <ContactShadow cx={left + 9} cy={base + 7} rx={11} ry={3} />
+        {n === 0 && <StackCoin x={left} y={base} state="shadow" />}
+        {Array.from({ length: n }, (_, k) => (
+          <StackCoin key={k} x={left} y={base - k * STACK_STEP} state="match" />
+        ))}
+        <text x={left + 9} y={base + 17} textAnchor="middle" fontSize="7" fill="#94A3B8" style={MONO_STYLE}>
+          {displayValue(r.value)}
+        </text>
+      </g>
+    );
+  });
+}
+
+// 2-1
+const ARC = 'M46 104 Q 100 8 166 56';
+
+function TipJarStage({ rows, cfg, answers }) {
+  const [answer] = answers;
+  const text = answerText(answer);
+  const w = Math.max(44, text.length * 5.6 + 14);
+  return (
+    <>
+      <Backdrop name="coin-jar" x={150} y={40} w={92} />
+      <Overlay>
+        <CoinStacks rows={rows} cfg={cfg} x={14} gap={26} base={150} />
+        <path d={ARC} fill="none" stroke={C.lime} strokeOpacity="0.7" strokeWidth="1.2" strokeDasharray="4 3" />
+        <path d="M160 48 L167 57 L156 58" fill="none" stroke={C.lime} strokeOpacity="0.7" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        <AnswerChip x={193 - w / 2} y={14} w={w} h={21} text={text} state={answer.state} />
+        {answer.state === 'match' &&
+          [0, 1, 2].map((i) => (
+            <g key={i} className={styles.hop} style={{ offsetPath: `path("${ARC}")`, animationDelay: `${i * 110}ms` }}>
+              <Coin x={-6} y={-6} state="match" />
+            </g>
+          ))}
+      </Overlay>
+    </>
+  );
+}
+
+function TipJarTotal({ answers }) {
+  return <AnswerTotal label={`${answers[0].ref} · ยอดขายรวม`} answer={answers[0]} unit="บาท" />;
+}
+
+// 2-2
+const AVERAGE_STACKS = { x: 18, gap: 30, base: 160 };
+
+function AverageStage({ rows, cfg, answers }) {
+  const [answer] = answers;
+  const { x, gap, base } = AVERAGE_STACKS;
+  const zero = zeroDay(rows, answer);
+  const lineY = typeof answer.value === 'number' ? base + STACK_STEP - coinHeight(answer.value, cfg, STACK_STEP) : null;
+  const zeroX = zero ? x + zero.index * gap + 9 : 0;
+  return (
+    <>
+      <Backdrop name="cash-register" x={176} y={96} w={68} />
+      <Overlay>
+        <CoinStacks rows={rows} cfg={cfg} {...AVERAGE_STACKS} />
+        {lineY !== null && (
+          <g>
+            <line x1="8" x2="168" y1={lineY} y2={lineY} stroke={C.blue} strokeWidth="1.2" strokeDasharray="4 3" />
+            <text x="100" y={lineY - 4} fontSize="7.5" fontWeight="700" fill={C.blue}>
+              เฉลี่ย {money(answer.value)}
+            </text>
+          </g>
+        )}
+        {zero && (
+          <>
+            <path d={`M103 31 C 103 80, ${zeroX + 12} 100, ${zeroX} ${base - 4}`} fill="none" stroke={C.amber} strokeWidth="1" strokeDasharray="3 2.5" />
+            <StageTag cx={103} cy={21.5} w={82} h={19} tag={{ meaning: 'warning', text: '0 ก็นับเป็น 1 วัน', state: 'match' }} />
+          </>
+        )}
+      </Overlay>
+    </>
+  );
+}
+
+function averageTone(row, { rows, answers }) {
+  return zeroDay(rows, answers[0])?.ref === row.ref ? 'warn' : 'plain';
+}
+
+function AverageTotal({ rows, answers }) {
+  const [answer] = answers;
+  const { sum, count } = averageParts(rows);
+  const label = answer.state === 'match' ? `${answer.ref} · ${money(sum)} ÷ ${count}` : answer.ref;
+  return <AnswerTotal label={label} answer={answer} unit="บาท / วัน" />;
+}
+
+// 2-3
+const PODIUM_STACKS = { x: 24, gap: 46, base: 166 };
+const TROPHY_W = 56;
+const MAX_LOOK = { filter: 'brightness(1.2) saturate(1.25)' };
+const MIN_LOOK = { opacity: 0.5 };
+
+function PodiumStage({ rows, cfg, answers }) {
+  const { x, gap, base } = PODIUM_STACKS;
+  const { max, min } = podiumTags(rows, answers);
+  const centre = (r) => x + r.index * gap + 9;
+  const looks = { ...(min && { [min.ref]: MIN_LOOK }), ...(max && { [max.ref]: MAX_LOOK }) };
+  return (
+    <>
+      {max && <Backdrop name="trophy" x={Math.min(VB_W - TROPHY_W - 4, Math.max(4, centre(max) - TROPHY_W / 2))} y={28} w={TROPHY_W} />}
+      <Overlay>
+        <CoinStacks rows={rows} cfg={cfg} {...PODIUM_STACKS} looks={looks} />
+        {max && <StageTag cx={Math.min(VB_W - 32, Math.max(32, centre(max)))} cy={17.5} w={32} h={19} tag={{ meaning: 'ok', text: 'MAX', state: 'match' }} />}
+        {min && (
+          <StageTag cx={centre(min)} cy={base - Math.max(0, stackCoins(min.value, cfg) - 1) * STACK_STEP - 13} w={32} h={19} tag={{ meaning: 'warning', text: 'MIN', state: 'match' }} />
+        )}
+      </Overlay>
+    </>
+  );
+}
+
+function podiumTone(row, { rows, answers }) {
+  const { max, min } = podiumTags(rows, answers);
+  if (max?.ref === row.ref) return 'ok';
+  return min?.ref === row.ref ? 'warn' : 'plain';
+}
+
+function PodiumTotal({ answers }) {
+  const [max, min] = answers;
+  return (
+    <>
+      <AnswerTotal label={`${max.ref} · MAX`} answer={max} unit="บาท" />
+      <p className="mt-1 flex items-baseline gap-2">
+        <span className="text-xs text-white/60">{min.ref} · MIN</span>
+        <span className={`${MONO} text-xl font-bold tabular-nums ${VALUE_TONE[min.state]}`}>{answerText(min)}</span>
+        <span className="text-xs text-white/50">บาท</span>
+      </p>
+    </>
+  );
+}
+
+// 2-4
+const ORDER_KIND = {
+  number: { name: 'ตัวเลข', tone: 'text-[#86EFAC]' },
+  text: { name: 'ข้อความ', tone: 'text-white/40' },
+  blank: { name: 'ช่องว่าง', tone: 'text-white/40' },
+};
+
+function SpikeStage({ level, rows, answers }) {
+  const [answer] = answers;
+  return (
+    <>
+      <Backdrop name="cash-register" x={168} y={92} w={74} />
+      <Overlay>
+        {rows.map((r, i) => {
+          const kind = orderCell(level, r.ref);
+          return (
+            <g key={r.ref}>
+              <SpikeSlip x={14 + i * 30} y={14} kind={kind} text={kind === 'blank' ? 'ว่าง' : displayValue(r.value)} />
+              <CountBadge x={16 + i * 30} y={100} counted={kind === 'number'} />
+            </g>
+          );
+        })}
+        <AnswerChip x={14} y={150} w={78} h={21} text={`COUNT = ${answerText(answer)}`} state={answer.state} />
+      </Overlay>
+    </>
+  );
+}
+
+function OrderProps({ row, level }) {
+  const { name, tone } = ORDER_KIND[orderCell(level, row.ref)];
+  return <span className={`text-xs ${tone}`}>{name}</span>;
+}
+
+function orderTone(row, { level }) {
+  return orderCell(level, row.ref) === 'number' ? 'plain' : 'skip';
+}
+
+function OrderValue({ row, level, tone }) {
+  const counted = orderCell(level, row.ref) === 'number';
+  return <span className={`text-right text-sm font-bold ${counted ? 'text-[#86EFAC]' : tone.value}`}>{counted ? 'นับ' : 'ข้าม'}</span>;
+}
+
+function SpikeTotal({ answers }) {
+  return <AnswerTotal label={`${answers[0].ref} · ออเดอร์ที่ขายได้`} answer={answers[0]} unit="ออเดอร์" />;
 }
 
 // ── 3-1 stock ────────────────────────────────────────────────────────────────

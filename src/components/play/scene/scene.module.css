@@ -11,9 +11,31 @@
   animation: scene-float 900ms ease-out forwards;
 }
 
+/* 2-1: a coin hops along the arc into the jar, once. The path is set inline. */
+.hop {
+  offset-rotate: 0deg;
+  opacity: 0;
+  animation: scene-hop 650ms ease-in-out both;
+}
+
 /* The boss trophy lights up once when step 3 passes. */
 .glow {
   animation: scene-glow 900ms ease-out;
+}
+
+@keyframes scene-hop {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  15%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
 }
 
 @keyframes scene-glow {
@@ -58,7 +80,8 @@
   .glow {
     animation: none;
   }
-  .float {
+  .float,
+  .hop {
     display: none;
   }
 }

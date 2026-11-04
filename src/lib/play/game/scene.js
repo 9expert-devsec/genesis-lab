@@ -1,5 +1,5 @@
-import { shiftFormula } from '../engine/index.js';
-import { taskCells } from '../levels/check.js';
+import { evaluateFormula, expandRange, shiftFormula } from '../engine/index.js';
+import { taskCells, valuesEqual } from '../levels/check.js';
 import { displayValue, formulaRefSpans } from './view.js';
 
 /**
@@ -11,7 +11,11 @@ import { displayValue, formulaRefSpans } from './view.js';
 export const SCENE_KINDS = [
   'toppings', 'checkout', 'change', 'split', 'delivery', 'vat',
   'stock', 'receipts', 'discount', 'iced', 'tiers', 'boss',
+  'tipjar', 'average', 'podium', 'spike',
 ];
+
+/** Kinds whose rows are input data (see dataRows), not one answer per row. */
+export const DATA_SCENE_KINDS = ['tipjar', 'average', 'podium', 'spike'];
 
 /**
  * `scene` is a kind name, or `{ kind, ...config }` for a scene with parameters.
@@ -24,6 +28,10 @@ export const SCENE_CONFIG_KEYS = {
   iced: ['match', 'amount'],
   tiers: ['zones'],
   boss: ['target', 'targetAt', 'steps'],
+  tipjar: ['data', 'coinUnit', 'coinMax'],
+  average: ['data', 'coinUnit', 'coinMax'],
+  podium: ['data', 'coinUnit', 'coinMax'],
+  spike: ['data'],
 };
 
 const sceneKind = (scene) => (typeof scene === 'string' ? scene : scene?.kind);
@@ -192,4 +200,62 @@ export function bossGoal(level, rows, results, { taskIndex, complete }) {
   const passed = complete || taskIndex > 1;
   const value = passed ? results[level.tasks[1].anchor]?.value ?? matchedSum(rows) : matchedSum(rows);
   return { value, fill: Math.min(1, (value / target) * targetAt) };
+}
+
+// ── CH.2 summaries. One answer cell (2-3: two) from rows of input data, so the
+// rows carry no answer state; the answer's lives in the total box.
+
+/**
+ * The level's data rows. `inRange` = the formula that ran references the row's
+ * cell, read from the grid's own ref spans; before a run, the whole data range.
+ * `value` is the raw sheet cell, undefined when blank.
+ */
+export function dataRows(level, formula) {
+  const cells = expandRange(sceneConfig(level).data);
+  const referenced = new Set(formula ? formulaRefSpans(formula).cells : cells);
+  return cells.map((ref, index) => {
+    const row = Number(ref.replace(/^[A-Z]+/, ''));
+    return { ref, row, index, label: level.sheet[`A${row}`] ?? ref, value: level.sheet[ref], inRange: referenced.has(ref) };
+  });
+}
+
+/**
+ * One answer cell, in sceneRows' states read from the grid's `results`. `running`
+ * is this cell's own run: blue while it reveals, with no value until it lands.
+ */
+export function answerState(results, ref, { running = false } = {}) {
+  const result = results[ref];
+  if (!result) return { ref, value: null, state: running ? 'current' : 'shadow' };
+  return { ref, value: result.value, state: !result.ok ? 'error' : running ? 'current' : 'match' };
+}
+
+/** Coins in a day's stack; 0 draws one dashed outline instead. */
+export const stackCoins = (value, config) => Math.min(config.coinMax, Math.round(value / config.coinUnit));
+
+/** The same day as a few small coins on its row. */
+export const rowCoins = (value, config) => Math.ceil(stackCoins(value, config) / 2);
+
+/** Height of a value on the stacks' scale, kept on the stage for a wild answer. */
+export const coinHeight = (value, config, step) => Math.max(0, Math.min(config.coinMax + 1, value / config.coinUnit)) * step;
+
+/** 2-2: the 0 day to point at. Only on a wrong answer: a 0 day counts as a day. */
+export const zeroDay = (rows, answer) => (answer.state === 'error' ? rows.find((r) => r.value === 0) ?? null : null);
+
+/** 2-2: what the right average divides, for the total box. */
+export function averageParts(rows) {
+  const days = rows.filter((r) => typeof r.value === 'number');
+  return { sum: days.reduce((s, r) => s + r.value, 0), count: days.length };
+}
+
+/** 2-3: the row each answer's value sits on, null when it equals no day. */
+export function podiumTags(rows, [max, min]) {
+  const on = (answer) => (answer.value === null ? null : rows.find((r) => r.value !== undefined && valuesEqual(answer.value, r.value)) ?? null);
+  return { max: on(max), min: on(min) };
+}
+
+/** 2-4: what the cell is, asked of the engine's own COUNT; not the player's answer. */
+export function orderCell(level, ref) {
+  if (evaluateFormula(`=COUNT(${ref})`, level.sheet) === 1) return 'number';
+  const value = level.sheet[ref];
+  return value === undefined || value === '' ? 'blank' : 'text';
 }

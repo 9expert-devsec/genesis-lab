@@ -58,7 +58,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
   const [complete, setComplete] = useState(false);
   const [dialog, setDialog] = useState(null); // null | { kind: 'fail', message } | { kind: 'complete' }
   const [notice, setNotice] = useState('');
-  const [ranFormula, setRanFormula] = useState(''); // the formula behind `results`, for the 2-5 scene
+  const [ranFormula, setRanFormula] = useState(''); // the formula behind `results`, for the scenes
   const [progress, setProgress] = useState({});
 
   // Storage is read after mount so the server HTML and first client render agree.
@@ -189,12 +189,14 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
     setRunning(true);
     const step = prefersReducedMotion() ? 0 : CELL_STEP_MS;
     timers.current.forEach(clearTimeout);
-    timers.current = result.cells.map((c, i) =>
-      setTimeout(() => {
-        setResults((prev) => ({ ...prev, [c.ref]: { value: c.value, ok: c.ok } }));
-        if (i === result.cells.length - 1) finish(result, typed);
-      }, step * (i + 1)),
-    );
+    // A one-cell task holds a step on its value, so a data scene can show it blue.
+    const settle = result.cells.length === 1 ? step : 0;
+    timers.current = [
+      ...result.cells.map((c, i) =>
+        setTimeout(() => setResults((prev) => ({ ...prev, [c.ref]: { value: c.value, ok: c.ok } })), step * (i + 1)),
+      ),
+      setTimeout(() => finish(result, typed), step * result.cells.length + settle),
+    ];
   }
 
   function reset() {

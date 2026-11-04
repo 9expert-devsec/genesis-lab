@@ -17,6 +17,7 @@ export const C = {
   blue: '#60A5FA',
   green: '#86EFAC',
   red: '#F87171',
+  amber: '#FBBF24',
   shadow: 'rgba(148,163,184,0.45)',
 };
 const DASH = '2 1.6';
@@ -263,7 +264,7 @@ export function Crate({ x, y, s = 1, state }) {
   );
 }
 
-const TAG_COLORS = { warning: '#FBBF24', ok: C.green, lime: C.lime, neutral: '#94A3B8' };
+const TAG_COLORS = { warning: C.amber, ok: C.green, lime: C.lime, neutral: '#94A3B8' };
 
 /** Colours for a statusTag: colour at 16% fill and 80% border, per the row state. */
 function tagLook({ meaning, state }) {
@@ -298,13 +299,18 @@ export function StageTag({ cx, cy, w = 38, h = 13, tag }) {
   );
 }
 
-/** Paper slip of any size with a zig-zag bottom edge and a few grey text lines. */
-export function Receipt({ x, y, w, h, state }) {
+/** A slip's outline: a rectangle with a zig-zag bottom edge. */
+function slipOutline(w, h) {
   const teeth = Math.max(3, Math.round(w / 3));
   const tooth = w / teeth;
   let edge = '';
   for (let i = teeth - 1; i >= 0; i -= 1) edge += ` L${i * tooth + tooth / 2} ${h - 2.2} L${i * tooth} ${h}`;
-  const outline = `M0 0 H${w} V${h}${edge} Z`;
+  return `M0 0 H${w} V${h}${edge} Z`;
+}
+
+/** Paper slip of any size with a zig-zag bottom edge and a few grey text lines. */
+export function Receipt({ x, y, w, h, state }) {
+  const outline = slipOutline(w, h);
   if (state === 'shadow' || state === 'error') {
     return (
       <Place x={x} y={y}>
@@ -320,6 +326,58 @@ export function Receipt({ x, y, w, h, state }) {
         <rect key={i} x={w * 0.16} y={3 + i * 4} width={w * (i % 3 === 2 ? 0.42 : 0.68)} height="1" fill="#A69A82" />
       ))}
     </Place>
+  );
+}
+
+const SLIP = { w: 24, h: 60 };
+const SLIP_LOOK = {
+  number: { fill: '#F5ECD7', ink: '#0D1B2A', line: '#A69A82' },
+  text: { fill: '#8D92A0', ink: '#1E2636', line: '#6B7080' },
+};
+
+/** Order slip on a spike pin, local box 24×76 (slip from y 16), printing `text`. `kind` is an orderCell. */
+export function SpikeSlip({ x, y, kind, text }) {
+  const look = SLIP_LOOK[kind];
+  const outline = slipOutline(SLIP.w, SLIP.h);
+  return (
+    <g transform={`translate(${x} ${y})`}>
+      <g transform="translate(0 16)">
+        {look ? (
+          <>
+            <path d={outline} fill={look.fill} />
+            {[32, 38, 44].map((ly, i) => (
+              <rect key={ly} x="4" y={ly} width={i === 2 ? 9 : 16} height="1" fill={look.line} />
+            ))}
+          </>
+        ) : (
+          <path d={outline} fill="none" stroke={C.shadow} strokeWidth="0.9" strokeDasharray={DASH} />
+        )}
+        <text x={SLIP.w / 2} y="17" textAnchor="middle" fontSize={kind === 'number' ? 9 : 6.5} fontWeight="700" fill={look?.ink ?? '#94A3B8'} style={kind === 'number' ? { fontFamily: 'var(--font-play-mono), ui-monospace, monospace' } : undefined}>
+          {text}
+        </text>
+      </g>
+      <rect x="10" y="0" width="4" height="22" rx="2" fill="#94A3B8" />
+      <rect x="10.8" y="0.8" width="1" height="20" rx="0.5" fill="rgba(255,255,255,0.6)" />
+    </g>
+  );
+}
+
+/** Round badge, local box 20×20: green check when counted, grey slashed circle when not. */
+export function CountBadge({ x, y, counted }) {
+  return (
+    <g transform={`translate(${x} ${y})`}>
+      {counted ? (
+        <>
+          <circle cx="10" cy="10" r="9" fill={C.green} />
+          <path d="M5.8 10.4 l3 3 l5.6 -6.4" fill="none" stroke="#0D1B2A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      ) : (
+        <>
+          <circle cx="10" cy="10" r="8.4" fill="none" stroke="#94A3B8" strokeWidth="1.3" />
+          <line x1="5" y1="15" x2="15" y2="5" stroke="#94A3B8" strokeWidth="1.3" strokeLinecap="round" />
+        </>
+      )}
+    </g>
   );
 }
 

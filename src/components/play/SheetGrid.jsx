@@ -22,7 +22,7 @@ export function SheetGrid({ cols, rows, sheet, formats, answers, results, active
         role="grid"
         aria-label="ตารางข้อมูลของด่าน"
         aria-readonly="true"
-        className="grid min-w-max font-mono text-sm"
+        className="grid min-w-max font-en text-sm tabular-nums"
         style={{ gridTemplateColumns: `44px repeat(${cols.length}, minmax(112px, 1fr))` }}
       >
         <div role="row" className="contents">
@@ -56,7 +56,7 @@ export function SheetGrid({ cols, rows, sheet, formats, answers, results, active
                 content = (
                   <span className="flex w-full items-center justify-between gap-2">
                     <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    <span className={numeric ? 'tabular-nums' : ''}>{text}</span>
+                    <span>{text}</span>
                   </span>
                 );
                 label = `${ref} ${result.ok ? 'ถูก' : 'ยังไม่ตรง'} ${text}`;
