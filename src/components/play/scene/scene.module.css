@@ -11,6 +11,23 @@
   animation: scene-float 900ms ease-out forwards;
 }
 
+/* The boss trophy lights up once when step 3 passes. */
+.glow {
+  animation: scene-glow 900ms ease-out;
+}
+
+@keyframes scene-glow {
+  0% {
+    filter: drop-shadow(0 0 0 rgba(245, 184, 61, 0));
+  }
+  40% {
+    filter: drop-shadow(0 0 12px rgba(245, 184, 61, 0.9));
+  }
+  100% {
+    filter: drop-shadow(0 0 0 rgba(245, 184, 61, 0));
+  }
+}
+
 @keyframes scene-pop {
   from {
     transform: scale(0.9);
@@ -37,7 +54,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pop {
+  .pop,
+  .glow {
     animation: none;
   }
   .float {

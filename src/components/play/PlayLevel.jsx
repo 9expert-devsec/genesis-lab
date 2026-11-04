@@ -285,7 +285,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
 
         <div className="lg:col-span-2 xl:col-span-1">
           {scene ? (
-            <SceneCard kind={scene} level={level} results={results} running={running} formats={formats} formula={ranFormula} />
+            <SceneCard kind={scene} level={level} results={results} running={running} formats={formats} formula={ranFormula} taskIndex={taskIndex} complete={complete} />
           ) : (
             <Scoreboard level={level} results={results} formats={formats} />
           )}

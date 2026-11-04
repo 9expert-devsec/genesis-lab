@@ -1,6 +1,6 @@
 import { shiftFormula } from '../engine/index.js';
 import { taskCells } from '../levels/check.js';
-import { formulaRefSpans } from './view.js';
+import { displayValue, formulaRefSpans } from './view.js';
 
 /**
  * Pure helpers behind the simulator scene card that replaces the scoreboard on
@@ -8,12 +8,34 @@ import { formulaRefSpans } from './view.js';
  */
 
 /** Scene kinds a level's `scene` field may name. */
-export const SCENE_KINDS = ['toppings', 'checkout', 'change', 'split', 'delivery', 'vat'];
+export const SCENE_KINDS = [
+  'toppings', 'checkout', 'change', 'split', 'delivery', 'vat',
+  'stock', 'receipts', 'discount', 'iced', 'tiers', 'boss',
+];
+
+/**
+ * `scene` is a kind name, or `{ kind, ...config }` for a scene with parameters.
+ * These kinds take a config, with these keys required.
+ */
+export const SCENE_CONFIG_KEYS = {
+  stock: ['threshold', 'crateUnit', 'crateMax', 'tags', 'countTag'],
+  receipts: ['threshold', 'tags', 'countTag'],
+  discount: ['threshold', 'amount'],
+  iced: ['match', 'amount'],
+  tiers: ['zones'],
+  boss: ['target', 'targetAt', 'steps'],
+};
+
+const sceneKind = (scene) => (typeof scene === 'string' ? scene : scene?.kind);
 
 /** The kind to render for a level, or null for the plain scoreboard. */
 export function sceneFor(level) {
-  return SCENE_KINDS.includes(level?.scene) ? level.scene : null;
+  const kind = sceneKind(level?.scene);
+  return SCENE_KINDS.includes(kind) ? kind : null;
 }
+
+/** The level's scene parameters; empty for a scene named by kind alone. */
+export const sceneConfig = (level) => (level?.scene && typeof level.scene === 'object' ? level.scene : {});
 
 /** Drink colours per menu, shared by every coffee scene. `foam: null` = no foam band. */
 export const MENU_COLORS = {
@@ -98,4 +120,76 @@ export function rateRefs(formula, rows, { lockCell, sheet }) {
     }
     return null;
   });
+}
+
+// ── CH.3 and the boss. Thresholds, amounts and targets come from the level's
+// scene config, never from here.
+
+/** The status tag a row shows: `meaning` picks its colour from the config. */
+export function statusTag(row, config) {
+  if (row.state === 'shadow') return { meaning: null, text: '?', state: row.state };
+  const text = displayValue(row.value);
+  return { meaning: config.tags[text] ?? 'neutral', text, state: row.state };
+}
+
+/** Matched rows whose answer carries the tag the total counts. */
+export const countTagged = (rows, config) =>
+  rows.filter((r) => r.state === 'match' && statusTag(r, config).meaning === config.countTag).length;
+
+/** 3-1: crates on the shelf for a stock level. */
+export const crateCount = (stock, config) => Math.min(config.crateMax, Math.ceil(stock / config.crateUnit));
+
+/** 3-2 / 3-3: does the bill reach the level's threshold? Equal counts. */
+export const meetsThreshold = (bill, config) => bill >= config.threshold;
+
+/** 3-2: receipt heights and the threshold line on one scale, tallest = `maxHeight`. */
+export function receiptScale(bills, config, maxHeight) {
+  const unit = maxHeight / Math.max(config.threshold, ...bills);
+  return { line: config.threshold * unit, heights: bills.map((b) => b * unit) };
+}
+
+/** 3-5: index of the zone a result cell names, -1 when it names none. */
+export function tierZone(value, config) {
+  if (typeof value !== 'string') return -1;
+  const want = value.trim().toLowerCase();
+  return config.zones.findIndex((z) => z.value.toLowerCase() === want);
+}
+
+/**
+ * 3-5: per zone, the rows standing in it. A row with a result stands where its
+ * result cell says, right or wrong; a shadow row is the ghost of the answer.
+ */
+export function tierPlacement(rows, config) {
+  return config.zones.map((_, i) =>
+    rows.filter((r) => tierZone(r.state === 'shadow' ? r.expected : r.value, config) === i),
+  );
+}
+
+/** 3-5: `≥ 1000` for a zone, `< 500` for the last one. Zones run highest first. */
+export function tierLabel(i, config) {
+  const { zones } = config;
+  return i < zones.length - 1 ? `≥ ${zones[i].min}` : `< ${zones[i - 1].min}`;
+}
+
+/** 3-5: the range an amount really falls in, as a phrase for the total box. */
+export function tierRange(amount, config) {
+  const { zones } = config;
+  const i = zones.findIndex((z) => amount >= z.min);
+  if (i <= 0) return `อยู่ในช่วง ${zones[0].min} ขึ้นไป`;
+  return `อยู่ระหว่าง ${zones[i].min}–${zones[i - 1].min - 1}`;
+}
+
+/** Boss: match / current / shadow per step, from where the player has got to. */
+export const bossSteps = (level, { taskIndex, complete }) =>
+  level.tasks.map((_, i) => (complete || i < taskIndex ? 'match' : i === taskIndex ? 'current' : 'shadow'));
+
+/**
+ * Boss goal bar: step 2's result once it has passed, the matched step-1 rows
+ * before that. `fill` is 0..1 of the bar, scaled so the target sits at `targetAt`.
+ */
+export function bossGoal(level, rows, results, { taskIndex, complete }) {
+  const { target, targetAt } = sceneConfig(level);
+  const passed = complete || taskIndex > 1;
+  const value = passed ? results[level.tasks[1].anchor]?.value ?? matchedSum(rows) : matchedSum(rows);
+  return { value, fill: Math.min(1, (value / target) * targetAt) };
 }

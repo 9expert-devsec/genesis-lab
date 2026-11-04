@@ -62,7 +62,7 @@ export function ContactShadow({ cx, cy, rx, ry = rx / 4 }) {
  * topping whose height follows it and replaces the straw; null or 0 → straw.
  */
 const GLASS = '0,6 20,6 17.5,28 2.5,28';
-export function Glass({ x, y, s = 1, menu, state, cream = null }) {
+export function Glass({ x, y, s = 1, menu, state, cream = null, iced = false }) {
   const id = useSvgId();
   if (state === 'shadow' || state === 'error') {
     return (
@@ -86,9 +86,11 @@ export function Glass({ x, y, s = 1, menu, state, cream = null }) {
       {/* drink: the glass trapezoid from y 10 down */}
       <polygon points="0.6,10 19.4,10 17.6,27.2 2.4,27.2" fill={`url(#${id}d)`} />
       {color.foam && <polygon points="0.6,10 19.4,10 19.1,13 0.9,13" fill={color.foam} />}
+      {iced && <IceCubes />}
       {!h && <line x1="12" y1="12" x2="15.5" y2="-1" stroke={C.lime} strokeWidth="1.8" strokeLinecap="round" />}
       <polygon points={GLASS} fill="rgba(255,255,255,0.10)" stroke={current ? C.blue : 'rgba(255,255,255,0.6)'} strokeWidth={current ? 2 : 0.9} strokeLinejoin="round" />
       <line x1="3.4" y1="9" x2="4.6" y2="25" stroke="rgba(255,255,255,0.7)" strokeWidth="0.8" strokeLinecap="round" />
+      {iced && <Condensation />}
       {h > 0 && (
         <g>
           <ellipse cx="10" cy={6 - h * 0.2} rx="10" ry={h * 0.32} fill="#FFF8EE" />
@@ -171,7 +173,7 @@ export function Box({ x, y, s = 1, state }) {
   );
 }
 
-/** Person: head + shoulders, local box 12×14. Lime, blue when current. */
+/** Person: head + shoulders, local box 12×14. Lime, blue when current, red when wrong. */
 export function Person({ x, y, s = 1, state }) {
   const body = 'M1 14 v-2.6 a5 4.4 0 0 1 10 0 V14 Z';
   if (state === 'shadow') {
@@ -184,11 +186,179 @@ export function Person({ x, y, s = 1, state }) {
       </Place>
     );
   }
-  const fill = state === 'current' ? C.blue : C.lime;
+  const fill = state === 'current' ? C.blue : state === 'error' ? C.red : C.lime;
   return (
     <Place x={x} y={y} s={s} state={state}>
       <circle cx="6" cy="3.6" r="2.9" fill={fill} />
       <path d={body} fill={fill} />
+    </Place>
+  );
+}
+
+const dashStroke = (state) => (state === 'error' ? C.red : C.shadow);
+
+/** Two ice cubes inside an iced Glass. */
+function IceCubes() {
+  return (
+    <g fill="#BFE3FF" fillOpacity="0.85" stroke="#FFFFFF" strokeOpacity="0.7" strokeWidth="0.4">
+      <rect x="4.2" y="11.5" width="5.6" height="5.6" rx="1" transform="rotate(-12 7 14.3)" />
+      <rect x="10.4" y="14.4" width="5.6" height="5.6" rx="1" transform="rotate(14 13.2 17.2)" />
+    </g>
+  );
+}
+
+/** Condensation dots on the outside of an iced Glass. */
+function Condensation() {
+  return (
+    <g fill="#DCEFFF" fillOpacity="0.85">
+      {[[1.6, 15, 0.6], [2.4, 20, 0.5], [18.6, 13, 0.5], [17.6, 18, 0.6], [17, 23, 0.45]].map(([cx, cy, r]) => (
+        <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={r} />
+      ))}
+    </g>
+  );
+}
+
+/** Ceramic mug, same local box as Glass (20×28) so the two stand in one row. */
+export function HotCup({ x, y, s = 1, state }) {
+  const body = 'M1.5 9 h14 v14.5 a3.5 3.5 0 0 1 -3.5 3.5 h-7 a3.5 3.5 0 0 1 -3.5 -3.5 Z';
+  const handle = 'M15.5 12.5 h1.6 a2.9 2.9 0 0 1 0 8.4 h-1.6';
+  if (state === 'shadow' || state === 'error') {
+    return (
+      <Place x={x} y={y} s={s}>
+        <g fill="none" stroke={dashStroke(state)} strokeWidth="1.2" strokeDasharray={DASH}>
+          <path d={body} />
+          <path d={handle} />
+        </g>
+      </Place>
+    );
+  }
+  return (
+    <Place x={x} y={y} s={s} state={state}>
+      <ContactShadow cx={9.5} cy={28} rx={11} ry={2.4} />
+      <path d="M5 7 q-1.6 -1.7 0 -3.4 t0 -3.2 M8.5 7 q-1.6 -1.7 0 -3.4 t0 -3.2 M12 7 q-1.6 -1.7 0 -3.4 t0 -3.2" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="0.9" strokeLinecap="round" />
+      <path d={handle} fill="none" stroke="#F5ECD7" strokeWidth="1.8" />
+      <path d={body} fill="#F5ECD7" stroke={state === 'current' ? C.blue : '#D9CBAE'} strokeWidth={state === 'current' ? 2 : 0.7} />
+      <rect x="1.5" y="17" width="14" height="3" fill={C.lime} />
+      <ellipse cx="8.5" cy="9" rx="7" ry="1.7" fill="#5A3A24" stroke="#F5ECD7" strokeWidth="0.7" />
+    </Place>
+  );
+}
+
+/** Stock crate, local box 16×13. */
+export function Crate({ x, y, s = 1, state }) {
+  if (state === 'shadow' || state === 'error') {
+    return (
+      <Place x={x} y={y} s={s}>
+        <rect x="0.5" y="0.5" width="15" height="12" rx="1.2" fill="none" stroke={dashStroke(state)} strokeWidth="1" strokeDasharray={DASH} />
+      </Place>
+    );
+  }
+  return (
+    <Place x={x} y={y} s={s} state={state}>
+      <rect x="0.5" y="0.5" width="15" height="12" rx="1" fill="#C9925B" />
+      <rect x="0.5" y="0.5" width="15" height="3.2" rx="1" fill="#DDB07F" />
+      <rect x="6.6" y="0.5" width="2.8" height="12" fill={C.lime} />
+      <rect x="0.5" y="0.5" width="15" height="12" rx="1" fill="none" stroke={state === 'current' ? C.blue : '#9C6B3C'} strokeWidth={state === 'current' ? 1.4 : 0.6} />
+    </Place>
+  );
+}
+
+const TAG_COLORS = { warning: '#FBBF24', ok: C.green, lime: C.lime, neutral: '#94A3B8' };
+
+/** Colours for a statusTag: colour at 16% fill and 80% border, per the row state. */
+function tagLook({ meaning, state }) {
+  if (state === 'shadow') return { color: '#94A3B8', fill: 'transparent', border: C.shadow, dashed: true };
+  const hex = state === 'error' ? C.red : TAG_COLORS[meaning];
+  return { color: hex, fill: `${hex}29`, border: state === 'current' ? C.blue : `${hex}CC`, dashed: false };
+}
+
+/** Status pill for a row's value. Never wraps; a long wrong answer truncates. */
+export function StatusTag({ tag }) {
+  const look = tagLook(tag);
+  return (
+    <span
+      className={`inline-block max-w-[5.5rem] truncate whitespace-nowrap rounded-full border px-1.5 text-[11px] leading-[18px] max-[400px]:px-1 ${tag.state === 'shadow' ? '' : styles.pop}`}
+      style={{ color: look.color, backgroundColor: look.fill, borderColor: look.border, borderStyle: look.dashed ? 'dashed' : 'solid' }}
+    >
+      {tag.text}
+    </span>
+  );
+}
+
+/** The same pill on the stage, `w`×`h` with its centre at (cx, cy). */
+export function StageTag({ cx, cy, w = 38, h = 13, tag }) {
+  const look = tagLook(tag);
+  return (
+    <Place x={cx} y={cy} state={tag.state}>
+      <rect x={-w / 2} y={-h / 2} width={w} height={h} rx={h / 2} fill={look.fill} stroke={look.border} strokeWidth="1" strokeDasharray={look.dashed ? '2.5 2' : undefined} />
+      <text y="2.4" textAnchor="middle" fontSize="7" fontWeight="700" fill={look.color}>
+        {tag.text}
+      </text>
+    </Place>
+  );
+}
+
+/** Paper slip of any size with a zig-zag bottom edge and a few grey text lines. */
+export function Receipt({ x, y, w, h, state }) {
+  const teeth = Math.max(3, Math.round(w / 3));
+  const tooth = w / teeth;
+  let edge = '';
+  for (let i = teeth - 1; i >= 0; i -= 1) edge += ` L${i * tooth + tooth / 2} ${h - 2.2} L${i * tooth} ${h}`;
+  const outline = `M0 0 H${w} V${h}${edge} Z`;
+  if (state === 'shadow' || state === 'error') {
+    return (
+      <Place x={x} y={y}>
+        <path d={outline} fill="none" stroke={dashStroke(state)} strokeWidth="0.9" strokeDasharray={DASH} />
+      </Place>
+    );
+  }
+  const lines = Math.min(12, Math.floor((h - 7) / 4));
+  return (
+    <Place x={x} y={y} state={state}>
+      <path d={outline} fill="#F5ECD7" stroke={state === 'current' ? C.blue : 'none'} strokeWidth="1.2" />
+      {Array.from({ length: Math.max(1, lines) }, (_, i) => (
+        <rect key={i} x={w * 0.16} y={3 + i * 4} width={w * (i % 3 === 2 ? 0.42 : 0.68)} height="1" fill="#A69A82" />
+      ))}
+    </Place>
+  );
+}
+
+/** Lime coupon chip, `w`×10. */
+export function Coupon({ x, y, s = 1, w = 20, text, state }) {
+  const shadow = state === 'shadow';
+  const error = state === 'error';
+  const stroke = shadow ? C.shadow : error ? C.red : 'none';
+  return (
+    <Place x={x} y={y} s={s} state={shadow ? undefined : state}>
+      <rect x="0.5" y="0.5" width={w - 1} height="9" rx="2.6" fill={shadow || error ? 'none' : C.lime} stroke={stroke} strokeWidth="0.9" strokeDasharray={shadow || error ? '2.4 1.8' : undefined} />
+      <text x={w / 2} y="7.2" textAnchor="middle" fontSize="7" fontWeight="700" fill={shadow ? '#94A3B8' : error ? C.red : '#0D1B2A'} style={{ fontFamily: 'var(--font-play-mono), ui-monospace, monospace' }}>
+        {text}
+      </text>
+    </Place>
+  );
+}
+
+const TIER_LOOK = {
+  gold: { fill: '#F5B83D', rim: '#C98A1C', star: '#FFF4D6' },
+  silver: { fill: '#CBD5E1', rim: '#94A3B8', star: '#FFFFFF' },
+  member: { fill: '#1E3A5F', rim: C.blue, star: '#CFE3FF' },
+};
+const STAR = '7,2.6 8.3,5.4 11.3,5.7 9,7.7 9.7,10.7 7,9.1 4.3,10.7 5,7.7 2.7,5.7 5.7,5.4';
+
+/** Tier disc with a star, local box 14×14. */
+export function TierBadge({ x = 0, y = 0, s = 1, tier, state }) {
+  if (state === 'shadow') {
+    return (
+      <Place x={x} y={y} s={s}>
+        <circle cx="7" cy="7" r="6.2" fill="none" stroke={C.shadow} strokeWidth="1" strokeDasharray={DASH} />
+      </Place>
+    );
+  }
+  const look = TIER_LOOK[tier];
+  return (
+    <Place x={x} y={y} s={s} state={state}>
+      <circle cx="7" cy="7" r="6.2" fill={look.fill} stroke={state === 'error' ? C.red : look.rim} strokeWidth="1.2" />
+      <polygon points={STAR} fill={look.star} />
     </Place>
   );
 }

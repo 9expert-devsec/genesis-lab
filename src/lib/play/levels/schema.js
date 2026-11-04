@@ -1,6 +1,6 @@
 import { ARITY } from '../engine/parse.js';
 import { expandRange, parseRef } from '../engine/refs.js';
-import { SCENE_KINDS } from '../game/scene.js';
+import { SCENE_CONFIG_KEYS, sceneConfig, sceneFor } from '../game/scene.js';
 
 /**
  * Structural check for one level. Returns a list of human-readable problems;
@@ -96,11 +96,18 @@ export function validateLevel(level) {
     }
   }
 
-  // Optional simulator scene. Scenes act out one fill-down task row by row.
+  // Optional simulator scene. Scenes act out a fill-down task row by row; only
+  // the boss scene follows later steps as well.
   if (level.scene !== undefined) {
-    if (!SCENE_KINDS.includes(level.scene)) problems.push(`scene "${level.scene}" is not one of ${SCENE_KINDS.join(', ')}`);
-    else if (!Array.isArray(level.tasks) || level.tasks.length !== 1 || !level.tasks[0]?.fill) {
-      problems.push('a scene level must have exactly one fill-down task');
+    const kind = sceneFor(level);
+    if (!kind) problems.push(`scene "${level.scene?.kind ?? level.scene}" is not a known scene kind`);
+    else {
+      const tasks = Array.isArray(level.tasks) ? level.tasks : [];
+      if (!tasks[0]?.fill || (kind !== 'boss' && tasks.length !== 1)) problems.push('a scene level must have exactly one fill-down task');
+      const config = sceneConfig(level);
+      for (const key of SCENE_CONFIG_KEYS[kind] || []) {
+        if (config[key] === undefined) problems.push(`scene "${kind}" config is missing ${key}`);
+      }
     }
   }
 
