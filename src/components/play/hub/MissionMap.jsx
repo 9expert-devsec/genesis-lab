@@ -25,7 +25,10 @@ import m from './mapMotion.module.css';
  * its top surface starts at ≈45% and its base ends at ≈93%. A node's (x, y)
  * is that visible centre, so the path joins the platforms themselves. The orb
  * is anchored by its BOTTOM to the top surface and the label by its TOP to the
- * base — they stay on the platform whatever the scale.
+ * base — they stay on the platform whatever the scale. The pulse ring is centred
+ * on the top disc (DISC_CY), not on the image or on the visible platform: both
+ * of those are pulled off the disc by the crystals, the rim's depth and the
+ * shadow. Both platform images share the same disc.
  *
  * MOTION lives in mapMotion.module.css (entrance once at 30% visibility,
  * ambient loops paused off-screen, mouse-only hover, all static under reduced
@@ -40,6 +43,8 @@ const PLATFORM_CY = 0.69; // visible centre of the platform, down the image
 const PLATFORM_TOP_FACE = 0.5; // where an orb's bottom rests (rim at ≈0.45)
 const PLATFORM_BASE = 0.93; // bottom of the visible platform
 const PLATFORM_SIDE = 0.07; // visible left/right edge inset, across the image
+const DISC_CY = 0.605; // centre of the disc's rings, down the image (50% across)
+const DISC_RATIO = 3.65; // width ÷ height of those rings
 const LABEL_GAP = 10;
 const LABEL_W = 168;
 
@@ -52,10 +57,11 @@ const WIDE = {
   nodes: [
     { chapter: 1, x: 230, y: 310, w: 220 },
     { chapter: 2, x: 500, y: 240, w: 220 },
-    { chapter: 3, x: 780, y: 330, w: 220 },
+    // The route climbs through where the rocket's flame would be, so it hovers higher here.
+    { chapter: 3, x: 780, y: 330, w: 220, mascotLift: 36 },
     { chapter: BOSS_CHAPTER, x: 1040, y: 210, w: 260 },
   ],
-  mascotW: 120,
+  mascotW: 108,
 };
 
 // Phones: top→bottom, zig-zagging between two columns. Each leg leaves its
@@ -75,7 +81,7 @@ const TALL = {
     { chapter: 3, x: 100, y: 740, w: 150 },
     { chapter: BOSS_CHAPTER, x: 260, y: 1020, w: 170 },
   ],
-  mascotW: 80,
+  mascotW: 72,
   labelInset: 12,
 };
 
@@ -274,16 +280,17 @@ function Stage({ layout, states, levels, progress, chapterNames, counts, current
       )}
 
       {mascotNode && (() => {
-        // Feet on the current platform's top surface, beside it. The art has
-        // ~16% empty margin on each side, hence the overlap. On the tall stage a
-        // node on the left takes the mascot on its open right side.
+        // Hull level with the current platform's top surface, beside it. The
+        // art fills its square, and its nose is on the right: from the left the
+        // nose tucks over the platform's edge, and on the tall stage's open right
+        // side the rocket starts past the edge so the flame stays off the platform.
         const box = nodeBox(mascotNode);
         const right = vertical && mascotNode.x < W / 2;
-        const left = right ? box.visibleRight - 0.2 * layout.mascotW : box.visibleLeft + 0.2 * layout.mascotW;
+        const left = right ? box.visibleRight : box.visibleLeft + 0.2 * layout.mascotW;
         return (
           <div
             className={`pointer-events-none absolute z-20 ${right ? '' : '-translate-x-full'} -translate-y-full`}
-            style={{ left, top: box.face, width: layout.mascotW }}
+            style={{ left, top: box.face - (mascotNode.mascotLift ?? 0), width: layout.mascotW }}
             data-play-mascot=""
             aria-hidden="true"
           >
@@ -291,7 +298,7 @@ function Stage({ layout, states, levels, progress, chapterNames, counts, current
               <span className={`absolute -top-8 left-1/2 -ml-[45px] whitespace-nowrap rounded-[12px] bg-white px-3 py-1 text-sm font-bold text-[#0D1B2A] shadow-lg ${m.bubble}`}>
                 เริ่มภารกิจ!
               </span>
-              <Image src="/play/mascot-wave.webp" alt="" width={720} height={800} className="h-auto w-full object-contain" />
+              <Image src="/play/hero-rocket.webp" alt="" width={1240} height={1240} sizes={`${layout.mascotW}px`} className="h-auto w-full object-contain" />
             </div>
           </div>
         );
@@ -323,10 +330,12 @@ function Stage({ layout, states, levels, progress, chapterNames, counts, current
                 />
               )}
               {live && (
+                // `translate`, not Tailwind's -translate-*: those write `transform`,
+                // which the ripple's `scale` would scale too, sliding the ring sideways.
                 <span
                   aria-hidden="true"
-                  className={`pointer-events-none absolute left-1/2 aspect-[3.2/1] w-[64%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-2 border-[#D4F73F]/80 ${m.ripple}`}
-                  style={{ top: `${(PLATFORM_TOP_FACE + 0.06) * 100}%` }}
+                  className={`pointer-events-none absolute left-1/2 w-[64%] rounded-[50%] border-2 border-[#D4F73F]/80 ${m.ripple}`}
+                  style={{ top: `${DISC_CY * 100}%`, aspectRatio: DISC_RATIO, translate: '-50% -50%' }}
                 />
               )}
               <span

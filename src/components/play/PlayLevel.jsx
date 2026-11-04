@@ -9,6 +9,7 @@ import { maxStarsFor, starsFor, xpFor } from '@/lib/play/game/stars';
 import { failureMessage, formatMap, formulaRefSpans, gridBounds, levelFunctions, secretFormulas } from '@/lib/play/game/view';
 import { displayFormula } from '@/lib/play/game/normalize';
 import { isChapterUnlocked } from '@/lib/play/game/map';
+import { afterMotion } from '@/lib/play/game/motion';
 import { sceneFor } from '@/lib/play/game/scene';
 
 import { PlayHud } from './PlayHud';
@@ -20,6 +21,8 @@ import { SceneCard } from './scene/SceneCard';
 import { AlmostThereDialog, MissionCompleteDialog } from './ResultDialog';
 
 const CELL_STEP_MS = 180;
+const SCENE_HOLD_MS = 600; // the finished scene stays up this long before the modal
+const SCENE_CAP_MS = 4000; // the modal opens by then, whatever the scene is doing
 const EXCEL_COURSES_HREF = '/excel-all-courses';
 
 // Space backdrop: a soft glow plus two tiling star layers. Always dark — the
@@ -46,6 +49,7 @@ function prefersReducedMotion() {
 
 export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
   const inputRef = useRef(null);
+  const rootRef = useRef(null);
   const timers = useRef([]);
 
   const [taskIndex, setTaskIndex] = useState(0);
@@ -57,6 +61,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
   const [passedFormulas, setPassedFormulas] = useState([]);
   const [complete, setComplete] = useState(false);
   const [dialog, setDialog] = useState(null); // null | { kind: 'fail', message } | { kind: 'complete' }
+  const [celebrating, setCelebrating] = useState(false); // passed; MISSION COMPLETE waits for the scene
   const [notice, setNotice] = useState('');
   const [ranFormula, setRanFormula] = useState(''); // the formula behind `results`, for the scenes
   const [progress, setProgress] = useState({});
@@ -64,6 +69,35 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
   // Storage is read after mount so the server HTML and first client render agree.
   useEffect(() => setProgress(loadProgress()), []);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  // MISSION COMPLETE opens once the run has played out. A click or Enter/Space
+  // skips the wait. click, not pointerdown: the mousedown that follows a
+  // pointerdown would land on the new backdrop and close the dialog. The key's
+  // default is prevented for the same reason: focus moves into the dialog, and
+  // Enter would go on to activate its first link.
+  useEffect(() => {
+    if (!celebrating) return undefined;
+    const wait = afterMotion(rootRef.current, {
+      hold: SCENE_HOLD_MS,
+      cap: SCENE_CAP_MS,
+      done: () => {
+        setCelebrating(false);
+        setDialog({ kind: 'complete' });
+      },
+    });
+    const onKeyDown = (e) => {
+      if ((e.key !== 'Enter' && e.key !== ' ') || e.repeat) return;
+      e.preventDefault();
+      wait.skip();
+    };
+    window.addEventListener('click', wait.skip);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      wait.cancel();
+      window.removeEventListener('click', wait.skip);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [celebrating]);
 
   const task = level.tasks[taskIndex];
   const hints = useMemo(() => hintsForTask(task), [task]);
@@ -165,7 +199,8 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
       saveProgress(next);
       return next;
     });
-    setDialog({ kind: 'complete' });
+    if (prefersReducedMotion()) setDialog({ kind: 'complete' });
+    else setCelebrating(true);
   }
 
   function run() {
@@ -200,6 +235,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
   }
 
   function reset() {
+    if (celebrating) return; // this click is a skip
     timers.current.forEach(clearTimeout);
     setRunning(false);
     setFormula('');
@@ -226,7 +262,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
     : [];
 
   return (
-    <div style={SPACE_BG} className="min-h-[calc(100dvh-80px)] text-white">
+    <div ref={rootRef} style={SPACE_BG} className="min-h-[calc(100dvh-80px)] text-white">
       <PlayHud
         level={level}
         chapterName={chapterName}

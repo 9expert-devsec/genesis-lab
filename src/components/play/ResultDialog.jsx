@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Lightbulb, RotateCcw } from 'lucide-react';
 
 import { StarIcons } from './Stars';
+import motion from './scene/scene.module.css';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -20,7 +21,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1
  * sits OUTSIDE the scroll area (a scroller would clip its overlap) and
  * shrinks below 800px of height.
  */
-function DialogShell({ labelledBy, onClose, children }) {
+function DialogShell({ labelledBy, onClose, entrance = false, children }) {
   const panelRef = useRef(null);
 
   useEffect(() => {
@@ -54,7 +55,7 @@ function DialogShell({ labelledBy, onClose, children }) {
 
   return (
     <div
-      className="fixed inset-0 z-70 flex items-center justify-center bg-[#060E17]/80 p-4 backdrop-blur-sm"
+      className={`fixed inset-0 z-70 flex items-center justify-center bg-[#060E17]/80 p-4 backdrop-blur-sm ${entrance ? motion.dialogFade : ''}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -66,7 +67,7 @@ function DialogShell({ labelledBy, onClose, children }) {
         aria-labelledby={labelledBy}
         onKeyDown={onKeyDown}
         data-play-dialog=""
-        className="relative flex max-h-[calc(100dvh-32px)] w-full max-w-[440px] flex-col"
+        className={`relative flex max-h-[calc(100dvh-32px)] w-full max-w-[440px] flex-col ${entrance ? motion.dialogRise : ''}`}
       >
         {children}
       </div>
@@ -115,7 +116,7 @@ function Card({ tone, mascot, mascotAlt = '', size, children, footer }) {
 
 export function MissionCompleteDialog({ level, stars, xp, secrets, nextHref, nextLabel, coursesHref, onClose }) {
   return (
-    <DialogShell labelledBy="play-complete-title" onClose={onClose}>
+    <DialogShell labelledBy="play-complete-title" onClose={onClose} entrance>
       <Card
         tone="border-[#D4F73F]/30"
         mascot="/play/mascot-thumbs-up.webp"

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { BookOpenText, Lock, Play, Plus, Sparkles } from 'lucide-react';
 
 import { STAR_FILLED } from '../Stars';
+import m from './mapMotion.module.css';
 
 /** Display heading with the lime italic accent tucked under its right end. */
 export function SectionHeading({ title, accent, sub, id, as: Tag = 'h2' }) {
@@ -55,7 +56,7 @@ export function HubHero({ startHref, levelCount, chapterCount }) {
             the accent, positioned from its right, ends under the word's end. */}
         <h1 id="play-hero-title" className="relative inline-block font-en text-[clamp(3rem,14vw,6rem)] font-bold uppercase leading-[0.9] text-white">
           {/* `!`: globals.css pins every span to Google Sans with !important. */}
-          <span className="!font-[family-name:var(--font-play-display)] font-normal tracking-normal">Level up</span>
+          <span className="!font-[family-name:var(--font-play-display)] font-normal tracking-normal text-9e-brand">Level up</span>
           <span className="absolute -bottom-[0.33em] right-0 block -rotate-6 whitespace-nowrap text-[0.5em] normal-case italic tracking-tight text-[#D4F73F]">
             your skills!
           </span>
@@ -68,7 +69,7 @@ export function HubHero({ startHref, levelCount, chapterCount }) {
         <div className="mt-7 flex flex-col gap-3 min-[480px]:flex-row min-[480px]:flex-wrap">
           <Link
             href={startHref}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-[#D4F73F] px-6 py-3 font-bold text-[#0D1B2A] transition-colors hover:bg-[#D8F852] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-9e-brand px-6 py-3 font-bold text-white transition-colors hover:bg-9e-action focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             <Play className="h-4 w-4 fill-current" aria-hidden="true" />
             เริ่มภารกิจแรก
@@ -111,18 +112,26 @@ export function HubHero({ startHref, levelCount, chapterCount }) {
           <ellipse cx="260" cy="270" rx="236" ry="120" stroke="rgba(72,176,255,0.45)" strokeWidth="1.5" strokeDasharray="6 10" transform="rotate(-14 260 270)" />
           <ellipse cx="260" cy="270" rx="190" ry="210" stroke="rgba(212,247,63,0.25)" strokeWidth="1.5" strokeDasharray="4 12" transform="rotate(24 260 270)" />
         </svg>
-        <div className="absolute inset-[8%]">
-          <Image src="/play/hero-rocket.webp" alt="" width={1240} height={1240} priority className="h-full w-full object-contain" />
+        <div className={`absolute inset-[8%] ${m.heroBob}`}>
+          <Image
+            src="/play/mascot-wink.webp"
+            alt=""
+            width={1254}
+            height={1254}
+            priority
+            sizes="(min-width: 768px) 437px, 74vw"
+            className="h-full w-full object-contain"
+          />
         </div>
         {ORBIT_ICONS.map((ic) => (
           <div key={ic.src} className={`absolute ${ic.pos} ${ic.size}`}>
             <Image src={ic.src} alt="" width={384} height={384} className="h-auto w-full object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.4)]" />
           </div>
         ))}
-        <div className="absolute left-[2%] top-[30%] rounded-[10px] border border-white/15 bg-[#132638]/90 px-3 py-1.5 font-mono text-sm text-[#D4F73F] shadow-lg">
+        <div className="absolute left-[2%] top-[46%] rounded-[10px] lg:top-[30%] border border-white/15 bg-[#132638]/90 px-3 py-1.5 font-mono text-sm text-[#D4F73F] shadow-lg">
           =SUM(D2:D6)
         </div>
-        <div className="absolute bottom-[18%] right-[0%] inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-bold text-[#0D1B2A] shadow-lg">
+        <div className="absolute bottom-[25%] right-[0%] inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-bold text-[#0D1B2A] shadow-lg">
           ผ่านด่าน! <span className="text-[#FACC15] [text-shadow:0_0_1px_rgba(0,0,0,0.25)]">★★★</span>
         </div>
       </div>

@@ -114,8 +114,11 @@
   to { rotate: 360deg; }
 }
 
+/* `scale` goes round the ring's own centre, and only stays there because the
+   ring is placed with `translate`: the order is translate → scale → transform. */
 .ripple {
   opacity: 0;
+  transform-origin: center;
   animation: ripple 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 @keyframes ripple {
@@ -149,6 +152,16 @@
 @keyframes bob {
   0%, 100% { translate: 0 0; }
   50% { translate: 0 -3px; }
+}
+
+/* The hero figure bobs on the same terms, but sits outside .map: it has its own
+   reduced-motion rule below. */
+.heroBob {
+  animation: heroBob 3.4s ease-in-out infinite;
+}
+@keyframes heroBob {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -8px; }
 }
 
 /* Background: two star layers twinkling on their own clocks, the horizon glow
@@ -220,6 +233,9 @@
 /* ── reduced motion: everything static, in its final state ──────────────── */
 
 @media (prefers-reduced-motion: reduce) {
+  .heroBob {
+    animation: none;
+  }
   .map *,
   .map *::before,
   .map *::after {

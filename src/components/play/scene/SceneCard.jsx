@@ -183,10 +183,11 @@ function SceneRow({ row, fmt, float, value, children }) {
 const Overflow = ({ n }) => (n ? <span className={`${MONO} text-xs text-white/50`}>×{n}</span> : null);
 
 function BigNumber({ value, unit, tone = 'text-[#86EFAC]', countUp = false, fmt, plain = false }) {
-  const shown = useCountUp(value, countUp);
+  const numberRef = useRef(null);
+  const shown = useCountUp(value, countUp, numberRef);
   return (
     <p className="mt-0.5 flex items-baseline gap-2">
-      <span className={`${plain ? '' : MONO} text-3xl font-bold tabular-nums ${tone}`}>
+      <span ref={numberRef} className={`${plain ? '' : MONO} text-3xl font-bold tabular-nums ${tone}`}>
         {typeof value === 'number' ? displayValue(countUp ? shown : value, fmt) : value}
       </span>
       {unit && <span className="text-xs text-white/50">{unit}</span>}
@@ -202,8 +203,14 @@ function reducedMotion() {
   }
 }
 
-/** Counts from the last shown number to `value` over ~400ms; jumps when off. */
-function useCountUp(value, enabled) {
+const COUNT_MS = 400;
+
+/**
+ * Counts from the last shown number to `value` over COUNT_MS; jumps when off.
+ * The count runs on rAF, so an empty Web Animation of the same length keeps it
+ * in getAnimations(), and MISSION COMPLETE waits for it like any CSS animation.
+ */
+function useCountUp(value, enabled, ref) {
   const [shown, setShown] = useState(value);
   const from = useRef(value);
   useEffect(() => {
@@ -214,9 +221,10 @@ function useCountUp(value, enabled) {
     }
     const start = performance.now();
     const a = from.current;
+    const pace = ref.current?.animate(null, COUNT_MS);
     let raf = 0;
     const tick = (t) => {
-      const k = Math.min(1, (t - start) / 400);
+      const k = Math.min(1, (t - start) / COUNT_MS);
       const v = a + (value - a) * (1 - (1 - k) ** 3);
       setShown(k < 1 ? Math.round(v) : value);
       if (k < 1) raf = requestAnimationFrame(tick);
@@ -225,9 +233,10 @@ function useCountUp(value, enabled) {
     raf = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(raf);
+      pace?.cancel();
       from.current = value;
     };
-  }, [value, enabled]);
+  }, [value, enabled, ref]);
   return shown;
 }
 
