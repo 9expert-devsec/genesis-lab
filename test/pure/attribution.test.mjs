@@ -166,6 +166,119 @@ for (const [t, want] of CASES) {
   });
 }
 
+// ── referrer classification ────────────────────────────────────────────────
+
+// Served from a host of its own, so the static own-host list is what is under
+// test rather than the served-host comparison, which would hide it.
+const fromReferrer = (host, query = '') =>
+  readTouch({
+    href: `https://served.example.test/power-bi${query}`,
+    referrer: `https://${host}/some/path`,
+    ownHost: 'served.example.test',
+    now: NOW,
+  });
+
+const REFERRER_CASES = {
+  'Organic Search': [
+    'google.com', 'www.google.com', 'google.co.th', 'www.google.co.th',
+    'www.google.de', 'www.google.com.au',
+    'bing.com', 'www.bing.com', 'search.yahoo.com', 'duckduckgo.com',
+    'yandex.ru', 'yandex.com', 'yandex.com.tr', 'baidu.com', 'search.naver.com',
+    'ecosia.org', 'www.ecosia.org', 'coccoc.com', 'search.brave.com',
+    'cn.bing.com', 'th.search.yahoo.com', 'm.search.naver.com', 'm.baidu.com',
+    'html.duckduckgo.com',
+  ],
+  Email: [
+    'mail.google.com', 'outlook.live.com', 'outlook.office.com',
+    'outlook.office365.com', 'mail.yahoo.com',
+  ],
+  Referral: [
+    'docs.google.com', 'drive.google.com', 'chat.google.com', 'sites.google.com',
+    'lens.google.com',
+    'google.evil.com', 'www.google.co.th.evil.com', 'notgoogle.com', 'yandex.evil.com',
+    'mail.google.com.evil.io', 'naver.com', 'yahoo.com',
+    'notbing.com', 'bing.com.evil.io', 'notsearch.yahoo.com',
+    'other.vercel.app', 'evil-genesis-lab-x.vercel.app', 'x.genesis-lab.vercel.app',
+    'academy.9experttraining.com', '9expert.co.th',
+  ],
+};
+
+for (const [want, hosts] of Object.entries(REFERRER_CASES)) {
+  for (const host of hosts) {
+    test(`referrer ${host} → ${want}`, () => {
+      assert.equal(classifyChannel(fromReferrer(host)), want);
+      // readTouch strips `www.`, a hand-built POST need not: both read alike.
+      assert.equal(classifyChannel({ referrer_host: host }), want);
+    });
+  }
+}
+
+const ANDROID_APP_CASES = [
+  ['com.google.android.googlequicksearchbox', 'android-app://com.google.android.googlequicksearchbox/https/www.google.com', 'Organic Search'],
+  ['com.google.android.gm', 'android-app://com.google.android.gm/', 'Email'],
+  ['com.example.someapp', 'android-app://com.example.someapp/', 'Referral'],
+];
+
+for (const [pkg, referrer, want] of ANDROID_APP_CASES) {
+  test(`android app ${pkg} → ${want}`, () => {
+    const t = readTouch({ href: `${SITE}/power-bi`, referrer, ownHost: 'www.9experttraining.com', now: NOW });
+    assert.equal(t.referrer_host, pkg);
+    assert.equal(classifyChannel(t), want);
+  });
+}
+
+const IGNORED_HOSTS = [
+  'tagassistant.google.com', 'accounts.google.com',
+  'www.9experttraining.com', '9experttraining.com',
+  'genesis-lab.9expert.app', 'genesis-lab.vercel.app',
+  'genesis-lab-abc123-team.vercel.app', 'genesis-lab-git-staging-team.vercel.app',
+  'api.omise.co', 'pay.omise.co', 'cdn.omise.co', 'omise.net',
+];
+
+for (const host of IGNORED_HOSTS) {
+  test(`referrer ${host} is ignored: no referrer, Direct, and last is left alone`, () => {
+    const t = fromReferrer(host);
+    assert.equal(t.referrer_host, undefined);
+    assert.equal(classifyChannel(t), 'Direct');
+    const state = { first: email, last: email };
+    assert.equal(mergeTouch(state, t, NOW), state);
+  });
+}
+
+test('a bank 3-D Secure host is ignored by the return path, whatever its name', () => {
+  for (const path of ['/registration/payment/complete', '/masterclass/payment/complete']) {
+    const t = touch(path, 'https://acs.some-issuer.example/challenge');
+    assert.equal(t.referrer_host, undefined);
+    assert.equal(classifyChannel(t), 'Direct');
+  }
+});
+
+test('no referrer → Direct', () => {
+  assert.equal(classifyChannel(touch('/power-bi')), 'Direct');
+});
+
+test('a touch stored before a host was ignored reaches the server as Direct', () => {
+  const out = buildAttribution({ last: { referrer_host: 'tagassistant.google.com' } }, NOW);
+  assert.equal(out.channel, 'Direct');
+  assert.equal(out.last.referrer_host, 'tagassistant.google.com', 'the evidence is kept');
+});
+
+test('UTM and click-id rules outrank the referrer, whichever host it is', () => {
+  const channel = (host, query) => classifyChannel(fromReferrer(host, query));
+  assert.equal(channel('mail.google.com', '?utm_source=line&utm_medium=line_oa'), 'LINE');
+  assert.equal(channel('mail.google.com', '?utm_source=facebook&utm_medium=cpc'), 'Paid Social');
+  assert.equal(channel('mail.google.com', '?utm_source=partner&utm_campaign=expo'), 'Other Campaign');
+  assert.equal(channel('mail.google.com', '?gclid=Cj0KAbC'), 'Paid Search');
+  assert.equal(channel('docs.google.com', '?utm_source=a&utm_medium=email'), 'Email');
+});
+
+test('an ignored referrer drops the host, not the campaign on the link', () => {
+  const t = fromReferrer('tagassistant.google.com', '?utm_source=line&utm_medium=line_oa');
+  assert.equal(t.referrer_host, undefined);
+  assert.equal(t.utm_source, 'line');
+  assert.equal(classifyChannel(t), 'LINE');
+});
+
 // ── buildAttribution (the server's entry point) ───────────────────────────
 
 test('server: unknown keys dropped, client channel ignored, channel derived from last', () => {

@@ -30,6 +30,7 @@
  * anything), and a landing PATH (never its query). That is the whole reason it
  * may be stored before consent — see the cookie policy's "จำเป็น" entry.
  */
+import { matchesTrustedOrigin } from '@/lib/registration/requestMeta';
 
 export const FIRST_TOUCH_TTL_DAYS = 90;
 const TTL_MS = FIRST_TOUCH_TTL_DAYS * 24 * 60 * 60 * 1000;
@@ -65,13 +66,41 @@ const MAX_VALUE = 300;
  * or Omise with THEIR host as referrer, and treating that as a Referral would
  * overwrite the campaign that brought the customer, at the exact moment they
  * convert.
+ *
+ * The issuer's 3-D Secure host is not listed because it cannot be: it arrives
+ * at runtime behind Omise's `authorize_uri` and differs per bank. The path rule
+ * is what covers it — both return_uris land under NO_REFERRER_PATHS.
+ *
+ * `accounts.google.com` is the Google sign-in round-trip, and
+ * `tagassistant.google.com` is our own debugging tool: a tester opening the
+ * site from it is not a visitor arriving from anywhere.
  */
 const NO_REFERRER_PATHS = ['/registration/payment/', '/masterclass/payment/'];
-const IGNORED_REFERRER_HOSTS = ['omise.co', 'omise.net', 'accounts.google.com'];
+const IGNORED_REFERRER_HOSTS = ['omise.co', 'omise.net', 'accounts.google.com', 'tagassistant.google.com'];
 
+/**
+ * Search engines: each host below or any subdomain of it, so regional and
+ * mobile hosts (`th.search.yahoo.com`, `cn.bing.com`) count. Yahoo and Naver are
+ * listed by their SEARCH host, because their other subdomains are not search.
+ *
+ * Google gets no such entry: `*.google.com` is mostly not search — Gmail, Docs,
+ * Drive and Chat all send a referrer. Google and Yandex run one host per
+ * country, hence the pattern: the name, then a bare ccTLD, `com`, `co.<cc>` or
+ * `com.<cc>` — and nothing after it, so `google.evil.com` is not Google.
+ *
+ * An Android app's referrer is `android-app://<package>/`, so its "host" is the
+ * package name: the Google app here, the Gmail app in EMAIL_HOSTS.
+ */
 const SEARCH_HOSTS = [
-  'google.', 'bing.com', 'yahoo.', 'duckduckgo.com', 'baidu.com', 'yandex.',
-  'ecosia.org', 'naver.com', 'search.brave.com',
+  'bing.com', 'search.yahoo.com', 'duckduckgo.com', 'baidu.com',
+  'search.naver.com', 'ecosia.org', 'coccoc.com', 'search.brave.com',
+  'com.google.android.googlequicksearchbox',
+];
+const COUNTRY_SEARCH_HOST = /^(?:google|yandex)\.(?:com|[a-z]{2}|com?\.[a-z]{2})$/;
+/** Webmail, by exact host. Checked before the catch-all Referral. */
+const EMAIL_HOSTS = [
+  'mail.google.com', 'outlook.live.com', 'outlook.office.com',
+  'outlook.office365.com', 'mail.yahoo.com', 'com.google.android.gm',
 ];
 const SOCIAL_HOSTS = [
   'facebook.com', 'fb.com', 'instagram.com', 'messenger.com', 'threads.net',
@@ -86,12 +115,29 @@ const SOCIAL_SOURCES = [
 
 function hostMatches(host, list) {
   if (!host) return false;
-  return list.some((h) =>
-    h.endsWith('.')
-      // `google.` — any TLD: google.com, google.co.th
-      ? host === h.slice(0, -1) || host.startsWith(h) || host.includes(`.${h}`)
-      : host === h || host.endsWith(`.${h}`),
-  );
+  return list.some((h) => host === h || host.endsWith(`.${h}`));
+}
+
+function isSearchHost(host) {
+  return hostMatches(host, SEARCH_HOSTS) || COUNTRY_SEARCH_HOST.test(host);
+}
+
+/**
+ * This project's bare Vercel URL. Not in TRUSTED_ORIGINS, which decides whether
+ * a registration's origin is trusted and should not widen for this: here it
+ * only stops our own URL counting as a source.
+ */
+const OWN_VERCEL_HOST = 'genesis-lab.vercel.app';
+
+/**
+ * A referrer that says nothing about where the visitor came from: as if there
+ * were none. This site's other hosts come from TRUSTED_ORIGINS, the project's
+ * one list of them, so a preview URL is recognised on every other deployment.
+ */
+function isIgnoredReferrer(host) {
+  return hostMatches(host, IGNORED_REFERRER_HOSTS)
+    || host === OWN_VERCEL_HOST
+    || matchesTrustedOrigin(`https://${host}`);
 }
 
 /**
@@ -119,7 +165,8 @@ function hostOf(url) {
 /**
  * Same site: the host the page is being served from, `www.` ignored on both
  * sides (hostOf strips it from the referrer; it is stripped here from ours).
- * That is the WHOLE self list — every other host is external.
+ * Together with TRUSTED_ORIGINS (isIgnoredReferrer) that is the WHOLE self list
+ * — every other host is external, `academy.9experttraining.com` included.
  *
  * ── THE CORPORATE SITE IS A REFERRER, ON PURPOSE ─────────────────────────
  * `9expert.co.th` / `www.9expert.co.th` is the company's corporate website, a
@@ -182,7 +229,7 @@ export function readTouch({ href, referrer = '', ownHost = '', now = new Date() 
   const referrerCounts =
     refHost
     && !isOwnHost(refHost, ownHost || url.hostname)
-    && !hostMatches(refHost, IGNORED_REFERRER_HOSTS)
+    && !isIgnoredReferrer(refHost)
     && !NO_REFERRER_PATHS.some((p) => path.startsWith(p));
   if (referrerCounts) touch.referrer_host = refHost;
 
@@ -230,12 +277,17 @@ export function mergeTouch(state, touch, now = new Date()) {
  * organic link clicks as well as to ads, so on its own it proves the visitor
  * came from Meta and nothing about whether we paid. A tagged ad link says
  * `utm_medium=paid_social` and lands in the rule above it.
+ *
+ * Ignored hosts are dropped here as well as in readTouch: a browser can hold a
+ * touch stored before a host was ignored for the whole of the 90-day window,
+ * and this is what classifies it when the form is submitted.
  */
 export function classifyChannel(touch) {
   if (!touch || typeof touch !== 'object') return 'Direct';
   const source = String(touch.utm_source ?? '').toLowerCase();
   const medium = String(touch.utm_medium ?? '').toLowerCase();
-  const host = String(touch.referrer_host ?? '').toLowerCase();
+  const referrerHost = String(touch.referrer_host ?? '').toLowerCase().replace(/^www\./, '');
+  const host = isIgnoredReferrer(referrerHost) ? '' : referrerHost;
   const paidMedium = /^(cpc|ppc|paid|paidsearch|paid_search|paid-search|cpm|display|banner)$/.test(medium);
   const socialSource = SOCIAL_SOURCES.includes(source);
 
@@ -253,7 +305,8 @@ export function classifyChannel(touch) {
   if (medium === 'referral') return 'Referral';
   if (source || medium || touch.utm_campaign) return 'Other Campaign';
   if (hostMatches(host, SOCIAL_HOSTS)) return 'Organic Social';
-  if (hostMatches(host, SEARCH_HOSTS)) return 'Organic Search';
+  if (isSearchHost(host)) return 'Organic Search';
+  if (EMAIL_HOSTS.includes(host)) return 'Email';
   if (host) return 'Referral';
   return 'Direct';
 }
