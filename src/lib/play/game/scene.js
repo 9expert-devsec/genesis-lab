@@ -238,13 +238,22 @@ export const rowCoins = (value, config) => Math.ceil(stackCoins(value, config) /
 /** Height of a value on the stacks' scale, kept on the stage for a wild answer. */
 export const coinHeight = (value, config, step) => Math.max(0, Math.min(config.coinMax + 1, value / config.coinUnit)) * step;
 
-/** 2-2: the 0 day to point at. Only on a wrong answer: a 0 day counts as a day. */
-export const zeroDay = (rows, answer) => (answer.state === 'error' ? rows.find((r) => r.value === 0) ?? null : null);
-
 /** 2-2: what the right average divides, for the total box. */
 export function averageParts(rows) {
   const days = rows.filter((r) => typeof r.value === 'number');
   return { sum: days.reduce((s, r) => s + r.value, 0), count: days.length };
+}
+
+/**
+ * 2-2: the 0 day to point at, only for the mistake of not counting it: a wrong
+ * answer equal to the data's sum over its non-zero days. Any other wrong answer
+ * has some other cause, so null.
+ */
+export function zeroDay(rows, answer) {
+  const zero = rows.find((r) => r.value === 0);
+  if (!zero || answer.state !== 'error') return null;
+  const nonZero = rows.filter((r) => typeof r.value === 'number' && r.value !== 0).length;
+  return valuesEqual(answer.value, averageParts(rows).sum / nonZero) ? zero : null;
 }
 
 /** 2-3: the row each answer's value sits on, null when it equals no day. */

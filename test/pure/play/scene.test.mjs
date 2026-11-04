@@ -180,7 +180,7 @@ test('scene range bar: follows the rows the ran formula references, the data ran
   assert.equal(stackCoins(9000, level.scene), 8);
 });
 
-test('scene 2-2: the 0-day note appears only on a wrong answer', () => {
+test('scene 2-2: the 0-day note appears only for the mistake of not counting the 0 day', () => {
   const level = getLevel('2-2');
   const rows = dataRows(level, '');
   const note = (formula) => zeroDay(rows, ranAnswers(level, [formula])[0]);
@@ -194,6 +194,21 @@ test('scene 2-2: the 0-day note appears only on a wrong answer', () => {
   assert.equal(wrong.value, 1222.5);
   assert.equal(wrong.state, 'error');
   assert.equal(note('=SUM(B2:B6)/4').label, 'พฤ.');
+  // Wrong for another reason: red, but no note.
+  const [other] = ranAnswers(level, ['=SUM(B2:B5)/5']);
+  assert.equal(other.state, 'error');
+  assert.equal(note('=SUM(B2:B5)/5'), null);
+  assert.equal(note('=SUM(B2:B6)/3'), null);
+  // The sum and the day count come from the data, not from 1222.5.
+  const edited = { ...level, sheet: { ...level.sheet, B2: 2000 } };
+  const editedRows = dataRows(edited, '');
+  const editedNote = (formula) => zeroDay(editedRows, ranAnswers(edited, [formula])[0]);
+  assert.equal(ranAnswers(edited, ['=SUM(B2:B6)/4'])[0].value, 1412.5);
+  assert.equal(editedNote('=SUM(B2:B6)/4').label, 'พฤ.');
+  assert.equal(editedNote('=1222.5+B5'), null);
+  // No 0 day in the data, nothing to point at.
+  const full = { ...level, sheet: { ...level.sheet, B5: 500 } };
+  assert.equal(zeroDay(dataRows(full, ''), ranAnswers(full, ['=SUM(B2:B6)/4'])[0]), null);
 });
 
 test('scene 2-3: MAX and MIN sit on the stack equal to the player\'s value, or nowhere', () => {

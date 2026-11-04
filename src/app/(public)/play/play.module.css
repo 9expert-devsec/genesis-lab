@@ -9,6 +9,20 @@
   font-feature-settings: 'liga' 0, 'calt' 0;
 }
 
+/* FormulaBar's input text is transparent over a mirror. The global ::selection
+   sets a text colour, which would paint the selected text on top of the mirror,
+   so it stays transparent here and only a tint shows. Two rules: a browser drops
+   a whole selector list over one pseudo-element it does not know. */
+.root input::selection {
+  background-color: rgba(212, 247, 63, 0.32);
+  color: transparent;
+}
+
+.root input::-moz-selection {
+  background-color: rgba(212, 247, 63, 0.32);
+  color: transparent;
+}
+
 /* Tailwind's font-mono is a system stack; under /play it means JetBrains Mono.
    !important because globals.css pins every p and span to Google Sans with it.
    JetBrains Mono has no Thai, so Thai is named here too: the system's own
