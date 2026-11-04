@@ -45,6 +45,7 @@ import {
 } from '@/lib/registration/bundlePreview';
 import {
   BUNDLE_CLOSED_MESSAGE,
+  BUNDLE_NO_ROUNDS_MESSAGE,
   BUNDLE_UNAVAILABLE_MESSAGE,
 } from '@/lib/pageBuilder/bundleRegistration';
 import { isSilentRefusal } from '@/lib/registration/bundleRequest';
@@ -638,35 +639,7 @@ export function BundleWizard({
     }
   }
 
-  if (refused) {
-    /**
-     * The SAME two sentences the page renders, from the same module. A silent
-     * reason cannot reach here — the form only exists because the page resolved
-     * the bundle — but if one ever did, it must not render as a blank panel, so
-     * it falls to the unavailable wording rather than to nothing.
-     */
-    const closed = refused === 'closed';
-    return (
-      <section
-        data-testid="bundle-refused-late"
-        data-reason={refused}
-        className="rounded-9e-lg border border-dashed border-[var(--surface-border)] px-6 py-10 text-center"
-      >
-        <h2 className="text-lg font-bold text-[var(--text-primary)]">
-          {closed && !isSilentRefusal(refused) ? BUNDLE_CLOSED_MESSAGE : BUNDLE_UNAVAILABLE_MESSAGE}
-        </h2>
-        <p className="mt-3 text-sm text-[var(--text-secondary)]">
-          แพ็กเกจนี้เปลี่ยนสถานะระหว่างที่คุณกรอกแบบฟอร์ม จึงยังไม่ได้บันทึกคำขอของคุณ
-        </p>
-        <Link
-          href="/contact-us"
-          className="mt-5 inline-block text-sm font-semibold text-9e-action underline underline-offset-2"
-        >
-          ติดต่อทีมขาย
-        </Link>
-      </section>
-    );
-  }
+  if (refused) return <BundleLateRefusal reason={refused} />;
 
   return (
     <div>
@@ -842,6 +815,43 @@ export function BundleWizard({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * A refusal that arrives on SUBMIT, after the page already let the form open.
+ *
+ * The SAME sentences the page renders, from the same module. A silent reason
+ * cannot reach here — the form only exists because the page resolved the bundle
+ * — but if one ever did, it must not render as a blank panel, so it falls to the
+ * unavailable wording rather than to nothing.
+ *
+ * Exported for the reason the steps are: `BundleWizard` itself cannot be
+ * rendered in the test tier.
+ */
+export function BundleLateRefusal({ reason }) {
+  let heading = BUNDLE_UNAVAILABLE_MESSAGE;
+  if (reason === 'closed' && !isSilentRefusal(reason)) heading = BUNDLE_CLOSED_MESSAGE;
+  if (reason === 'no_open_rounds') heading = BUNDLE_NO_ROUNDS_MESSAGE;
+  return (
+    <section
+      data-testid="bundle-refused-late"
+      data-reason={reason}
+      className="rounded-9e-lg border border-dashed border-[var(--surface-border)] px-6 py-10 text-center"
+    >
+      <h2 className="text-lg font-bold text-[var(--text-primary)]">
+        {heading}
+      </h2>
+      <p className="mt-3 text-sm text-[var(--text-secondary)]">
+        แพ็กเกจนี้เปลี่ยนสถานะระหว่างที่คุณกรอกแบบฟอร์ม จึงยังไม่ได้บันทึกคำขอของคุณ
+      </p>
+      <Link
+        href="/contact-us"
+        className="mt-5 inline-block text-sm font-semibold text-9e-action underline underline-offset-2"
+      >
+        ติดต่อทีมขาย
+      </Link>
+    </section>
   );
 }
 

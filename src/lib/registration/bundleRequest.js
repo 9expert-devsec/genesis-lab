@@ -1,7 +1,8 @@
 import { slotsOf } from '@/lib/pageBuilder/containerSlots';
 import { isPubliclyVisible, invisibleReason } from '@/lib/pageBuilder/visibility';
 import { isBundleRegistrationOpen } from '@/lib/pageBuilder/bundleRegistration';
-import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
+import { chooseItemRounds } from '@/lib/pageBuilder/chosenRounds';
+import { bundleRegistrable } from '@/lib/pageBuilder/bundleRoundChoice';
 /**
  * ── THE FAIL-CLOSED GUARD IS GONE, AND SO IS ITS IMPORT ──────────────────
  * Commit ed73c0b5 refused any bundle offering several rounds per course,
@@ -58,7 +59,7 @@ import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
  *   section_missing   no section with that id on it
  *   wrong_type        that section id is not a promotion_bundle
  *
- * THREE of them ARE spoken, and they are deliberately different sentences:
+ * FOUR of them ARE spoken, and they are deliberately different sentences:
  *
  *   closed            the author turned this bundle's registration off. A
  *                     DECISION, reversible on Monday. BUNDLE_CLOSED_MESSAGE —
@@ -72,9 +73,16 @@ import { chooseItemRound } from '@/lib/pageBuilder/chosenRounds';
  *
  *   unavailable       the bundle is not closed and has not expired, but the
  *                     site cannot assemble it: the page is unpublished or not
- *                     yet live, the section is disabled, or an item's course or
- *                     round no longer resolves. A fault on our side, possibly
- *                     fixed within the hour. BUNDLE_UNAVAILABLE_MESSAGE.
+ *                     yet live, the section is disabled, or an item's course
+ *                     no longer resolves or was never given a round. A fault on
+ *                     our side, possibly fixed within the hour.
+ *                     BUNDLE_UNAVAILABLE_MESSAGE.
+ *
+ *   no_open_rounds    the bundle is assembled and nothing is wrong with it, but
+ *                     no complete set of picks exists today: some course has no
+ *                     open round left. The schedule's answer rather than a
+ *                     fault, so it says what the card says in the same slot.
+ *                     BUNDLE_NO_ROUNDS_MESSAGE.
  *
  * `page_not_public`, `section_disabled` and `unresolved_items` are three
  * distinct reasons that all SPEAK as `unavailable`. They are kept apart in the
@@ -118,6 +126,7 @@ export const BUNDLE_REFUSAL_REASONS = Object.freeze([
   'section_disabled',
   'closed',
   'unresolved_items',
+  'no_open_rounds',
 ]);
 
 /**
@@ -203,24 +212,21 @@ export function unresolvedBundleItems(items, resolved, todayKey) {
     }
 
     /**
-     * `chooseItemRound` and not a local `rounds.find(...)`: it is the one place
-     * the live / elapsed / missing split and the snapshot fallback are decided,
-     * and its own header says a hand-rolled lookup here would lose both. This
-     * guard has to agree with what the page DREW, or a visitor sees a dated
-     * round on the card and is refused for not having one.
+     * ── EVERY OFFERED ROUND, AND ONLY "ARE THERE ANY" ─────────────────────
+     * This read `chooseItemRound` — the FIRST offered round — and refused on
+     * its state. That was right while an item carried one round, and it became
+     * the bug the moment an item offered several: a first round missing from
+     * the feed refused a whole bundle whose other rounds were live, while the
+     * card drew the register button.
+     *
+     * A round that is closed, full, past or withdrawn is merely not selectable,
+     * and an item whose EVERY round is like that is not a fault in the
+     * document: it is `no_open_rounds`, which `resolveBundleRequest` answers
+     * with `bundleRegistrable`. All this asks is whether the author offered
+     * anything — a claim about the document, not about upstream.
      */
-    const round = chooseItemRound(entry.rounds, item, todayKey);
-    if (!round) {
-      // The author never chose a round for this item — a claim about the
-      // document, not about upstream.
+    if (chooseItemRounds(entry.rounds, item, todayKey).length === 0) {
       out.push({ index, courseId, why: 'no_round' });
-      return;
-    }
-    if (round.state !== 'live') {
-      // `elapsed` (it has begun) or `missing` (withdrawn upstream). Either way
-      // there is no round to book, and the snapshot can draw a date but cannot
-      // hold a seat.
-      out.push({ index, courseId, why: `round_${round.state}` });
     }
   });
 
@@ -237,10 +243,15 @@ export function unresolvedBundleItems(items, resolved, todayKey) {
  * submit — the item pass is re-run on submission because a round can roll off
  * between opening the form and sending it.
  *
+ * `liveStatusById` is REQUIRED whenever `resolved` is passed: it is the map from
+ * `bundleLiveStatusById`, and the auto-close reads it. A caller that forgets it
+ * gets `no_open_rounds` — every round reads as closed when it has no live row —
+ * which fails closed rather than opening a form nobody can complete.
+ *
  * @returns {{ok: true, section: object, content: object}
  *          |{ok: false, reason: string, unresolved?: Array<object>}}
  */
-export function resolveBundleRequest({ page, sectionId, resolved, todayKey, now = Date.now(), allowUnpublished = false }) {
+export function resolveBundleRequest({ page, sectionId, resolved, liveStatusById, todayKey, now = Date.now(), allowUnpublished = false }) {
   if (!page) return { ok: false, reason: 'page_missing' };
 
   const section = findSectionById(page.sections, sectionId);
@@ -330,6 +341,27 @@ export function resolveBundleRequest({ page, sectionId, resolved, todayKey, now 
    */
   if (!Array.isArray(content.items) || content.items.length === 0) {
     return { ok: false, reason: 'unresolved_items', unresolved: [] };
+  }
+
+  /**
+   * ── AUTO-CLOSE, THE SERVER'S HALF ──────────────────────────────────────
+   * The card has always asked `bundleRegistrable` before drawing its button;
+   * the form never did, so a bundle the card called closed still opened a
+   * wizard with nothing to pick and a submit that could only 409. The same
+   * function now answers for both, with the real `sequential` flag, so a chain
+   * no ordering can satisfy is refused here exactly as the card refuses it.
+   *
+   * LAST, after the items, so a course that cannot be named is still reported
+   * as the fault it is rather than as a question about the schedule.
+   */
+  if (resolved !== undefined) {
+    const registrable = bundleRegistrable({
+      items: content.items,
+      sequential: content.sequential === true,
+      liveStatusById,
+      today: todayKey,
+    });
+    if (!registrable) return { ok: false, reason: 'no_open_rounds' };
   }
 
   return { ok: true, section, content };

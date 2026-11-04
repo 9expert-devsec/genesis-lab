@@ -209,6 +209,7 @@ export async function POST(req) {
     page,
     sectionId: data.sectionId,
     resolved,
+    liveStatusById,
     todayKey,
     allowUnpublished: preview,
   });

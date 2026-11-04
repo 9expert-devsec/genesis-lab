@@ -11,6 +11,7 @@ import {
   BUNDLE_CLOSED_MESSAGE,
   BUNDLE_UNAVAILABLE_MESSAGE,
   BUNDLE_EXPIRED_MESSAGE,
+  BUNDLE_NO_ROUNDS_MESSAGE,
 } from "@/lib/pageBuilder/bundleRegistration";
 /*
   `chooseItemRound` — the SINGULAR one — is no longer imported. It picked the
@@ -176,6 +177,7 @@ export async function BundlePageContent({ searchParams, step }) {
     page: doc,
     sectionId,
     resolved,
+    liveStatusById,
     todayKey,
     allowUnpublished: preview,
   });
@@ -431,11 +433,11 @@ function renderPreviewForbidden() {
   );
 }
 
-function renderRefusal(reason) {
+export function renderRefusal(reason) {
   if (isSilentRefusal(reason)) notFound();
 
   /**
-   * THREE spoken refusals, and the reason picks one. It was a boolean over two.
+   * FOUR spoken refusals, and the reason picks one. It was a boolean over two.
    *
    * `expired` is not a softer `unavailable`: that sentence opens with
    * "ขณะนี้ยังไม่สามารถ…" and invites the visitor back, which is honest for an
@@ -455,6 +457,16 @@ function renderRefusal(reason) {
       testid: "bundle-refused-expired",
       heading: BUNDLE_EXPIRED_MESSAGE,
       sub: "ช่วงเวลาของโปรโมชันนี้ผ่านไปแล้ว — สอบถามโปรโมชันที่กำลังจัดอยู่ได้จากทีมขาย",
+    },
+    /*
+      The schedule's answer, in the same words the card shows in place of its
+      button. Not `unavailable`: nothing is broken and no link is stale, and
+      that sub-line would send the visitor to check a bookmark that is fine.
+    */
+    no_open_rounds: {
+      testid: "bundle-refused-no-rounds",
+      heading: BUNDLE_NO_ROUNDS_MESSAGE,
+      sub: "บางหลักสูตรในแพ็กเกจนี้ไม่มีรอบที่เปิดรับในขณะนี้ — สอบถามรอบถัดไปได้จากทีมขาย",
     },
   };
   const spoken = SPOKEN[reason] ?? {
