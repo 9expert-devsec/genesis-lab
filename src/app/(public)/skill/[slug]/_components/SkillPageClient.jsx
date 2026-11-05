@@ -8,6 +8,7 @@ import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 import { ProgramArticlesSection } from '@/components/program/ProgramArticlesSection';
 import { ProgramOnlineCoursesSection } from '@/components/program/ProgramOnlineCoursesSection';
 import { PageCatalogButton } from '@/components/ui/PageCatalogButton';
+import { resolveHeroTitle, skillHeroDescription } from '@/lib/pageHero';
 import { RoadmapHeroThumbnail } from '@/components/ui/RoadmapHeroThumbnail';
 
 /**
@@ -45,8 +46,8 @@ export function SkillPageClient({
   programNames = {},
   skillNames = {},
 }) {
-  const description =
-    skill?.skill_description || skill?.skill_teaser || '';
+  const heroTitle = resolveHeroTitle(config, skill?.skill_name);
+  const description = skillHeroDescription(config, skill);
   const roadmapUrl = skill?.skill_roadmap_url ?? null;
 
   return (
@@ -84,7 +85,7 @@ export function SkillPageClient({
               )}
               <div>
                 <h1 className="text-3xl font-bold text-white md:text-4xl">
-                  {skill?.skill_name}
+                  {heroTitle}
                 </h1>
                 <p className="mt-1 text-sm text-white/80">
                   กลุ่ม Skill {skill?.skill_name} มีทั้งหมด{' '}
@@ -129,7 +130,7 @@ export function SkillPageClient({
             </div>
           )}
           <h1 className="text-3xl font-bold text-white md:text-4xl">
-            {skill?.skill_name}
+            {heroTitle}
           </h1>
           <p className="mt-3 text-sm text-white/80">
             กลุ่ม Skill {skill?.skill_name} มีทั้งหมด{' '}
