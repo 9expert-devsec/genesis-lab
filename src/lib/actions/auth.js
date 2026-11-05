@@ -3,6 +3,7 @@
 import { AuthError } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { signIn, signOut, auth } from '@/lib/auth/options';
+import { getActiveSession } from '@/lib/auth/assertActiveAdmin';
 import { dbConnect } from '@/lib/db/connect';
 import Admin from '@/models/Admin';
 import { canAccess } from '@/lib/rbac/access';
@@ -12,7 +13,9 @@ import { canAccess } from '@/lib/rbac/access';
  *
  * Use at the top of any server action that mutates admin data (and any
  * admin-only read). Behavior:
- *   - No session            → throws Error('UNAUTHENTICATED'), `.status = 401`.
+ *   - No session, or the    → throws Error('UNAUTHENTICATED'), `.status = 401`.
+ *     admin is disabled or
+ *     deleted
  *   - Lacking the page perm  → throws Error('FORBIDDEN'),      `.status = 403`.
  *   - Superadmin (`pages == null`) passes any key.
  *   - `pageKey` omitted → login-only check (legacy behavior). AVOID in new
@@ -23,7 +26,7 @@ import { canAccess } from '@/lib/rbac/access';
  * `.status` lets a route handler map it to an HTTP status if it surfaces.
  */
 export async function requireAdmin(pageKey) {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) {
     const err = new Error('UNAUTHENTICATED');
     err.status = 401;
@@ -115,6 +118,7 @@ export async function adminLogin(_prevState, formData) {
  */
 export async function logoutAction() {
   try {
+    // auth(), not getActiveSession(): signing out must work for anyone.
     const session = await auth();
     const id = session?.user?.id;
     if (id) {

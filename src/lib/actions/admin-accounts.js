@@ -25,7 +25,7 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Admin from '@/models/Admin';
 import Role from '@/models/Role';
-import { auth } from '@/lib/auth/options';
+import { getActiveSession } from '@/lib/auth/assertActiveAdmin';
 import { requireAdmin } from '@/lib/actions/auth';
 import { isOnline } from '@/lib/admin/presence';
 
@@ -225,7 +225,7 @@ export async function deleteAdmin(id) {
  * cookie silently changing the password).
  */
 export async function updateOwnProfile({ name, currentPassword, newPassword }) {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user?.email) {
     return { ok: false, error: 'Unauthorized' };
   }

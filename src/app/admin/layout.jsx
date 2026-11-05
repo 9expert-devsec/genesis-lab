@@ -3,6 +3,7 @@ import { AdminSidebar } from '@/components/layout/AdminSidebar';
 import { AdminMain } from '@/components/layout/AdminMain';
 import { PresenceHeartbeat } from '@/components/admin/PresenceHeartbeat';
 import { auth } from '@/lib/auth/options';
+import { assertActiveAdmin } from '@/lib/auth/assertActiveAdmin';
 import { dbConnect } from '@/lib/db/connect';
 import Admin from '@/models/Admin';
 
@@ -41,6 +42,10 @@ export default async function AdminLayout({ children }) {
   }
 
   const session = await auth();
+  // Here as well as in requirePage because /admin/403 and /admin/door have no
+  // page guard, and neither should render the chrome for an ended account. A
+  // soft navigation skips this layout, which is why requirePage still checks.
+  if (session?.user) await assertActiveAdmin(session);
   const user = session?.user ?? null;
 
   // ── THE AVATAR COMES FROM MONGO, NOT FROM THE SESSION ────────────────────

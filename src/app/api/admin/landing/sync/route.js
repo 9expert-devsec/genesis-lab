@@ -10,14 +10,14 @@
  */
 
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/options';
+import { getActiveSession } from '@/lib/auth/assertActiveAdmin';
 import { syncLandingData } from '@/lib/landing/syncLandingData';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST() {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

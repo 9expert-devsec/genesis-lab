@@ -12,6 +12,7 @@
  */
 
 import { auth } from '@/lib/auth/options';
+import { assertActiveAdmin, getActiveSession } from '@/lib/auth/assertActiveAdmin';
 import { redirect } from 'next/navigation';
 import { canAccess, canAccessPath } from '@/lib/rbac/access';
 
@@ -21,12 +22,14 @@ export { canAccess, canAccessPath };
 
 /**
  * Server-Component guard. Returns the session if the current user may access
- * `pageKey`; redirects to the portal when unauthenticated, or to /admin/403
- * when authenticated but lacking the page.
+ * `pageKey`; redirects to the portal when unauthenticated, ends the session
+ * when the admin is disabled or deleted, or redirects to /admin/403 when
+ * authenticated but lacking the page.
  */
 export async function requirePage(pageKey) {
   const session = await auth();
   if (!session?.user) redirect('/admin/9x-portal');
+  await assertActiveAdmin(session);
   if (canAccess(session.user, pageKey)) return session;
   redirect('/admin/403');
 }
@@ -36,7 +39,7 @@ export async function requirePage(pageKey) {
  * so the caller can surface the error however it wants.
  */
 export async function requirePageAction(pageKey) {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) throw new Error('UNAUTHENTICATED');
   if (!canAccess(session.user, pageKey)) throw new Error('FORBIDDEN');
   return session;

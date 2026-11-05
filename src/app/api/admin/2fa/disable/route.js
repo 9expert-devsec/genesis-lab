@@ -7,7 +7,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/options';
+import { getActiveSession } from '@/lib/auth/assertActiveAdmin';
 import { dbConnect } from '@/lib/db/connect';
 import Admin from '@/models/Admin';
 import { verifyTotp } from '@/lib/totp';
@@ -16,7 +16,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req) {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user?.email) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
