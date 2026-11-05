@@ -44,6 +44,7 @@ import {
   ChevronDown,
   Cookie,
   Eye,
+  PenLine,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logoutAction } from '@/lib/actions/auth';
@@ -199,6 +200,7 @@ const ICONS = {
   Monitor,
   MessageSquare,
   FileText,
+  PenLine,
   Briefcase,
   Database,
   Shield,
@@ -316,6 +318,7 @@ const NAV_GROUPS = [
     label: 'เนื้อหา',
     items: [
       { label: 'บทความ',           href: '/admin/articles',      icon: 'FileText',       pageKey: 'articles' },
+      { label: 'ผู้เขียน',          href: '/admin/writers',       icon: 'PenLine',        pageKey: 'writers' },
       // `exact` because /admin/promotions/banner is a SEPARATE row above, and
       // this page's own child routes are not menu rows. See activeNavItem.js.
       { label: 'โปรโมชั่น',        href: '/admin/promotions',    icon: 'Tag', exact: true, pageKey: 'promotions' },

@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { checkUpload, rulesForFolder, DEFAULT_RULE, FOLDER_RULES } from '@/lib/uploads/uploadRules';
 
 /**
@@ -73,6 +74,25 @@ test('avatars: an invented image MIME is rejected — allowlist, not blocklist',
   assert.equal(checkUpload('avatars', { type: 'image/gif', size: 1024 }).ok, false);
 });
 
+// ── the writers rule ─────────────────────────────────────────────────────────
+test('writers: the same three raster types, up to 2 MB', () => {
+  for (const type of ['image/jpeg', 'image/png', 'image/webp']) {
+    assert.equal(checkUpload('writers', { type, size: 2 * MB }).ok, true, type);
+  }
+  assert.equal(checkUpload('writers', { type: 'image/jpeg', size: 2 * MB + 1 }).ok, false);
+});
+
+test('writers: SVG, PDF and an unlisted image type are all refused', () => {
+  for (const type of ['image/svg+xml', 'application/pdf', 'image/gif']) {
+    assert.equal(checkUpload('writers', { type, size: 1024 }).ok, false, type);
+  }
+});
+
+test('writers: the folder is on the route allowlist, or the upload lands in `uploads` with a 200', () => {
+  const source = readFileSync(new URL('../../src/app/api/admin/upload/route.js', import.meta.url), 'utf8');
+  assert.match(source, /^\s*'writers',\s*$/m);
+});
+
 // ── THE REGRESSION GUARD: existing folders are untouched ────────────────────
 test('courses/covers: a 4 MB PDF is STILL allowed', () => {
   // The behaviour that existed before per-folder rules, asserted so narrowing
@@ -121,11 +141,11 @@ test('an unknown folder falls back to the default rule, not to nothing', () => {
   assert.equal(rulesForFolder(''), DEFAULT_RULE);
 });
 
-test('avatars is the only folder with a bespoke rule today', () => {
-  // Not a style check. If a second entry appears, the regression list above
+test('avatars and writers are the only folders with a bespoke rule today', () => {
+  // Not a style check. If another entry appears, the regression list above
   // needs to know about it — otherwise that folder is silently exempt from the
   // "existing behaviour" assertion while still being listed in it.
-  assert.deepEqual(Object.keys(FOLDER_RULES), ['avatars']);
+  assert.deepEqual(Object.keys(FOLDER_RULES), ['avatars', 'writers']);
 });
 
 test('a missing or non-numeric size is refused rather than passed through', () => {

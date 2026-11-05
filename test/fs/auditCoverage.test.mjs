@@ -63,6 +63,7 @@ const READ_ONLY_EXPORTS = {
   'src/lib/actions/course-extensions.js': [
     'getCourseExtension', 'getCourseExtensionByAlias', 'listCourseExtensions',
   ],
+  'src/lib/actions/writers.js': ['listWriters', 'getWriter', 'listInstructorOptions'],
 };
 
 /**
@@ -793,7 +794,9 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // regardless. NOTE: the assertion was already red at 191 !== 184 before this
 // round (see the known pre-existing failures); the constant is bumped by
 // exactly this round's delta so it keeps saying what this round added.
-const MUTATING_EXPORT_COUNT = 186;
+// 186 → 190: createWriter, updateWriter, setWriterActive and deleteWriter
+// (writers.js). All four write in their own bodies, so both figures move by 4.
+const MUTATING_EXPORT_COUNT = 190;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -1015,7 +1018,8 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 178,
+    zero, 182,
+    'ROUND: 178 → 182 for the four writers.js actions, which write in their own bodies. ' +
     'ROUND: 176 → 178 for recordPageCatalogUpload + removePageCatalog (page-catalogs.js), ' +
     'which write the page-config models in their own bodies — same property as the last bump. ' +
     'ROUND: 175 → 176 for updateBundleRequestStatus, which calls ' +
