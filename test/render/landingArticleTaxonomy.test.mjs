@@ -118,7 +118,7 @@ test('the landing FETCHES the ids, the names, and cannot be taken down by either
   // The card can be perfect and still show nothing if the data never arrives.
   const actions = src('src/lib/actions/articles.js');
   assert.match(
-    actions, /\.select\('slug title excerpt coverUrl tags articleType publishedAt programs skills'\)/,
+    actions, /\.select\('slug title excerpt coverUrl tags articleType publishedAt programs skills writerIds'\)/,
     'getFeaturedArticlesForLanding projects the taxonomy ids — without them the ' +
     'card renders no chips, which is indistinguishable from an article that has none',
   );

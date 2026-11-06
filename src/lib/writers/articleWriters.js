@@ -62,6 +62,19 @@ export function planArticleWriters({ ids, found = [], defaultWriter = null, crea
   return { ok: true, writers };
 }
 
+/**
+ * What an article card shows: up to two avatars and names, then a count of the rest.
+ *
+ * @returns {{shown: object[], label: string}}
+ */
+export function cardBylineParts(writers) {
+  const list = writers ?? [];
+  const shown = list.slice(0, 2);
+  const more = list.length - shown.length;
+  const names = joinWriterNames(shown);
+  return { shown, label: more > 0 ? `${names} และอีก ${more} คน` : names };
+}
+
 /** Every distinct writer id across a list of articles, for one batched read. */
 export function collectWriterIds(articles) {
   return dedupeIds((articles ?? []).flatMap((article) => article?.writerIds ?? []));

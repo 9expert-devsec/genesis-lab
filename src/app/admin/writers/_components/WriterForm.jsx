@@ -14,8 +14,10 @@ import {
   WRITER_TYPES,
   slugFromName,
 } from '@/lib/writers/writerFields';
+import { writerPath } from '@/lib/writers/writerUrls';
 import { ReorderRows, withRowKey } from './ReorderRows';
 import { WriterAvatarField } from './WriterAvatarField';
+import { useWriterDeactivation } from './WriterDeactivateDialog';
 
 const INPUT = 'w-full rounded-9e-md border border-[var(--surface-border)] px-3 py-2 text-sm text-9e-navy dark:bg-[#0D1B2A] dark:text-white';
 const BUTTON_SECONDARY = 'rounded-9e-md border border-[var(--surface-border)] px-3 py-2 text-sm text-9e-navy disabled:cursor-not-allowed disabled:opacity-50 dark:text-white';
@@ -99,6 +101,14 @@ export function WriterForm({ writer = null, instructors }) {
   const [formError, setFormError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
 
+  const { begin: beginDeactivation, dialog } = useWriterDeactivation({
+    onDone: () => {
+      setIsActive(false);
+      router.refresh();
+    },
+    onError: setFormError,
+  });
+
   const isDefault = writer?.isDefault === true;
   const selectedInstructor = instructors.find((i) => i.id === instructorId) ?? null;
 
@@ -159,14 +169,17 @@ export function WriterForm({ writer = null, instructors }) {
       return;
     }
     if (isDefault) return;
-    if (isActive && !window.confirm(`ปิดใช้งาน "${writer.displayName}"?`)) return;
     setSaving(true);
     setMessage(null);
     setFormError(null);
     try {
-      const res = await setWriterActive(writer._id, !isActive);
+      if (isActive) {
+        await beginDeactivation(writer);
+        return;
+      }
+      const res = await setWriterActive(writer._id, true);
       if (res?.ok) {
-        setIsActive(!isActive);
+        setIsActive(true);
         router.refresh();
       } else {
         setFormError(res?.error ?? 'บันทึกไม่สำเร็จ');
@@ -180,6 +193,7 @@ export function WriterForm({ writer = null, instructors }) {
 
   return (
     <div>
+      {dialog}
       <nav className="text-sm text-[var(--text-muted)]" aria-label="breadcrumb">
         <Link href="/admin/writers" className="hover:underline">ผู้เขียน</Link>
         {' › '}
@@ -191,9 +205,27 @@ export function WriterForm({ writer = null, instructors }) {
           {displayName || (editing ? writer.displayName : 'เพิ่มผู้เขียน')}
         </h1>
         <div className="flex items-center gap-2">
-          <button type="button" disabled title="หน้าโปรไฟล์จะเปิดในรอบถัดไป" className={BUTTON_SECONDARY}>
-            ดูหน้าโปรไฟล์
-          </button>
+          {editing && isActive ? (
+            <a
+              href={writerPath(writer.slug)}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="writer-view-profile"
+              className={BUTTON_SECONDARY}
+            >
+              ดูหน้าโปรไฟล์
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              data-testid="writer-view-profile"
+              title={editing ? 'ผู้เขียนถูกปิดใช้งาน — หน้าโปรไฟล์ redirect ไปที่ 9Expert Academy' : 'บันทึกผู้เขียนก่อน'}
+              className={BUTTON_SECONDARY}
+            >
+              ดูหน้าโปรไฟล์
+            </button>
+          )}
           <button
             type="button"
             onClick={save}

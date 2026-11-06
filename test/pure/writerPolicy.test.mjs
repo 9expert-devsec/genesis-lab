@@ -54,9 +54,16 @@ test('deactivating the default writer through a save is refused', async () => {
   assert.deepEqual(res, { ok: false, error: WRITER_REFUSALS.defaultDeactivate });
 });
 
-test('a save cannot do what the toggle is refused: deactivation with articles', async () => {
-  const res = await checkWriterUpdate(ID, { isActive: false }, deps(writer, 3));
-  assert.deepEqual(res, { ok: false, error: WRITER_REFUSALS.deactivateWithArticles(3) });
+test('a save cannot deactivate: only the toggle moves the articles', async () => {
+  for (const articles of [0, 3]) {
+    const res = await checkWriterUpdate(ID, { isActive: false }, deps(writer, articles));
+    assert.deepEqual(res, { ok: false, error: WRITER_REFUSALS.deactivateThroughSave });
+  }
+});
+
+test('CONTROL: a save that leaves an inactive writer inactive is no deactivation', async () => {
+  const off = { ...writer, isActive: false };
+  assert.equal((await checkWriterUpdate(ID, { isActive: false }, deps(off))).ok, true);
 });
 
 test('the toggle refuses the default writer', async () => {
@@ -64,10 +71,12 @@ test('the toggle refuses the default writer', async () => {
   assert.deepEqual(res, { ok: false, error: WRITER_REFUSALS.defaultDeactivate });
 });
 
-test('the toggle refuses a writer with articles, naming how many', async () => {
-  const res = await checkSetWriterActive(ID, false, deps(writer, 2));
-  assert.deepEqual(res, { ok: false, error: WRITER_REFUSALS.deactivateWithArticles(2) });
-  assert.match(res.error, /2/);
+test('the toggle passes a writer with articles: the action transfers them', async () => {
+  assert.equal((await checkSetWriterActive(ID, false, deps(writer, 2))).ok, true);
+});
+
+test('the interim refusal is gone', () => {
+  assert.equal('deactivateWithArticles' in WRITER_REFUSALS, false);
 });
 
 test('CONTROL: the toggle passes a writer with no articles', async () => {
@@ -81,7 +90,7 @@ test('CONTROL: activating asks nothing about articles', async () => {
 
 test('the article count is asked by the id of the writer in question', async () => {
   let asked;
-  await checkSetWriterActive(ID, false, {
+  await checkDeleteWriter(ID, {
     findWriter: async () => writer,
     countArticles: async (id) => { asked = id; return 0; },
   });

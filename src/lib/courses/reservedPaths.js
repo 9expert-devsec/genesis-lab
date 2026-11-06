@@ -78,6 +78,7 @@ export const RESERVED_PATHS = Object.freeze([
   { segment: 'social', source: 'tree' },
   { segment: 'terms', source: 'tree' },
   { segment: 'training-course', source: 'tree' },
+  { segment: 'writer', source: 'tree' },
 
   // ── app-router tree: src/app (outside the (public) group) ────────────────
   { segment: 'admin', source: 'tree' },

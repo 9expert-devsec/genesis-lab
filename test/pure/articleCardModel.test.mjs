@@ -29,6 +29,7 @@ test('a complete article maps to the shape BlogCard reads', () => {
     id: 'a1',
     programs: ['MSE', 'POWER-BI'],
     skills: ['BUSINESS'],
+    writers: [],
     title: 'Excel tips',
     excerpt: 'an excerpt',
     thumbnail: 'https://www.9experttraining.com/cover.png',

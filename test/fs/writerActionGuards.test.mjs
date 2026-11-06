@@ -77,6 +77,81 @@ test('deactivation is one audit row', () => {
   assert.equal((body('setWriterActive').match(/recordAdminActionAfter\(/g) ?? []).length, 1);
 });
 
+// ── the transfer ────────────────────────────────────────────────────────────
+
+const transfer = src.slice(
+  src.indexOf('async function transferArticlesAndDeactivate('),
+  src.indexOf('export async function listWriters('),
+);
+
+test('getWriterDeactivationPreview is guarded and runs the policy check', () => {
+  before('getWriterDeactivationPreview', "requireAdmin('writers')", 'dbConnect()');
+  before('getWriterDeactivationPreview', 'checkSetWriterActive(', 'readArticlesForTransfer(');
+});
+
+test('deactivating transfers, and activating does not', () => {
+  const action = body('setWriterActive');
+  assert.match(action, /if \(next\) \{\s*await Writer\.findByIdAndUpdate\(id, \{ \$set: \{ isActive: true \} \}\);\s*\} else \{\s*const transfer = await transferArticlesAndDeactivate\(current\);/);
+});
+
+test('a failed transfer stops before the caches and the audit row', () => {
+  before('setWriterActive', 'if (!transfer.ok) return transfer;', 'bustWriterCaches(');
+  before('setWriterActive', 'if (!transfer.ok) return transfer;', 'recordAdminActionAfter(');
+});
+
+test('the transfer runs in one transaction, and the recount is inside it', () => {
+  const callback = transfer.indexOf('session.withTransaction(');
+  assert.notEqual(callback, -1);
+  assert.ok(callback < transfer.indexOf('readArticlesForTransfer(current._id, session)'));
+  assert.ok(callback < transfer.indexOf('Article.bulkWrite('));
+  assert.ok(callback < transfer.indexOf('Writer.updateOne('));
+});
+
+test('articles are written before the writer is switched off', () => {
+  assert.ok(transfer.indexOf('Article.bulkWrite(') < transfer.indexOf('Writer.updateOne('));
+});
+
+test('every write joins the session', () => {
+  assert.match(transfer, /Article\.bulkWrite\(transferBulkOps\(plan, current\._id\), \{\s*session,/);
+  assert.match(transfer, /Writer\.updateOne\(\{ _id: current\._id \}, \{ \$set: \{ isActive: false \} \}, \{ session \}\)/);
+});
+
+test('the bulk write keeps timestamps off, and nothing names contentUpdatedAt', () => {
+  assert.match(transfer, /timestamps: false,/);
+  assert.equal(transfer.includes('contentUpdatedAt'), false);
+});
+
+test('an article that changed mid-transfer aborts it', () => {
+  assert.match(transfer, /result\.modifiedCount !== plan\.writes\.length[\s\S]*?throw new Error\(WRITER_REFUSALS\.transferConflict\)/);
+});
+
+test('the session is always ended', () => {
+  assert.match(transfer, /finally \{\s*await session\.endSession\(\);/);
+});
+
+test('the audit row counts the articles and does not list them', () => {
+  const action = body('setWriterActive');
+  assert.match(action, /meta: \{ alsoTouched: plan\.writes\.length, sole: plan\.sole, coWritten: plan\.coWritten \}/);
+  assert.equal(action.includes('plan.writes.map'), false);
+});
+
+test('a transfer revalidates the touched pages and both profiles', () => {
+  const action = body('setWriterActive');
+  assert.match(action, /bustWriterCaches\(current\.slug\);/);
+  assert.match(action, /revalidatePath\(DEFAULT_WRITER_PATH\);/);
+  assert.match(action, /revalidatePath\(ADMIN_ARTICLES_PATH\);/);
+  assert.match(action, /revalidatePath\(PUBLIC_ARTICLES_PATH\);/);
+  assert.match(action, /paths\.forEach\(\(path\) => revalidatePath\(path\)\);/);
+  assert.match(action, /revalidatePath\(`\$\{PUBLIC_ARTICLES_PATH\}\/\[slug\]`, 'page'\);/);
+});
+
+test('every writer change refreshes the public list', () => {
+  assert.match(src, /function bustWriterCaches\(slug\) \{[\s\S]*?revalidatePath\(WRITER_LIST_PATH\);[\s\S]*?revalidatePath\(writerPath\(slug\)\);/);
+  for (const action of ['createWriter', 'updateWriter', 'setWriterActive', 'deleteWriter']) {
+    assert.match(body(action), /bustWriterCaches\(/, action);
+  }
+});
+
 test('the old avatar is removed only after the row is durable', () => {
   before('updateWriter', 'Writer.findByIdAndUpdate(', 'removeOldAvatar(');
   before('deleteWriter', 'Writer.findByIdAndDelete(', 'removeOldAvatar(');

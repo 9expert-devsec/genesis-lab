@@ -221,6 +221,7 @@ export async function getArticles({
   articleType = '', // 'article' | 'video' | '' (all)
   active,
   select = '',
+  writer = '', // a writer's _id
 } = {}) {
   await dbConnect();
 
@@ -233,6 +234,7 @@ export async function getArticles({
   // in the commit before this one — the measurement lives beside it).
   if (skill)       filter.skills      = String(skill);
   if (articleType) filter.articleType = String(articleType);
+  if (writer)      filter.writerIds   = String(writer);
   /**
    * ESCAPED, AND THIS IS THE SITE THAT WAS CRASHING PRODUCTION.
    *
@@ -1154,7 +1156,7 @@ export async function getFeaturedArticlesForLanding(limit = 6) {
     // renders no taxonomy at all, which is indistinguishable from an article
     // that simply has none. `tags` stays: the field is untouched and still
     // searched, it is just no longer what the card displays.
-    .select('slug title excerpt coverUrl tags articleType publishedAt programs skills')
+    .select('slug title excerpt coverUrl tags articleType publishedAt programs skills writerIds')
     .lean();
   return serialize(docs);
 }

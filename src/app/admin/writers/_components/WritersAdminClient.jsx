@@ -7,6 +7,7 @@ import { Lock, Plus } from 'lucide-react';
 import { setWriterActive } from '@/lib/actions/writers';
 import { WRITER_TYPE_LABELS } from '@/lib/writers/writerFields';
 import { WriterAvatar } from './WriterAvatar';
+import { useWriterDeactivation } from './WriterDeactivateDialog';
 
 /**
  * The writer list. `status` and `q` are props, read from the URL on the server,
@@ -28,6 +29,10 @@ export function WritersAdminClient({ rows, counts, status, q }) {
   const [, startTransition] = useTransition();
   const [busyId, setBusyId] = useState(null);
   const [message, setMessage] = useState(null);
+  const { begin: beginDeactivation, dialog } = useWriterDeactivation({
+    onDone: () => router.refresh(),
+    onError: setMessage,
+  });
 
   const navigate = useCallback(
     (overrides = {}) => {
@@ -45,11 +50,14 @@ export function WritersAdminClient({ rows, counts, status, q }) {
 
   async function toggle(row) {
     if (row.isDefault) return;
-    if (row.isActive && !window.confirm(`ปิดใช้งาน "${row.displayName}"?`)) return;
     setBusyId(row._id);
     setMessage(null);
     try {
-      const res = await setWriterActive(row._id, !row.isActive);
+      if (row.isActive) {
+        await beginDeactivation(row);
+        return;
+      }
+      const res = await setWriterActive(row._id, true);
       if (res?.ok) router.refresh();
       else setMessage(res?.error ?? 'บันทึกไม่สำเร็จ');
     } catch (err) {
@@ -63,6 +71,7 @@ export function WritersAdminClient({ rows, counts, status, q }) {
 
   return (
     <div>
+      {dialog}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-9e-navy dark:text-white">ผู้เขียน</h1>

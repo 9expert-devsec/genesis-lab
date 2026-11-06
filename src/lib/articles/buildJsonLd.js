@@ -18,19 +18,25 @@
 import { toMetaDescription } from '@/lib/seo/metaDescription';
 import { articleCanonicalUrl } from '@/lib/articles/articleUrl';
 import { SITE_URL } from '@/lib/seo/siteUrl';
+import { writerImageUrl, writerPath } from '@/lib/writers/writerUrls';
 
 /**
- * `article.writers`, when the caller resolved any, in byline order. They carry no
- * `url` because there are no profile pages to point at yet. With none resolved,
- * this is the chain every article had before writers existed.
+ * `article.writers`, when the caller resolved any, in byline order, each pointing
+ * at its profile page. With none resolved, this is the chain every article had
+ * before writers existed.
  */
-function jsonLdAuthor(article, overrides, publisherName) {
+function jsonLdAuthor(article, overrides, publisherName, siteUrl) {
   const writers = article.writers ?? [];
   if (writers.length > 0) {
-    return writers.map((writer) => ({
-      '@type': writer.type === 'organization' ? 'Organization' : 'Person',
-      name: writer.displayName,
-    }));
+    return writers.map((writer) => {
+      const image = writerImageUrl(writer);
+      return {
+        '@type': writer.type === 'organization' ? 'Organization' : 'Person',
+        name: writer.displayName,
+        ...(writer.slug ? { url: `${siteUrl}${writerPath(writer.slug)}` } : {}),
+        ...(image ? { image } : {}),
+      };
+    });
   }
   return {
     '@type': 'Person',
@@ -78,7 +84,7 @@ export function buildJsonLd(article, siteUrl = SITE_URL) {
     // here too — see the helper for why that is accepted.
     description: toMetaDescription(ov.description, article.excerpt),
     image:       ov.image       || article.coverUrl || '',
-    author: jsonLdAuthor(article, ov, publisherName),
+    author: jsonLdAuthor(article, ov, publisherName, siteUrl),
     publisher: {
       '@type': 'Organization',
       name:    publisherName,

@@ -6,6 +6,8 @@ import CourseExtension from '@/models/CourseExtension';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { courseSitemapEntries } from '@/lib/courses/courseSitemapEntries';
 import { getPublishedMasterclasses } from '@/lib/masterclass/getMasterclass';
+import { readPublicWriters } from '@/lib/writers/writerReads';
+import { writerSitemapEntries } from '@/lib/writers/writerProfile';
 
 // Regenerate hourly — fresh enough for new articles, cheap enough that
 // crawlers don't trigger a Mongo round-trip on every hit.
@@ -25,6 +27,7 @@ const STATIC_ROUTES = [
   '/faq',
   '/join-us',
   '/social',
+  '/writer',
 ];
 
 export default async function sitemap() {
@@ -190,5 +193,14 @@ export default async function sitemap() {
     // swallow — every other entry type still ships
   }
 
-  return [...staticEntries, ...articleEntries, ...customPageEntries, ...courseEntries, ...masterclassEntries];
+  // Writers — best-effort like every block above, and the same read /writer
+  // renders from, so the two cannot disagree about who is listed.
+  let writerEntries = [];
+  try {
+    writerEntries = writerSitemapEntries(await readPublicWriters(), base);
+  } catch {
+    // swallow — every other entry type still ships
+  }
+
+  return [...staticEntries, ...articleEntries, ...customPageEntries, ...courseEntries, ...masterclassEntries, ...writerEntries];
 }

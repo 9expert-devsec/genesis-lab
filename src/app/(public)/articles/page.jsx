@@ -5,6 +5,7 @@ import { buildProgramNames, buildSkillNames } from '@/lib/articleTaxonomy';
 import { buildListJsonLd } from '@/lib/articles/buildListJsonLd';
 import { articlePublicListQuery } from '@/lib/articles/publicListQuery';
 import { pageClampTarget } from '@/lib/adminListQuery';
+import { withCardWriters } from '@/lib/writers/writerReads';
 import { redirect } from 'next/navigation';
 import { ArticlesPageClient } from './_components/ArticlesPageClient';
 
@@ -131,6 +132,7 @@ export default async function ArticlesIndexPage({ searchParams }) {
    */
   const clampTo = pageClampTarget({ path: '/articles', query: listQuery, pageKey: 'page', page, pageCount: totalPages });
   if (clampTo) redirect(clampTo);
+  const cards = await withCardWriters(items);
   const programs = (programsRes.items ?? []).map((p) => ({
     program_id:   p.program_id,
     program_name: p.program_name,
@@ -186,7 +188,7 @@ export default async function ArticlesIndexPage({ searchParams }) {
             makes that a property of the code rather than a consequence of one
             export nobody may touch. */}
         <ArticlesPageClient
-          articles={items}
+          articles={cards}
           programs={programs}
           programNames={programNames}
           skillNames={skillNames}

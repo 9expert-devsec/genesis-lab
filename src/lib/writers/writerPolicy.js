@@ -16,7 +16,9 @@ export const WRITER_REFUSALS = Object.freeze({
   defaultFlag: 'เปลี่ยนสถานะผู้เขียนหลักไม่ได้',
   defaultDeactivate: 'ปิดใช้งานผู้เขียนหลักไม่ได้ — เป็นผู้เขียนเริ่มต้นของบทความใหม่',
   defaultDelete: 'ลบผู้เขียนหลักไม่ได้ — เป็นผู้เขียนเริ่มต้นของบทความใหม่',
-  deactivateWithArticles: (n) => `ปิดใช้งานไม่ได้ — ผู้เขียนนี้ยังมีบทความ ${n} รายการ`,
+  deactivateThroughSave: 'ปิดใช้งานผ่านการบันทึกไม่ได้ — ใช้สวิตช์สถานะ เพื่อโอนบทความก่อน',
+  noTransferTarget: 'ไม่พบ 9Expert Academy ที่เปิดใช้งาน — โอนบทความไม่ได้',
+  transferConflict: 'บทความมีการเปลี่ยนแปลงระหว่างโอน — กรุณาลองอีกครั้ง',
   deleteWithArticles: (n) => `ลบไม่ได้ — ผู้เขียนนี้ยังมีบทความ ${n} รายการ`,
 });
 
@@ -29,19 +31,10 @@ async function loadWriter(id, { findWriter }) {
 }
 
 /**
- * The deactivation rule, shared by setWriterActive and updateWriter so a save
- * cannot do what the toggle was refused.
- *
- * ── THE ARTICLE REFUSAL IS TEMPORARY ───────────────────────────────────────
- * Round 3 replaces it with the transfer to 9Expert Academy. Until that flow
- * exists, deactivating a writer who has articles would strand them, so it is
- * refused. Articles have no `writerIds` yet, so the count is 0 today.
+ * Deactivation goes through setWriterActive and nowhere else, because that is
+ * what moves the writer's articles. A save that switched the flag would leave
+ * them on a writer whose page redirects away.
  */
-async function refuseDeactivation(current, { countArticles }) {
-  if (current.isDefault === true) return WRITER_REFUSALS.defaultDeactivate;
-  const articles = await countArticles(String(current._id));
-  return articles > 0 ? WRITER_REFUSALS.deactivateWithArticles(articles) : null;
-}
 
 export async function checkWriterUpdate(id, input, deps) {
   const current = await loadWriter(id, deps);
@@ -57,8 +50,10 @@ export async function checkWriterUpdate(id, input, deps) {
     return { ok: false, error: WRITER_REFUSALS.defaultFlag };
   }
   if (raw.isActive === false && current.isActive !== false) {
-    const refusal = await refuseDeactivation(current, deps);
-    if (refusal) return { ok: false, error: refusal };
+    const refusal = current.isDefault === true
+      ? WRITER_REFUSALS.defaultDeactivate
+      : WRITER_REFUSALS.deactivateThroughSave;
+    return { ok: false, error: refusal };
   }
   return { ok: true, current };
 }
@@ -66,9 +61,8 @@ export async function checkWriterUpdate(id, input, deps) {
 export async function checkSetWriterActive(id, active, deps) {
   const current = await loadWriter(id, deps);
   if (!current) return { ok: false, error: WRITER_REFUSALS.notFound };
-  if (active !== true) {
-    const refusal = await refuseDeactivation(current, deps);
-    if (refusal) return { ok: false, error: refusal };
+  if (active !== true && current.isDefault === true) {
+    return { ok: false, error: WRITER_REFUSALS.defaultDeactivate };
   }
   return { ok: true, current };
 }
@@ -92,10 +86,11 @@ export async function checkDeleteWriter(id, deps) {
  * not filtered through the schema, so it cannot fail that way.
  *
  * @param {unknown[]} writerIds  ObjectIds, as stored
+ * @param {object} [filter]      narrows the articles, e.g. to public ones
  */
-export function writerArticleCountPipeline(writerIds) {
+export function writerArticleCountPipeline(writerIds, filter = {}) {
   return [
-    { $match: { writerIds: { $in: writerIds } } },
+    { $match: { ...filter, writerIds: { $in: writerIds } } },
     { $unwind: '$writerIds' },
     { $match: { writerIds: { $in: writerIds } } },
     { $group: { _id: '$writerIds', n: { $sum: 1 } } },

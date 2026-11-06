@@ -471,7 +471,7 @@ export function ArticleDetailClient({
               </div>
             )}
 
-            <ArticleByline writers={writers} author={article.author} />
+            <ArticleByline writers={writers} author={article.author} minutes={minutes} />
 
             <h1 className="mt-6 text-4xl font-bold leading-tight text-9e-navy dark:text-white">
               {article.title}
@@ -482,17 +482,6 @@ export function ArticleDetailClient({
                 {article.excerpt}
               </p>
             )}
-
-            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-              {/* NO PUBLISH DATE. The owner's decision: articles are evergreen
-                  reference material and a visible date makes a still-accurate
-                  2024 piece look stale. `publishedAt` is untouched as DATA — it
-                  still orders this list, the sitemap and search, and it still
-                  gates publication — it simply is not shown. */}
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-4 w-4" /> {minutes} นาที
-              </span>
-            </div>
 
             {(article.tags?.length ?? 0) > 0 && (
               <div className="mt-4 flex flex-wrap gap-1.5">

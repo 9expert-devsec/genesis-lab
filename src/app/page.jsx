@@ -6,6 +6,7 @@ import { TopNotificationBar } from "@/components/notifications/TopNotificationBa
 import { SitePopup } from "@/components/notifications/SitePopup";
 import { getActiveTopBars } from "@/lib/actions/site-notifications";
 import { getFeaturedArticlesForLanding } from "@/lib/actions/articles";
+import { withCardWriters } from "@/lib/writers/writerReads";
 import { listPrograms } from "@/lib/api/programs";
 import { listSkills } from "@/lib/api/skills";
 import { buildProgramNames, buildSkillNames } from "@/lib/articleTaxonomy";
@@ -111,7 +112,7 @@ export default async function HomePage() {
   ] = await Promise.all([
     getLandingData(),
     getActiveTopBars().catch(() => []),
-    getFeaturedArticlesForLanding().catch(() => []),
+    getFeaturedArticlesForLanding().then(withCardWriters).catch(() => []),
     getActiveClientLogos().catch(() => []),
     getNavMenuData().catch(() => ({ programSlugs: {}, skillSlugs: {} })),
     // Program and skill NAMES for the article cards' overlay and chips.

@@ -12,7 +12,7 @@
 export const RESERVED_SLUGS = [
   'masterclass', 'career-path', 'career-path-register', 'career-path-project',
   'admin', 'api', 'articles', 'promotions', 'about-us', 'contact-us', 'portfolio',
-  'join-us', 'training-course', 'schedule', 'faq', 'social', 'p', 'lp',
+  'join-us', 'training-course', 'schedule', 'faq', 'social', 'p', 'lp', 'writer',
   'sitemap.xml', 'robots.txt', '_next', 'favicon.ico',
 ];
 
