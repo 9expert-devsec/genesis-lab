@@ -42,7 +42,7 @@ export function ArticleByline({ writers = [], author = '', minutes = null }) {
                   alt=""
                   width={28}
                   height={28}
-                  className="h-7 w-7 rounded-full object-cover ring-2 ring-white dark:ring-[#111d2c]"
+                  className="h-7 w-7 rounded-full object-cover shadow-[0_2px_6px_rgb(13_27_42/0.15)] ring-2 ring-white"
                 />
               </Link>
             ))}
