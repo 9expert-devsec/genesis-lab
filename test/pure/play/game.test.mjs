@@ -2,9 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { getLevel } from '@/lib/play/levels/excel/beginner';
+import { getLevel as getIntermediate } from '@/lib/play/levels/excel/intermediate';
 import { maxStarsFor, starsFor, xpFor } from '@/lib/play/game/stars';
 import { hintsForTask, maskFormula } from '@/lib/play/game/hints';
-import { PROGRESS_KEY, loadProgress, progressReducer, saveProgress, totalStars } from '@/lib/play/game/progress';
+import { LEGACY_PROGRESS_KEY, PROGRESS_KEY, loadProgress, migrateV1, progressReducer, saveProgress, seriesProgress, totalStars } from '@/lib/play/game/progress';
+import { failureMessage } from '@/lib/play/game/view';
 import { displayFormula, normalizeFormula, sameFormula } from '@/lib/play/game/normalize';
 
 /**
@@ -14,8 +16,8 @@ import { displayFormula, normalizeFormula, sameFormula } from '@/lib/play/game/n
  * must not overwrite a better score, a corrupt stored value reads as empty.
  */
 
-const memoryStorage = (initial) => {
-  const data = new Map(initial ? [[PROGRESS_KEY, initial]] : []);
+const memoryStorage = (initial, key = PROGRESS_KEY) => {
+  const data = new Map(initial ? [[key, initial]] : []);
   return { getItem: (k) => (data.has(k) ? data.get(k) : null), setItem: (k, v) => data.set(k, String(v)), data };
 };
 const throwingStorage = {
@@ -57,18 +59,25 @@ test('hints: three steps for a single-cell, a fill-down and a mustUse level', ()
   assert.equal(maskFormula('=IF(B2<10,"สั่งเพิ่ม","พอ")'), '=___(B2 _ _, "…", "…")');
   assert.equal(maskFormula('=(B2+C2)*D2'), '=(B2 _ C2) _ D2');
   assert.equal(maskFormula('=B2*$B$7'), '=B2 _ $B$7');
-  assert.doesNotMatch(maskFormula(getLevel('3-5').tasks[0].model), /Gold|1000|>=/);
+  assert.doesNotMatch(maskFormula(getIntermediate('1-5').tasks[0].model), /Gold|1000|>=/);
 });
 
 test('progress: best stars win, totals sum, storage that throws or holds junk reads as empty', () => {
-  let p = progressReducer({}, { type: 'pass', levelId: '1-1', stars: 2, passedAt: 't1' });
-  p = progressReducer(p, { type: 'pass', levelId: '1-1', stars: 1, passedAt: 't2' });
-  assert.deepEqual(p['1-1'], { stars: 2, xp: 20, passedAt: 't1' }, 'a lower replay must not overwrite a better score');
-  p = progressReducer(p, { type: 'pass', levelId: '1-1', stars: 3, passedAt: 't3' });
-  assert.deepEqual(p['1-1'], { stars: 3, xp: 30, passedAt: 't3' });
-  p = progressReducer(p, { type: 'pass', levelId: 'boss', stars: 1, passedAt: 't4' });
-  assert.equal(totalStars(p, [{ id: '1-1' }, { id: '1-2' }, { id: 'boss' }]), 4);
+  const pass = (state, levelId, stars, passedAt, series = 'beginner') => progressReducer(state, { type: 'pass', series, levelId, stars, passedAt });
+  let p = pass({}, '1-1', 2, 't1');
+  p = pass(p, '1-1', 1, 't2');
+  assert.deepEqual(p.beginner['1-1'], { stars: 2, xp: 20, passedAt: 't1' }, 'a lower replay must not overwrite a better score');
+  p = pass(p, '1-1', 3, 't3');
+  assert.deepEqual(p.beginner['1-1'], { stars: 3, xp: 30, passedAt: 't3' });
+  p = pass(p, 'boss', 1, 't4');
+  assert.equal(totalStars(seriesProgress(p, 'beginner'), [{ id: '1-1' }, { id: '1-2' }, { id: 'boss' }]), 4);
   assert.equal(progressReducer(p, { type: 'noop' }), p);
+
+  // Ids repeat across tiers; a pass in one must not show as a pass in the other.
+  const both = pass(p, '1-1', 1, 't5', 'intermediate');
+  assert.equal(both.beginner['1-1'].stars, 3);
+  assert.equal(both.intermediate['1-1'].stars, 1);
+  assert.deepEqual(seriesProgress(p, 'intermediate'), {});
 
   const store = memoryStorage();
   assert.equal(saveProgress(p, store), true);
@@ -77,13 +86,39 @@ test('progress: best stars win, totals sum, storage that throws or holds junk re
   assert.deepEqual(loadProgress(memoryStorage('{not json')), {}, 'corrupt storage → empty progress');
   assert.deepEqual(loadProgress(memoryStorage('[1,2]')), {});
   assert.deepEqual(
-    loadProgress(memoryStorage(JSON.stringify({ '1-1': { stars: 9 }, '1-2': { stars: 2, passedAt: 'x' }, '1-3': 'gold' }))),
-    { '1-2': { stars: 2, xp: 20, passedAt: 'x' } },
+    loadProgress(memoryStorage(JSON.stringify({ beginner: { '1-1': { stars: 9 }, '1-2': { stars: 2, passedAt: 'x' }, '1-3': 'gold' }, junk: 4 }))),
+    { beginner: { '1-2': { stars: 2, xp: 20, passedAt: 'x' } } },
   );
   assert.deepEqual(loadProgress(memoryStorage()), {});
   assert.deepEqual(loadProgress(throwingStorage), {});
   assert.equal(saveProgress(p, throwingStorage), false);
   assert.deepEqual(loadProgress(null), {});
+});
+
+test('progress v1: the IF levels keep their stars in Intermediate, never as Beginner CH.3', () => {
+  const entry = (stars) => ({ stars, xp: stars * 10, passedAt: 't' });
+  const v1 = { '1-1': entry(3), '2-5': entry(2), '3-1': entry(3), '3-5': entry(1), boss: entry(2) };
+  const migrated = migrateV1(v1);
+  assert.deepEqual(migrated.beginner, { '1-1': entry(3), '2-5': entry(2) });
+  assert.deepEqual(migrated.intermediate, { '1-1': entry(3), '1-5': entry(1) });
+  assert.deepEqual(migrated.retired, { boss: entry(2) });
+  assert.equal(migrated.beginner['3-1'], undefined, 'an old IF pass must not clear the new text level');
+  assert.equal(migrated.beginner.boss, undefined, 'the old boss must not clear the new one');
+
+  const store = memoryStorage(JSON.stringify(v1), LEGACY_PROGRESS_KEY);
+  assert.deepEqual(loadProgress(store), migrated, 'no v2 value yet: v1 is read through the migration');
+  assert.equal(store.data.has(PROGRESS_KEY), false, 'reading writes nothing');
+  saveProgress(progressReducer(loadProgress(store), { type: 'pass', series: 'beginner', levelId: '3-1', stars: 1, passedAt: 'n' }), store);
+  assert.equal(loadProgress(store).beginner['3-1'].stars, 1, 'once v2 exists it wins');
+  assert.equal(loadProgress(store).intermediate['1-1'].stars, 3);
+  assert.equal(store.data.get(LEGACY_PROGRESS_KEY), JSON.stringify(v1), 'v1 is left in place');
+  assert.deepEqual(loadProgress(memoryStorage('{not json', LEGACY_PROGRESS_KEY)), {});
+});
+
+test('failure copy: a typed-in answer gets text wording on a text level, number wording otherwise', () => {
+  const typed = { reason: 'no_cell_ref', cells: [] };
+  assert.match(failureMessage(typed, '="LAT"', getLevel('3-1').tasks[0]).headline, /พิมพ์คำตอบตรงๆ/);
+  assert.match(failureMessage(typed, '=60', getLevel('1-2').tasks[0]).headline, /พิมพ์ตัวเลขตรงๆ/);
 });
 
 test('normalize: case and spaces outside strings do not matter, text inside does', () => {

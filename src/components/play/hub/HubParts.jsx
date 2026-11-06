@@ -69,7 +69,7 @@ export function HubHero({ startHref, levelCount, chapterCount }) {
         <div className="mt-7 flex flex-col gap-3 min-[480px]:flex-row min-[480px]:flex-wrap">
           <Link
             href={startHref}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-9e-brand px-6 py-3 font-bold text-white transition-colors hover:bg-9e-action focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-9e-brand px-6 py-3 text-[19px] font-bold text-white transition-colors hover:bg-9e-action focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             <Play className="h-4 w-4 fill-current" aria-hidden="true" />
             เริ่มภารกิจแรก

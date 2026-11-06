@@ -3,15 +3,18 @@
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Check, Crown, Lock, Trophy } from 'lucide-react';
+import { Check, Crown, Lock, Rocket, Trophy } from 'lucide-react';
 
-import { BOSS_CHAPTER, chapterProgress, currentChapter, firstUnpassedLevel, isChapterComplete, isChapterUnlocked } from '@/lib/play/game/map';
+import { BOSS_CHAPTER, chapterProgress, currentChapter, firstUnpassedLevel, isChapterComplete, isChapterUnlocked, levelHref } from '@/lib/play/game/map';
+import { seriesProgress } from '@/lib/play/game/progress';
 
 import { SectionHeading } from './HubParts';
 import m from './mapMotion.module.css';
 
 /**
- * The Excel Beginner mission map: four nodes (CH.1–3, BOSS) on a curved path.
+ * The Excel mission map: four nodes (CH.1–3, BOSS) on a curved path, for the
+ * tier picked in the tabs. The route and the lime elements are the same on every
+ * tier; TIER_THEME holds what changes.
  *
  * TWO STAGES, ONE SET OF RULES. ≥768px the nodes run left→right on a
  * 1200×640 stage; below 768px they run top→bottom, zig-zagging, on a 360×1110
@@ -35,8 +38,60 @@ import m from './mapMotion.module.css';
  * motion). Nothing follows the pointer.
  *
  * Lock state comes from the soft rule in lib/play/game/map and is advisory:
- * a locked node is not a link, but the level URLs themselves stay open.
+ * a locked node is not a link, but the level URLs themselves stay open. A
+ * `comingSoon` chapter is locked whatever the player has passed: it has no levels.
  */
+
+const COMING_SOON = 'เร็วๆ นี้';
+
+// Whole class names, so Tailwind's scanner sees every one.
+const TIER_THEME = {
+  beginner: {
+    bg: null,
+    baseSuffix: '',
+    panel: 'border-[#48B0FF]/30 bg-[linear-gradient(180deg,#0B1726_0%,#0D1B2A_45%,#102a45_100%)]',
+    tabs: 'bg-white/5',
+    tabIdle: 'text-white/40',
+    label: 'border-white/10 bg-[#0D1B2A]/90',
+    lock: 'border-[#48B0FF] bg-[#0D1B2A] text-[#48B0FF]',
+    lockGlow: 'shadow-[0_0_18px_rgba(72,176,255,0.7)]',
+    lockRing: 'focus-visible:ring-[#48B0FF]',
+    tip: 'bg-[#0D1B2A] text-[#48B0FF] ring-[#48B0FF]/40',
+    lockedOrb: 'h-[72px] w-[72px]',
+    bossOrb: 'h-[72px] w-[72px]',
+    bossCrownAlways: false,
+  },
+  intermediate: {
+    bg: '/play/map/map-bg-intermediate.webp',
+    baseSuffix: '-intermediate',
+    panel: 'border-[#BF75FF]/40 bg-[linear-gradient(180deg,#0D0823_0%,#281041_60%,#0D0823_100%)]',
+    tabs: 'border border-[#BF75FF]/40 bg-[#0D0823]/75',
+    tabIdle: 'text-white/70',
+    label: 'border-[#BF75FF] bg-[#170B33]',
+    lock: 'border-[#BF75FF] bg-[#0D0823]/[0.92] text-[#BF75FF]',
+    lockGlow: 'shadow-[0_0_18px_rgba(191,117,255,0.7)]',
+    lockRing: 'focus-visible:ring-[#BF75FF]',
+    tip: 'bg-[#170B33] text-[#BF75FF] ring-[#BF75FF]/40',
+    lockedOrb: 'h-[58px] w-[58px]',
+    bossOrb: 'h-[82px] w-[82px]',
+    bossCrownAlways: true,
+  },
+  advanced: {
+    bg: '/play/map/map-bg-advanced.webp',
+    baseSuffix: '-advanced',
+    panel: 'border-[#FF6231]/40 bg-[linear-gradient(180deg,#1B0506_0%,#3E0D0A_60%,#1B0506_100%)]',
+    tabs: 'border border-[#FF6231]/40 bg-[#1B0506]/75',
+    tabIdle: 'text-white/70',
+    label: 'border-[#FF6231] bg-[#290808]',
+    lock: 'border-[#FF6231] bg-[#1B0506]/[0.92] text-[#FF6231]',
+    lockGlow: 'shadow-[0_0_18px_rgba(255,98,49,0.7)]',
+    lockRing: 'focus-visible:ring-[#FF6231]',
+    tip: 'bg-[#290808] text-[#FF6231] ring-[#FF6231]/40',
+    lockedOrb: 'h-[58px] w-[58px]',
+    bossOrb: 'h-[82px] w-[82px]',
+    bossCrownAlways: true,
+  },
+};
 
 const PLATFORM_RATIO = 720 / 880;
 const PLATFORM_CY = 0.69; // visible centre of the platform, down the image
@@ -124,9 +179,10 @@ function nodeState(chapter, levels, progress, current) {
   return 'open';
 }
 
-function Orb({ chapter, state }) {
+function Orb({ chapter, state, theme }) {
   const boss = chapter === BOSS_CHAPTER;
-  const base = 'relative flex h-[72px] w-[72px] items-center justify-center rounded-full font-en text-2xl font-bold';
+  const size = boss ? theme.bossOrb : state === 'locked' ? theme.lockedOrb : 'h-[72px] w-[72px]';
+  const base = `relative flex ${size} items-center justify-center rounded-full font-en text-2xl font-bold`;
   if (state === 'passed') {
     return (
       <span className={`${base} bg-[#D4F73F] text-[#0D1B2A] shadow-[0_0_24px_rgba(212,247,63,0.45)]`}>
@@ -134,10 +190,10 @@ function Orb({ chapter, state }) {
       </span>
     );
   }
-  if (state === 'locked') {
+  if (state === 'locked' && !(boss && theme.bossCrownAlways)) {
     return (
-      <span className={`${base} border-2 border-[#48B0FF] bg-[#0D1B2A] text-[#48B0FF]`}>
-        <span className={`absolute -inset-1.5 rounded-full shadow-[0_0_18px_rgba(72,176,255,0.7)] ${m.breathe}`} aria-hidden="true" />
+      <span className={`${base} border-2 ${theme.lock}`}>
+        <span className={`absolute -inset-1.5 rounded-full ${theme.lockGlow} ${m.breathe}`} aria-hidden="true" />
         <Lock className="relative h-6 w-6" aria-hidden="true" />
       </span>
     );
@@ -159,12 +215,12 @@ function Orb({ chapter, state }) {
   );
 }
 
-function Label({ chapter, name, levels, progress }) {
+function Label({ chapter, name, dots, levels, progress, theme }) {
   const boss = chapter === BOSS_CHAPTER;
   const ls = levels.filter((l) => l.chapter === chapter).sort((a, b) => a.order - b.order);
   return (
     <span
-      className="flex flex-col items-center rounded-[14px] border border-white/10 bg-[#0D1B2A]/90 px-3 py-2 text-center"
+      className={`flex flex-col items-center rounded-[14px] border px-3 py-2 text-center ${theme.label}`}
       style={{ width: LABEL_W }}
     >
       <span className="inline-flex items-center gap-1 rounded-full bg-[#D4F73F]/15 px-2 py-0.5 font-en text-[11px] font-bold text-[#D4F73F]">
@@ -184,24 +240,28 @@ function Label({ chapter, name, levels, progress }) {
           {ls.map((l) => (
             <span key={l.id} className={`h-2 w-2 rounded-full ${progress[l.id] ? 'bg-[#D4F73F]' : 'border border-white/30'}`} />
           ))}
+          {Array.from({ length: dots ?? 0 }, (_, i) => (
+            <span key={i} className="h-2 w-2 rounded-full border border-white/30" />
+          ))}
         </span>
       )}
     </span>
   );
 }
 
-function platformFor(chapter, state) {
-  if (chapter === BOSS_CHAPTER) return '/play/map/base-boss.webp';
-  return state === 'locked' ? '/play/map/base-locked.webp' : '/play/map/base-active.webp';
+function platformFor(chapter, state, theme) {
+  const kind = chapter === BOSS_CHAPTER ? 'boss' : state === 'locked' ? 'locked' : 'active';
+  return `/play/map/base-${kind}${theme.baseSuffix}.webp`;
 }
 
-function nodeLabel(chapter, name, state, counts) {
+function nodeLabel(chapter, name, state, counts, comingSoon) {
   const what = chapter === BOSS_CHAPTER ? 'บอส' : `บทที่ ${chapter} ${name}`;
-  const status = { passed: 'ผ่านครบแล้ว', locked: 'ยังไม่ปลดล็อก', current: 'บทปัจจุบัน', open: 'เปิดแล้ว' }[state];
+  const status = comingSoon ? COMING_SOON : { passed: 'ผ่านครบแล้ว', locked: 'ยังไม่ปลดล็อก', current: 'บทปัจจุบัน', open: 'เปิดแล้ว' }[state];
   return `${what} · ${status}${counts ? ` · ผ่าน ${counts.passed}/${counts.total} ด่าน` : ''}`;
 }
 
-function lockedHint(chapter) {
+function lockedHint(chapter, comingSoon) {
+  if (comingSoon) return COMING_SOON;
   return chapter === BOSS_CHAPTER ? 'ผ่านครบ 3 บทเพื่อปลดล็อก' : `ผ่าน CH.${chapter - 1} ให้ครบก่อน`;
 }
 
@@ -227,7 +287,7 @@ function ScaledStage({ W, H, children }) {
   );
 }
 
-function Stage({ layout, states, levels, progress, chapterNames, counts, currentIndex, allDone }) {
+function Stage({ layout, states, levels, progress, counts, currentIndex, allDone, theme }) {
   const { W, H, vertical, key } = layout;
   const nodes = layout.nodes.map((n, i) => ({ ...n, ...states[i] }));
   const full = route(nodes, nodes.length - 1, vertical);
@@ -295,9 +355,11 @@ function Stage({ layout, states, levels, progress, chapterNames, counts, current
             aria-hidden="true"
           >
             <div className={m.bob}>
-              <span className={`absolute -top-8 left-1/2 -ml-[45px] whitespace-nowrap rounded-[12px] bg-white px-3 py-1 text-sm font-bold text-[#0D1B2A] shadow-lg ${m.bubble}`}>
-                เริ่มภารกิจ!
-              </span>
+              {mascotNode.state !== 'locked' && (
+                <span className={`absolute -top-8 left-1/2 -ml-[45px] whitespace-nowrap rounded-[12px] bg-white px-3 py-1 text-sm font-bold text-[#0D1B2A] shadow-lg ${m.bubble}`}>
+                  เริ่มภารกิจ!
+                </span>
+              )}
               <Image src="/play/hero-rocket.webp" alt="" width={1240} height={1240} sizes={`${layout.mascotW}px`} className="h-auto w-full object-contain" />
             </div>
           </div>
@@ -306,7 +368,7 @@ function Stage({ layout, states, levels, progress, chapterNames, counts, current
 
       <ol className="contents">
         {nodes.map((n, i) => {
-          const label = nodeLabel(n.chapter, n.name, n.state, n.chapter === BOSS_CHAPTER ? null : counts[n.chapter]);
+          const label = nodeLabel(n.chapter, n.name, n.state, n.chapter === BOSS_CHAPTER ? null : counts[n.chapter], n.comingSoon);
           const box = nodeBox(n);
           const boss = n.chapter === BOSS_CHAPTER;
           const live = n.state === 'current';
@@ -318,10 +380,10 @@ function Stage({ layout, states, levels, progress, chapterNames, counts, current
                 className={`pointer-events-none absolute left-1/2 h-[46%] w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] bg-[radial-gradient(closest-side,rgba(212,247,63,0.45),rgba(212,247,63,0))] ${m.nodeGlow}`}
                 style={{ top: `${PLATFORM_TOP_FACE * 100}%` }}
               />
-              <Image src={platformFor(n.chapter, n.state)} alt="" width={880} height={720} className="relative h-auto w-full object-contain" />
+              <Image src={platformFor(n.chapter, n.state, theme)} alt="" width={880} height={720} className="relative h-auto w-full object-contain" />
               {boss && n.state !== 'locked' && (
                 <Image
-                  src="/play/map/base-boss.webp"
+                  src={platformFor(n.chapter, n.state, theme)}
                   alt=""
                   width={880}
                   height={720}
@@ -344,7 +406,7 @@ function Stage({ layout, states, levels, progress, chapterNames, counts, current
                 data-play-orb=""
               >
                 <span className={`block ${live ? m.float : boss && n.state !== 'locked' ? m.floatLate : ''}`}>
-                  <Orb chapter={n.chapter} state={n.state} />
+                  <Orb chapter={n.chapter} state={n.state} theme={theme} />
                 </span>
               </span>
               <span
@@ -361,7 +423,7 @@ function Stage({ layout, states, levels, progress, chapterNames, counts, current
                 data-play-label=""
               >
                 <span className={`block ${m.labelReveal}`} style={{ '--i': i }}>
-                  <Label chapter={n.chapter} name={n.name} levels={levels} progress={progress} />
+                  <Label chapter={n.chapter} name={n.name} dots={n.dots} levels={levels} progress={progress} theme={theme} />
                 </span>
               </span>
             </>
@@ -371,14 +433,14 @@ function Stage({ layout, states, levels, progress, chapterNames, counts, current
               <div className={m.reveal} style={{ '--i': i }}>
                 {n.state === 'locked' ? (
                   // Focusable so keyboard users get the same hint the mouse tooltip gives.
-                  <div tabIndex={0} aria-label={`${label} · ${lockedHint(n.chapter)}`} className={`relative block rounded-[20px] outline-none focus-visible:ring-2 focus-visible:ring-[#48B0FF] ${m.locked}`}>
+                  <div tabIndex={0} aria-label={`${label} · ${lockedHint(n.chapter, n.comingSoon)}`} className={`relative block rounded-[20px] outline-none focus-visible:ring-2 ${theme.lockRing} ${m.locked}`}>
                     {body}
                     <span
                       role="tooltip"
-                      className={`pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-[10px] bg-[#0D1B2A] px-3 py-1.5 text-xs font-bold text-[#48B0FF] shadow-lg ring-1 ring-[#48B0FF]/40 ${m.tip}`}
+                      className={`pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-[10px] px-3 py-1.5 text-xs font-bold shadow-lg ring-1 ${theme.tip} ${m.tip}`}
                       style={{ top: `calc(${PLATFORM_TOP_FACE * 100}% - 108px)` }}
                     >
-                      {lockedHint(n.chapter)}
+                      {lockedHint(n.chapter, n.comingSoon)}
                     </span>
                   </div>
                 ) : (
@@ -417,19 +479,51 @@ function starField(count, seed) {
 }
 const STARS_A = starField(22, 7);
 const STARS_B = starField(16, 23);
+const inSky = (s) => parseFloat(s.top) < 50; // the tier backgrounds have ground in the lower half
 
-export function MissionMap({ levels, chapterNames, progress }) {
+const TIER_KEY = 'play:v1:tier';
+
+export function MissionMap({ tiers, progress: allProgress }) {
   const panelRef = useRef(null);
   const pausedRef = useRef(true);
   const [shot, setShot] = useState(null);
+  const [series, setSeries] = useState(tiers[0].series);
 
+  // The tab is a per-viewer convenience, so coming back from a level lands on it.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(TIER_KEY);
+      if (tiers.some((t) => t.series === saved)) setSeries(saved);
+    } catch {
+      /* storage blocked: stay on the first tier */
+    }
+  }, [tiers]);
+
+  function pickTier(next) {
+    setSeries(next);
+    try {
+      localStorage.setItem(TIER_KEY, next);
+    } catch {
+      /* storage blocked: the tab still switches */
+    }
+  }
+
+  const tier = tiers.find((t) => t.series === series);
+  const theme = TIER_THEME[series];
+  const { levels, chapters } = tier;
+  const progress = seriesProgress(allProgress, series);
   const current = currentChapter(levels, progress);
   const counts = chapterProgress(levels, progress);
-  const states = WIDE.nodes.map((n) => ({
-    name: chapterNames[n.chapter],
-    state: nodeState(n.chapter, levels, progress, current),
-    href: `/play/excel/beginner/${firstUnpassedLevel(n.chapter, levels, progress)}`,
-  }));
+  const states = WIDE.nodes.map((n) => {
+    const { name, comingSoon = false, dots } = chapters[n.chapter];
+    return {
+      name,
+      comingSoon,
+      dots,
+      state: comingSoon ? 'locked' : nodeState(n.chapter, levels, progress, current),
+      href: levelHref(series, firstUnpassedLevel(n.chapter, levels, progress)),
+    };
+  });
   const currentIndex = Math.max(0, WIDE.nodes.findIndex((n) => n.chapter === current));
   const allDone = states.every((s) => s.state === 'passed');
 
@@ -474,21 +568,26 @@ export function MissionMap({ levels, chapterNames, progress }) {
     return () => clearTimeout(timer);
   }, []);
 
-  const stageProps = { states, levels, progress, chapterNames, counts, currentIndex, allDone };
+  const stageProps = { states, levels, progress, counts, currentIndex, allDone, theme };
+  const starsA = theme.bg ? STARS_A.filter(inSky) : STARS_A;
+  const starsB = theme.bg ? STARS_B.filter(inSky) : STARS_B;
 
   return (
     <section id="map" aria-labelledby="play-map-title" className="mt-28 scroll-mt-28">
-      <SectionHeading id="play-map-title" title="Mission map" accent="beginner" sub="แผนที่ภารกิจของดาวที่คุณเลือก · ตอนนี้คือดาว Excel" />
+      <SectionHeading id="play-map-title" title="Mission map" accent={series} sub={tier.sub} />
 
       <div
         ref={panelRef}
-        className={`relative mt-12 overflow-hidden rounded-[32px] border border-[#48B0FF]/30 bg-[linear-gradient(180deg,#0B1726_0%,#0D1B2A_45%,#102a45_100%)] ${m.map}`}
+        className={`relative mt-12 overflow-hidden rounded-[32px] border ${theme.panel} ${m.map}`}
       >
+        {theme.bg && (
+          <Image src={theme.bg} alt="" fill sizes="(min-width: 1200px) 1200px, 100vw" className="pointer-events-none object-cover" data-play-tier-bg="" />
+        )}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-          {STARS_A.map((s, i) => (
+          {starsA.map((s, i) => (
             <span key={`a${i}`} className={`absolute rounded-full bg-white ${m.twinkleA}`} style={{ left: s.left, top: s.top, width: s.size, height: s.size, animationDelay: s.delay }} />
           ))}
-          {STARS_B.map((s, i) => (
+          {starsB.map((s, i) => (
             <span key={`b${i}`} className={`absolute rounded-full bg-[#D4F73F] ${m.twinkleB}`} style={{ left: s.left, top: s.top, width: s.size, height: s.size, animationDelay: s.delay }} />
           ))}
           {shot && (
@@ -505,17 +604,21 @@ export function MissionMap({ levels, chapterNames, progress }) {
         {/* The horizon art is OPAQUE (its own dark sky), so its top edge is
             faded out with a mask — otherwise it shows as a hard line. Taller and
             cropped on phones, where the panel is narrow. */}
-        <Image
-          src="/play/map/horizon.webp"
-          alt=""
-          width={1650}
-          height={340}
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-40 w-full object-cover object-bottom [mask-image:linear-gradient(to_bottom,transparent_0%,black_45%)] md:h-auto md:object-contain"
-        />
-        <div
-          aria-hidden="true"
-          className={`pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-[radial-gradient(ellipse_60%_55%_at_60%_100%,rgba(72,176,255,0.28),rgba(212,247,63,0.06)_55%,transparent_75%)] ${m.horizonGlow}`}
-        />
+        {!theme.bg && (
+          <>
+            <Image
+              src="/play/map/horizon.webp"
+              alt=""
+              width={1650}
+              height={340}
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-40 w-full object-cover object-bottom [mask-image:linear-gradient(to_bottom,transparent_0%,black_45%)] md:h-auto md:object-contain"
+            />
+            <div
+              aria-hidden="true"
+              className={`pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-[radial-gradient(ellipse_60%_55%_at_60%_100%,rgba(72,176,255,0.28),rgba(212,247,63,0.06)_55%,transparent_75%)] ${m.horizonGlow}`}
+            />
+          </>
+        )}
 
         <div className="relative flex flex-wrap items-center justify-between gap-4 px-5 pt-5 md:px-8 md:pt-6">
           <div className="flex min-w-0 items-center gap-3">
@@ -528,18 +631,27 @@ export function MissionMap({ levels, chapterNames, progress }) {
           </div>
           {/* Phones: the tabs scroll sideways rather than wrap. */}
           <div className="-mx-5 w-[calc(100%+2.5rem)] overflow-x-auto px-5 [scrollbar-width:none] md:mx-0 md:w-auto md:px-0 [&::-webkit-scrollbar]:hidden">
-            <ul className="flex w-max items-center gap-1 rounded-full bg-white/5 p-1 text-sm" aria-label="ระดับ">
-              <li>
-                <span aria-current="true" className="block whitespace-nowrap rounded-full bg-[#D4F73F] px-4 py-1.5 font-bold text-[#0D1B2A]">Beginner</span>
-              </li>
-              {['Intermediate', 'Advanced'].map((s) => (
-                <li key={s}>
-                  <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-4 py-1.5 text-white/40" aria-label={`${s} · ยังไม่เปิด`}>
-                    <Lock className="h-3 w-3" aria-hidden="true" />
-                    {s}
-                  </span>
-                </li>
-              ))}
+            <ul className={`flex w-max items-center gap-1 rounded-full p-1 text-sm ${theme.tabs}`} aria-label="ระดับ">
+              {tiers.map((t) => {
+                const on = t.series === series;
+                const first = t.series === tiers[0].series;
+                const Icon = !first && !on ? Lock : theme.bg ? Rocket : null;
+                return (
+                  <li key={t.series}>
+                    <button
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => pickTier(t.series)}
+                      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-4 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4F73F] ${
+                        on ? 'bg-[#D4F73F] font-bold text-[#0D1B2A]' : `${theme.tabIdle} hover:text-white`
+                      }`}
+                    >
+                      {Icon && <Icon className="h-3 w-3" aria-hidden="true" />}
+                      {t.label}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>

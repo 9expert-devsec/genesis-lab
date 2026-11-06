@@ -157,7 +157,11 @@ export function failureMessage(result, formula, task) {
     case 'must_use':
       return { headline: `ผลถูกแล้ว แต่ด่านนี้ต้องใช้ ${(task.mustUse || []).join(', ')}` };
     case 'no_cell_ref':
-      return { headline: 'ลองอ้างอิงช่อง เช่น B2 แทนการพิมพ์ตัวเลขตรงๆ' };
+      return {
+        headline: (task?.expected ?? []).some((v) => typeof v === 'string')
+          ? 'ลองอ้างอิงช่อง เช่น A2 แทนการพิมพ์คำตอบตรงๆ'
+          : 'ลองอ้างอิงช่อง เช่น B2 แทนการพิมพ์ตัวเลขตรงๆ',
+      };
     default: {
       const parsed = parse(String(formula ?? '').trim());
       if (parsed.error) return { headline: PARSE_MESSAGES[parsed.error] || FALLBACK };

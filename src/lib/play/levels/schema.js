@@ -1,6 +1,6 @@
 import { ARITY } from '../engine/parse.js';
 import { expandRange, parseRef } from '../engine/refs.js';
-import { DATA_SCENE_KINDS, SCENE_CONFIG_KEYS, sceneConfig, sceneFor } from '../game/scene.js';
+import { DATA_SCENE_KINDS, MULTI_STEP_SCENE_KINDS, SCENE_CONFIG_KEYS, sceneConfig, sceneFor } from '../game/scene.js';
 
 /**
  * Structural check for one level. Returns a list of human-readable problems;
@@ -8,6 +8,7 @@ import { DATA_SCENE_KINDS, SCENE_CONFIG_KEYS, sceneConfig, sceneFor } from '../g
  * answers — test/pure/play/levels.test.mjs runs them through the checker.
  */
 
+const SERIES = new Set(['beginner', 'intermediate', 'advanced']);
 const FORMATS = new Set(['percent', '2dp']);
 const REJECT_REASONS = new Set(['no_cell_ref', 'must_use', 'mismatch', 'error']);
 const nonEmpty = (v) => typeof v === 'string' && v.trim() !== '';
@@ -47,6 +48,7 @@ function checkTask(task, i, level, problems) {
   }
 
   if (!nonEmpty(task.model) || !task.model.trim().startsWith('=')) push('model must be a formula starting with =');
+  if (task.mission !== undefined && !nonEmpty(task.mission)) push('mission must be text');
   for (const key of ['alternatives', 'mustUse', 'rejects']) {
     if (task[key] !== undefined && !Array.isArray(task[key])) push(`${key} must be an array`);
   }
@@ -69,7 +71,7 @@ export function validateLevel(level) {
   const isBoss = level.id === 'boss';
   if (!isBoss && !/^[1-9]-[1-9][0-9]*$/.test(String(level.id))) problems.push(`id "${level.id}" is not "<chapter>-<order>" or "boss"`);
   if (!nonEmpty(level.program)) problems.push('program missing');
-  if (!nonEmpty(level.series)) problems.push('series missing');
+  if (!SERIES.has(level.series)) problems.push(`series "${level.series}" is not one of ${[...SERIES].join(', ')}`);
   if (!Number.isInteger(level.chapter) || level.chapter < 1 || level.chapter > 4) problems.push('chapter must be 1..4');
   if (isBoss !== (level.chapter === 4)) problems.push('the boss, and only the boss, is chapter 4');
   if (!Number.isInteger(level.order) || level.order < 1) problems.push('order must be a positive integer');
@@ -108,7 +110,7 @@ export function validateLevel(level) {
       if (DATA_SCENE_KINDS.includes(kind)) {
         if (tasks.some((t) => t?.fill)) problems.push('a data scene answers single cells, not a fill-down');
         if (config.data !== undefined && !expandRange(config.data)) problems.push(`scene "${kind}" data is not a range`);
-      } else if (!tasks[0]?.fill || (kind !== 'boss' && tasks.length !== 1)) problems.push('a scene level must have exactly one fill-down task');
+      } else if (!tasks[0]?.fill || (!MULTI_STEP_SCENE_KINDS.includes(kind) && tasks.length !== 1)) problems.push('a scene level must have exactly one fill-down task');
       for (const key of SCENE_CONFIG_KEYS[kind] || []) {
         if (config[key] === undefined) problems.push(`scene "${kind}" config is missing ${key}`);
       }

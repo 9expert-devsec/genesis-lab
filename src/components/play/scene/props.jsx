@@ -381,6 +381,18 @@ export function CountBadge({ x, y, counted }) {
   );
 }
 
+/** 3-3: a tumbler with a lid, `w`×`h`; `lit` glows blue. */
+export function SizeCup({ x, y, w, h, lit }) {
+  const stroke = lit ? C.blue : 'rgba(148,163,184,0.5)';
+  const inset = w * 0.14;
+  return (
+    <g transform={`translate(${x} ${y})`} style={lit ? { filter: `drop-shadow(0 0 6px ${C.blue})` } : undefined}>
+      <polygon points={`0,${h * 0.16} ${w},${h * 0.16} ${w - inset},${h} ${inset},${h}`} fill={lit ? 'rgba(96,165,250,0.22)' : 'rgba(255,255,255,0.04)'} stroke={stroke} strokeWidth="1.4" strokeLinejoin="round" />
+      <rect x={-1} y="0" width={w + 2} height={h * 0.13} rx="1.5" fill={lit ? C.blue : 'rgba(148,163,184,0.35)'} />
+    </g>
+  );
+}
+
 /** Lime coupon chip, `w`×10. */
 export function Coupon({ x, y, s = 1, w = 20, text, state }) {
   const shadow = state === 'shadow';

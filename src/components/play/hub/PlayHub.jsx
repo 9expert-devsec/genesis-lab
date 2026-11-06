@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 
-import { loadProgress } from '@/lib/play/game/progress';
-import { BOSS_CHAPTER, nextLevelForPlayer } from '@/lib/play/game/map';
+import { loadProgress, seriesProgress } from '@/lib/play/game/progress';
+import { BOSS_CHAPTER, levelHref, nextLevelForPlayer } from '@/lib/play/game/map';
 
 import { HowItWorks, HubCta, HubHero, PlanetCards } from './HubParts';
 import { MissionMap } from './MissionMap';
@@ -26,21 +26,22 @@ const SPACE_BG = {
 /**
  * The /play hub. Progress is read from storage after mount, so the server HTML
  * is the fresh-player view (CH.1 current, everything else locked) and the map
- * and the hero CTA catch up on the client.
+ * and the hero CTA catch up on the client. The hero speaks for the first tier.
  */
-export function PlayHub({ levels, chapterNames }) {
+export function PlayHub({ tiers }) {
   const [progress, setProgress] = useState({});
   useEffect(() => setProgress(loadProgress()), []);
 
-  const startId = nextLevelForPlayer(levels, progress);
+  const { series, levels } = tiers[0];
+  const startId = nextLevelForPlayer(levels, seriesProgress(progress, series));
   const chapterCount = new Set(levels.map((l) => l.chapter).filter((c) => c !== BOSS_CHAPTER)).size;
 
   return (
     <div style={SPACE_BG} className="text-white">
       <div className="mx-auto max-w-[1200px] px-4 pb-24 md:px-6">
-        <HubHero startHref={`/play/excel/beginner/${startId}`} levelCount={levels.length} chapterCount={chapterCount} />
+        <HubHero startHref={levelHref(series, startId)} levelCount={levels.length} chapterCount={chapterCount} />
         <PlanetCards excelLevelCount={levels.length} />
-        <MissionMap levels={levels} chapterNames={chapterNames} progress={progress} />
+        <MissionMap tiers={tiers} progress={progress} />
         <HowItWorks />
         <HubCta coursesHref={EXCEL_COURSES_HREF} />
       </div>

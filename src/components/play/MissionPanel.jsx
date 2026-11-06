@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { Check, Lightbulb } from 'lucide-react';
+import { Check, Lightbulb, Target } from 'lucide-react';
 
 import { StarIcons } from './Stars';
 
@@ -8,10 +8,49 @@ function goalOf(task) {
   return task.fill || task.anchor;
 }
 
+/** What the current task asks: its mission on a multi-step level, then the goal. */
+function GoalText({ level, task, taskIndex }) {
+  const multi = level.tasks.length > 1;
+  return (
+    <>
+      {multi && `ขั้นที่ ${taskIndex + 1}${task.mission ? ` · ${task.mission}` : ''} · `}ทำให้{' '}
+      <span className="font-mono font-bold text-[#D4F73F]">{goalOf(task)}</span> ตรงกับคำตอบเงา{task.fill ? ' ด้วยสูตรเดียว' : ''}
+    </>
+  );
+}
+
 /**
- * Left column: the mascot's speech bubble (the level's story), then the
- * mission card — number, title, goal, the task list on multi-task levels, the
- * hints revealed so far for the active task, and the hint button.
+ * Above the formula bar, where the player is already looking: the mascot, the
+ * level's story and the goal of the current task.
+ */
+export function MissionBar({ level, taskIndex }) {
+  return (
+    <section
+      aria-label="ภารกิจ"
+      className="flex items-center gap-3.5 overflow-hidden rounded-[18px] border-[1.5px] border-9e-air bg-[#132638]/[0.92] py-2.5 pl-3 pr-[18px] shadow-[0_0_22px_rgba(72,176,255,0.28)]"
+    >
+      <Image src="/play/mascot-typing.webp" alt="น้องไนน์" width={360} height={400} sizes="64px" className="h-[72px] w-16 shrink-0 object-contain" priority />
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <p className="text-xs font-semibold text-[#94A3B8]">ลูกค้าบอกว่า</p>
+        <p className="text-base font-semibold text-white">“{level.story}”</p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-[10px] border border-[#D4F73F]/35 bg-[#D4F73F]/[0.08] px-2.5 py-1.5">
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-[#D4F73F]">
+            <Target className="h-4 w-4" aria-hidden="true" />
+            เป้าหมาย
+          </span>
+          <p className="min-w-0 text-[13px] leading-5 text-white">
+            <GoalText level={level} task={level.tasks[taskIndex]} taskIndex={taskIndex} />
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Left column: the mission card — number, title, the task list on multi-task
+ * levels, the hints revealed so far for the active task, and the hint button.
+ * The story and the goal live in MissionBar.
  */
 export function MissionPanel({
   level,
@@ -24,27 +63,19 @@ export function MissionPanel({
   nextHref,
   nextLabel,
 }) {
-  const task = level.tasks[taskIndex];
   const missionLabel = level.id === 'boss' ? 'Boss mission' : `Mission ${String(level.order).padStart(2, '0')}`;
   const canHint = !complete && hintsShown < hints.length;
   const multi = level.tasks.length > 1;
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-end gap-3">
-        <Image src="/play/mascot-typing.webp" alt="น้องไนน์" width={360} height={400} className="h-auto w-24 shrink-0" priority />
-        <p className="relative mb-6 rounded-[16px] rounded-bl-[4px] bg-white px-4 py-3 text-[15px] leading-relaxed text-[#0D1B2A] shadow-[0_8px_24px_rgba(0,0,0,0.25)]">
-          {level.story}
-        </p>
-      </div>
-
       <section aria-labelledby="play-mission-title" className="rounded-[20px] border border-white/10 bg-[#132638] p-5">
         <p className="font-en text-sm font-bold uppercase tracking-widest text-[#D4F73F]">{missionLabel}</p>
         <h1 id="play-mission-title" className="mt-1 font-heading text-2xl font-bold leading-snug text-white">
           {level.title}
         </h1>
 
-        {multi ? (
+        {multi && (
           <ol className="mt-4 flex flex-col gap-2">
             {level.tasks.map((t, i) => {
               const done = complete || i < taskIndex;
@@ -65,17 +96,13 @@ export function MissionPanel({
                     {done ? <Check className="h-3.5 w-3.5" aria-label="ผ่านแล้ว" /> : i + 1}
                   </span>
                   <span>
-                    ทำให้ <span className="font-mono text-[#D4F73F]">{goalOf(t)}</span> ตรงกับคำตอบเงา
+                    {t.mission ?? 'ทำให้'} <span className="font-mono text-[#D4F73F]">{goalOf(t)}</span>{t.mission ? '' : ' ตรงกับคำตอบเงา'}
                     {t.mustUse?.length ? <span className="text-white/50"> · ใช้ {t.mustUse.join(', ')}</span> : null}
                   </span>
                 </li>
               );
             })}
           </ol>
-        ) : (
-          <p className="mt-4 rounded-[12px] border border-[#D4F73F]/40 bg-[#D4F73F]/10 px-4 py-3 text-sm text-white">
-            ทำให้ <span className="font-mono font-bold text-[#D4F73F]">{goalOf(task)}</span> ตรงกับคำตอบเงา
-          </p>
         )}
 
         {hintsShown > 0 && !complete && (

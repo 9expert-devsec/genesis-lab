@@ -85,7 +85,7 @@ export function FormulaBar({ inputRef, anchor, value, spans, disabled, running, 
         type="button"
         onClick={onRun}
         disabled={disabled || running}
-        className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-[#D4F73F] px-3 font-bold sm:gap-2 sm:px-5 text-[#0D1B2A] transition-colors hover:bg-[#D8F852] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-9e-action px-3 font-bold sm:gap-2 sm:px-5 text-white transition-colors hover:bg-9e-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Play className="h-4 w-4 fill-current" aria-hidden="true" />
         รันสูตร

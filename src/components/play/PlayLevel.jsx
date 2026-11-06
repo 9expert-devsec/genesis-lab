@@ -4,16 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { checkTask, taskCells } from '@/lib/play/levels/check';
 import { hintsForTask } from '@/lib/play/game/hints';
-import { loadProgress, progressReducer, saveProgress, totalStars } from '@/lib/play/game/progress';
+import { loadProgress, progressReducer, saveProgress, seriesProgress, totalStars } from '@/lib/play/game/progress';
 import { maxStarsFor, starsFor, xpFor } from '@/lib/play/game/stars';
 import { failureMessage, formatMap, formulaRefSpans, gridBounds, levelFunctions, secretFormulas } from '@/lib/play/game/view';
 import { displayFormula } from '@/lib/play/game/normalize';
-import { isChapterUnlocked } from '@/lib/play/game/map';
+import { isChapterUnlocked, levelHref } from '@/lib/play/game/map';
 import { afterMotion } from '@/lib/play/game/motion';
 import { sceneFor } from '@/lib/play/game/scene';
 
 import { PlayHud } from './PlayHud';
-import { MissionPanel } from './MissionPanel';
+import { MissionBar, MissionPanel } from './MissionPanel';
 import { FormulaBar, QuickKeys } from './FormulaBar';
 import { SheetGrid, SheetLegend } from './SheetGrid';
 import { Scoreboard } from './Scoreboard';
@@ -47,7 +47,7 @@ function prefersReducedMotion() {
   }
 }
 
-export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
+export function PlayLevel({ level, tierLabel, chapterName, levels, nextLevelId }) {
   const inputRef = useRef(null);
   const rootRef = useRef(null);
   const timers = useRef([]);
@@ -117,9 +117,10 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
   const scene = sceneFor(level);
 
   const chapterLevels = levels.filter((l) => l.chapter === level.chapter).sort((a, b) => a.order - b.order);
-  const starsTotal = totalStars(progress, levels);
+  const tierProgress = seriesProgress(progress, level.series);
+  const starsTotal = totalStars(tierProgress, levels);
   const starsMax = maxStarsFor(levels);
-  const nextHref = nextLevelId ? `/play/excel/beginner/${nextLevelId}` : '/play';
+  const nextHref = nextLevelId ? levelHref(level.series, nextLevelId) : '/play';
   const nextLabel = nextLevelId ? 'ด่านถัดไป →' : 'กลับแผนที่';
 
   const focusInput = useCallback(() => {
@@ -195,7 +196,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
     }
     setComplete(true);
     setProgress((prev) => {
-      const next = progressReducer(prev, { type: 'pass', levelId: level.id, stars });
+      const next = progressReducer(prev, { type: 'pass', series: level.series, levelId: level.id, stars });
       saveProgress(next);
       return next;
     });
@@ -265,10 +266,11 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
     <div ref={rootRef} style={SPACE_BG} className="min-h-[calc(100dvh-80px)] text-white">
       <PlayHud
         level={level}
+        tierLabel={tierLabel}
         chapterName={chapterName}
         chapterLevels={chapterLevels}
-        chapterUnlocked={isChapterUnlocked(level.chapter, levels, progress)}
-        progress={progress}
+        chapterUnlocked={isChapterUnlocked(level.chapter, levels, tierProgress)}
+        progress={tierProgress}
         starsTotal={starsTotal}
         starsMax={starsMax}
       />
@@ -287,6 +289,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
         />
 
         <div className="flex min-w-0 flex-col gap-4">
+          <MissionBar level={level} taskIndex={taskIndex} />
           <FormulaBar
             inputRef={inputRef}
             anchor={task.anchor}
@@ -298,6 +301,7 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
             onRun={run}
             onReset={reset}
           />
+          <QuickKeys functions={functions} disabled={complete} onInsert={insertAtCaret} />
           <p className="min-h-[1.25rem] text-sm text-[#86EFAC]" role="status" aria-live="polite">
             {notice}
           </p>
@@ -315,7 +319,6 @@ export function PlayLevel({ level, chapterName, levels, nextLevelId }) {
             onCellClick={onCellClick}
           />
           <SheetLegend />
-          <QuickKeys functions={functions} disabled={complete} onInsert={insertAtCaret} />
           <p className="text-xs text-white/40">
             เคล็ดลับ: ขณะพิมพ์สูตร คลิกช่องในตารางเพื่อใส่ชื่อช่อง (เช่น B2) ลงในสูตรได้เลย
           </p>

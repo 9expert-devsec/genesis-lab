@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { EXCEL_BEGINNER_LEVELS, getLevel } from '@/lib/play/levels/excel/beginner';
+import { EXCEL_INTERMEDIATE_LEVELS, getLevel as getIntermediate } from '@/lib/play/levels/excel/intermediate';
+import { RETIRED_SHOP_SUMMARY_BOSS } from '@/lib/play/levels/excel/retired';
 import { checkTask } from '@/lib/play/levels/check';
 import { validateLevel } from '@/lib/play/levels/schema';
 import {
@@ -9,18 +11,25 @@ import {
   bossGoal,
   bossSteps,
   crateCount,
+  cutSpan,
   dataRows,
   meetsThreshold,
   orderCell,
+  ordersAverage,
+  ordersTotal,
+  phonePair,
+  phoneSlots,
   platesFor,
   podiumTags,
   rateRefs,
   receiptScale,
+  ruleEarned,
   sceneConfig,
   sceneFor,
   sceneRows,
   stackCoins,
   statusTag,
+  stepsFill,
   tierLabel,
   tierPlacement,
   tierRange,
@@ -41,17 +50,19 @@ test('scene: routed by the level `scene` field — every level has one; no scene
     [
       ['1-1', 'toppings'], ['1-2', 'checkout'], ['1-3', 'change'], ['1-4', 'split'], ['1-5', 'delivery'],
       ['2-1', 'tipjar'], ['2-2', 'average'], ['2-3', 'podium'], ['2-4', 'spike'], ['2-5', 'vat'],
-      ['3-1', 'stock'], ['3-2', 'receipts'], ['3-3', 'discount'], ['3-4', 'iced'], ['3-5', 'tiers'], ['boss', 'boss'],
+      ['3-1', 'productCode'], ['3-2', 'serialNo'], ['3-3', 'cupSize'], ['3-4', 'phoneCheck'], ['3-5', 'labelPrinter'], ['boss', 'dailyOrders'],
     ],
   );
+  assert.deepEqual(EXCEL_INTERMEDIATE_LEVELS.map(sceneFor), ['stock', 'receipts', 'discount', 'iced', 'tiers']);
+  assert.equal(sceneFor(RETIRED_SHOP_SUMMARY_BOSS), 'boss');
   // Unknown kinds fall back to the scoreboard at runtime and fail validation.
   const bad = { ...getLevel('1-1'), scene: 'aquarium' };
   assert.equal(sceneFor(bad), null);
   assert.ok(validateLevel(bad).some((p) => p.startsWith('scene "aquarium"')));
   // A configured kind is refused without its parameters.
-  const { threshold, ...rest } = getLevel('3-2').scene;
+  const { threshold, ...rest } = getIntermediate('1-2').scene;
   assert.equal(threshold, 200);
-  assert.ok(validateLevel({ ...getLevel('3-2'), scene: rest }).some((p) => p.includes('missing threshold')));
+  assert.ok(validateLevel({ ...getIntermediate('1-2'), scene: rest }).some((p) => p.includes('missing threshold')));
   assert.equal(sceneFor({ ...getLevel('2-1'), scene: undefined }), null);
   // A data scene needs a real range, and answers single cells.
   const sum = getLevel('2-1');
@@ -102,8 +113,8 @@ function ranRows(level, formula) {
   return sceneRows(level, Object.fromEntries(cells.map((c) => [c.ref, { value: c.value, ok: c.ok }])));
 }
 
-test('scene 3-5: a customer stands in the zone their result cell names, wrong or right', () => {
-  const level = getLevel('3-5');
+test('scene Intermediate 1-5: a customer stands in the zone their result cell names, wrong or right', () => {
+  const level = getIntermediate('1-5');
   const config = sceneConfig(level);
   const ids = (rows) => rows.map((r) => r.index + 1);
 
@@ -123,8 +134,8 @@ test('scene 3-5: a customer stands in the zone their result cell names, wrong or
   assert.deepEqual(tierPlacement(sceneRows(level, {}), config).map(ids), [[1, 4], [3], [2, 5]]);
 });
 
-test('scene boss: the goal bar is the matched step-1 sum before step 2 passes, its result after', () => {
-  const level = getLevel('boss');
+test('scene retired boss: the goal bar is the matched step-1 sum before step 2 passes, its result after', () => {
+  const level = RETIRED_SHOP_SUMMARY_BOSS;
   const { cells } = checkTask(level, 't1', '=B2*C2');
   const results = Object.fromEntries(cells.slice(0, 2).map((c) => [c.ref, { value: c.value, ok: c.ok }]));
 
@@ -245,7 +256,7 @@ test('scene 2-4: badges follow the cell type from the engine, not the answer', (
 
 test('scene config: change a parameter in a fixture and the scene changes with it', () => {
   // 3-2: at 200 the 200 bill touches the line; at 250 it and the 240 bill do not.
-  const receipts = sceneConfig(getLevel('3-2'));
+  const receipts = sceneConfig(getIntermediate('1-2'));
   assert.equal(meetsThreshold(200, receipts), true);
   assert.equal(meetsThreshold(200, { ...receipts, threshold: 250 }), false);
   const line = (config) => receiptScale([180, 240, 200, 95, 320], config, 120).line;
@@ -253,7 +264,7 @@ test('scene config: change a parameter in a fixture and the scene changes with i
   assert.equal(line({ ...receipts, threshold: 160 }), 60);
 
   // 3-1: the crate unit and cap.
-  const stock = sceneConfig(getLevel('3-1'));
+  const stock = sceneConfig(getIntermediate('1-1'));
   assert.equal(crateCount(12, stock), 2);
   assert.equal(crateCount(30, stock), 4);
   assert.equal(crateCount(12, { ...stock, crateUnit: 4 }), 3);
@@ -265,7 +276,7 @@ test('scene config: change a parameter in a fixture and the scene changes with i
   assert.equal(statusTag(row, { ...stock, tags: { พอ: 'lime' } }).meaning, 'lime');
 
   // 3-5: the range text follows the zone minimums.
-  const tiers = sceneConfig(getLevel('3-5'));
+  const tiers = sceneConfig(getIntermediate('1-5'));
   assert.equal(tierRange(800, tiers), 'อยู่ระหว่าง 500–999');
   const lower = { zones: tiers.zones.map((z) => (z.value === 'Silver' ? { ...z, min: 700 } : z)) };
   assert.equal(tierRange(800, lower), 'อยู่ระหว่าง 700–999');
@@ -273,9 +284,61 @@ test('scene config: change a parameter in a fixture and the scene changes with i
   assert.deepEqual([0, 1, 2].map((i) => tierLabel(i, tiers)), ['>= 1000', '>= 500', '< 500']);
 
   // Boss: the same amount fills less of the bar against a higher target.
-  const boss = getLevel('boss');
+  const boss = RETIRED_SHOP_SUMMARY_BOSS;
   const results = { D6: { value: 1000, ok: true } };
   assert.ok(Math.abs(bossGoal(boss, [], results, { taskIndex: 2, complete: false }).fill - 0.9) < 1e-9);
   const higher = { ...boss, scene: { ...boss.scene, target: 2000 } };
   assert.ok(Math.abs(bossGoal(higher, [], results, { taskIndex: 2, complete: false }).fill - 0.45) < 1e-9);
+});
+
+test('scene text cut: lights where the result came from, the lesson before a run or on a stray result', () => {
+  assert.deepEqual(cutSpan('MOC-S-003', 'MOC', [1, 3]), { start: 1, count: 3 });
+  assert.deepEqual(cutSpan('MOC-S-003', '003', [7, 3]), { start: 7, count: 3 });
+  assert.deepEqual(cutSpan('MOC-S-003', 'MO', [1, 3]), { start: 1, count: 2 }, '=LEFT(A2,2) lights two boxes');
+  assert.deepEqual(cutSpan('MOC-S-003', null, [1, 3]), { start: 1, count: 3 });
+  assert.deepEqual(cutSpan('MOC-S-003', 'XYZ', [1, 3]), { start: 1, count: 3 });
+  assert.deepEqual(cutSpan('MOC-S-003', 9, [1, 3]), { start: 1, count: 3 });
+  // Same letter earlier in the code: the configured position wins.
+  assert.deepEqual(cutSpan('MOM-M-003', 'M', [5, 1]), { start: 5, count: 1 });
+});
+
+test('scene rule chip: hidden until a row comes out right, so it never hands over the answer', () => {
+  const level = getLevel('3-1');
+  assert.equal(ruleEarned(sceneRows(level, {})), false);
+  assert.equal(ruleEarned(ranRows(level, '=A2')), false, 'all wrong earns nothing');
+  assert.equal(ruleEarned(ranRows(level, level.tasks[0].model)), true);
+});
+
+test('scene 3-4: the pair follows the focus, missing digits are null slots', () => {
+  const level = getLevel('3-4');
+  const none = sceneRows(level, {});
+  assert.deepEqual(phonePair(none).map((r) => r.index), [0, 1]);
+  const ran = ranRows(level, '=LEN(B2)');
+  assert.deepEqual(phonePair(ran).map((r) => r.index), [3, 4]);
+  const midway = ran.map((r, i) => (i > 2 ? { ...r, state: 'shadow', value: null } : i === 2 ? { ...r, state: 'current' } : r));
+  assert.deepEqual(phonePair(midway).map((r) => r.index), [1, 2]);
+  assert.deepEqual(phoneSlots('081234567', 10), ['0', '8', '1', '2', '3', '4', '5', '6', '7', null]);
+  assert.equal(phoneSlots('02123456', 10).filter((d) => d === null).length, 2);
+});
+
+test('scene daily orders: the jar runs on matched rows, then steps 2 and 3 take over', () => {
+  const level = getLevel('boss');
+  const { cells } = checkTask(level, 't1', '=LEFT(A2,3)');
+  const results = Object.fromEntries(cells.map((c) => [c.ref, { value: c.value, ok: c.ok }]));
+  const partial = { C2: results.C2, C3: results.C3 };
+
+  assert.equal(ordersTotal(level, sceneRows(level, partial), partial, { taskIndex: 0, complete: false }), 135);
+  assert.equal(ordersTotal(level, sceneRows(level, results), results, { taskIndex: 1, complete: false }), 315);
+  // Step 2 not passed yet: a wrong result on the grid does not move the jar.
+  const wrong = { ...results, B7: { value: 999, ok: false } };
+  assert.equal(ordersTotal(level, sceneRows(level, wrong), wrong, { taskIndex: 1, complete: false }), 315);
+
+  const done = { ...results, B7: { value: 315, ok: true }, C7: { value: 63, ok: true } };
+  assert.equal(ordersAverage(level, done, { taskIndex: 2, complete: false }), null);
+  assert.equal(ordersAverage(level, done, { taskIndex: 2, complete: true }), 63);
+
+  const fill = (progress) => stepsFill(bossSteps(level, progress));
+  assert.equal(fill({ taskIndex: 0, complete: false }), 0);
+  assert.ok(Math.abs(fill({ taskIndex: 2, complete: false }) - 2 / 3) < 1e-9);
+  assert.equal(fill({ taskIndex: 2, complete: true }), 1);
 });

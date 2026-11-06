@@ -26,8 +26,8 @@ export const EXCEL_BEGINNER_LEVELS = [
 export const EXCEL_BEGINNER_CHAPTERS = {
   1: 'วางรากพื้นฐาน',
   2: 'คิดเงินแบบอัตโนมัติ',
-  3: 'จัดการข้อมูลขั้นเทพ IF',
-  4: 'BOSS สรุปยอดร้านมืออาชีพ',
+  3: 'จัดข้อความให้เป๊ะ',
+  4: 'BOSS สรุปออเดอร์ประจำวัน',
 };
 
 export function getLevel(id) {

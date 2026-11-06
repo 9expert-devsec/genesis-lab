@@ -12,20 +12,27 @@ import {
   coinHeight,
   countTagged,
   crateCount,
+  cutSpan,
   dataRows,
   focusRow,
   matchedSum,
   meetsThreshold,
   orderCell,
+  ordersAverage,
+  ordersTotal,
+  phonePair,
+  phoneSlots,
   platesFor,
   podiumTags,
   rateRefs,
   receiptScale,
   rowCoins,
+  ruleEarned,
   sceneConfig,
   sceneRows,
   stackCoins,
   statusTag,
+  stepsFill,
   tierLabel,
   tierPlacement,
   tierRange,
@@ -48,6 +55,7 @@ import {
   MiniSvg,
   Person,
   Receipt,
+  SizeCup,
   SpikeSlip,
   StackCoin,
   StageTag,
@@ -84,6 +92,7 @@ const IMAGES = {
   'medal-gold': [445, 640],
   'medal-silver': [359, 640],
   trophy: [577, 640],
+  '3d-label-printer': [1024, 1024],
 };
 
 const SCENES = {
@@ -103,6 +112,12 @@ const SCENES = {
   average: { name: 'Cash register', data: true, Stage: AverageStage, Props: CoinProps, Total: AverageTotal, tone: averageTone },
   podium: { name: 'Sales podium', data: true, Stage: PodiumStage, Props: CoinProps, Total: PodiumTotal, tone: podiumTone },
   spike: { name: 'Order spike', data: true, Stage: SpikeStage, Props: OrderProps, Value: OrderValue, Total: SpikeTotal, tone: orderTone },
+  productCode: { name: 'Product code', labelCol: 'B', Stage: ProductCodeStage, Props: CodeProps, Total: ProductCodeTotal },
+  serialNo: { name: 'Serial no.', labelCol: 'B', Stage: SerialNoStage, Props: CodeProps, Total: SerialNoTotal },
+  cupSize: { name: 'Cup size', labelCol: 'B', Stage: CupSizeStage, Props: CodeProps, Total: CupSizeTotal },
+  phoneCheck: { name: 'Phone check', Stage: PhoneCheckStage, Props: PhoneProps, Value: PhoneValue, Total: PhoneCheckTotal },
+  labelPrinter: { name: 'Label printer', labelCol: 'B', Stage: LabelPrinterStage, Props: TypedProps, Value: PrintedValue, Total: LabelPrinterTotal },
+  dailyOrders: { name: 'Daily orders', Stage: DailyOrdersStage, Props: OrderTypeProps, Value: OrderAmount, Total: DailyOrdersTotal },
 };
 
 export function SceneCard({ kind, level, results, running, formats, formula, taskIndex, complete }) {
@@ -139,7 +154,7 @@ export function SceneCard({ kind, level, results, running, formats, formula, tas
       ) : (
         <ul className="mt-4 flex flex-col gap-1" aria-label="ผลแต่ละแถว">
           {rows.map((r) => (
-            <SceneRow key={r.ref} row={r} fmt={fmt} float={scene.float} value={Value ? <Value row={r} {...ctx} /> : null}>
+            <SceneRow key={r.ref} row={scene.labelCol ? { ...r, label: level.sheet[`${scene.labelCol}${r.row}`] } : r} fmt={fmt} float={scene.float} value={Value ? <Value row={r} {...ctx} /> : null}>
               <Props row={r} {...ctx} />
             </SceneRow>
           ))}
@@ -1230,6 +1245,346 @@ function TiersTotal({ rows, sheet, cfg }) {
   );
 }
 
+// ── Beginner CH.3: text functions ────────────────────────────────────────────
+
+const CHAR = { x: 13, step: 25, y: 24, w: 22, h: 30 };
+const OUTPUT_Y = 104;
+const OUTPUT_LOOK = {
+  match: { fill: 'rgba(134,239,172,0.12)', stroke: 'rgba(134,239,172,0.8)', text: C.green },
+  current: { fill: 'rgba(96,165,250,0.12)', stroke: 'rgba(96,165,250,0.8)', text: C.blue },
+  error: { fill: 'rgba(248,113,113,0.12)', stroke: 'rgba(248,113,113,0.8)', text: C.red },
+  shadow: { fill: 'transparent', stroke: C.shadow, text: '#94A3B8' },
+};
+
+const codeOf = (sheet, row) => String(sheet[`A${row.row}`] ?? '');
+const rowValue = (row) => (row.state === 'shadow' ? '—' : displayValue(row.value));
+
+/** The focused row's code as numbered boxes; the characters it was cut from light up. */
+function CharBoxes({ code, span, state }) {
+  const lit = (i) => i + 1 >= span.start && i + 1 < span.start + span.count;
+  const hot = state === 'error' ? C.red : C.lime;
+  const dim = state === 'shadow';
+  return [...code].map((ch, i) => {
+    const on = lit(i);
+    const x = CHAR.x + i * CHAR.step;
+    return (
+      <g key={i}>
+        <text x={x + CHAR.w / 2} y="19" textAnchor="middle" fontSize="9" fontWeight="500" fill={on ? hot : '#475569'} style={MONO_STYLE}>
+          {i + 1}
+        </text>
+        <rect
+          x={x}
+          y={CHAR.y}
+          width={CHAR.w}
+          height={CHAR.h}
+          rx="6"
+          fill={on ? (dim ? 'rgba(212,247,63,0.16)' : hot) : '#17294A'}
+          stroke={on ? hot : 'rgba(255,255,255,0.08)'}
+        />
+        <text x={x + CHAR.w / 2} y={CHAR.y + 20} textAnchor="middle" fontSize="14" fontWeight="500" fill={on ? (dim ? hot : '#0D1B2A') : '#94A3B8'} style={MONO_STYLE}>
+          {ch}
+        </text>
+      </g>
+    );
+  });
+}
+
+/** Bracket under the cut characters, dashed down to the output slot's top at `toX`. */
+function CutBracket({ span, toX }) {
+  const left = CHAR.x + (span.start - 1) * CHAR.step;
+  const right = CHAR.x + (span.start + span.count - 2) * CHAR.step + CHAR.w;
+  const midX = (left + right) / 2;
+  return (
+    <g fill="none" stroke={C.lime} strokeWidth="1.5">
+      <path d={`M${left} 58 V63 H${right} V58`} strokeLinecap="round" />
+      <path d={`M${midX} 63 Q ${midX} 82, ${toX} ${OUTPUT_Y - 6}`} strokeDasharray="3 3" />
+      <path d={`M${toX - 4} ${OUTPUT_Y - 8} L${toX} ${OUTPUT_Y - 2} L${toX + 4} ${OUTPUT_Y - 8}`} strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+  );
+}
+
+function OutputSlot({ x, w, row, slot, text }) {
+  const look = OUTPUT_LOOK[row.state];
+  return (
+    <g>
+      <rect x={x} y={OUTPUT_Y} width={w} height="46" rx="10" fill={look.fill} stroke={look.stroke} />
+      <text x={x + 7} y={OUTPUT_Y + 13} fontSize="9" fill="#94A3B8">
+        <tspan style={MONO_STYLE}>{row.ref}</tspan> · {slot}
+      </text>
+      <text x={x + 7} y={OUTPUT_Y + 35} fontSize="18" fontWeight="500" fill={look.text} style={MONO_STYLE}>
+        {text}
+      </text>
+    </g>
+  );
+}
+
+/** Lime chip with the lesson's formula, once a row has earned it. */
+function RuleChip({ rows, rule }) {
+  if (!ruleEarned(rows)) return null;
+  const w = rule.length * 6 + 10;
+  return (
+    <g>
+      <rect x="14" y="162" width={w} height="15" rx="4" fill={C.lime} />
+      <text x="19" y="173" fontSize="10" fontWeight="500" fill="#0D1B2A" style={MONO_STYLE}>
+        {rule}
+      </text>
+    </g>
+  );
+}
+
+/** Small outlined tag on the stage, top-left at (x, y). */
+function PillTag({ x, y, w, text, color, mono = false }) {
+  return (
+    <g>
+      <rect x={x} y={y} width={w} height="19" rx="6" fill={`${color}29`} stroke={`${color}CC`} />
+      <text x={x + w / 2} y={y + 13} textAnchor="middle" fontSize="10" fontWeight="600" fill={color} style={mono ? MONO_STYLE : undefined}>
+        {text}
+      </text>
+    </g>
+  );
+}
+
+/** Head of the three code-cut stages: boxes and bracket for the focused row. */
+function cutOf({ rows, sheet, cfg }) {
+  const row = focusRow(rows);
+  const code = codeOf(sheet, row);
+  return { row, code, span: cutSpan(code, row.state === 'shadow' ? null : row.value, cfg.cut) };
+}
+
+function ProductCodeStage(ctx) {
+  const { rows, cfg } = ctx;
+  const { row, code, span } = cutOf(ctx);
+  return (
+    <>
+      <Backdrop name="shelf" x={147} y={70} w={86} />
+      <Overlay>
+        <CharBoxes code={code} span={span} state={row.state} />
+        <CutBracket span={span} toX={56} />
+        <OutputSlot x={14} w={84} row={row} slot={cfg.slot} text={rowValue(row)} />
+        <RuleChip rows={rows} rule={cfg.rule} />
+      </Overlay>
+    </>
+  );
+}
+
+function SerialNoStage(ctx) {
+  const { cfg } = ctx;
+  const { row, code, span } = cutOf(ctx);
+  const shown = typeof row.value === 'string' && row.state !== 'shadow' ? `"${row.value}"` : rowValue(row);
+  return (
+    <>
+      <Backdrop name="cash-register" x={18} y={78} w={88} />
+      <Overlay>
+        <CharBoxes code={code} span={span} state={row.state} />
+        <CutBracket span={span} toX={193} />
+        <OutputSlot x={148} w={90} row={row} slot={cfg.slot} text={shown} />
+        {row.state !== 'shadow' && typeof row.value === 'string' && <PillTag x={132} y={160} w={92} text="ข้อความ · 0 ไม่หาย" color={C.green} />}
+      </Overlay>
+    </>
+  );
+}
+
+const CUPS = [
+  { size: 'S', x: 104, y: 117, w: 26, h: 33 },
+  { size: 'M', x: 148, y: 107, w: 34, h: 43 },
+  { size: 'L', x: 200, y: 97, w: 42, h: 53 },
+];
+
+function CupSizeStage(ctx) {
+  const { rows, cfg } = ctx;
+  const { row, code, span } = cutOf(ctx);
+  const picked = row.state === 'shadow' || row.state === 'error' ? null : row.value;
+  return (
+    <Overlay>
+      <CharBoxes code={code} span={span} state={row.state} />
+      <CutBracket span={span} toX={50} />
+      <OutputSlot x={14} w={72} row={row} slot={cfg.slot} text={rowValue(row)} />
+      {CUPS.map((c) => (
+        <g key={c.size}>
+          <SizeCup x={c.x} y={c.y} w={c.w} h={c.h} lit={c.size === picked} />
+          <text x={c.x + c.w / 2} y="165" textAnchor="middle" fontSize="11" fontWeight="500" fill={c.size === picked ? C.blue : '#94A3B8'} style={MONO_STYLE}>
+            {c.size}
+          </text>
+        </g>
+      ))}
+      <RuleChip rows={rows} rule={cfg.rule} />
+    </Overlay>
+  );
+}
+
+/** Row props on the code scenes: the code, the part this row cut in lime. */
+function CodeProps({ row, sheet, cfg }) {
+  const code = codeOf(sheet, row);
+  const shadow = row.state === 'shadow';
+  const { start, count } = cutSpan(code, shadow ? null : row.value, cfg.cut);
+  const part = (text, cls) => <span className={`${MONO} ${cls}`}>{text}</span>;
+  return (
+    <span className={`${MONO} truncate text-[11px]`}>
+      {part(code.slice(0, start - 1), shadow ? 'text-white/30' : 'text-white/55')}
+      {part(code.slice(start - 1, start - 1 + count), shadow ? 'text-white/30' : 'text-[#D4F73F]')}
+      {part(code.slice(start - 1 + count), shadow ? 'text-white/30' : 'text-white/55')}
+    </span>
+  );
+}
+
+/** The total box of a text scene: a line about the focused row, then its value. */
+function TextTotal({ row, label, unit, tone, value }) {
+  return (
+    <>
+      <p className="text-xs text-white/60">{label}</p>
+      <BigNumber value={value ?? rowValue(row)} unit={row.state === 'shadow' ? null : unit} tone={tone ?? VALUE_TONE[row.state]} plain />
+    </>
+  );
+}
+
+function ProductCodeTotal({ rows, sheet, cfg }) {
+  const row = focusRow(rows);
+  return <TextTotal row={row} label={`ลูกค้าสั่ง${sheet[`B${row.row}`]} · รหัส ${codeOf(sheet, row)}`} unit={cfg.unit} />;
+}
+
+function SerialNoTotal({ rows, cfg }) {
+  return <TextTotal row={focusRow(rows)} label="ผลเป็นข้อความ เลข 0 ข้างหน้าไม่หาย" unit={cfg.unit} />;
+}
+
+function CupSizeTotal({ rows, cfg }) {
+  const row = focusRow(rows);
+  const [start, count] = cfg.cut;
+  return <TextTotal row={row} label={`MID เริ่มที่ตัวที่ ${start} แล้วเอามา ${count} ตัว`} unit={cfg.sizes[row.value]} />;
+}
+
+// 3-4 phone check
+
+const SLOT = { x: 14, step: 19, w: 16, h: 22 };
+const phoneOf = (sheet, row) => String(sheet[`B${row.row}`] ?? '');
+const isShort = (row, cfg) => row.state !== 'shadow' && typeof row.value === 'number' && row.value < cfg.digits;
+
+function PhoneLine({ row, sheet, cfg, y, focused }) {
+  const counted = row.state !== 'shadow';
+  const short = isShort(row, cfg);
+  const hot = focused && counted;
+  const countColor = short ? C.amber : row.state === 'error' ? C.red : row.state === 'match' ? C.green : C.blue;
+  return (
+    <g>
+      <text x={SLOT.x} y={y + 11} fontSize="11" fill="#94A3B8">
+        {row.label}
+      </text>
+      {phoneSlots(phoneOf(sheet, row), cfg.digits).map((digit, i) => {
+        const x = SLOT.x + i * SLOT.step;
+        const missing = digit === null;
+        let fill = '#17294A';
+        let stroke = 'rgba(255,255,255,0.1)';
+        if (missing) {
+          fill = counted ? 'rgba(251,191,36,0.08)' : 'transparent';
+          stroke = counted ? 'rgba(251,191,36,0.9)' : C.shadow;
+        } else if (hot) {
+          fill = 'rgba(96,165,250,0.18)';
+          stroke = 'rgba(96,165,250,0.7)';
+        }
+        return (
+          <g key={i}>
+            <rect x={x} y={y + 18} width={SLOT.w} height={SLOT.h} rx="4" fill={fill} stroke={stroke} strokeDasharray={missing ? '3 2' : undefined} />
+            {!missing && (
+              <text x={x + SLOT.w / 2} y={y + 33} textAnchor="middle" fontSize="11" fontWeight="500" fill={hot ? 'white' : '#94A3B8'} style={MONO_STYLE}>
+                {digit}
+              </text>
+            )}
+          </g>
+        );
+      })}
+      <text x="210" y={y + 35} fontSize="16" fontWeight="500" fill={counted ? countColor : '#94A3B8'} style={MONO_STYLE}>
+        {counted ? displayValue(row.value) : '?'}
+      </text>
+    </g>
+  );
+}
+
+function PhoneCheckStage({ rows, sheet, cfg }) {
+  const focus = focusRow(rows);
+  const short = phonePair(rows).find((r) => isShort(r, cfg));
+  return (
+    <Overlay>
+      {phonePair(rows).map((r, i) => (
+        <PhoneLine key={r.ref} row={r} sheet={sheet} cfg={cfg} y={i * 52} focused={r === focus} />
+      ))}
+      {short && <PillTag x={14} y={116} w={60} text={`ขาด ${cfg.digits - short.value} หลัก`} color={C.amber} />}
+      <RuleChip rows={rows} rule={cfg.rule} />
+      {ruleEarned(rows) && <PillTag x={168} y={160} w={55} text={`ครบ = ${cfg.digits}`} color={C.green} />}
+    </Overlay>
+  );
+}
+
+function PhoneProps({ row, sheet, cfg }) {
+  return (
+    <>
+      <span className={`${MONO} truncate text-[11px] ${row.state === 'shadow' ? 'text-white/30' : 'text-white/55'}`}>{phoneOf(sheet, row)}</span>
+      {isShort(row, cfg) && <StatusTag tag={{ meaning: 'warning', text: 'ไม่ครบ', state: row.state }} />}
+    </>
+  );
+}
+
+function PhoneValue({ row, cfg }) {
+  const tone = isShort(row, cfg) && row.state !== 'error' ? 'text-[#FBBF24]' : ROW_TONE[row.state].value;
+  return <span className={`${MONO} text-right text-sm tabular-nums ${tone}`}>{rowValue(row)}</span>;
+}
+
+function PhoneCheckTotal({ rows, sheet, cfg }) {
+  const row = focusRow(rows);
+  const short = isShort(row, cfg);
+  return (
+    <TextTotal
+      row={row}
+      label={`${row.label} · ${phoneOf(sheet, row)}`}
+      unit={`หลัก · ${short ? 'ไม่ครบ' : 'ครบ'}`}
+      tone={short && row.state !== 'error' ? 'text-[#FBBF24]' : undefined}
+    />
+  );
+}
+
+// 3-5 label printer
+
+function LabelPrinterStage({ rows, sheet, cfg }) {
+  const row = focusRow(rows);
+  const printed = row.state !== 'shadow';
+  return (
+    <>
+      <Backdrop name="3d-label-printer" x={124} y={0} w={124} />
+      <Overlay>
+        <rect x="10" y="30" width="88" height="40" rx="8" fill="#17294A" stroke="rgba(255,255,255,0.18)" strokeDasharray="3 2" />
+        <text x="16" y="42" fontSize="8" fill="#94A3B8">
+          <tspan style={MONO_STYLE}>{`A${row.row}`}</tspan> พิมพ์มา
+        </text>
+        <text x="16" y="60" fontSize="11" fontWeight="500" fill="white" style={MONO_STYLE}>
+          {codeOf(sheet, row)}
+        </text>
+        <g fill="none" stroke={C.lime} strokeWidth="1.5">
+          <path d="M100 50 H126" strokeDasharray="3 3" />
+          <path d="M123 46 L129 50 L123 54" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+        <rect x="130" y="124" width="110" height="30" rx="4" fill={printed ? 'white' : 'rgba(255,255,255,0.08)'} stroke={row.state === 'error' ? C.red : 'none'} strokeWidth="1.5" />
+        <text x="185" y="144" textAnchor="middle" fontSize="13" fontWeight="500" fill={!printed ? '#94A3B8' : row.state === 'error' ? '#B91C1C' : '#0D1B2A'} style={MONO_STYLE}>
+          {rowValue(row)}
+        </text>
+        <PillTag x={14} y={138} w={93} text="LOWER ทำกลับกัน" color="#94A3B8" />
+        <RuleChip rows={rows} rule={cfg.rule} />
+      </Overlay>
+    </>
+  );
+}
+
+function TypedProps({ row, sheet }) {
+  return <span className={`${MONO} truncate text-[10px] ${row.state === 'shadow' ? 'text-white/30' : 'text-white/55'}`}>{codeOf(sheet, row)}</span>;
+}
+
+/** Both codes share one row, so the result runs a step smaller than other scenes'. */
+function PrintedValue({ row }) {
+  return <span className={`${MONO} text-right text-xs tabular-nums ${ROW_TONE[row.state].value}`}>{rowValue(row)}</span>;
+}
+
+function LabelPrinterTotal({ rows }) {
+  const row = focusRow(rows);
+  return <TextTotal row={row} label={row.state === 'shadow' ? 'ยังไม่ได้พิมพ์ป้ายใหม่' : `ป้ายใหม่ของแถว ${row.row} พิมพ์แล้ว`} />;
+}
+
 // ── boss ─────────────────────────────────────────────────────────────────────
 
 const money = (n) => (typeof n === 'number' ? n.toLocaleString('en-US') : '');
@@ -1286,6 +1641,100 @@ function BossStage({ level, rows, results, cfg, progress }) {
           (r, i) => r.state === 'match' && <Glass key={r.ref} x={62 + i * 19} y={base - 28 * s} s={s} menu={r.label} state={r.state} />,
         )}
       </Overlay>
+    </>
+  );
+}
+
+// Beginner boss: daily orders
+
+const RECEIPT = { x: 10, step: 30, y: 48, w: 26, h: 58 };
+const ORDER_BAR = { x: 10, y: 150, w: 228, h: 8 };
+const amountOf = (sheet, row) => sheet[`B${row.row}`];
+
+function DailyOrdersStage({ level, rows, results, sheet, cfg, progress }) {
+  const steps = bossSteps(level, progress);
+  const total = ordersTotal(level, rows, results, progress);
+  const average = ordersAverage(level, results, progress);
+  let chipX = 8;
+  return (
+    <>
+      <Backdrop name="coin-jar" x={167} y={32} w={68} />
+      <Overlay>
+        {steps.map((state, i) => {
+          const look = STEP_LOOK[state];
+          const text = `${i + 1} ${cfg.steps[i]}`;
+          const w = 12 + text.length * 5;
+          const x = chipX;
+          chipX += w + 4;
+          return (
+            <g key={text}>
+              <rect x={x} y="8" width={w} height="19" rx="9.5" fill={look.fill} stroke={look.stroke} strokeWidth="1" strokeDasharray={state === 'shadow' ? '2.5 2' : undefined} />
+              <text x={x + w / 2} y="21" textAnchor="middle" fontSize="9.5" fontWeight="600" fill={look.text}>
+                {text}
+              </text>
+            </g>
+          );
+        })}
+        {rows.map((r, i) => {
+          const x = RECEIPT.x + i * RECEIPT.step;
+          return (
+            <g key={r.ref}>
+              <Receipt x={x} y={RECEIPT.y} w={RECEIPT.w} h={RECEIPT.h} state="match" />
+              <Coupon x={x - 2} y={RECEIPT.y - 8} w={28} text={r.state === 'shadow' ? '?' : displayValue(r.value)} state={r.state} />
+              <text x={x + RECEIPT.w / 2} y={RECEIPT.y + 52} textAnchor="middle" fontSize="9" fontWeight="600" fill="#0D1B2A" style={MONO_STYLE}>
+                {amountOf(sheet, r)}
+              </text>
+            </g>
+          );
+        })}
+        <Coupon x={185} y={114} w={28} text={money(total)} />
+        <rect x={ORDER_BAR.x} y={ORDER_BAR.y} width={ORDER_BAR.w} height={ORDER_BAR.h} rx="4" fill="rgba(255,255,255,0.1)" />
+        <rect x={ORDER_BAR.x} y={ORDER_BAR.y} width={ORDER_BAR.w * stepsFill(steps)} height={ORDER_BAR.h} rx="4" fill={C.green} />
+        <text x={ORDER_BAR.x} y="176" fontSize="10" fontWeight="600" fill={C.blue} style={MONO_STYLE}>
+          ยอดรวม {money(total)}
+        </text>
+        <text x={ORDER_BAR.x + ORDER_BAR.w} y="176" textAnchor="end" fontSize="10" fontWeight="600" fill={average === null ? '#94A3B8' : C.green} style={MONO_STYLE}>
+          เฉลี่ย {average === null ? '?' : displayValue(average)}
+        </text>
+      </Overlay>
+    </>
+  );
+}
+
+function OrderTypeProps({ row }) {
+  if (row.state === 'shadow') return null;
+  return (
+    <MiniSvg w={28} h={14} viewBox="0 0 20 10">
+      <Coupon x={0} y={0} text={displayValue(row.value)} state={row.state} />
+    </MiniSvg>
+  );
+}
+
+function OrderAmount({ row, sheet }) {
+  return <span className={`${MONO} text-right text-sm tabular-nums ${row.state === 'shadow' ? 'text-white/30' : 'text-[#86EFAC]'}`}>{amountOf(sheet, row)}</span>;
+}
+
+function DailyOrdersTotal({ level, rows, results, sheet, progress, fmt }) {
+  const { taskIndex, complete } = progress;
+  const step = complete ? 2 : taskIndex;
+  const task = level.tasks[step];
+  if (step === 0) {
+    return (
+      <>
+        <p className="text-xs text-white/60">ขั้น 1 · {task.mission}</p>
+        <BigNumber value={ordersTotal(level, rows, results, progress)} unit="บาท" fmt={fmt} countUp />
+      </>
+    );
+  }
+  const result = results[task.anchor];
+  const tone = !result ? 'text-white/30' : result.ok ? 'text-[#86EFAC]' : 'text-[#F87171]';
+  const sum = step === 1 ? ` · ${rows.map((r) => amountOf(sheet, r)).join('+')}` : '';
+  return (
+    <>
+      <p className={`text-xs text-white/60 ${MONO}`}>
+        ขั้น {step + 1} · {task.model}{sum}
+      </p>
+      <BigNumber value={result ? result.value : '—'} unit={result ? 'บาท' : null} tone={tone} fmt={fmt} />
     </>
   );
 }

@@ -5,7 +5,7 @@ import { tokenize } from './tokenize.js';
 /**
  * Public API of the 9Expert Play formula engine. Only what the Excel Beginner
  * levels need: + - * /, comparisons, refs/ranges ($-locked or not), and
- * SUM AVERAGE MIN MAX COUNT PRODUCT IF.
+ * SUM AVERAGE MIN MAX COUNT PRODUCT IF LEFT RIGHT MID LEN UPPER LOWER.
  *
  * Nothing here throws. A formula that will not parse evaluates to
  * `{ error: '#ERROR!', key }` with a short key ('unclosed_paren',

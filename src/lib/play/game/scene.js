@@ -12,10 +12,14 @@ export const SCENE_KINDS = [
   'toppings', 'checkout', 'change', 'split', 'delivery', 'vat',
   'stock', 'receipts', 'discount', 'iced', 'tiers', 'boss',
   'tipjar', 'average', 'podium', 'spike',
+  'productCode', 'serialNo', 'cupSize', 'phoneCheck', 'labelPrinter', 'dailyOrders',
 ];
 
 /** Kinds whose rows are input data (see dataRows), not one answer per row. */
 export const DATA_SCENE_KINDS = ['tipjar', 'average', 'podium', 'spike'];
+
+/** Kinds that follow later tasks too; every other row scene acts out one fill-down. */
+export const MULTI_STEP_SCENE_KINDS = ['boss', 'dailyOrders'];
 
 /**
  * `scene` is a kind name, or `{ kind, ...config }` for a scene with parameters.
@@ -32,6 +36,12 @@ export const SCENE_CONFIG_KEYS = {
   average: ['data', 'coinUnit', 'coinMax'],
   podium: ['data', 'coinUnit', 'coinMax'],
   spike: ['data'],
+  productCode: ['cut', 'slot', 'unit', 'rule'],
+  serialNo: ['cut', 'slot', 'unit'],
+  cupSize: ['cut', 'slot', 'rule', 'sizes'],
+  phoneCheck: ['digits', 'rule'],
+  labelPrinter: ['rule'],
+  dailyOrders: ['steps'],
 };
 
 const sceneKind = (scene) => (typeof scene === 'string' ? scene : scene?.kind);
@@ -201,6 +211,50 @@ export function bossGoal(level, rows, results, { taskIndex, complete }) {
   const value = passed ? results[level.tasks[1].anchor]?.value ?? matchedSum(rows) : matchedSum(rows);
   return { value, fill: Math.min(1, (value / target) * targetAt) };
 }
+
+// ── Beginner CH.3 (text) and its boss. Positions, digit counts and steps come
+// from the level's scene config.
+
+/**
+ * Which characters a row's result was cut from, 1-based. The config's `[start,
+ * count]` is the lesson; a result found elsewhere in the code lights where it
+ * really came from, so `=LEFT(A2,2)` shows two boxes, not three.
+ */
+export function cutSpan(code, value, [start, count]) {
+  if (typeof value === 'string' && value !== '') {
+    if (code.slice(start - 1, start - 1 + count) === value) return { start, count };
+    const at = code.indexOf(value);
+    if (at !== -1) return { start: at + 1, count: value.length };
+  }
+  return { start, count };
+}
+
+/** The rule chip is the model formula: it waits until a row has come out right. */
+export const ruleEarned = (rows) => rows.some((r) => r.state === 'match' || r.state === 'current');
+
+/** 3-4: the two numbers on the stage — the focused row and the one before it. */
+export function phonePair(rows) {
+  const i = focusRow(rows).index;
+  return i === 0 ? rows.slice(0, 2) : [rows[i - 1], rows[i]];
+}
+
+/** 3-4: one slot per expected digit; null is a digit the number does not have. */
+export const phoneSlots = (text, digits) => Array.from({ length: digits }, (_, i) => String(text ?? '')[i] ?? null);
+
+/** Daily orders: amounts of the matched rows, step 2's own result once it passed. */
+export function ordersTotal(level, rows, results, { taskIndex, complete }) {
+  const sum = results[level.tasks[1].anchor];
+  if ((complete || taskIndex > 1) && sum) return sum.value;
+  return rows.reduce((s, r) => s + (r.state === 'match' ? Number(level.sheet[`B${r.row}`]) || 0 : 0), 0);
+}
+
+/** Daily orders: step 3's result once it passed, null until then. */
+export function ordersAverage(level, results, { complete }) {
+  return complete ? (results[level.tasks[2].anchor]?.value ?? null) : null;
+}
+
+/** Share of a multi-step scene's steps already passed, 0..1. */
+export const stepsFill = (steps) => steps.filter((s) => s === 'match').length / steps.length;
 
 // ── CH.2 summaries. One answer cell (2-3: two) from rows of input data, so the
 // rows carry no answer state; the answer's lives in the total box.

@@ -4,48 +4,27 @@
   "series": "beginner",
   "chapter": 3,
   "order": 5,
-  "title": "ระดับสมาชิก",
+  "title": "ทำรหัสเป็นตัวใหญ่ทั้งหมด",
   "scene": {
-    "kind": "tiers",
-    "zones": [
-      {
-        "value": "Gold",
-        "name": "GOLD",
-        "min": 1000,
-        "art": "medal-gold",
-        "badge": "gold"
-      },
-      {
-        "value": "Silver",
-        "name": "SILVER",
-        "min": 500,
-        "art": "medal-silver",
-        "badge": "silver"
-      },
-      {
-        "value": "Member",
-        "name": "MEMBER",
-        "min": 0,
-        "badge": "member"
-      }
-    ]
+    "kind": "labelPrinter",
+    "rule": "=UPPER(A2)"
   },
-  "story": "จัดระดับสมาชิกตามยอดสะสม: 1,000 ขึ้นไปเป็น Gold, 500 ขึ้นไปเป็น Silver, ที่เหลือเป็น Member",
-  "learn": "การซ้อน IF ไว้ใน IF เพื่อแยกได้มากกว่าสองกรณี",
+  "story": "พนักงานพิมพ์รหัสตัวเล็กปนตัวใหญ่ ทำให้เป็นตัวใหญ่ทั้งหมด",
+  "learn": "UPPER เปลี่ยนเป็นตัวพิมพ์ใหญ่ทั้งหมด ส่วน LOWER ทำกลับกัน",
   "sheet": {
-    "A1": "ลูกค้า",
-    "A2": "ลูกค้า 1",
-    "A3": "ลูกค้า 2",
-    "A4": "ลูกค้า 3",
-    "A5": "ลูกค้า 4",
-    "A6": "ลูกค้า 5",
-    "B1": "ยอดสะสม",
-    "B2": 1200,
-    "B3": 450,
-    "B4": 800,
-    "B5": 1000,
-    "B6": 499,
-    "C1": "ระดับ"
+    "A1": "รหัสที่พิมพ์มา",
+    "B1": "เมนู",
+    "C1": "รหัสใหม่",
+    "A2": "lat-m-001",
+    "B2": "ลาเต้",
+    "A3": "Ame-l-002",
+    "B3": "อเมริกาโน",
+    "A4": "moc-S-003",
+    "B4": "มอคค่า",
+    "A5": "MAT-m-004",
+    "B5": "มัทฉะ",
+    "A6": "coc-l-005",
+    "B6": "โกโก้"
   },
   "tasks": [
     {
@@ -53,18 +32,16 @@
       "anchor": "C2",
       "fill": "C2:C6",
       "expected": [
-        "Gold",
-        "Member",
-        "Silver",
-        "Gold",
-        "Member"
+        "LAT-M-001",
+        "AME-L-002",
+        "MOC-S-003",
+        "MAT-M-004",
+        "COC-L-005"
       ],
-      "model": "=IF(B2>=1000,\"Gold\",IF(B2>=500,\"Silver\",\"Member\"))",
-      "alternatives": [
-        "=IF(B2<500,\"Member\",IF(B2<1000,\"Silver\",\"Gold\"))"
-      ],
+      "model": "=UPPER(A2)",
+      "alternatives": [],
       "mustUse": [
-        "IF"
+        "UPPER"
       ],
       "rejects": []
     }

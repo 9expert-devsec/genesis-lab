@@ -2,12 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { EXCEL_BEGINNER_LEVELS } from '@/lib/play/levels/excel/beginner';
+import { EXCEL_INTERMEDIATE_LEVELS } from '@/lib/play/levels/excel/intermediate';
 import {
   chapterProgress,
   currentChapter,
   firstUnpassedLevel,
   isBossUnlocked,
   isChapterUnlocked,
+  levelHref,
   nextLevelForPlayer,
 } from '@/lib/play/game/map';
 
@@ -64,4 +66,12 @@ test('map: next level and a chapter\'s first unpassed level skip what is passed'
   assert.equal(firstUnpassedLevel(1, LEVELS, passed(...chapterIds(1))), '1-1', 'all passed → the chapter\'s first level');
   assert.equal(firstUnpassedLevel(4, LEVELS, {}), 'boss');
   assert.equal(nextLevelForPlayer(LEVELS, passed(...LEVELS.map((l) => l.id))), '1-1', 'all passed → back to 1-1');
+});
+
+test('map: a tier with unbuilt chapters stays on its last playable chapter; an empty tier on CH.1', () => {
+  const ifLevels = EXCEL_INTERMEDIATE_LEVELS.map(({ id, chapter, order }) => ({ id, chapter, order }));
+  assert.equal(currentChapter(ifLevels, {}), 1);
+  assert.equal(currentChapter(ifLevels, passed(...ifLevels.map((l) => l.id))), 1, 'everything passed → CH.1, not the unbuilt boss');
+  assert.equal(currentChapter([], {}), 1);
+  assert.equal(levelHref('intermediate', '1-3'), '/play/excel/intermediate/1-3');
 });

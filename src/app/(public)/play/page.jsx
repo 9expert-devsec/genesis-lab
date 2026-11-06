@@ -1,5 +1,5 @@
 import { assertPlayEnabled } from '@/lib/play/flag';
-import { EXCEL_BEGINNER_CHAPTERS, EXCEL_BEGINNER_LEVELS } from '@/lib/play/levels/excel/beginner';
+import { EXCEL_TIERS } from '@/lib/play/levels/excel/tiers';
 import { PlayHub } from '@/components/play/hub/PlayHub';
 
 export const metadata = {
@@ -12,8 +12,7 @@ export default function Page() {
   return (
     <PlayHub
       // Only what the map and the hero CTA read — not every level's sheet.
-      levels={EXCEL_BEGINNER_LEVELS.map(({ id, chapter, order }) => ({ id, chapter, order }))}
-      chapterNames={EXCEL_BEGINNER_CHAPTERS}
+      tiers={EXCEL_TIERS.map(({ levels, ...tier }) => ({ ...tier, levels: levels.map(({ id, chapter, order }) => ({ id, chapter, order })) }))}
     />
   );
 }

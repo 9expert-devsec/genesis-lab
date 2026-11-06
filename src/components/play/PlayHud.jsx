@@ -2,12 +2,14 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Check, ChevronLeft, Star } from 'lucide-react';
 
+import { levelHref } from '@/lib/play/game/map';
+
 import { STAR_FILLED } from './Stars';
 
 /**
  * The bar under the site header: back to the map, which game/series/chapter
  * this is, the chapter's level dots, and the player's star total over every
- * Beginner level (the max is computed from the level count, boss included).
+ * level of this tier (the max is computed from the level count, boss included).
  *
  * Dots: current = lime, passed = lime outline + check, otherwise the level
  * number. `chapterUnlocked` (the soft rule in lib/play/game/map) only changes
@@ -16,7 +18,7 @@ import { STAR_FILLED } from './Stars';
  * Phones (<640px): one row — back link, dots shrunk to 24px, star total; the
  * game/chapter block hides (the mission card right below names the level).
  */
-export function PlayHud({ level, chapterName, chapterLevels, chapterUnlocked, progress, starsTotal, starsMax }) {
+export function PlayHud({ level, tierLabel, chapterName, chapterLevels, chapterUnlocked, progress, starsTotal, starsMax }) {
   const chapterLabel = level.chapter === 4 ? chapterName : `CH.${level.chapter} ${chapterName}`;
   return (
     <div className="border-b border-white/10 bg-[#0D1B2A]/80 backdrop-blur">
@@ -33,7 +35,7 @@ export function PlayHud({ level, chapterName, chapterLevels, chapterUnlocked, pr
           <Image src="/play/icon-excel.webp" alt="" width={96} height={96} className="h-9 w-9 shrink-0 rounded-[8px]" />
           <div className="min-w-0 leading-tight">
             <p className="font-en text-xs font-bold uppercase tracking-widest text-[#D4F73F]">
-              Excel <span className="font-thai normal-case tracking-normal">แสนสนุก</span> · Beginner
+              Excel <span className="font-thai normal-case tracking-normal">แสนสนุก</span> · {tierLabel}
             </p>
             <p className="truncate font-heading text-sm font-bold text-white">{chapterLabel}</p>
           </div>
@@ -51,7 +53,7 @@ export function PlayHud({ level, chapterName, chapterLevels, chapterUnlocked, pr
               return (
                 <li key={l.id}>
                   <Link
-                    href={`/play/excel/beginner/${l.id}`}
+                    href={levelHref(level.series, l.id)}
                     aria-current={current ? 'page' : undefined}
                     aria-label={`ด่าน ${l.id} · ${state}`}
                     data-play-dot={passed ? 'passed' : current ? 'current' : 'open'}

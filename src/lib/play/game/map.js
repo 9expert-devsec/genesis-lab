@@ -7,8 +7,10 @@
  *   · CH.n (n = 2, 3) unlocks when every level of CH.n−1 is passed.
  *   · The boss (chapter 4) unlocks when every level of CH.1–3 is passed.
  *
- * `levels` is the index in play order (only id / chapter / order are read);
- * `progress` is the stored `{ [levelId]: { stars } }` map.
+ * `levels` is one tier's index in play order (only id / chapter / order are
+ * read); `progress` is that tier's `{ [levelId]: { stars } }` map. A chapter
+ * announced but not built is not in `levels`: the tier table marks it
+ * `comingSoon`, and that overrides this rule on the map.
  */
 
 export const BOSS_CHAPTER = 4;
@@ -61,9 +63,12 @@ export function nextLevelForPlayer(levels, progress) {
 
 /**
  * The chapter the map marks as "you are here": the one holding the first
- * unpassed level. With everything passed that is the boss, not CH.1.
+ * unpassed level. With everything passed that is the boss, not CH.1; in a tier
+ * whose later chapters are not built yet, the last playable chapter.
  */
 export function currentChapter(levels, progress) {
   const open = levels.find((l) => !isPassed(progress, l.id));
-  return open ? open.chapter : BOSS_CHAPTER;
+  return open ? open.chapter : (levels[levels.length - 1]?.chapter ?? 1);
 }
+
+export const levelHref = (series, id) => `/play/excel/${series}/${id}`;

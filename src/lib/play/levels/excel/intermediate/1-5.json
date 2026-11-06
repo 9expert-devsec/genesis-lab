@@ -1,0 +1,72 @@
+{
+  "id": "1-5",
+  "program": "excel",
+  "series": "intermediate",
+  "chapter": 1,
+  "order": 5,
+  "title": "ระดับสมาชิก",
+  "scene": {
+    "kind": "tiers",
+    "zones": [
+      {
+        "value": "Gold",
+        "name": "GOLD",
+        "min": 1000,
+        "art": "medal-gold",
+        "badge": "gold"
+      },
+      {
+        "value": "Silver",
+        "name": "SILVER",
+        "min": 500,
+        "art": "medal-silver",
+        "badge": "silver"
+      },
+      {
+        "value": "Member",
+        "name": "MEMBER",
+        "min": 0,
+        "badge": "member"
+      }
+    ]
+  },
+  "story": "จัดระดับสมาชิกตามยอดสะสม: 1,000 ขึ้นไปเป็น Gold, 500 ขึ้นไปเป็น Silver, ที่เหลือเป็น Member",
+  "learn": "การซ้อน IF ไว้ใน IF เพื่อแยกได้มากกว่าสองกรณี",
+  "sheet": {
+    "A1": "ลูกค้า",
+    "A2": "ลูกค้า 1",
+    "A3": "ลูกค้า 2",
+    "A4": "ลูกค้า 3",
+    "A5": "ลูกค้า 4",
+    "A6": "ลูกค้า 5",
+    "B1": "ยอดสะสม",
+    "B2": 1200,
+    "B3": 450,
+    "B4": 800,
+    "B5": 1000,
+    "B6": 499,
+    "C1": "ระดับ"
+  },
+  "tasks": [
+    {
+      "id": "t1",
+      "anchor": "C2",
+      "fill": "C2:C6",
+      "expected": [
+        "Gold",
+        "Member",
+        "Silver",
+        "Gold",
+        "Member"
+      ],
+      "model": "=IF(B2>=1000,\"Gold\",IF(B2>=500,\"Silver\",\"Member\"))",
+      "alternatives": [
+        "=IF(B2<500,\"Member\",IF(B2<1000,\"Silver\",\"Gold\"))"
+      ],
+      "mustUse": [
+        "IF"
+      ],
+      "rejects": []
+    }
+  ]
+}

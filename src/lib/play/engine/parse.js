@@ -17,6 +17,12 @@ export const ARITY = {
   COUNT: [1, 255],
   PRODUCT: [1, 255],
   IF: [2, 3],
+  LEFT: [1, 2],
+  RIGHT: [1, 2],
+  MID: [3, 3],
+  LEN: [1, 1],
+  UPPER: [1, 1],
+  LOWER: [1, 1],
 };
 
 const CMP = new Set(['=', '<>', '<', '>', '<=', '>=']);

@@ -39,6 +39,23 @@ function toBool(v) {
   return err('#VALUE!');
 }
 
+/** A value as Excel's text functions read it: `LEFT(12345,2)` sees "12345". */
+function toText(v) {
+  if (isErr(v)) return v;
+  if (v === null) return '';
+  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+  if (typeof v === 'number') return String(+v.toPrecision(15));
+  return String(v);
+}
+
+/** A character count or position: truncated toward zero; below `min` is #VALUE!. */
+function toCount(v, min) {
+  const n = toNumber(v);
+  if (isErr(n)) return n;
+  const whole = Math.trunc(n);
+  return whole < min ? err('#VALUE!') : whole;
+}
+
 // Excel orders numbers < text < booleans; an empty cell takes the other side's type.
 const rank = (v) => (typeof v === 'number' ? 0 : typeof v === 'string' ? 1 : 2);
 
@@ -123,6 +140,36 @@ const AGGREGATES = {
   COUNT: (ns) => ns.length,
 };
 
+function cut(ctx, text, n, take) {
+  const s = toText(evalNode(text, ctx));
+  if (isErr(s)) return s;
+  const count = n ? toCount(evalNode(n, ctx), 0) : 1;
+  return isErr(count) ? count : take(s, count);
+}
+
+function mapText(ctx, text, fn) {
+  const s = toText(evalNode(text, ctx));
+  return isErr(s) ? s : fn(s);
+}
+
+/** Each returns TEXT except LEN. A count reaches `take` already validated. */
+const TEXT_FNS = {
+  LEFT: (ctx, [text, n]) => cut(ctx, text, n, (s, c) => s.slice(0, c)),
+  RIGHT: (ctx, [text, n]) => cut(ctx, text, n, (s, c) => (c === 0 ? '' : s.slice(-c))),
+  MID: (ctx, [text, start, n]) => {
+    const s = toText(evalNode(text, ctx));
+    if (isErr(s)) return s;
+    const from = toCount(evalNode(start, ctx), 1);
+    if (isErr(from)) return from;
+    const count = toCount(evalNode(n, ctx), 0);
+    if (isErr(count)) return count;
+    return s.slice(from - 1, from - 1 + count);
+  },
+  LEN: (ctx, [text]) => mapText(ctx, text, (s) => s.length),
+  UPPER: (ctx, [text]) => mapText(ctx, text, (s) => s.toUpperCase()),
+  LOWER: (ctx, [text]) => mapText(ctx, text, (s) => s.toLowerCase()),
+};
+
 function callFn(node, ctx) {
   if (node.name === 'IF') {
     const cond = toBool(evalNode(node.args[0], ctx));
@@ -130,6 +177,7 @@ function callFn(node, ctx) {
     if (cond) return evalNode(node.args[1], ctx);
     return node.args.length === 3 ? evalNode(node.args[2], ctx) : false;
   }
+  if (TEXT_FNS[node.name]) return TEXT_FNS[node.name](ctx, node.args);
   const fn = AGGREGATES[node.name];
   if (!fn) return err('#NAME?');
   const ns = collectNumbers(node.args, ctx, node.name === 'COUNT');
