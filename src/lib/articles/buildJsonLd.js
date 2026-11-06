@@ -19,6 +19,25 @@ import { toMetaDescription } from '@/lib/seo/metaDescription';
 import { articleCanonicalUrl } from '@/lib/articles/articleUrl';
 import { SITE_URL } from '@/lib/seo/siteUrl';
 
+/**
+ * `article.writers`, when the caller resolved any, in byline order. They carry no
+ * `url` because there are no profile pages to point at yet. With none resolved,
+ * this is the chain every article had before writers existed.
+ */
+function jsonLdAuthor(article, overrides, publisherName) {
+  const writers = article.writers ?? [];
+  if (writers.length > 0) {
+    return writers.map((writer) => ({
+      '@type': writer.type === 'organization' ? 'Organization' : 'Person',
+      name: writer.displayName,
+    }));
+  }
+  return {
+    '@type': 'Person',
+    name: overrides.authorName || article.author || publisherName,
+  };
+}
+
 export function buildJsonLd(article, siteUrl = SITE_URL) {
   if (!article?.jsonLd?.enabled) return null;
   if (!article.active || !article.publishedAt) return null;
@@ -59,10 +78,7 @@ export function buildJsonLd(article, siteUrl = SITE_URL) {
     // here too — see the helper for why that is accepted.
     description: toMetaDescription(ov.description, article.excerpt),
     image:       ov.image       || article.coverUrl || '',
-    author: {
-      '@type': 'Person',
-      name: ov.authorName || article.author || publisherName,
-    },
+    author: jsonLdAuthor(article, ov, publisherName),
     publisher: {
       '@type': 'Organization',
       name:    publisherName,

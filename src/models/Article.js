@@ -40,6 +40,10 @@ const ArticleSchema = new mongoose.Schema(
 
     // Publishing
     author:          { type: String, trim: true, default: '' },
+    // Who wrote it, in byline order: index 0 is the primary writer. Absent on an
+    // article not migrated yet, and `.lean()` applies no default, so every reader
+    // takes `undefined` as "none" (src/lib/writers/articleWriters.js).
+    writerIds:       [{ type: mongoose.Schema.Types.ObjectId, ref: 'Writer' }],
     publishedAt:     { type: Date },
     active:          { type: Boolean, default: true },
 
@@ -215,6 +219,13 @@ ArticleSchema.index({ featuredOnLanding: 1, publishedAt: -1 });
  * writes and nothing else on the common path.
  */
 ArticleSchema.index({ skills: 1 });
+
+/**
+ * "The articles of this writer." The /admin/writers list counts them on every
+ * load, and without this that aggregate reads the whole collection, then once
+ * more per guarded action (deactivate, delete). Multikey, like `skills`.
+ */
+ArticleSchema.index({ writerIds: 1 });
 
 /**
  * The ordering cascade's index — DIRECTION IS THE WHOLE POINT.

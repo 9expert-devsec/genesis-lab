@@ -4,7 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Lock } from 'lucide-react';
-import { createWriter, setWriterActive, updateWriter } from '@/lib/actions/writers';
+import { createWriter, discardWriterAvatarUpload, setWriterActive, updateWriter } from '@/lib/actions/writers';
+import { saveWithPendingAvatar, uploadWriterAvatar } from '@/lib/writers/avatarSave';
 import {
   WRITER_PLATFORMS,
   WRITER_PLATFORM_LABELS,
@@ -82,6 +83,7 @@ export function WriterForm({ writer = null, instructors }) {
   const [role, setRole] = useState(writer?.role ?? '');
   const [bio, setBio] = useState(writer?.bio ?? '');
   const [avatarPublicId, setAvatarPublicId] = useState(writer?.avatarPublicId ?? '');
+  const [pendingAvatar, setPendingAvatar] = useState(null);
   const [isActive, setIsActive] = useState(writer?.isActive ?? true);
   const [instructorId, setInstructorId] = useState(writer?.instructorId ?? '');
 
@@ -100,13 +102,13 @@ export function WriterForm({ writer = null, instructors }) {
   const isDefault = writer?.isDefault === true;
   const selectedInstructor = instructors.find((i) => i.id === instructorId) ?? null;
 
-  function payload() {
+  function payload(uploadedId) {
     const fields = {
       displayName,
       type,
       role,
       bio,
-      avatarPublicId,
+      avatarPublicId: uploadedId ?? avatarPublicId,
       instructorId: instructorId || null,
       socialLinks: socialRows
         .filter((row) => row.url.trim())
@@ -125,11 +127,20 @@ export function WriterForm({ writer = null, instructors }) {
     setFormError(null);
     setFieldErrors({});
     try {
-      const res = editing ? await updateWriter(writer._id, payload()) : await createWriter(payload());
+      const { res, uploadedId } = await saveWithPendingAvatar({
+        blob: pendingAvatar,
+        upload: uploadWriterAvatar,
+        write: (id) => (editing ? updateWriter(writer._id, payload(id)) : createWriter(payload(id))),
+        discard: discardWriterAvatarUpload,
+      });
       if (!res?.ok) {
         setFormError(res?.error ?? 'บันทึกไม่สำเร็จ');
         setFieldErrors(res?.errors ?? {});
       } else if (editing) {
+        if (uploadedId) {
+          setAvatarPublicId(uploadedId);
+          setPendingAvatar(null);
+        }
         setMessage('บันทึกแล้ว');
         router.refresh();
       } else {
@@ -328,7 +339,12 @@ export function WriterForm({ writer = null, instructors }) {
 
         <div className="space-y-5">
           <Panel title="รูปโปรไฟล์" testId="panel-avatar">
-            <WriterAvatarField value={avatarPublicId} onChange={setAvatarPublicId} />
+            <WriterAvatarField
+              value={avatarPublicId}
+              pending={pendingAvatar}
+              onCrop={setPendingAvatar}
+              onRemove={() => { setPendingAvatar(null); setAvatarPublicId(''); }}
+            />
             {fieldErrors.avatarPublicId && (
               <p className="mt-2 text-xs text-red-700" data-testid="field-error">{fieldErrors.avatarPublicId}</p>
             )}

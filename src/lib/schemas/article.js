@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { INVALID_WRITER_ID_MESSAGE, NO_WRITER_MESSAGE } from '@/lib/writers/articleWriters';
 
 /**
  * The excerpt cap. 2000, and the number is argued rather than picked.
@@ -56,6 +57,8 @@ import { z } from 'zod';
  */
 export const ARTICLE_EXCERPT_MAX = 2000;
 
+const writerId = z.string().regex(/^[0-9a-fA-F]{24}$/, INVALID_WRITER_ID_MESSAGE);
+
 export const articleSchema = z.object({
   slug:            z.string().trim().min(1).max(200),
   title:           z.string().trim().min(1).max(200),
@@ -76,7 +79,10 @@ export const articleSchema = z.object({
   // the public <meta> is truncated at render by lib/seo/metaDescription.js.
   seoDescription:  z.string().trim().max(320).default(''),
   focusKeyword:    z.string().trim().default(''),
-  author:          z.string().trim().max(100).default(''),
+  // Ordered; index 0 is the primary writer. May be empty only on create, where
+  // the default writer is used: articleUpdateSchema requires at least one.
+  // `author` is NOT declared: the save path derives it from these writers.
+  writerIds:       z.array(writerId).default([]),
   publishedAt:     z.string().datetime().optional().or(z.literal('')),
   active:          z.boolean().default(true),
   // Pin BADGE only — never positioning. `isPinnedOnArticlePage` and `pinOrder`
@@ -101,11 +107,16 @@ export const articleSchema = z.object({
       headline:      z.string().default(''),
       description:   z.string().default(''),
       image:         z.string().default(''),
-      authorName:    z.string().default(''),
       datePublished: z.string().default(''),
       dateModified:  z.string().default(''),
     }).default({}),
     rawOverride:        z.string().default(''),
     rawOverrideEnabled: z.boolean().default(false),
   }).default({}),
+});
+
+export const articleUpdateSchema = articleSchema.extend({
+  writerIds: z
+    .array(writerId, { required_error: NO_WRITER_MESSAGE, invalid_type_error: NO_WRITER_MESSAGE })
+    .min(1, NO_WRITER_MESSAGE),
 });

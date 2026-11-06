@@ -18,19 +18,32 @@ function loadImage(src) {
 }
 
 /**
- * Pick a photo, crop it, upload ONLY the crop.
+ * Pick a photo and crop it. Nothing leaves the browser here.
  *
- * Stores the public_id, not the URL (see Writer.avatarPublicId). The upload
- * happens when the crop is accepted and the row is written by บันทึก, so a crop
- * that is never saved leaves an unreferenced file on Cloudinary.
+ * The crop is held by the form as `pending` and shown through an object URL. บันทึก
+ * uploads it (lib/writers/avatarSave), so a crop that is never saved leaves
+ * nothing on Cloudinary. ลบ also only changes the form until then.
+ *
+ * Stores the public_id, not the URL (see Writer.avatarPublicId).
  */
-export function WriterAvatarField({ value, onChange }) {
+export function WriterAvatarField({ value, pending, onCrop, onRemove }) {
   const inputRef = useRef(null);
   const [source, setSource] = useState(null);
+  const [pendingUrl, setPendingUrl] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => () => { if (source) URL.revokeObjectURL(source); }, [source]);
+
+  useEffect(() => {
+    if (!pending) {
+      setPendingUrl(null);
+      return undefined;
+    }
+    const url = URL.createObjectURL(pending);
+    setPendingUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pending]);
 
   function pick(e) {
     const file = e.target.files?.[0];
@@ -54,18 +67,10 @@ export function WriterAvatarField({ value, onChange }) {
       const verdict = checkUpload(WRITER_AVATAR_FOLDER, blob);
       if (!verdict.ok) throw new Error(verdict.error);
 
-      const fd = new FormData();
-      fd.append('file', blob, blob.type === 'image/webp' ? 'avatar.webp' : 'avatar.jpg');
-      fd.append('folder', WRITER_AVATAR_FOLDER);
-      const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `อัปโหลดไม่สำเร็จ (${res.status})`);
-      if (!data?.publicId) throw new Error('อัปโหลดสำเร็จแต่ไม่ได้รับรหัสรูป');
-
-      onChange(data.publicId);
+      onCrop(blob);
       setSource(null);
     } catch (err) {
-      setError(err?.message ?? 'อัปโหลดไม่สำเร็จ');
+      setError(err?.message ?? 'ครอปรูปไม่สำเร็จ');
     } finally {
       setBusy(false);
     }
@@ -73,7 +78,7 @@ export function WriterAvatarField({ value, onChange }) {
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <WriterAvatar publicId={value} px={140} source={256} />
+      <WriterAvatar publicId={value} px={140} source={256} previewUrl={pendingUrl} />
 
       <div className="flex gap-2">
         <button
@@ -85,8 +90,8 @@ export function WriterAvatarField({ value, onChange }) {
         </button>
         <button
           type="button"
-          onClick={() => onChange('')}
-          disabled={!value}
+          onClick={onRemove}
+          disabled={!value && !pending}
           className="inline-flex items-center gap-1.5 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
         >
           <Trash2 className="h-4 w-4" aria-hidden="true" /> ลบ
@@ -105,6 +110,7 @@ export function WriterAvatarField({ value, onChange }) {
       <p className="text-center text-xs text-[var(--text-muted)]">
         JPG/PNG/WebP ไม่เกิน 2 MB · เลือกไฟล์แล้วครอปเองได้ (ลากตำแหน่ง + ซูม) · แสดงเป็นวงกลมทุกที่
       </p>
+      {pending && <p className="text-center text-xs text-9e-action" data-testid="writer-avatar-pending">รูปใหม่จะบันทึกเมื่อกดบันทึก</p>}
       {error && !source && <p className="text-sm text-red-700" role="alert">{error}</p>}
 
       {source && (

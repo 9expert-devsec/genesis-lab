@@ -88,8 +88,26 @@ async function refuseInstructor(instructorId, currentId = null) {
 
 async function removeOldAvatar(previous, next) {
   if (previous && previous !== next && isWriterAvatarPublicId(previous)) {
-    await deleteFromCloudinary(previous);
+    await deleteFromCloudinary(previous, { resourceType: 'image' });
   }
+}
+
+/**
+ * Remove an avatar that a failed save uploaded and no row points at.
+ *
+ * The id comes from the browser, so it must be a writer avatar and no writer may
+ * be using it. That second check also covers a save that reached the database
+ * and lost its response on the way back: the "failed" upload is in use by then.
+ */
+export async function discardWriterAvatarUpload(publicId) {
+  await requireAdmin('writers');
+  if (!isWriterAvatarPublicId(publicId)) return { ok: false, error: 'รหัสรูปไม่ถูกต้อง' };
+  await dbConnect();
+  if (await Writer.exists({ avatarPublicId: publicId })) {
+    return { ok: false, error: 'รูปนี้ถูกใช้งานอยู่' };
+  }
+  await removeOldAvatar(publicId, '');
+  return { ok: true };
 }
 
 export async function listWriters({ status = 'all', q = '' } = {}) {

@@ -58,6 +58,8 @@ import {
 import { runSeoChecks, normalizeForMatch, parseFocusKeywords } from '@/lib/seo/articleSeoChecks';
 import { findArticlesSharingFocusKeyword } from '@/lib/actions/articles';
 import { SeoChecklist } from './SeoChecklist';
+import { initialArticleWriters, joinWriterNames } from '@/lib/writers/articleWriters';
+import { ArticleWritersPicker } from './ArticleWritersPicker';
 
 const MAX_TAGS = 20;
 
@@ -182,6 +184,8 @@ export function ArticleForm({
    * the screen that has no record to pass also gets no control promising one.
    */
   historySlot = null,
+  // What the "บทความโดย" picker offers, read by the page (lib/writers/writerReads).
+  writerOptions = [],
 }) {
   const router = useRouter();
   const isEdit = Boolean(article?._id);
@@ -201,7 +205,8 @@ export function ArticleForm({
   // Sidebar — Article Info
   const [slug,        setSlug]        = useState(article?.slug   ?? '');
   const [slugEdited,  setSlugEdited]  = useState(isEdit);
-  const [author,      setAuthor]      = useState(article?.author ?? '');
+  const [initialWriters] = useState(() => initialArticleWriters(article, writerOptions));
+  const [writers,     setWriters]     = useState(initialWriters);
   const [articleType, setArticleType] = useState(article?.articleType ?? 'article');
   const [active,      setActive]      = useState(article?.active !== false);
   // Badge only — the form owns this one. `!== false` not `?? true`: under
@@ -563,7 +568,7 @@ export function ArticleForm({
     fd.set('seoTitle',       seoTitle);
     fd.set('seoDescription', seoDescription);
     fd.set('focusKeyword',   focusKeyword);
-    fd.set('author',         author);
+    fd.set('writerIds',      JSON.stringify(writers.map((writer) => writer._id)));
     fd.set('publishedAt',    finalPublishedAt);
     fd.set('active',         String(finalActive));
     // Badge rides with the payload. Positioning does NOT — `pinOrder` and
@@ -622,7 +627,7 @@ export function ArticleForm({
     parsedTags, selectedPrograms, selectedSkills,
     relatedArticles, relatedCourses, articleType,
     seoTitle, seoDescription, focusKeyword,
-    author, publishedAt, active, showPinBadge,
+    writers, publishedAt, active, showPinBadge,
     jsonLdEnabled, schemaType, jsonLdOverrides,
     rawOverride, rawOverrideEnabled, isSuperAdmin,
     isEdit, article, router, listQuery,
@@ -642,7 +647,7 @@ export function ArticleForm({
       title,
       excerpt,
       coverUrl,
-      author,
+      writers,
       // `publishedAt` is the form's WALL-CLOCK state, not an instant.
       // buildJsonLd feeds it straight into `new Date(...).toISOString()`, so
       // handing it over unconverted would put the browser's zone into the
@@ -943,15 +948,6 @@ export function ArticleForm({
                 className={inputCls + ' font-mono'}
               />
             </Label>
-            <Label text="ผู้เขียน" className="mt-3">
-              <input
-                type="text"
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-                placeholder="9Expert Team"
-                className={inputCls}
-              />
-            </Label>
             <div className="mt-3">
               <span className="text-xs font-medium text-9e-navy dark:text-white">ประเภทบทความ</span>
               <div className="mt-1 inline-flex rounded-9e-md border border-[var(--surface-border)] p-0.5">
@@ -984,6 +980,15 @@ export function ArticleForm({
               />
               <span className="text-xs text-9e-navy dark:text-white">เผยแพร่ (active)</span>
             </label>
+          </Section>
+
+          <Section title="บทความโดย">
+            <ArticleWritersPicker
+              options={writerOptions}
+              initial={initialWriters}
+              onChange={setWriters}
+              legacyAuthor={isEdit && !article.writerIds?.length ? (article.author || 'ไม่ระบุ') : null}
+            />
           </Section>
 
           {/* 3. Tags */}
@@ -1413,7 +1418,7 @@ export function ArticleForm({
             excerpt,
             content: editor?.getHTML() ?? '',
             coverUrl,
-            author,
+            author: joinWriterNames(writers),
             tags: parsedTags,
             // Wall clock → instant, so the overlay formats the same value the
             // public page will once this is saved.
@@ -1573,7 +1578,6 @@ function JsonLdSection({
     { key: 'headline',    label: 'Headline',    ph: 'ปล่อยว่าง = ใช้ชื่อบทความ' },
     { key: 'description', label: 'Description', ph: 'ปล่อยว่าง = ใช้ excerpt' },
     { key: 'image',       label: 'Image URL',   ph: 'ปล่อยว่าง = ใช้รูปปก' },
-    { key: 'authorName',  label: 'Author',      ph: 'ปล่อยว่าง = ใช้ผู้เขียน' },
   ];
   const statusStyle = JSONLD_STATUS_STYLE[status.status] ?? JSONLD_STATUS_STYLE.unchecked;
 

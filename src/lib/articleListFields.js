@@ -32,7 +32,7 @@
  *
  * Derived from what ArticlesAdminClient renders plus what its two pure helpers
  * read, NOT from what looks useful:
- *   · the table columns          — slug, title, author, tags, articleType,
+ *   · the table columns          — slug, title, author, writerIds, tags, articleType,
  *                                  active, featuredOnLanding, publishedAt
  *   · OrderCell                  — isPinnedOnArticlePage, pinOrder, sortKey,
  *                                  showPinBadge
@@ -72,7 +72,7 @@
  * reaches through an import in a shape the scanner cannot see.
  */
 export const ADMIN_LIST_FIELDS =
-  '_id slug title author tags articleType active featuredOnLanding ' +
+  '_id slug title author writerIds tags articleType active featuredOnLanding ' +
   'publishedAt createdAt isPinnedOnArticlePage pinOrder sortKey showPinBadge';
 
 /**

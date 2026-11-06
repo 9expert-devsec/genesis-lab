@@ -76,7 +76,7 @@ export function parseArticleFormData(formData) {
     seoTitle:        String(formData.get('seoTitle') ?? ''),
     seoDescription:  String(formData.get('seoDescription') ?? ''),
     focusKeyword:    String(formData.get('focusKeyword') ?? ''),
-    author:          String(formData.get('author') ?? '').trim(),
+    writerIds:       jsonArr('writerIds'),
     publishedAt,
     // Booleans ride as the strings 'true'/'false'. `=== 'true'` makes an ABSENT
     // key read as false, which is the right answer for a checkbox: an unchecked

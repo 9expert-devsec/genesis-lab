@@ -2,13 +2,14 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Clock, Share2, User } from 'lucide-react';
+import { ArrowRight, Clock, Share2 } from 'lucide-react';
 import { ArrowSlider } from '@/components/ui/ArrowSlider';
 import { READING_PROGRESS_ANCHOR_ID } from '@/lib/readingProgress';
 import { coursePriceLabel } from '@/lib/coursePriceLabel';
 import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import { articleCanonicalUrl } from '@/lib/articles/articleUrl';
 import { ArticleBackLink } from './ArticleBackLink';
+import { ArticleByline } from './ArticleByline';
 import { ArticleViewBeacon } from './ArticleViewBeacon';
 import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 
@@ -36,6 +37,7 @@ import { courseLinkHref } from '@/lib/courses/courseLinkHref';
  */
 export function ArticleDetailClient({
   article,
+  writers = [],
   related = [],
   relatedCoursesData = [],
   minutes,
@@ -469,11 +471,7 @@ export function ArticleDetailClient({
               </div>
             )}
 
-            {article.author && (
-              <p className="mt-2 text-sm text-gray-400 dark:text-[#94a3b8]">
-                บทความโดย: {article.author}
-              </p>
-            )}
+            <ArticleByline writers={writers} author={article.author} />
 
             <h1 className="mt-6 text-4xl font-bold leading-tight text-9e-navy dark:text-white">
               {article.title}
@@ -486,11 +484,6 @@ export function ArticleDetailClient({
             )}
 
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-              {article.author && (
-                <span className="inline-flex items-center gap-1">
-                  <User className="h-4 w-4" /> {article.author}
-                </span>
-              )}
               {/* NO PUBLISH DATE. The owner's decision: articles are evergreen
                   reference material and a visible date makes a still-accurate
                   2024 piece look stale. `publishedAt` is untouched as DATA — it

@@ -41,10 +41,12 @@ export async function uploadToCloudinary(file, subfolder = '', options = {}) {
   });
 }
 
-export async function deleteFromCloudinary(publicId) {
+export async function deleteFromCloudinary(publicId, options = {}) {
   if (!publicId) return null;
   try {
-    return await cloudinary.uploader.destroy(publicId);
+    return await cloudinary.uploader.destroy(publicId, {
+      resource_type: options.resourceType ?? 'image',
+    });
   } catch (err) {
     // Deletion failures shouldn't block the DB update — log and move on.
     console.error('[cloudinary] destroy failed for', publicId, err);

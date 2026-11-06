@@ -5,6 +5,7 @@ import {
   getArticlesByIds,
 } from '@/lib/actions/articles';
 import { listPublicCourses } from '@/lib/api/public-courses';
+import { readWritersByIds } from '@/lib/writers/writerReads';
 import { buildJsonLd } from '@/lib/articles/buildJsonLd';
 import { toMetaDescription } from '@/lib/seo/metaDescription';
 import { pickPinnedCourses } from '@/lib/articles/pinnedCourses';
@@ -161,11 +162,21 @@ export default async function ArticleDetailPage({ params }) {
     }
   }
 
+  // Resolved here on every render and never copied onto the article, so renaming
+  // a writer reaches the byline as the page revalidates. If the read fails, the
+  // page falls back to the legacy `author` text.
+  let writers = [];
+  try {
+    writers = await readWritersByIds(article.writerIds);
+  } catch {
+    writers = [];
+  }
+
   const minutes = readingTimeMinutes(article.content);
   // null when the article is a draft, has no publishedAt, JSON-LD is
   // disabled, or rawOverride is on with invalid JSON — in any of those
   // cases we simply omit the script tag.
-  const jsonLdData = buildJsonLd(article);
+  const jsonLdData = buildJsonLd({ ...article, writers });
   // Independent of the Article block above: the trail says where the page sits
   // in the site, which does not depend on the article's JSON-LD settings.
   const breadcrumbJsonLd = buildArticleBreadcrumbJsonLd(article);
@@ -219,6 +230,7 @@ export default async function ArticleDetailPage({ params }) {
             wrapArticleTables(normalizeAuthoredColors(sanitizeRichHtml(article.content)))
           ),
         }}
+        writers={writers}
         related={related}
         relatedCoursesData={relatedCoursesData}
         minutes={minutes}

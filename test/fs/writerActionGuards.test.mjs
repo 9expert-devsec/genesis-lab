@@ -97,10 +97,47 @@ test('every page is guarded with requirePage', () => {
   }
 });
 
-test('the crop dialog hands over pixels, and the field uploads only the crop', () => {
+test('the crop dialog hands over pixels, and the field uploads nothing', () => {
   const field = readSource('src/app/admin/writers/_components/WriterAvatarField.jsx').code;
   assert.match(field, /renderCroppedBlob\(/);
-  assert.match(field, /fd\.append\('file', blob,/);
-  assert.doesNotMatch(field, /fd\.append\('file', file/);
-  assert.match(field, /fd\.append\('folder', WRITER_AVATAR_FOLDER\)/);
+  assert.match(field, /onCrop\(blob\)/);
+  assert.doesNotMatch(field, /fetch\(|FormData/);
+});
+
+test('only the crop is uploaded, into the writers folder', () => {
+  const save = readSource('src/lib/writers/avatarSave.js').code;
+  assert.match(save, /fd\.append\('file', blob,/);
+  assert.doesNotMatch(save, /fd\.append\('file', file/);
+  assert.match(save, /fd\.append\('folder', WRITER_AVATAR_FOLDER\)/);
+});
+
+test('บันทึก goes through the pending-avatar save, on both create and update', () => {
+  const form = readSource('src/app/admin/writers/_components/WriterForm.jsx').code;
+  assert.match(form, /saveWithPendingAvatar\(\{/);
+  assert.match(form, /discard: discardWriterAvatarUpload/);
+  assert.match(form, /updateWriter\(writer\._id, payload\(id\)\) : createWriter\(payload\(id\)\)/);
+});
+
+test('removing the photo only changes the form until บันทึก', () => {
+  const form = readSource('src/app/admin/writers/_components/WriterForm.jsx').code;
+  assert.match(form, /onRemove=\{\(\) => \{ setPendingAvatar\(null\); setAvatarPublicId\(''\); \}\}/);
+});
+
+test('the crop preview revokes its object URL on replace and on unmount', () => {
+  const field = readSource('src/app/admin/writers/_components/WriterAvatarField.jsx').code;
+  assert.match(field, /const url = URL\.createObjectURL\(pending\);[\s\S]*?return \(\) => URL\.revokeObjectURL\(url\);[\s\S]*?\}, \[pending\]\);/);
+});
+
+test('discardWriterAvatarUpload is guarded, and refuses a file any writer uses', () => {
+  before('discardWriterAvatarUpload', "requireAdmin('writers')", 'dbConnect()');
+  before('discardWriterAvatarUpload', 'isWriterAvatarPublicId(publicId)', 'removeOldAvatar(');
+  before('discardWriterAvatarUpload', 'Writer.exists({ avatarPublicId: publicId })', 'removeOldAvatar(');
+});
+
+test('avatar removal names the resource type', () => {
+  assert.match(src, /deleteFromCloudinary\(previous, \{ resourceType: 'image' \}\)/);
+  assert.match(
+    readSource('src/lib/cloudinary.js').code,
+    /uploader\.destroy\(publicId, \{\s*resource_type: options\.resourceType \?\? 'image'/,
+  );
 });
