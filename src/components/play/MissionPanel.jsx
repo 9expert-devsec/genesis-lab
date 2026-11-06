@@ -31,7 +31,7 @@ export function MissionBar({ level, taskIndex }) {
     >
       <Image src="/play/mascot-typing.webp" alt="น้องไนน์" width={360} height={400} sizes="64px" className="h-[72px] w-16 shrink-0 object-contain" priority />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <p className="text-xs font-semibold text-[#94A3B8]">ลูกค้าบอกว่า</p>
+        <p className="text-xs font-semibold text-[#94A3B8]">ภารกิจ</p>
         <p className="text-base font-semibold text-white">“{level.story}”</p>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-[10px] border border-[#D4F73F]/35 bg-[#D4F73F]/[0.08] px-2.5 py-1.5">
           <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-[#D4F73F]">

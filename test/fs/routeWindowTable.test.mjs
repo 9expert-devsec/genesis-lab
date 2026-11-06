@@ -6,6 +6,20 @@ import { readSource, sourceExists, walkSources, blankStringBodies } from '../sou
 /** An exported generateStaticParams DECLARATION — not a mention of the name. */
 const DECLARES_STATIC_PARAMS = /export\s+(?:async\s+)?function\s+generateStaticParams\s*\(/;
 
+/** A declaration whose body is the empty list: on-demand ISR, nothing built up front. */
+const EMPTY_STATIC_PARAMS = /export\s+(?:async\s+)?function\s+generateStaticParams\s*\(\s*\)\s*\{\s*return\s*\[\s*\]\s*;?\s*\}/;
+
+/**
+ * A segment that ENUMERATES its pages: it declares a non-empty list and refuses
+ * everything else with `dynamicParams = false`. Its pages are all built up
+ * front, so it has no on-demand window for the ISR rows to describe. Takes code
+ * already through blankStringBodies.
+ */
+const enumeratesItsPages = (code) =>
+  DECLARES_STATIC_PARAMS.test(code) &&
+  !EMPTY_STATIC_PARAMS.test(code) &&
+  /export\s+const\s+dynamicParams\s*=\s*false\b/.test(code);
+
 /**
  * The route-window table vs the route files it describes.
  *
@@ -181,18 +195,44 @@ test('the unenumerable-segment rows rest on a fact that still holds', () => {
     assert.ok(declares(r.file), `${r.path} is marked NONE but ${r.file} has no generateStaticParams — its revalidate is inert`);
     assert.match(
       blankStringBodies(readSource(r.file).code),
-      /export\s+(?:async\s+)?function\s+generateStaticParams\s*\(\s*\)\s*\{\s*return\s*\[\s*\]\s*;?\s*\}/,
+      EMPTY_STATIC_PARAMS,
       `${r.file}: generateStaticParams must return [] (on-demand ISR)`
     );
   }
 
+  // Every [param] row marked LOWERED_BY_LAYOUT is the other legitimate shape: a
+  // closed set of pages built up front, whose only window is the one the chrome
+  // sets. Accounted for only by proving that shape, so an empty declaration, or
+  // one that still serves unlisted params, has to be described by an ISR row.
+  const enumeratedRows = CONCRETE.filter((r) => r.divergence === DIVERGENCE.LOWERED_BY_LAYOUT && r.file.includes('['));
+  assert.ok(enumeratedRows.length >= 1, 'the enumerated [param] rows exist');
+  for (const r of enumeratedRows) {
+    assert.ok(
+      enumeratesItsPages(blankStringBodies(readSource(r.file).code)),
+      `${r.path} is marked LOWERED_BY_LAYOUT but ${r.file} does not enumerate its pages with dynamicParams = false`
+    );
+  }
+
   // And no declaration exists that the table does not account for.
-  const accounted = new Set(isrParamRows.map((r) => r.file));
+  const accounted = new Set([...isrParamRows, ...enumeratedRows].map((r) => r.file));
   assert.deepEqual(
     withStaticParams.filter((rel) => !accounted.has(rel)),
     [],
     'a generateStaticParams appeared in a file the table has no ISR row for'
   );
+});
+
+test('CONTROL: only a closed, non-empty list counts as enumerating a segment\'s pages', () => {
+  const closed = 'export const dynamicParams = false;\n';
+  const list = 'export function generateStaticParams() {\n  return LEVELS.map((l) => ({ level: l.id }));\n}\n';
+  assert.ok(enumeratesItsPages(closed + list));
+  assert.ok(enumeratesItsPages(`${closed}export async function generateStaticParams() { return ids(); }`));
+
+  // Each must stay refused, or a route could leave the ISR rows by changing its label.
+  assert.ok(!enumeratesItsPages(list), 'no dynamicParams: unlisted params still render on demand');
+  assert.ok(!enumeratesItsPages(`export const dynamicParams = true;\n${list}`), 'dynamicParams = true is not closed');
+  assert.ok(!enumeratesItsPages(`${closed}export function generateStaticParams() { return []; }`), 'an empty list is on-demand ISR');
+  assert.ok(!enumeratesItsPages(closed), 'no declaration at all');
 });
 
 test('CONTROL: the generateStaticParams matcher tells a declaration from a mention', () => {
