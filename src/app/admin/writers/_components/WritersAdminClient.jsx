@@ -76,7 +76,7 @@ export function WritersAdminClient({ rows, counts, status, q }) {
         <div>
           <h1 className="text-2xl font-bold text-9e-navy dark:text-white">ผู้เขียน</h1>
           <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-            โปรไฟล์ผู้เขียนบทความ — แสดงที่ /writer และใน &quot;บทความโดย&quot; ของทุกบทความ
+            โปรไฟล์ผู้เขียนบทความ — แสดงที่ /author และใน &quot;บทความโดย&quot; ของทุกบทความ
           </p>
         </div>
         <Link
@@ -170,7 +170,7 @@ export function WritersAdminClient({ rows, counts, status, q }) {
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-[var(--text-muted)]">/writer/{row.slug}</div>
+                        <div className="text-xs text-[var(--text-muted)]">/author/{row.slug}</div>
                       </div>
                     </div>
                   </td>

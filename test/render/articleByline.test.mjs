@@ -48,8 +48,8 @@ test('with writers: a photo goes through the avatar helper, and no photo gets th
 
 test('each name and each avatar links to the profile', () => {
   const html = render({ writers: [vate, academy] });
-  assert.equal((html.match(/href="\/writer\/chalaivate"/g) ?? []).length, 2);
-  assert.equal((html.match(/href="\/writer\/9expert-academy"/g) ?? []).length, 2);
+  assert.equal((html.match(/href="\/author\/chalaivate"/g) ?? []).length, 2);
+  assert.equal((html.match(/href="\/author\/9expert-academy"/g) ?? []).length, 2);
 });
 
 test('an avatar link has a name of its own, since its image is decorative', () => {

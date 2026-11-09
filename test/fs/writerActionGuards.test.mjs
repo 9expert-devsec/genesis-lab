@@ -56,8 +56,12 @@ for (const action of ['listWriters', 'getWriter', 'listInstructorOptions']) {
 }
 
 test('both writes validate through the schema first', () => {
-  before('createWriter', 'writerSchema.safeParse(', 'Writer.create(');
-  before('updateWriter', 'writerSchema.safeParse(', 'Writer.findByIdAndUpdate(');
+  // parseWriterInput = writerSchema.safeParse, then the oEmbed title fill.
+  before('createWriter', 'await parseWriterInput(', 'Writer.create(');
+  before('updateWriter', 'await parseWriterInput(', 'Writer.findByIdAndUpdate(');
+  const helper = src.slice(src.indexOf('async function parseWriterInput('), src.indexOf('async function removeOldAvatar('));
+  assert.ok(helper.indexOf('writerSchema.safeParse(') >= 0, 'the helper parses through the schema');
+  assert.ok(helper.indexOf('writerSchema.safeParse(') < helper.indexOf('fillYouTubeTitles('), 'and parses before any YouTube call');
 });
 
 test('the slug is taken out of what updateWriter writes', () => {

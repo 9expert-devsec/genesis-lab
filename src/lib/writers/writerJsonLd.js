@@ -3,7 +3,7 @@ import { SITE_URL } from '@/lib/seo/siteUrl';
 import { WRITER_LIST_PATH, writerImageUrl, writerPath } from '@/lib/writers/writerUrls';
 
 /**
- * Structured data for /writer/[slug]: a ProfilePage about one Person or
+ * Structured data for /author/[slug]: a ProfilePage about one Person or
  * Organization, and its breadcrumb trail. PURE, like the article builders.
  */
 
@@ -18,7 +18,11 @@ export function writerProfileUrl(writer, siteUrl = SITE_URL) {
 export function buildWriterProfileJsonLd(writer, siteUrl = SITE_URL) {
   const url = writerProfileUrl(writer, siteUrl);
   const image = writerImageUrl(writer);
-  const sameAs = (writer.socialLinks ?? []).map((link) => link.url).filter(Boolean);
+  // The social links, then the YouTube channel; one entry per address.
+  const sameAs = [...new Set([
+    ...(writer.socialLinks ?? []).map((link) => link.url),
+    writer.youtubeChannelUrl,
+  ].filter(Boolean))];
 
   return {
     '@context': 'https://schema.org',

@@ -29,7 +29,7 @@ const render = (props) => renderToStaticMarkup(createElement(WritersAdminClient,
 }));
 
 const rowOf = (html, slug) => {
-  const end = html.indexOf(`/writer/${slug}`);
+  const end = html.indexOf(`/author/${slug}`);
   assert.notEqual(end, -1, `${slug} is not on the page`);
   const start = html.lastIndexOf('<tr', end);
   return html.slice(start, html.indexOf('</tr>', end));
@@ -38,7 +38,7 @@ const rowOf = (html, slug) => {
 test('the header and the footer note are the agreed Thai', () => {
   const html = render();
   assert.match(html, />ผู้เขียน</);
-  assert.match(html, /โปรไฟล์ผู้เขียนบทความ — แสดงที่ \/writer/);
+  assert.match(html, /โปรไฟล์ผู้เขียนบทความ — แสดงที่ \/author/);
   assert.match(html, /เพิ่มผู้เขียน/);
   assert.match(html, /9Expert Academy ปิดใช้งาน\/ลบไม่ได้/);
 });

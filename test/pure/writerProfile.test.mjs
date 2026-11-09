@@ -35,8 +35,8 @@ test('the default writer never redirects: it is the redirect target', () => {
 });
 
 test('the redirect target is the 9Expert Academy profile', () => {
-  assert.equal(DEFAULT_WRITER_PATH, '/writer/9expert-academy');
-  assert.equal(writerPath('chalaivate'), '/writer/chalaivate');
+  assert.equal(DEFAULT_WRITER_PATH, '/author/9expert-academy');
+  assert.equal(writerPath('chalaivate'), '/author/chalaivate');
 });
 
 // ── paging ──────────────────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ test('pager: and at the end', () => {
   assert.deepEqual(pagerPages(42, 42), [1, null, 41, 42]);
 });
 
-// ── the /writer list ────────────────────────────────────────────────────────
+// ── the /author list ────────────────────────────────────────────────────────
 
 const row = (id, over = {}) => ({ _id: id, displayName: id, isActive: true, ...over });
 
@@ -224,7 +224,7 @@ test('layout: takes missing sections', () => {
 test('sitemap: one row per writer, dated by the writer', () => {
   const updatedAt = '2026-11-01T00:00:00.000Z';
   const [entry] = writerSitemapEntries([{ slug: 'a', updatedAt }], 'https://x.test');
-  assert.equal(entry.url, 'https://x.test/writer/a');
+  assert.equal(entry.url, 'https://x.test/author/a');
   assert.deepEqual(entry.lastModified, new Date(updatedAt));
 });
 

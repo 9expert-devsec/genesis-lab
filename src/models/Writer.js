@@ -1,7 +1,9 @@
 import mongoose from 'mongoose';
 import {
+  WRITER_FEATURED_COURSE_LIMIT,
   WRITER_PLATFORMS,
   WRITER_SLUG_RE,
+  WRITER_VIDEO_LIMIT,
   WRITER_TYPES,
   isHttpUrl,
 } from '@/lib/writers/writerFields';
@@ -37,6 +39,33 @@ const SocialLinkSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * A section row. `period` is the ปี column ("2013 – Present"), optional.
+ *
+ * Rows stored before 2026-11-09 are plain strings. Reads are `.lean()`, which
+ * casts nothing, and normalizeSectionItem reads a string as `{ text }`, so those
+ * rows keep rendering until scripts/split-writer-periods.mjs converts them. Every
+ * save goes through writerSchema, which only ever produces this object shape.
+ */
+const SectionItemSchema = new mongoose.Schema(
+  {
+    period: { type: String, trim: true },
+    text: { type: String, required: true, trim: true },
+  },
+  { _id: false }
+);
+
+const YouTubeVideoSchema = new mongoose.Schema(
+  {
+    videoId: { type: String, required: true, match: /^[A-Za-z0-9_-]{11}$/ },
+    url: { type: String, required: true, trim: true },
+    title: { type: String, required: true, trim: true },
+  },
+  { _id: false }
+);
+
+const maxItems = (n) => ({ validator: (list) => !list || list.length <= n, message: `ใส่ได้ไม่เกิน ${n} รายการ` });
+
 const WriterSchema = new mongoose.Schema(
   {
     slug: {
@@ -56,11 +85,27 @@ const WriterSchema = new mongoose.Schema(
     // Array order is the display order.
     socialLinks: { type: [SocialLinkSchema], default: [] },
     sections: {
-      experience:     { type: [String], default: [] },
-      education:      { type: [String], default: [] },
-      certifications: { type: [String], default: [] },
-      recognition:    { type: [String], default: [] },
+      experience:     { type: [SectionItemSchema], default: [] },
+      education:      { type: [SectionItemSchema], default: [] },
+      certifications: { type: [SectionItemSchema], default: [] },
+      recognition:    { type: [SectionItemSchema], default: [] },
     },
+
+    // The online courses an admin picked for the profile card, by the stable
+    // upstream `o_course_id`, in display order. Empty = fall back to the
+    // courses matched by the linked instructor's name.
+    featuredOnlineCourseIds: {
+      type: [String],
+      default: [],
+      validate: maxItems(WRITER_FEATURED_COURSE_LIMIT),
+    },
+    // Display order. Titles are fetched once, at save (lib/writers/youtube).
+    youtubeVideos: {
+      type: [YouTubeVideoSchema],
+      default: [],
+      validate: maxItems(WRITER_VIDEO_LIMIT),
+    },
+    youtubeChannelUrl: { type: String, trim: true, default: '' },
 
     instructorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Instructor', default: null },
 

@@ -27,7 +27,7 @@ const STATIC_ROUTES = [
   '/faq',
   '/join-us',
   '/social',
-  '/writer',
+  '/author',
 ];
 
 export default async function sitemap() {
@@ -193,7 +193,7 @@ export default async function sitemap() {
     // swallow — every other entry type still ships
   }
 
-  // Writers — best-effort like every block above, and the same read /writer
+  // Writers — best-effort like every block above, and the same read /author
   // renders from, so the two cannot disagree about who is listed.
   let writerEntries = [];
   try {

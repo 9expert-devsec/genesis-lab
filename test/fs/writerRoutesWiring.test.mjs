@@ -13,29 +13,33 @@ import { writerArticleCountPipeline } from '@/lib/writers/writerPolicy';
 
 const code = (rel) => readSource(rel).code;
 
-const profile = code('src/app/(public)/writer/[slug]/page.jsx');
-const list = code('src/app/(public)/writer/page.jsx');
+const profile = code('src/app/(public)/author/[slug]/page.jsx');
+const list = code('src/app/(public)/author/page.jsx');
 const sitemap = code('src/app/sitemap.js');
 const reads = code('src/lib/writers/writerReads.js');
 
 // ── reserved paths ──────────────────────────────────────────────────────────
 
-test('`writer` cannot be taken by a page', () => {
+test('`author` and the retired `writer` cannot be taken by a page', () => {
+  assert.ok(RESERVED_SLUGS.includes('author'));
+  assert.equal(isReservedSlug('Author'), true);
   assert.ok(RESERVED_SLUGS.includes('writer'));
   assert.equal(isReservedSlug('Writer'), true);
 });
 
-test('`writer` cannot be taken by a course alias', () => {
-  assert.deepEqual(reservedPathOwner('/writer/someone'), { segment: 'writer', source: 'tree' });
+test('`author` (route) and `writer` (redirect) cannot be taken by a course alias', () => {
+  assert.deepEqual(reservedPathOwner('/author/someone'), { segment: 'author', source: 'tree' });
+  assert.deepEqual(reservedPathOwner('/writer/someone'), { segment: 'writer', source: 'redirect' });
 });
 
 // ── sitemap ─────────────────────────────────────────────────────────────────
 
-test('the sitemap lists /writer as a static route', () => {
-  assert.match(sitemap, /STATIC_ROUTES = \[[\s\S]*?'\/writer',[\s\S]*?\];/);
+test('the sitemap lists /author as a static route, and not /writer', () => {
+  assert.match(sitemap, /STATIC_ROUTES = \[[\s\S]*?'\/author',[\s\S]*?\];/);
+  assert.equal(sitemap.includes("'/writer'"), false);
 });
 
-test('the sitemap lists the writers from the read /writer renders', () => {
+test('the sitemap lists the writers from the read /author renders', () => {
   assert.match(sitemap, /writerSitemapEntries\(await readPublicWriters\(\), base\)/);
   assert.match(list, /await readPublicWriters\(\)/);
 });
@@ -102,7 +106,7 @@ test('the route says what it is: per request, with no inert revalidate', () => {
   assert.equal(/export const revalidate/.test(profile), false);
 });
 
-test('/writer takes the article page revalidate', () => {
+test('/author takes the article page revalidate', () => {
   assert.match(list, /export const revalidate = 3600;/);
   assert.match(code('src/app/(public)/articles/[slug]/page.jsx'), /export const revalidate = 3600;/);
 });
@@ -126,7 +130,7 @@ test('both JSON-LD blocks go through the safe serialiser', () => {
 
 test('expertise uses the data /about-us uses', () => {
   assert.match(profile, /buildInstructorCards\(\[instructor\]\)/);
-  assert.match(profile, /matchOnlineCourses\(online\.items, instructor\.name_en\)/);
+  assert.match(profile, /selectOnlineCourses\(online\.items, writer\.featuredOnlineCourseIds, instructor\?\.name_en\)/);
 });
 
 test('the grid is the shared card', () => {
@@ -153,7 +157,7 @@ for (const [rel, n] of [
   ['src/app/(public)/program/[slug]/page.jsx', 1],
   ['src/app/(public)/skill/[slug]/page.jsx', 1],
   ['src/app/(public)/[...slug]/page.jsx', 2],
-  ['src/app/(public)/writer/[slug]/page.jsx', 1],
+  ['src/app/(public)/author/[slug]/page.jsx', 1],
 ]) {
   test(`${rel} resolves card writers in one batched read per list`, () => {
     assert.equal((code(rel).match(/withCardWriters\(/g) ?? []).length + (code(rel).match(/\.then\(withCardWriters\)/g) ?? []).length, n);

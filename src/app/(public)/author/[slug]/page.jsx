@@ -22,8 +22,8 @@ import {
 import {
   WRITER_ARTICLES_PER_PAGE,
   isProfilePageInRange,
-  matchOnlineCourses,
   parseProfilePage,
+  selectOnlineCourses,
   writerProfileLayout,
   writerRolePills,
   writerRouteAction,
@@ -77,19 +77,24 @@ export async function generateMetadata({ params }) {
   };
 }
 
-/** Each read is optional: a missing aside card beats a failed profile. */
+/**
+ * Each read is optional: a missing aside card beats a failed profile.
+ *
+ * The online-course list is read when the admin picked courses OR an instructor
+ * is linked: picks need no instructor, the name-match fallback does.
+ */
 async function loadAside(writer) {
   const instructor = await readProfileInstructor(writer.instructorId).catch(() => null);
-  if (!instructor) return { instructor: null, programs: [], onlineCourses: [] };
+  const wantsCourses = Boolean(instructor) || writer.featuredOnlineCourseIds.length > 0;
 
   const [cards, online] = await Promise.all([
-    buildInstructorCards([instructor]).catch(() => []),
-    getOnlineCourses().catch(() => ({ items: [] })),
+    instructor ? buildInstructorCards([instructor]).catch(() => []) : [],
+    wantsCourses ? getOnlineCourses().catch(() => ({ items: [] })) : { items: [] },
   ]);
   return {
     instructor,
     programs: cards[0]?.programs ?? [],
-    onlineCourses: matchOnlineCourses(online.items, instructor.name_en),
+    onlineCourses: selectOnlineCourses(online.items, writer.featuredOnlineCourseIds, instructor?.name_en),
   };
 }
 
@@ -131,6 +136,7 @@ export default async function WriterProfilePage({ params, searchParams }) {
     sections: writer.sections,
     programs: aside.programs,
     onlineCourses: aside.onlineCourses,
+    videos: writer.youtubeVideos,
   });
 
   return (
@@ -153,7 +159,7 @@ export default async function WriterProfilePage({ params, searchParams }) {
               { label: writer.displayName },
             ]}
           />
-          <div className="mt-6 flex flex-col items-center gap-6 text-center md:flex-row md:items-start md:gap-10 md:text-left">
+          <div className="mt-8 flex flex-col items-center gap-6 text-center md:mt-10 md:flex-row md:items-start md:gap-10 md:text-left">
             <WriterPhoto
               writer={writer}
               alt={writer.displayName}
@@ -187,6 +193,8 @@ export default async function WriterProfilePage({ params, searchParams }) {
         layout={layout}
         programs={aside.programs}
         onlineCourses={aside.onlineCourses}
+        videos={writer.youtubeVideos}
+        channelUrl={writer.youtubeChannelUrl}
         shortName={shortName}
       />
 

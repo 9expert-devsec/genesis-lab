@@ -12,9 +12,14 @@ import {
   WRITER_SECTIONS,
   WRITER_TYPE_LABELS,
   WRITER_TYPES,
+  WRITER_FEATURED_COURSE_LIMIT,
+  WRITER_VIDEO_LIMIT,
+  normalizeSectionItem,
   slugFromName,
 } from '@/lib/writers/writerFields';
 import { writerPath } from '@/lib/writers/writerUrls';
+import { YOUTUBE_MESSAGES, parseYouTubeVideoId } from '@/lib/writers/youtube';
+import { OnlineCoursePicker } from './OnlineCoursePicker';
 import { ReorderRows, withRowKey } from './ReorderRows';
 import { WriterAvatarField } from './WriterAvatarField';
 import { useWriterDeactivation } from './WriterDeactivateDialog';
@@ -72,9 +77,19 @@ function Switch({ checked, disabled, label, onClick }) {
   );
 }
 
-const toValueRows = (items = []) => items.map((value) => withRowKey({ value }));
+// A row is { period, text }; a legacy string row arrives as { text }.
+const toSectionRows = (items = []) => items.map((item) => {
+  const { period = '', text } = normalizeSectionItem(item);
+  return withRowKey({ period, text });
+});
 
-export function WriterForm({ writer = null, instructors }) {
+// Always WRITER_VIDEO_LIMIT slots, in order; blank slots are dropped on save.
+const toVideoSlots = (videos = []) => Array.from({ length: WRITER_VIDEO_LIMIT }, (_, i) => ({
+  url: videos[i]?.url ?? '',
+  title: videos[i]?.title ?? '',
+}));
+
+export function WriterForm({ writer = null, instructors, onlineCourses = [] }) {
   const router = useRouter();
   const editing = Boolean(writer);
 
@@ -92,9 +107,12 @@ export function WriterForm({ writer = null, instructors }) {
   const [initialLinks] = useState(() => (writer?.socialLinks ?? []).map(withRowKey));
   const [socialRows, setSocialRows] = useState(initialLinks);
   const [initialSections] = useState(() => Object.fromEntries(
-    WRITER_SECTIONS.map(({ key }) => [key, toValueRows(writer?.sections?.[key])]),
+    WRITER_SECTIONS.map(({ key }) => [key, toSectionRows(writer?.sections?.[key])]),
   ));
   const [sections, setSections] = useState(initialSections);
+  const [featuredCourseIds, setFeaturedCourseIds] = useState(writer?.featuredOnlineCourseIds ?? []);
+  const [videos, setVideos] = useState(() => toVideoSlots(writer?.youtubeVideos));
+  const [channelUrl, setChannelUrl] = useState(writer?.youtubeChannelUrl ?? '');
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
@@ -124,8 +142,11 @@ export function WriterForm({ writer = null, instructors }) {
         .filter((row) => row.url.trim())
         .map(({ platform, url }) => ({ platform, url })),
       sections: Object.fromEntries(
-        WRITER_SECTIONS.map(({ key }) => [key, sections[key].map((row) => row.value)]),
+        WRITER_SECTIONS.map(({ key }) => [key, sections[key].map(({ period, text }) => ({ period, text }))]),
       ),
+      featuredOnlineCourseIds: featuredCourseIds,
+      youtubeVideos: videos.map(({ url, title }) => ({ url, title })),
+      youtubeChannelUrl: channelUrl,
     };
     // On edit the active flag is the toggle's own action, not part of a save.
     return editing ? { ...fields, slug: writer.slug } : { ...fields, slug, isActive };
@@ -151,6 +172,8 @@ export function WriterForm({ writer = null, instructors }) {
           setAvatarPublicId(uploadedId);
           setPendingAvatar(null);
         }
+        // The titles the save fetched from YouTube, so the form shows them.
+        if (Array.isArray(res.youtubeVideos)) setVideos(toVideoSlots(res.youtubeVideos));
         setMessage('บันทึกแล้ว');
         router.refresh();
       } else {
@@ -263,7 +286,7 @@ export function WriterForm({ writer = null, instructors }) {
                   error={fieldErrors.slug}
                 >
                   <div className="flex items-center rounded-9e-md border border-[var(--surface-border)] pl-3 text-sm dark:bg-[#0D1B2A]">
-                    <span className="text-[var(--text-muted)]">/writer/</span>
+                    <span className="text-[var(--text-muted)]">/author/</span>
                     <input
                       type="text"
                       value={slug}
@@ -352,21 +375,82 @@ export function WriterForm({ writer = null, instructors }) {
               <ReorderRows
                 initial={initialSections[key]}
                 onChange={(rows) => setSections((prev) => ({ ...prev, [key]: rows }))}
-                blank={{ value: '' }}
+                blank={{ period: '', text: '' }}
                 addLabel="เพิ่มรายการ"
                 emptyHint="ยังไม่มีรายการ — ส่วนนี้จะไม่แสดงบนหน้าโปรไฟล์"
                 renderRow={(row, update) => (
-                  <input
-                    type="text"
-                    value={row.value}
-                    aria-label={label}
-                    onChange={(e) => update({ value: e.target.value })}
-                    className={INPUT}
-                  />
+                  <>
+                    <input
+                      type="text"
+                      value={row.period}
+                      placeholder="ปี (ไม่บังคับ)"
+                      aria-label={`${label} — ปี`}
+                      title="เช่น 2013 – Present, 2009, 2010 – 2013"
+                      onChange={(e) => update({ period: e.target.value })}
+                      className="w-36 shrink-0 rounded-9e-md border border-[var(--surface-border)] px-3 py-2 text-sm text-9e-navy dark:bg-[#0D1B2A] dark:text-white"
+                    />
+                    <input
+                      type="text"
+                      value={row.text}
+                      placeholder="เนื้อหา *"
+                      aria-label={`${label} — เนื้อหา`}
+                      onChange={(e) => update({ text: e.target.value })}
+                      className={INPUT}
+                    />
+                  </>
                 )}
               />
             </Panel>
           ))}
+
+          <Panel
+            title="วิดีโอ YouTube"
+            hint={`สูงสุด ${WRITER_VIDEO_LIMIT} วิดีโอ เรียงตามลำดับ — เว้นชื่อว่างไว้ ระบบจะดึงชื่อจาก YouTube ตอนบันทึก · ไม่มีวิดีโอ → ไม่แสดงการ์ด`}
+            testId="panel-youtube"
+          >
+            <div className="space-y-3">
+              {videos.map((video, index) => {
+                const bad = video.url.trim() && !parseYouTubeVideoId(video.url);
+                return (
+                  // Fixed slots, never reordered.
+                  // eslint-disable-next-line react/no-array-index-key
+                  <div key={index} className="grid gap-2 md:grid-cols-2" data-testid="writer-video-slot">
+                    <div>
+                      <input
+                        type="url"
+                        value={video.url}
+                        placeholder={`ลิงก์วิดีโอที่ ${index + 1} — https://www.youtube.com/watch?v=…`}
+                        aria-label={`ลิงก์วิดีโอที่ ${index + 1}`}
+                        onChange={(e) => setVideos((prev) => prev.map((v, i) => (i === index ? { ...v, url: e.target.value } : v)))}
+                        className={INPUT}
+                      />
+                      {bad && <p className="mt-1 text-xs text-red-700">{YOUTUBE_MESSAGES.badVideoUrl}</p>}
+                    </div>
+                    <input
+                      type="text"
+                      value={video.title}
+                      placeholder="ชื่อวิดีโอ (เว้นว่าง = ดึงจาก YouTube)"
+                      aria-label={`ชื่อวิดีโอที่ ${index + 1}`}
+                      onChange={(e) => setVideos((prev) => prev.map((v, i) => (i === index ? { ...v, title: e.target.value } : v)))}
+                      className={INPUT}
+                    />
+                  </div>
+                );
+              })}
+              <Field label="ลิงก์ช่อง YouTube" helper={'ลิงก์ "ดูทั้งหมดบน YouTube →" ใต้การ์ด — เว้นว่าง = ไม่แสดงลิงก์'} error={fieldErrors.youtubeChannelUrl}>
+                <input
+                  type="url"
+                  value={channelUrl}
+                  placeholder="https://www.youtube.com/@…"
+                  onChange={(e) => setChannelUrl(e.target.value)}
+                  className={INPUT}
+                />
+              </Field>
+            </div>
+            {fieldErrors.youtubeVideos && (
+              <p className="mt-2 text-xs text-red-700" data-testid="field-error">{fieldErrors.youtubeVideos}</p>
+            )}
+          </Panel>
         </div>
 
         <div className="space-y-5">
@@ -432,6 +516,17 @@ export function WriterForm({ writer = null, instructors }) {
             )}
             {fieldErrors.instructorId && (
               <p className="mt-2 text-xs text-red-700" data-testid="field-error">{fieldErrors.instructorId}</p>
+            )}
+          </Panel>
+
+          <Panel
+            title="หลักสูตรออนไลน์ที่แสดง"
+            hint={`เลือกได้สูงสุด ${WRITER_FEATURED_COURSE_LIMIT} หลักสูตร เรียงตามลำดับ — ไม่เลือก = แสดงหลักสูตรของวิทยากรที่ผูกไว้`}
+            testId="panel-online-courses"
+          >
+            <OnlineCoursePicker options={onlineCourses} value={featuredCourseIds} onChange={setFeaturedCourseIds} />
+            {fieldErrors.featuredOnlineCourseIds && (
+              <p className="mt-2 text-xs text-red-700" data-testid="field-error">{fieldErrors.featuredOnlineCourseIds}</p>
             )}
           </Panel>
 

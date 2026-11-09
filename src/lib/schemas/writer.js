@@ -6,7 +6,10 @@ import {
   WRITER_TYPES,
   isHttpUrl,
   isWriterAvatarPublicId,
+  WRITER_FEATURED_COURSE_LIMIT,
+  WRITER_VIDEO_LIMIT,
 } from '@/lib/writers/writerFields';
+import { YOUTUBE_MESSAGES, isYouTubeChannelUrl, parseYouTubeVideoId } from '@/lib/writers/youtube';
 
 /**
  * What a writer form may submit.
@@ -20,11 +23,51 @@ import {
  * Absent means "not this save's business"; createWriter fills it in.
  */
 
+/**
+ * One section row: an optional ปี (`period`) and the required เนื้อหา (`text`).
+ * A bare string is still accepted and read as `{ text }`, the shape rows had
+ * before the period column. A row with both inputs blank is dropped; a ปี with
+ * no เนื้อหา is refused rather than silently lost.
+ */
+const sectionItem = z.preprocess(
+  (v) => (typeof v === 'string' ? { text: v } : v),
+  z.object({
+    period: z.string().trim().max(40, 'ปียาวเกิน 40 ตัวอักษร').default(''),
+    text: z.string().trim().max(300, 'รายการยาวเกิน 300 ตัวอักษร').default(''),
+  }),
+);
+
 const sectionItems = z
-  .array(z.string().trim().max(300, 'รายการยาวเกิน 300 ตัวอักษร'))
+  .array(sectionItem)
   .max(50, 'ใส่ได้ไม่เกิน 50 รายการ')
   .default([])
-  .transform((items) => items.filter(Boolean));
+  .transform((items) => items.filter((item) => item.period || item.text))
+  .refine((items) => items.every((item) => item.text), 'กรุณากรอกเนื้อหาของทุกรายการที่ใส่ปีไว้')
+  .transform((items) => items.map(({ period, text }) => (period ? { period, text } : { text })));
+
+/** Ordered, de-duplicated, at most three: the admin's picks for the profile. */
+const featuredOnlineCourseIds = z
+  .array(z.string().trim().min(1).max(80))
+  .default([])
+  .transform((ids) => [...new Set(ids)])
+  .refine((ids) => ids.length <= WRITER_FEATURED_COURSE_LIMIT, `เลือกหลักสูตรออนไลน์ได้ไม่เกิน ${WRITER_FEATURED_COURSE_LIMIT} รายการ`);
+
+/**
+ * The video rows as typed. The id comes from the link here, server-side, so a
+ * client-sent `videoId` is never trusted. Titles may be blank at this point:
+ * the save action fills them from oEmbed (lib/writers/youtube).
+ */
+const youtubeVideos = z
+  .array(z.object({
+    url: z.string().trim().max(500).default(''),
+    title: z.string().trim().max(200, 'ชื่อวิดีโอยาวเกิน 200 ตัวอักษร').default(''),
+  }))
+  .default([])
+  .transform((rows) => rows.filter((row) => row.url || row.title))
+  .refine((rows) => rows.length <= WRITER_VIDEO_LIMIT, `ใส่วิดีโอได้ไม่เกิน ${WRITER_VIDEO_LIMIT} รายการ`)
+  .refine((rows) => rows.every((row) => row.url), YOUTUBE_MESSAGES.missingUrl)
+  .refine((rows) => rows.every((row) => parseYouTubeVideoId(row.url)), YOUTUBE_MESSAGES.badVideoUrl)
+  .transform((rows) => rows.map((row) => ({ videoId: parseYouTubeVideoId(row.url), url: row.url, title: row.title })));
 
 export const writerSchema = z.object({
   slug: z
@@ -54,6 +97,14 @@ export const writerSchema = z.object({
   sections: z
     .object(Object.fromEntries(WRITER_SECTION_KEYS.map((key) => [key, sectionItems])))
     .default({}),
+  featuredOnlineCourseIds,
+  youtubeVideos,
+  youtubeChannelUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .default('')
+    .refine((v) => v === '' || isYouTubeChannelUrl(v), YOUTUBE_MESSAGES.badChannelUrl),
   instructorId: z.preprocess(
     (v) => (v === '' || v === undefined ? null : v),
     z.string().regex(/^[a-f\d]{24}$/i, 'ข้อมูลวิทยากรไม่ถูกต้อง').nullable(),

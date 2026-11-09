@@ -6,7 +6,15 @@ import { avatarUrl } from '@/lib/avatar/avatarUrl';
  * Slugs match WRITER_SLUG_RE, so they need no encoding.
  */
 
-export const WRITER_LIST_PATH = '/writer';
+/**
+ * The public address is /author (renamed from /writer on 2026-11-09). The old
+ * paths answer with a permanent redirect in next.config.mjs `redirects()`, and
+ * every code identifier keeps the word "writer": only the URL moved.
+ */
+export const WRITER_LIST_PATH = '/author';
+
+/** The retired prefix, for the redirect and its tests. Nothing links to it. */
+export const LEGACY_WRITER_LIST_PATH = '/writer';
 
 /**
  * Where a deactivated writer's page redirects. The slug is locked after creation

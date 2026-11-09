@@ -30,7 +30,7 @@ test('the four lines, with the real numbers', () => {
   const html = render();
   assert.ok(html.includes('บทความ 3 รายการที่ อ.เวท เขียนคนเดียว → ผู้เขียนเปลี่ยนเป็น 9Expert Academy'));
   assert.ok(html.includes('บทความ 2 รายการที่เขียนร่วมกับคนอื่น → เอาชื่อ อ.เวท ออก'));
-  assert.ok(html.includes('หน้า /writer/chalaivate จะ redirect ไปที่ /writer/9expert-academy'));
+  assert.ok(html.includes('หน้า /author/chalaivate จะ redirect ไปที่ /author/9expert-academy'));
   assert.ok(html.includes('เปิดใช้งานอีกครั้งได้ แต่บทความที่โอนไปแล้วจะไม่ย้ายกลับอัตโนมัติ'));
 });
 

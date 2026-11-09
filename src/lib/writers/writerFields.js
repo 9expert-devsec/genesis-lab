@@ -38,6 +38,29 @@ export const WRITER_SECTIONS = Object.freeze([
 
 export const WRITER_SECTION_KEYS = Object.freeze(WRITER_SECTIONS.map((s) => s.key));
 
+/** At most this many online courses an admin may feature on a profile. */
+export const WRITER_FEATURED_COURSE_LIMIT = 3;
+
+/** At most this many YouTube videos on a profile. */
+export const WRITER_VIDEO_LIMIT = 3;
+
+/**
+ * One section row as readers may assume it: `{ text }` or `{ period, text }`.
+ *
+ * Rows were plain strings until 2026-11-09 ("2013 – Present · 9Expert …"), and
+ * scripts/split-writer-periods.mjs moves the year into `period`. Until it has
+ * run, and for any row it leaves alone, a string reads as `{ text }`, so the
+ * page renders the same either way. Anything else reads as an empty row, which
+ * the callers drop.
+ */
+export function normalizeSectionItem(item) {
+  if (typeof item === 'string') return { text: item.trim() };
+  if (!item || typeof item !== 'object') return { text: '' };
+  const text = typeof item.text === 'string' ? item.text.trim() : '';
+  const period = typeof item.period === 'string' ? item.period.trim() : '';
+  return period ? { period, text } : { text };
+}
+
 export const WRITER_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
@@ -99,8 +122,20 @@ export function normalizeWriter(doc) {
     avatarPublicId: doc.avatarPublicId ?? '',
     socialLinks: Array.isArray(doc.socialLinks) ? doc.socialLinks : [],
     sections: Object.fromEntries(
-      WRITER_SECTION_KEYS.map((key) => [key, Array.isArray(sections[key]) ? sections[key] : []]),
+      WRITER_SECTION_KEYS.map((key) => [
+        key,
+        Array.isArray(sections[key]) ? sections[key].map(normalizeSectionItem) : [],
+      ]),
     ),
+    featuredOnlineCourseIds: Array.isArray(doc.featuredOnlineCourseIds)
+      ? doc.featuredOnlineCourseIds.map((id) => String(id ?? '').trim()).filter(Boolean)
+      : [],
+    youtubeVideos: Array.isArray(doc.youtubeVideos)
+      ? doc.youtubeVideos
+        .filter((v) => v && typeof v.videoId === 'string' && v.videoId)
+        .map((v) => ({ videoId: v.videoId, url: v.url ?? '', title: v.title ?? '' }))
+      : [],
+    youtubeChannelUrl: doc.youtubeChannelUrl ?? '',
     instructorId: doc.instructorId ?? null,
     isActive: doc.isActive !== false,
     isDefault: doc.isDefault === true,

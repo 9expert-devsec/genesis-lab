@@ -23,6 +23,9 @@ test('CONTROL: a minimal writer parses, with every default filled in', () => {
     avatarPublicId: '',
     socialLinks: [],
     sections: { experience: [], education: [], certifications: [], recognition: [] },
+    featuredOnlineCourseIds: [],
+    youtubeVideos: [],
+    youtubeChannelUrl: '',
     instructorId: null,
   });
 });
@@ -64,7 +67,7 @@ test('http and https are both accepted', () => {
 test('section items are trimmed and the empty ones dropped, keeping order', () => {
   const res = parse({ sections: { experience: ['  one ', '', '   ', 'two'], recognition: ['  '] } });
   assert.equal(res.success, true);
-  assert.deepEqual(res.data.sections.experience, ['one', 'two']);
+  assert.deepEqual(res.data.sections.experience, [{ text: 'one' }, { text: 'two' }]);
   assert.deepEqual(res.data.sections.recognition, []);
   assert.deepEqual(res.data.sections.education, []);
 });

@@ -3,6 +3,7 @@ import { ArrowRight, Award, BadgeCheck, Briefcase, GraduationCap } from 'lucide-
 import { siteConfig } from '@/config/site';
 import { coursePriceLabel } from '@/lib/coursePriceLabel';
 import { onlineCourseHref } from '@/lib/onlineCourseHref';
+import { youtubeThumbnailUrl } from '@/lib/writers/youtube';
 
 const SECTION_ICONS = {
   experience: Briefcase,
@@ -12,6 +13,23 @@ const SECTION_ICONS = {
 };
 
 const CARD = 'rounded-2xl border border-[var(--surface-border)] bg-white p-5 dark:bg-[#111d2c]';
+
+/**
+ * The list as ONE grid per section on md+: [bullet][ปี][เนื้อหา]. Each row is a
+ * subgrid, so the ปี column is as wide as the widest ปี in THIS section
+ * (max-content) and every row's text starts on the same line; a wrapped line
+ * stays in the text column. A row with no ปี keeps an empty cell there. A
+ * section where no row has a ปี has no such column at all.
+ *
+ * Below md each row is a flex row: the ปี on its own line above the text.
+ *
+ * Class strings are complete literals: Tailwind cannot see assembled ones.
+ */
+const SECTION_LIST_WITH_PERIODS = 'mt-4 space-y-2 text-sm leading-relaxed text-[var(--text-secondary)] md:grid md:grid-cols-[auto_max-content_1fr] md:gap-x-3 md:gap-y-2 md:space-y-0';
+const SECTION_LIST_PLAIN = 'mt-4 space-y-2 text-sm leading-relaxed text-[var(--text-secondary)] md:grid md:grid-cols-[auto_1fr] md:gap-x-3 md:gap-y-2 md:space-y-0';
+const SECTION_ROW = 'flex gap-3 md:col-span-full md:grid md:grid-cols-subgrid md:gap-x-3';
+// pr-1 on top of the 12px column gap: 16px between the ปี and the text.
+const PERIOD = 'block font-semibold text-[var(--text-primary)] md:pr-1';
 
 function SectionCard({ section }) {
   const Icon = SECTION_ICONS[section.key];
@@ -23,11 +41,21 @@ function SectionCard({ section }) {
         </span>
         <h2 className="text-lg font-bold text-9e-navy dark:text-white">{section.label}</h2>
       </div>
-      <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-relaxed text-[var(--text-secondary)] marker:text-9e-action">
+      <ul className={section.hasPeriods ? SECTION_LIST_WITH_PERIODS : SECTION_LIST_PLAIN}>
         {section.items.map((item, index) => (
           // Two rows may say the same thing, and the list never reorders in place.
           // eslint-disable-next-line react/no-array-index-key
-          <li key={index}>{item}</li>
+          <li key={index} className={SECTION_ROW}>
+            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-9e-action" aria-hidden="true" />
+            <div className="min-w-0 md:contents">
+              {item.period ? (
+                <span className={PERIOD} data-testid="writer-section-period">{item.period}</span>
+              ) : (
+                section.hasPeriods && <span className="hidden md:block" aria-hidden="true" />
+              )}
+              <span className="block min-w-0">{item.text}</span>
+            </div>
+          </li>
         ))}
       </ul>
     </section>
@@ -78,10 +106,41 @@ function OnlineCourseRow({ course }) {
 }
 
 /**
+ * A video, in the online-course row's layout: the same 16:9 thumbnail width on
+ * the left, the title on the right. The thumbnail is a plain <img> straight from
+ * i.ytimg.com — not next/image, so it never passes through image optimisation.
+ */
+function VideoRow({ video }) {
+  return (
+    <li>
+      <a
+        href={video.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-3 rounded-9e-md p-1 transition-colors hover:bg-9e-ice dark:hover:bg-[#0D1B2A]"
+      >
+        <span className="block aspect-video w-24 shrink-0 overflow-hidden rounded-9e-sm bg-9e-ice dark:bg-[#0D1B2A]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={youtubeThumbnailUrl(video.videoId)} alt={video.title} loading="lazy" className="h-full w-full object-cover" />
+        </span>
+        <span className="min-w-0">
+          <span className="line-clamp-2 text-sm font-medium text-9e-navy dark:text-white">{video.title}</span>
+        </span>
+      </a>
+    </li>
+  );
+}
+
+const FOOTER_LINK = 'mt-3 inline-flex items-center gap-1 text-sm font-semibold text-9e-action hover:underline dark:text-9e-air';
+
+/**
  * The sections and the aside. `layout` comes from writerProfileLayout, which owns
  * every collapse rule, so this only draws what it is told to.
+ *
+ * Aside order: เชี่ยวชาญด้าน → หลักสูตรออนไลน์ → วิดีโอ, each only when it has
+ * something in it.
  */
-export function WriterProfileBody({ layout, programs, onlineCourses, shortName }) {
+export function WriterProfileBody({ layout, programs, onlineCourses, videos = [], channelUrl = '', shortName }) {
   if (!layout.showBody) return null;
 
   const wide = !layout.showAside;
@@ -114,10 +173,23 @@ export function WriterProfileBody({ layout, programs, onlineCourses, shortName }
                 href={siteConfig.academyUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-9e-action hover:underline dark:text-9e-air"
+                className={FOOTER_LINK}
               >
                 ดูที่ 9Expert Academy <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
               </a>
+            </section>
+          )}
+          {layout.showVideos && (
+            <section className={CARD} data-testid="writer-videos">
+              <h2 className="text-lg font-bold text-9e-navy dark:text-white">วิดีโอของ {shortName}</h2>
+              <ul className="mt-3 space-y-2">
+                {videos.map((video) => <VideoRow key={video.videoId} video={video} />)}
+              </ul>
+              {channelUrl && (
+                <a href={channelUrl} target="_blank" rel="noopener noreferrer" className={FOOTER_LINK}>
+                  ดูทั้งหมดบน YouTube <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+              )}
             </section>
           )}
         </aside>

@@ -37,6 +37,7 @@ import { readArticlesForTransfer, readDefaultWriter, readWriterRows } from '@/li
 import { collectWriterIds } from '@/lib/writers/articleWriters';
 import { planWriterTransfer, transferArticlePaths, transferBulkOps } from '@/lib/writers/writerTransfer';
 import { DEFAULT_WRITER_PATH, WRITER_LIST_PATH, writerPath } from '@/lib/writers/writerUrls';
+import { fillYouTubeTitles } from '@/lib/writers/youtube';
 
 const ADMIN_PATH = '/admin/writers';
 const ADMIN_ARTICLES_PATH = '/admin/articles';
@@ -72,6 +73,10 @@ function writerFields(doc) {
     avatarPublicId: writer.avatarPublicId,
     socialLinks: writer.socialLinks.length,
     sections: Object.fromEntries(WRITER_SECTION_KEYS.map((key) => [key, writer.sections[key].length])),
+    // Short, bounded lists (≤3 each), so the values themselves fit the cap.
+    featuredOnlineCourseIds: writer.featuredOnlineCourseIds,
+    youtubeVideoIds: writer.youtubeVideos.map((v) => v.videoId),
+    youtubeChannelUrl: writer.youtubeChannelUrl,
     instructorId: writer.instructorId ? String(writer.instructorId) : null,
     isActive: writer.isActive,
     isDefault: writer.isDefault,
@@ -97,6 +102,23 @@ async function refuseInstructor(instructorId, currentId = null) {
   return row?.is_active === true && String(row.name ?? '').trim()
     ? null
     : 'ไม่พบวิทยากรที่เลือก หรือวิทยากรถูกปิดใช้งาน';
+}
+
+/**
+ * Parse a writer payload, then fill each empty video title from YouTube oEmbed.
+ * The ONLY YouTube call in the app: the public page reads the stored title.
+ */
+async function parseWriterInput(input) {
+  const parsed = writerSchema.safeParse(input);
+  if (!parsed.success) {
+    const errors = writerFieldErrors(parsed.error);
+    return { ok: false, error: Object.values(errors)[0], errors };
+  }
+  const titles = await fillYouTubeTitles(parsed.data.youtubeVideos);
+  if (!titles.ok) {
+    return { ok: false, error: titles.error, errors: { youtubeVideos: titles.error } };
+  }
+  return { ok: true, data: { ...parsed.data, youtubeVideos: titles.videos } };
 }
 
 async function removeOldAvatar(previous, next) {
@@ -299,11 +321,8 @@ export async function createWriter(input) {
   const session = await requireAdmin('writers');
   await dbConnect();
 
-  const parsed = writerSchema.safeParse(input);
-  if (!parsed.success) {
-    const errors = writerFieldErrors(parsed.error);
-    return { ok: false, error: Object.values(errors)[0], errors };
-  }
+  const parsed = await parseWriterInput(input);
+  if (!parsed.ok) return parsed;
 
   const instructorRefusal = await refuseInstructor(parsed.data.instructorId);
   if (instructorRefusal) return { ok: false, error: instructorRefusal };
@@ -341,11 +360,8 @@ export async function updateWriter(id, input) {
   if (!check.ok) return check;
   const { current } = check;
 
-  const parsed = writerSchema.safeParse({ ...input, slug: current.slug });
-  if (!parsed.success) {
-    const errors = writerFieldErrors(parsed.error);
-    return { ok: false, error: Object.values(errors)[0], errors };
-  }
+  const parsed = await parseWriterInput({ ...input, slug: current.slug });
+  if (!parsed.ok) return parsed;
 
   const instructorRefusal = await refuseInstructor(parsed.data.instructorId, current.instructorId);
   if (instructorRefusal) return { ok: false, error: instructorRefusal };
@@ -376,7 +392,8 @@ export async function updateWriter(id, input) {
       actor: { id: session.user?.id, name: session.user?.name },
     });
 
-    return { ok: true };
+    // The stored videos, so the form shows the titles this save fetched.
+    return { ok: true, youtubeVideos: serialise(normalizeWriter(doc).youtubeVideos) };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' };
   }

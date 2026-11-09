@@ -61,7 +61,7 @@ export async function withCardWriters(articles) {
   }
 }
 
-/** Who /writer lists, each with a published-article count. Also feeds the sitemap. */
+/** Who /author lists, each with a published-article count. Also feeds the sitemap. */
 export async function readPublicWriters() {
   await dbConnect();
   const writers = await Writer.find({ isActive: { $ne: false } })

@@ -1,16 +1,17 @@
 import { onlineCourseInstructors } from '@/lib/onlineCourseInstructors';
-import { WRITER_SECTIONS } from '@/lib/writers/writerFields';
+import { WRITER_FEATURED_COURSE_LIMIT, WRITER_SECTIONS, normalizeSectionItem } from '@/lib/writers/writerFields';
 import { writerPath } from '@/lib/writers/writerUrls';
 
 /**
- * The rules behind /writer and /writer/[slug].
+ * The rules behind /author and /author/[slug].
  *
  * Pure: the pages read, these decide. That is what lets the redirect, the page
  * bounds and the collapse rules run in the test tier without a database.
  */
 
 export const WRITER_ARTICLES_PER_PAGE = 12;
-export const WRITER_ONLINE_COURSE_LIMIT = 4;
+/** Never more than three online courses on the card, picked or matched. */
+export const WRITER_ONLINE_COURSE_LIMIT = WRITER_FEATURED_COURSE_LIMIT;
 
 /**
  * What the route does with a slug's row.
@@ -65,7 +66,7 @@ export function writerShortName(writer) {
 }
 
 /**
- * Who /writer lists, and in what order: active, with at least one published
+ * Who /author lists, and in what order: active, with at least one published
  * article, the default writer first, then most articles first. Names break ties
  * so the order does not change between renders.
  *
@@ -101,34 +102,74 @@ export function matchOnlineCourses(courses, instructorNameEn) {
     .slice(0, WRITER_ONLINE_COURSE_LIMIT);
 }
 
+/** `o_course_id` as a key. Upstream has one with a leading space (' ONL-CYS'). */
+const courseKey = (course) => String(course?.o_course_id ?? '').trim();
+
+/**
+ * The online courses the profile card shows, at most three.
+ *
+ * The admin's picks win, in the admin's order; a pick whose course no longer
+ * exists upstream is skipped without a word. With no picks, the card falls back
+ * to the courses matched by the linked instructor's English name. Picks that
+ * have ALL disappeared leave an empty card (hidden), not the fallback: the admin
+ * chose to override the match, and that choice stands until they edit it.
+ */
+export function selectOnlineCourses(courses, featuredIds, instructorNameEn) {
+  const picks = (featuredIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean);
+  if (picks.length === 0) return matchOnlineCourses(courses, instructorNameEn);
+  const byId = new Map((courses ?? []).map((course) => [courseKey(course), course]));
+  return picks
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .slice(0, WRITER_ONLINE_COURSE_LIMIT);
+}
+
+/** What the admin picker offers: every online course, by its stable id. */
+export function toOnlineCourseOptions(courses) {
+  return (courses ?? [])
+    .map((course) => ({
+      id: courseKey(course),
+      name: String(course?.o_course_name ?? '').trim(),
+      coverUrl: course?.o_course_cover_url || '',
+    }))
+    .filter((option) => option.id && option.name);
+}
+
+/**
+ * A section's rows for the page: normalised, blanks dropped, and whether ANY row
+ * has a ปี — a section where none does is drawn without the period column.
+ */
+function sectionRows(items) {
+  const rows = (items ?? []).map(normalizeSectionItem).filter((item) => item.text);
+  return { items: rows, hasPeriods: rows.some((item) => Boolean(item.period)) };
+}
+
 /**
  * What the profile body shows. A section with no items is not rendered, an empty
  * aside gives the left column the full width, and with nothing on either side the
  * body is skipped so the articles follow the hero.
  */
-export function writerProfileLayout({ sections, programs, onlineCourses }) {
+export function writerProfileLayout({ sections, programs, onlineCourses, videos }) {
   const visibleSections = WRITER_SECTIONS
-    .map(({ key, label }) => ({
-      key,
-      label,
-      items: (sections?.[key] ?? []).map((item) => String(item ?? '').trim()).filter(Boolean),
-    }))
+    .map(({ key, label }) => ({ key, label, ...sectionRows(sections?.[key]) }))
     .filter((section) => section.items.length > 0);
 
   const showPrograms = (programs?.length ?? 0) > 0;
   const showOnlineCourses = (onlineCourses?.length ?? 0) > 0;
-  const showAside = showPrograms || showOnlineCourses;
+  const showVideos = (videos?.length ?? 0) > 0;
+  const showAside = showPrograms || showOnlineCourses || showVideos;
 
   return {
     visibleSections,
     showPrograms,
     showOnlineCourses,
+    showVideos,
     showAside,
     showBody: showAside || visibleSections.length > 0,
   };
 }
 
-/** The sitemap's rows, for exactly the writers /writer lists. */
+/** The sitemap's rows, for exactly the writers /author lists. */
 export function writerSitemapEntries(writers, base) {
   return (writers ?? []).map((writer) => ({
     url: `${base}${writerPath(writer.slug)}`,
