@@ -18,7 +18,12 @@ const CARD = 'rounded-2xl border border-[var(--surface-border)] bg-white p-5 dar
  * The list as ONE grid per section on md+: [bullet][ปี][เนื้อหา]. Each row is a
  * subgrid, so the ปี column is as wide as the widest ปี in THIS section
  * (max-content) and every row's text starts on the same line; a wrapped line
- * stays in the text column. A row with no ปี keeps an empty cell there. A
+ * stays in the text column. A row with no ปี spans the ปี AND text columns
+ * (md:col-span-2), so its text starts right after the bullet, where a ปี would
+ * start: the CVs have no year for those rows, and an empty cell left a hole.
+ * The span does not widen the ปี column: it also crosses the 1fr track, and
+ * grid sizing gives a spanning item's extra space to flexible tracks only, so
+ * the max-content column is still sized by the ปี cells alone (measured). A
  * section where no row has a ปี has no such column at all.
  *
  * Below md each row is a flex row: the ปี on its own line above the text.
@@ -30,6 +35,9 @@ const SECTION_LIST_PLAIN = 'mt-4 space-y-2 text-sm leading-relaxed text-[var(--t
 const SECTION_ROW = 'flex gap-3 md:col-span-full md:grid md:grid-cols-subgrid md:gap-x-3';
 // pr-1 on top of the 12px column gap: 16px between the ปี and the text.
 const PERIOD = 'block font-semibold text-[var(--text-primary)] md:pr-1';
+const TEXT = 'block min-w-0';
+// A no-ปี row in a section that has a ปี column.
+const TEXT_SPANNING = 'block min-w-0 md:col-span-2';
 
 function SectionCard({ section }) {
   const Icon = SECTION_ICONS[section.key];
@@ -48,12 +56,10 @@ function SectionCard({ section }) {
           <li key={index} className={SECTION_ROW}>
             <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-9e-action" aria-hidden="true" />
             <div className="min-w-0 md:contents">
-              {item.period ? (
+              {item.period && (
                 <span className={PERIOD} data-testid="writer-section-period">{item.period}</span>
-              ) : (
-                section.hasPeriods && <span className="hidden md:block" aria-hidden="true" />
               )}
-              <span className="block min-w-0">{item.text}</span>
+              <span className={section.hasPeriods && !item.period ? TEXT_SPANNING : TEXT}>{item.text}</span>
             </div>
           </li>
         ))}

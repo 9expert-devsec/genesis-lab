@@ -49,12 +49,19 @@ test('aside order: with no online courses the videos follow เชี่ยว�
   assert.ok(html.indexOf('writer-programs') < html.indexOf('writer-videos'));
 });
 
-test('ปี column: a grid with a max-content period column, bold period, empty cell when absent', () => {
+test('ปี column: a grid with a max-content period column and a bold period', () => {
   const html = render({ sections: { ...empty, experience: [{ period: '2013 – Present', text: 'A' }, { text: 'B' }] } });
   assert.match(html, /md:grid-cols-\[auto_max-content_1fr\]/);
   assert.match(html, /<span class="block font-semibold text-\[var\(--text-primary\)\] md:pr-1" data-testid="writer-section-period">2013 – Present<\/span>/);
   assert.equal((html.match(/md:grid-cols-subgrid/g) ?? []).length, 2);
-  assert.equal((html.match(/<span class="hidden md:block" aria-hidden="true"><\/span>/g) ?? []).length, 1, 'B keeps an empty ปี cell');
+});
+
+test('ปี column, mixed section: a no-ปี row spans ปี + text; a ปี row does not', () => {
+  const html = render({ sections: { ...empty, education: [{ period: '2009', text: 'WithYear' }, { text: 'NoYear' }] } });
+  assert.match(html, /<span class="block min-w-0 md:col-span-2">NoYear<\/span>/);
+  assert.match(html, /<span class="block min-w-0">WithYear<\/span>/);
+  assert.equal((html.match(/md:col-span-2/g) ?? []).length, 1, 'only the no-ปี row spans');
+  assert.equal(html.includes('hidden md:block'), false, 'no empty placeholder cell any more');
 });
 
 test('ปี column: absent when no row in the section has one', () => {
@@ -62,5 +69,5 @@ test('ปี column: absent when no row in the section has one', () => {
   assert.match(html, /md:grid-cols-\[auto_1fr\]/);
   assert.equal(html.includes('max-content'), false);
   assert.equal(html.includes('writer-section-period'), false);
-  assert.equal(html.includes('hidden md:block'), false);
+  assert.equal(html.includes('md:col-span-2'), false, 'nothing to span without a ปี column');
 });
