@@ -154,6 +154,9 @@ export async function getAllSchedules({ status, includeStarted = false } = {}) {
  * @param {boolean} [options.includeStarted=false] — keep rounds whose first
  *   training day has already arrived. ADMIN CALLERS ONLY; see the block comment
  *   at the top of this file for the three that pass it and why.
+ * @param {string} [options.from] — 'YYYY-MM-DD' range start, lifting the
+ *   endpoint's default `>= today` bound. Measured 2026-11-09 on POWER-BI: no
+ *   `from` → 5 rounds, `from=2000-01-01` → all 17.
  *
  * Without `status`, upstream auto-filters to the registerable statuses and
  * dates >= today, so a `full` round never arrives. The registration page, the
@@ -183,6 +186,11 @@ export async function listSchedulesByCourse(courseObjectId, options = {}) {
       course: courseObjectId,
       limit: options.limit ?? 20,
       status: options.status,
+      // OPTIONAL range start. Without it MSDB applies `dates >= today`, so a
+      // round whose days are all past never arrives. Only the registration
+      // round guard passes it (it must find ANY round of the course). aiFetch
+      // drops undefined params, so every other caller's request is unchanged.
+      from: options.from,
     },
     /**
      * ── `revalidate` IS NOW OVERRIDABLE, AND DEFAULTS TO WHAT IT WAS ───────

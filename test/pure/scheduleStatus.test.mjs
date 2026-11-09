@@ -24,9 +24,11 @@ import { formatStatusFromAPI } from '@/lib/formatScheduleDate';
  * (test/render/scheduleStatus.test.mjs) proves it at each surface.
  */
 
-test('the vocabulary is exactly three states', () => {
-  assert.deepEqual(SCHEDULE_STATUSES, ['open', 'nearly_full', 'full']);
-  assert.deepEqual(Object.keys(SCHEDULE_STATUS), ['open', 'nearly_full', 'full']);
+test('the vocabulary is the three public states plus closed (cancelled)', () => {
+  // `closed` joined 2026-11-09 (MSDB e7771bc): a CANCELLED round — admin-only,
+  // never on a public surface. See test/pure/scheduleClosedStatus.
+  assert.deepEqual(SCHEDULE_STATUSES, ['open', 'nearly_full', 'full', 'closed']);
+  assert.deepEqual(Object.keys(SCHEDULE_STATUS), ['open', 'nearly_full', 'full', 'closed']);
 });
 
 test('each state has its agreed Thai wording, in BOTH registers', () => {
@@ -127,17 +129,20 @@ test('nearFull is the same state as nearly_full', () => {
   assert.equal(scheduleStatusLabel('nearFull'), 'ใกล้เต็ม');
 });
 
-test('closed is the same state as full', () => {
-  // models/ScheduleStatus.js spells the terminal state `closed`; MSDB spells
-  // it `full`. Both mean "cannot register" and must not read as open.
-  assert.equal(normalizeScheduleStatus('closed'), 'full');
-  assert.equal(scheduleStatusLabel('closed'), 'เต็ม');
+test('closed is its own state (cancelled) — no longer an alias of full', () => {
+  // It used to alias `full` (the local override's spelling of "cannot
+  // register"). MSDB now uses `closed` for a CANCELLED round, so it resolves to
+  // its own state: still not registrable, worded ยกเลิก, never green.
+  assert.equal(normalizeScheduleStatus('closed'), 'closed');
+  assert.equal(scheduleStatusLabel('closed'), 'ยกเลิก');
+  assert.equal(normalizeScheduleStatus('cancelled'), 'closed');
 });
 
 // ── THE FALLBACK POLICY ────────────────────────────────────────────
 
 test('an unrecognised status is never classified as a real state', () => {
-  for (const v of ['bogus', 'OPEN', 'cancelled', 'draft', '', '  ', null, undefined, 7, {}]) {
+  // `cancelled` left this list 2026-11-09: it is now an alias of `closed`.
+  for (const v of ['bogus', 'OPEN', 'draft', '', '  ', null, undefined, 7, {}]) {
     assert.equal(normalizeScheduleStatus(v), null, `expected null for ${JSON.stringify(v)}`);
   }
 });
@@ -195,8 +200,8 @@ test('formatStatusFromAPI canonicalises the states it does know', () => {
   assert.equal(formatStatusFromAPI('open'), 'open');
   assert.equal(formatStatusFromAPI('nearly_full'), 'nearly_full');
   assert.equal(formatStatusFromAPI('full'), 'full');
-  // ...including the one its old table was missing entirely.
-  assert.equal(formatStatusFromAPI('closed'), 'full');
+  // ...including `closed`, now its own state rather than `full`.
+  assert.equal(formatStatusFromAPI('closed'), 'closed');
 });
 
 test('whatever formatStatusFromAPI emits, the renderer can resolve it', () => {
@@ -253,8 +258,10 @@ test('the derived states did NOT join the MSDB vocabulary', () => {
   // which is the PUBLIC /schedule filter dropdown. Adding them there would offer
   // a visitor 'จบไปแล้ว' as something to filter by, for a state no round can be
   // fetched in.
-  assert.deepEqual(SCHEDULE_STATUSES, ['open', 'nearly_full', 'full']);
-  assert.deepEqual(Object.keys(SCHEDULE_STATUS), ['open', 'nearly_full', 'full']);
+  assert.deepEqual(SCHEDULE_STATUSES, ['open', 'nearly_full', 'full', 'closed']);
+  assert.deepEqual(Object.keys(SCHEDULE_STATUS), ['open', 'nearly_full', 'full', 'closed']);
+  // `closed` is in the vocabulary but, like the derived states, NOT in the
+  // public filter — the options come from PUBLIC_RENDERED_SCHEDULE_STATUSES.
   assert.equal(SCHEDULE_STATUS_OPTIONS.length, 3);
   for (const key of DERIVED_ROUND_STATES) {
     assert.equal(SCHEDULE_STATUS[key], undefined, `${key} leaked into the status map`);
@@ -306,8 +313,9 @@ test('the derived states mint NO new colour — they reuse the neutral grey', ()
     for (const shape of ['dot', 'text', 'solid', 'soft']) {
       assert.equal(badge[shape], NEUTRAL_STATUS[shape], `${key}.${shape} is not the neutral grey`);
     }
-    // ...and it is none of the three status colours, in any shape.
-    for (const status of SCHEDULE_STATUSES) {
+    // ...and it is none of the three COLOURED status colours, in any shape.
+    // (`closed` is excluded on purpose: it reuses this same neutral grey.)
+    for (const status of ['open', 'nearly_full', 'full']) {
       assert.notEqual(badge.soft, SCHEDULE_STATUS[status].soft,
         `${key} borrowed ${status}'s colour`);
     }

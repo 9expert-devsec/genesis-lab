@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { publicRegistrationSchema } from '@/lib/schemas/register-public';
 import { resolveScheduleStatus } from '@/lib/schedule-status';
+import { checkRegistrableRound } from '@/lib/registration/roundGuard';
 import { resolveCheckoutPricing } from '@/lib/registration/resolve-price';
 import { asRegistrationPointer, createPaidRegistration, getClientIp } from '@/lib/registration/create-public';
 import { createCardCharge, createPromptPayCharge, getPromptPayQrUrl } from '@/lib/omise';
@@ -25,6 +26,13 @@ export async function POST(req) {
   const status = await resolveScheduleStatus(data.classId, 'open');
   if (status === 'closed') {
     return NextResponse.json({ error: 'schedule_closed', message: 'รอบนี้ปิดรับสมัครแล้ว' }, { status: 409 });
+  }
+
+  // The round itself, read FRESH from MSDB — before pricing, before the
+  // registration row, before any charge. See lib/registration/roundGuard.js.
+  const roundCheck = await checkRegistrableRound(data);
+  if (!roundCheck.ok) {
+    return NextResponse.json(roundCheck.body, { status: roundCheck.status });
   }
 
   // Authoritative pricing — never trust client amounts.

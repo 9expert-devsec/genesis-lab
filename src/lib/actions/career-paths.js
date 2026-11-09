@@ -36,6 +36,7 @@ import {
   listSchedulesByCourse,
 } from '@/lib/api/schedules';
 import { siteTodayKey } from '@/lib/articlePublishTime';
+import { isClosedRound } from '@/lib/scheduleStatus';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 // ADDED beside the statement above rather than folded into it — the standing
@@ -765,6 +766,11 @@ export async function getCareerPathPastSchedules(curriculumOrPath) {
       console.error('[getCareerPathPastSchedules] /schedules failed:', err?.message);
     }
     for (const s of rows) {
+      // `status: 'all'` brings CANCELLED rounds back. A round that was called
+      // off never ran, so it can never be named as attended — not shown, not
+      // selectable, and (because career-path-registrations validates against
+      // this same list) not accepted on submit.
+      if (isClosedRound(s)) continue;
       const canonical = oidToCanonical.get(String(s?.course?._id ?? s?.course ?? ''));
       if (!canonical) continue;
       const dates = Array.isArray(s?.dates) ? s.dates.filter(Boolean).map(String) : [];

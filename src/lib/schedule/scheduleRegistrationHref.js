@@ -1,4 +1,4 @@
-import { normalizeScheduleStatus } from '@/lib/scheduleStatus';
+import { isClosedRound, normalizeScheduleStatus } from '@/lib/scheduleStatus';
 
 /**
  * THE registration link for a round. Built here and nowhere else.
@@ -49,6 +49,9 @@ import { normalizeScheduleStatus } from '@/lib/scheduleStatus';
  */
 export function scheduleRegistrationHref(schedule, courseId) {
   if (normalizeScheduleStatus(schedule?.status) === 'full') return null;
+  // A CANCELLED round (MSDB `closed`, or the local override's `closed`) is
+  // never linkable — and, like full, never falls through to `signup_url`.
+  if (isClosedRound(schedule)) return null;
   if (schedule?._id && courseId) {
     return `/registration/public?course=${String(courseId).toLowerCase()}&class=${schedule._id}`;
   }

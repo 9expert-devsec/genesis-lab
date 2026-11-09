@@ -110,12 +110,13 @@ test('a full round carries no registration URL anywhere in its markup', () => {
 });
 
 test('the local `closed` spelling is exactly as unclickable as MSDB `full`', () => {
-  // src/models/ScheduleStatus.js spells the same state `closed`. The builder
-  // normalises before refusing, so a round closed by an admin override is not a
-  // link either — which a `=== 'full'` check here would have got wrong.
+  // src/models/ScheduleStatus.js and MSDB (e7771bc) both spell a CANCELLED round
+  // `closed`. Since 2026-11-09 it is its own state — no longer an alias of full —
+  // so it is worded ยกเลิก, but it is exactly as unclickable: the builder refuses
+  // it through `isClosedRound`, which a `=== 'full'` check would have got wrong.
   const row = one(upcoming([liveRow('r-closed', 'closed')]));
   assert.equal(row.anchored, false, 'a `closed` round was clickable');
-  assert.equal(row.chipText, SCHEDULE_STATUS.full.action, 'and it is still worded เต็ม');
+  assert.equal(row.chipText, SCHEDULE_STATUS.closed.action, 'and it is worded ยกเลิก');
 });
 
 // ── the other four states, so the table is complete ────────────────────────

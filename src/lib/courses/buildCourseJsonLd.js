@@ -11,6 +11,7 @@
 import { courseCanonicalUrl } from '@/lib/courses/courseCanonicalPath';
 import { courseNodeUrl } from '@/lib/seo/courseNode';
 import { SITE_URL } from '@/lib/seo/siteUrl';
+import { isClosedRound } from '@/lib/scheduleStatus';
 
 export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }) {
   if (!course?.course_name) return null;
@@ -101,7 +102,7 @@ export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }
   // Build hasCourseInstance from live schedules (open/nearly_full only).
   // Each schedule becomes a CourseInstance with startDate/endDate/location.
   const instances = schedules
-    .filter((s) => s.status !== 'closed' && s.status !== 'cancelled')
+    .filter((s) => !isClosedRound(s))
     .slice(0, 5) // cap at 5 to keep payload reasonable
     .map((s) => ({
       '@type': 'CourseInstance',

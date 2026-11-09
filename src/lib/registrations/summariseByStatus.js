@@ -102,3 +102,18 @@ export function summariseRegistrationsByStatus(rows, vocabulary = PUBLIC_STATUSE
 
   return { total: list.length, known, unrecognised };
 }
+
+/**
+ * Registrations on a round that still count — every row except `cancelled`.
+ * What the admin is warned about before closing a round. Counts REGISTRATIONS
+ * (rows), not seats: one registration may carry several attendees.
+ *
+ * @param {{ total: number, known: Array<{value: string, count: number}> }} summary
+ *   the output of `summariseRegistrationsByStatus`
+ */
+export function activeRegistrationCount(summary) {
+  const total = Number(summary?.total) || 0;
+  const cancelled =
+    (Array.isArray(summary?.known) ? summary.known : []).find((k) => k?.value === 'cancelled')?.count ?? 0;
+  return Math.max(0, total - cancelled);
+}

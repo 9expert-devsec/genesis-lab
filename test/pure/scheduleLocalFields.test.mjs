@@ -286,14 +286,16 @@ test('CONTROL: a Mongo $set built from the result cannot reach the stored fields
   assert.equal(after.msdb_schedule_id, 'abc');
 });
 
-test('CONTROL: SIDECAR_KEYS still names the three fields the writer handles', () => {
+test('CONTROL: SIDECAR_KEYS still names the four fields the writer handles', () => {
   // The list exists so the writer, the audit snapshot and this file agree. If a
-  // fourth sidecar field is added to the schema and not to the writer, the
+  // fifth sidecar field is added to the schema and not to the writer, the
   // mismatch shows up here rather than as a field that silently never saves.
-  assert.deepEqual(SIDECAR_KEYS, ['max_seats', 'price_override', 'instructor_ids']);
+  // `admin_note` (หมายเหตุ) is the fourth, added 2026-11-09.
+  assert.deepEqual(SIDECAR_KEYS, ['max_seats', 'price_override', 'instructor_ids', 'admin_note']);
 
   const fd = modalFormData({ seats: '10', price: '1' });
   fd.append('instructor_ids', 'x');
+  fd.set('admin_note', 'n');
   assert.deepEqual(Object.keys(sidecarSetFields(fd)).sort(), [...SIDECAR_KEYS].sort());
 });
 

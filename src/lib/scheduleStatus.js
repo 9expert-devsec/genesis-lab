@@ -27,22 +27,44 @@
  * layout. Adding a sixth shape here is preferable to a sixth local map.
  */
 
-/** The vocabulary MSDB emits. Order is display order, least→most full. */
-export const SCHEDULE_STATUSES = ['open', 'nearly_full', 'full'];
+/**
+ * The vocabulary MSDB emits. Order is display order, least→most full, then
+ * `closed`.
+ *
+ * `closed` = the round was CANCELLED (MSDB e7771bc). It is not "more full than
+ * full": a closed round is invisible on every public surface and refuses
+ * registration, while a full round is still SHOWN as เต็ม. MSDB's default and
+ * `PUBLIC_SCHEDULE_STATUSES` reads never return it; the two `status=all`
+ * readers that can (MCP list_training_rounds, the career-path transfer) drop it
+ * through `isClosedRound` below. It is reversible — an admin can reopen it.
+ */
+export const SCHEDULE_STATUSES = ['open', 'nearly_full', 'full', 'closed'];
 
 /**
- * Spellings that mean one of the canonical three but arrive differently.
+ * The statuses a PUBLIC surface can render. `closed` is deliberately absent:
+ * it drives the /schedule filter dropdown, and offering "ยกเลิก" there would
+ * be a filter for rounds no public feed contains.
+ */
+export const PUBLIC_RENDERED_SCHEDULE_STATUSES = ['open', 'nearly_full', 'full'];
+
+/**
+ * Spellings that mean one of the canonical values but arrive differently.
  *
- *   closed   — the local ScheduleStatus override collection's enum
- *              (src/models/ScheduleStatus.js) uses `closed` where MSDB uses
- *              `full`. Both mean "cannot register".
+ *   cancelled / canceled — the same state as MSDB `closed`, in the spelling
+ *              other domains use. Folded in so a stray spelling can never
+ *              read as an unknown (grey-but-clickable) status.
  *   nearFull — lib/formatScheduleDate.js `formatStatusFromAPI` camel-cases
  *              `nearly_full` on its way into <ScheduleCard />.
  *
- * Mapping them here is what stops a full session from rendering as green.
+ * `closed → full` USED to be here: the local ScheduleStatus override
+ * (src/models/ScheduleStatus.js) spelled "cannot register" as `closed`. Since
+ * MSDB adopted `closed` for a CANCELLED round, the override's `closed` resolves
+ * to the canonical closed state instead — still not registrable, now worded
+ * ยกเลิก and grey rather than เต็ม and red. (0 override records exist.)
  */
 const ALIASES = {
-  closed: 'full',
+  cancelled: 'closed',
+  canceled: 'closed',
   nearFull: 'nearly_full',
   nearly_Full: 'nearly_full',
 };
@@ -127,7 +149,36 @@ export const SCHEDULE_STATUS = {
     solid: 'bg-[#ff4b55] text-white',
     soft: 'bg-[#ff4b55]/10 text-[#ff4b55] dark:bg-[#ff4b55]/20',
   },
+  /**
+   * Cancelled round. Seen ONLY in admin (public reads exclude it). Grey, and
+   * the SAME grey tokens as NEUTRAL_STATUS below — written out literally rather
+   * than spread because NEUTRAL_STATUS is declared after this object, and
+   * Tailwind needs complete literals in source anyway. A test pins the two
+   * equal. `action` equals `state`: there is nothing a visitor can do.
+   */
+  closed: {
+    state: 'ยกเลิก',
+    action: 'ยกเลิก',
+    dot: 'bg-slate-400',
+    text: 'text-slate-500 dark:text-slate-300',
+    solid: 'bg-slate-400 text-white',
+    soft: 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300',
+  },
 };
+
+/**
+ * THE predicate for "this round is cancelled". Every surface asks this rather
+ * than comparing strings, so `closed`, `cancelled` and `canceled` (and the local
+ * override's `closed`) all answer the same way.
+ *
+ * @param {object|string|null|undefined} round a schedule row (reads `.status`)
+ *   or a raw status string
+ * @returns {boolean}
+ */
+export function isClosedRound(round) {
+  const raw = typeof round === 'string' ? round : round?.status;
+  return normalizeScheduleStatus(raw) === 'closed';
+}
 
 /**
  * Canonical key for a raw status value, or null when it is not a schedule
@@ -285,7 +336,7 @@ export function scheduleStatusLabel(raw) {
  * is a state to select, `<option>ลงทะเบียน` reads as a command. The key stays
  * `label` because that is the `<option>`'s label and means nothing else here.
  */
-export const SCHEDULE_STATUS_OPTIONS = SCHEDULE_STATUSES.map((value) => ({
+export const SCHEDULE_STATUS_OPTIONS = PUBLIC_RENDERED_SCHEDULE_STATUSES.map((value) => ({
   value,
   label: SCHEDULE_STATUS[value].state,
 }));
