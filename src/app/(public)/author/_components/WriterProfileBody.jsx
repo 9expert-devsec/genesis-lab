@@ -145,15 +145,19 @@ const FOOTER_LINK = 'mt-3 inline-flex items-center gap-1 text-sm font-semibold t
  *
  * Aside order: เชี่ยวชาญด้าน → หลักสูตรออนไลน์ → วิดีโอ, each only when it has
  * something in it.
+ *
+ * `hasArticles` false: no articles section follows, so the body supplies the
+ * gap to the footer itself. pb-10 matches the articles section's py-10 bottom
+ * (40px at every width). With articles the class string is unchanged.
  */
-export function WriterProfileBody({ layout, programs, onlineCourses, videos = [], channelUrl = '', shortName }) {
+export function WriterProfileBody({ layout, programs, onlineCourses, videos = [], channelUrl = '', shortName, hasArticles = true }) {
   if (!layout.showBody) return null;
 
   const wide = !layout.showAside;
 
   return (
     <div
-      className={`mx-auto mt-8 grid max-w-[1200px] items-start gap-6 px-4 lg:px-6 ${wide ? '' : 'lg:grid-cols-[minmax(0,1fr)_396px]'}`}
+      className={`mx-auto mt-8 grid max-w-[1200px] items-start gap-6 px-4 lg:px-6 ${wide ? '' : 'lg:grid-cols-[minmax(0,1fr)_396px]'}${hasArticles ? '' : ' pb-10'}`}
       data-testid="writer-body"
     >
       {layout.showAside && (
