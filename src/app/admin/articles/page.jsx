@@ -2,6 +2,7 @@ import { requirePage } from '@/lib/rbac/guard';
 import { getArticles } from '@/lib/actions/articles';
 import { ADMIN_LIST_FIELDS } from '@/lib/articleListFields';
 import { readListPage } from '@/lib/articles/adminListQuery';
+import { readWriterNames } from '@/lib/writers/writerReads';
 import { ArticlesAdminClient } from './_components/ArticlesAdminClient';
 
 export const metadata = { title: 'จัดการบทความ' };
@@ -67,6 +68,9 @@ export default async function ArticlesAdminPage({ searchParams }) {
     select: ADMIN_LIST_FIELDS,
   });
 
+  // One read for the whole list; the rows only hold ids.
+  const writerNames = await readWriterNames(items);
+
   // `reachable` is what this surface can get the admin to, not what it paints.
   // Today those are the same number — one fetch, no pager, every fetched row
   // rendered — so it is `items.length`. Once commit 3 adds a pager it becomes
@@ -77,6 +81,7 @@ export default async function ArticlesAdminPage({ searchParams }) {
       total={total}
       reachable={items.length}
       page={page}
+      writerNames={writerNames}
     />
   );
 }

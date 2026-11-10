@@ -3,6 +3,7 @@ import { listSkills }   from '@/lib/api/skills';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { requirePage } from '@/lib/rbac/guard';
 import { articleListQuery } from '@/lib/articles/adminListQuery';
+import { readWriterOptions } from '@/lib/writers/writerReads';
 import { ArticleForm } from '../_components/ArticleForm';
 
 export const metadata = { title: 'สร้างบทความใหม่' };
@@ -17,7 +18,8 @@ export default async function NewArticlePage({ searchParams }) {
   // the fix works for one way home and not the other.
   const listQuery = articleListQuery(await searchParams);
 
-  const [programsRes, skillsRes, coursesRes] = await Promise.all([
+  const [writerOptions, programsRes, skillsRes, coursesRes] = await Promise.all([
+    readWriterOptions(),
     listPrograms().catch(() => ({ items: [] })),
     listSkills().catch(()   => ({ items: [] })),
     // includeHidden — admin picker. An article may already pin a course that
@@ -48,6 +50,7 @@ export default async function NewArticlePage({ searchParams }) {
       courses={courses}
       isSuperAdmin={isSuperAdmin}
       listQuery={listQuery}
+      writerOptions={writerOptions}
     />
   );
 }

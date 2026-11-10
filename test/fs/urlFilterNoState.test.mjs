@@ -181,6 +181,11 @@ const FILTER_SCREENS = [
     component: 'SchedulesAdminClient',
     filters: ['search', 'filterProgram', 'filterStatus', 'monthFrom', 'monthTo'],
   },
+  {
+    rel: 'src/app/admin/writers/_components/WritersAdminClient.jsx',
+    component: 'WritersAdminClient',
+    filters: ['status', 'q'],
+  },
 ];
 
 /**

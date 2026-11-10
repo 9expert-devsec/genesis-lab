@@ -48,9 +48,13 @@ import { monthLabel } from '@/lib/schedule/monthWindow';
 import { trainingTypeColor } from '@/lib/schedule/trainingTypeColor';
 import { roundHasEnded } from '@/lib/schedule/roundHasStarted';
 import {
+  isClosedRound,
   resolveDerivedRoundBadge,
   resolveScheduleBadge,
 } from '@/lib/scheduleStatus';
+import { closeRoundWarning, isClosingChange } from '@/lib/schedule/closeRoundWarning';
+import { activeRegistrationCount } from '@/lib/registrations/summariseByStatus';
+import { ADMIN_NOTE_MAX } from '@/lib/schedule/scheduleLocalFields';
 import { RegistrationSummaryPanel } from './RegistrationSummaryPanel';
 
 // ── constants ──────────────────────────────────────────────────────
@@ -59,6 +63,9 @@ const STATUS_OPTIONS = [
   { value: 'open',        label: 'Open' },
   { value: 'nearly_full', label: 'Nearly Full' },
   { value: 'full',        label: 'Full' },
+  // CANCELLED (MSDB `closed`). Reversible — the other three buttons reopen it.
+  // Saving a change TO it goes through the close confirm (closeRoundWarning).
+  { value: 'closed',      label: 'Closed' },
 ];
 /**
  * ── THE ROUND'S DOT USED TO BE THE STATUS. IT IS THE DELIVERY TYPE NOW ──────
@@ -413,7 +420,7 @@ export function SchedulesAdminClient({
               {/* Names what this screen can EDIT. วิทยากร is deliberately absent:
                   it has no input in the modal any more, though the stored names
                   are still shown on the round boxes below. */}
-              แสดง {ADMIN_SCHEDULE_MONTHS} เดือนข้างหน้า — max_seats และราคาต่อรอบเก็บใน Genesis
+              แสดง {ADMIN_SCHEDULE_MONTHS} เดือนข้างหน้า — หมายเหตุของแต่ละรอบเก็บใน Genesis (ไม่ส่งไป MSDB)
             </p>
           </div>
           <button
@@ -1331,46 +1338,36 @@ function ScheduleModal({
     ? localBySchedId.get(String(schedule?._id)) ?? null
     : null;
   /*
-   * ── WHAT THE "ข้อมูลเฉพาะ Genesis" BLOCK HOLDS, AND WHAT IT DOES NOT ──────
+   * ── THE SIDECAR BLOCK NOW HOLDS ONE INPUT: หมายเหตุ (admin_note) ─────────
    *
-   * TWO inputs: จำนวนที่นั่ง (max_seats) and ราคาต่อท่าน (price_override).
-   * วิทยากร (instructor_ids) has no input and is not sent.
+   * The "ข้อมูลเฉพาะ Genesis" block (จำนวนที่นั่ง / ราคาต่อท่าน) is HIDDEN —
+   * UI only. Decided 2026-11-09:
+   *   · price_override — 0 rows use it. Hidden. Its schema field, data and
+   *     PUBLIC consumers (registration price, Omise charge via
+   *     lib/registration/resolve-price.js, JSON-LD offers) are UNCHANGED.
+   *   · max_seats — a grep of src/ found NO reader outside /admin/schedules
+   *     (only this grid's chip and RoundDetailsModal display it; no quotation,
+   *     registration, PDF or email reads it), so per the decision its input is
+   *     hidden too. The 8 stored seat counts are untouched and still DISPLAYED.
+   *   · instructor_ids — stayed out, as before.
    *
-   * `max_seats` was briefly removed here and is BACK. The removal was made on
-   * the reading that "keep max_seats" meant only that the stored data survives;
-   * it meant the admin must still be able to ENTER it. It is wanted for
-   * in-house quotation requests. The 5 stored seat counts were never at risk —
-   * that is what the presence-based writer below is for — so restoring the
-   * input was re-adding an input, exactly as intended.
-   *
-   * `instructor_ids` STAYS OUT, and its data stays untouched: the schema still
-   * declares it (models/ScheduleLocal.js), the 4 stored rosters are still
-   * there, no migration was written, and the grid still renders the names. Do
-   * NOT read the absent input as "this column is dead".
-   *
-   * ── THE WRITER IS PRESENCE-BASED, AND EVERY DECISION HERE DEPENDS ON IT ───
+   * ── THE WRITER IS PRESENCE-BASED, AND THAT IS WHY HIDING IS SAFE ─────────
    * `sidecarSetFields` (lib/schedule/scheduleLocalFields) writes ONLY the keys
-   * the form actually sends. A key present means this form is authoritative for
-   * that field, blank included; a key ABSENT means leave the stored value
-   * alone. That is what lets an input be removed without erasing anything, and
-   * it is the bug fix that must never be reverted to an unconditional `$set` —
-   * see that module's docstring for what the old one destroyed.
+   * the form actually sends; an ABSENT key means "leave the stored value
+   * alone". So none of max_seats / price_override / instructor_ids is set on
+   * the FormData at all — not '', not null — and every stored value survives
+   * every save. Sending any of them, even blank, would erase it.
    *
-   * So both surviving inputs send their key UNCONDITIONALLY. A field an admin
-   * can SET must be one they can UNSET: clearing จำนวนที่นั่ง has to reach the
-   * database as null (= ไม่จำกัด), and clearing ราคาต่อท่าน has to fall the
-   * round back to the course's normal price.
-   *
-   * `price_override` additionally has live PUBLIC readers — the registration
-   * wizard's per-round price — and decides the amount charged through Omise
-   * (lib/registration/resolve-price.js). Do not touch it casually.
+   * `admin_note` IS sent, unconditionally, blank included: it is on screen, so
+   * the form is authoritative for it and clearing the textarea clears it.
+   * Never sent to MSDB (shapeMsdbPayload does not read it), and admin-only on
+   * the read side (getScheduleLocalsForAdmin).
    */
-  const [maxSeats, setMaxSeats] = useState(
-    existingLocal?.max_seats != null ? String(existingLocal.max_seats) : ''
+  const [adminNote, setAdminNote] = useState(
+    typeof existingLocal?.admin_note === 'string' ? existingLocal.admin_note : ''
   );
-  const [priceOverride, setPriceOverride] = useState(
-    existingLocal?.price_override != null ? String(existingLocal.price_override) : ''
-  );
+  // Set while the close confirm is fetching the round's registration count.
+  const [checkingClose, setCheckingClose] = useState(false);
 
   const datesPretty = selectedDates
     .map((d) =>
@@ -1419,30 +1416,66 @@ function ScheduleModal({
     fd.set('type',        type);
     fd.set('signup_url',  signupUrl);
     /*
-     * ── THE TWO ON-SCREEN SIDECAR FIELDS ARE SENT UNCONDITIONALLY ───────────
-     * Blank included, and neither may grow an `if` in front of it. The writer
-     * reads PRESENCE: sending the key says "this form owns this field", and a
-     * blank value reaches `toNullableNum` as null — which is how จำนวนที่นั่ง
-     * is cleared back to ไม่จำกัด and ราคาต่อท่าน back to the course's normal
-     * price. A guard like `if (maxSeats)` would make each field settable but
-     * never UNsettable, silently keeping the old value forever.
-     *
-     * `instructor_ids` IS NOT SET AT ALL — not '', not 0, not an empty append.
-     * It has no input on this form, so the form has no opinion about it, and
-     * the writer must leave the 4 stored rosters exactly where they are.
-     * Sending the key with anything, including a blank, erases them.
+     * ── ONE SIDECAR KEY IS SENT: admin_note, UNCONDITIONALLY ────────────────
+     * Blank included, so a cleared textarea clears the note. max_seats,
+     * price_override and instructor_ids are NOT SET AT ALL — they have no
+     * input on this form, so the form has no opinion, and the presence-based
+     * writer leaves every stored value exactly where it is. See the note at
+     * the `adminNote` state declaration.
      */
-    fd.set('max_seats', maxSeats);
-    fd.set('price_override', priceOverride);
+    fd.set('admin_note', adminNote);
     if (isEdit) fd.set('schedule_id', schedule._id);
 
+    setPendingWarning(null);
     startTransition(async () => {
       const res = isEdit
         ? await updateSchedule(fd)
         : await createSchedule(fd);
+      // `ok` is only true when MSDB echoed back the status that was sent — the
+      // action checks `item.status`, so a mismatch arrives here as an error.
       if (res?.ok) onSaved();
       else setError(res?.error ?? 'บันทึกไม่สำเร็จ');
     });
+  }
+
+  /**
+   * The close confirm, or straight to save. A change TO `closed` always
+   * confirms; with ≥1 active registration the wording names the count and says
+   * nobody is notified. The count is read live (getRoundRegistrationSummary,
+   * register_public by classId, `cancelled` excluded). A failed count read
+   * refuses to proceed rather than confirming on a number it does not have.
+   * Registrations are never modified by closing.
+   */
+  async function confirmCloseOrSubmit() {
+    const closing = isClosingChange({
+      isEdit,
+      previousStatus: schedule?.status,
+      nextStatus: status,
+    });
+    if (!closing) {
+      submitNow();
+      return;
+    }
+    let count = 0;
+    if (isEdit && schedule?._id) {
+      setCheckingClose(true);
+      try {
+        const res = await getRoundRegistrationSummary(String(schedule._id));
+        if (!res?.ok) {
+          setError(res?.error ?? 'อ่านจำนวนผู้ลงทะเบียนไม่สำเร็จ — ยังไม่ได้บันทึก');
+          setPendingWarning(null);
+          return;
+        }
+        count = activeRegistrationCount(res.summary);
+      } catch (err) {
+        setError(err?.message ?? 'อ่านจำนวนผู้ลงทะเบียนไม่สำเร็จ — ยังไม่ได้บันทึก');
+        setPendingWarning(null);
+        return;
+      } finally {
+        setCheckingClose(false);
+      }
+    }
+    setPendingWarning(closeRoundWarning(count));
   }
 
   async function handleSubmit(e) {
@@ -1470,7 +1503,7 @@ function ScheduleModal({
       return;
     }
 
-    submitNow();
+    confirmCloseOrSubmit();
   }
 
   return (
@@ -1678,8 +1711,18 @@ function ScheduleModal({
             <ButtonGroup
               options={STATUS_OPTIONS}
               value={status}
-              onChange={setStatus}
+              onChange={(next) => {
+                // A confirm asked about the OLD status no longer applies.
+                setPendingWarning(null);
+                setStatus(next);
+              }}
             />
+            {status === 'closed' && (
+              <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                ยกเลิกรอบ — รอบจะไม่แสดงบนเว็บและลงทะเบียนไม่ได้ (เปลี่ยนกลับได้) ·
+                ผู้ลงทะเบียนเดิมไม่ถูกแก้ไข
+              </p>
+            )}
           </div>
 
           <div>
@@ -1721,61 +1764,25 @@ function ScheduleModal({
             )}
           </div>
 
-          {/* Local sidecar */}
-          <div className="rounded-9e-md border border-dashed border-[var(--surface-border)] p-3">
-            <p className="mb-2 text-xs font-semibold text-9e-slate-dp-50 dark:text-[#94a3b8]">
-              ข้อมูลเฉพาะ Genesis (ไม่ส่งไป MSDB)
-            </p>
-            {/*
-              TWO cells, so `md:grid-cols-2` is back — จำนวนที่นั่ง beside
-              ราคาต่อท่าน, as it was.
-
-              วิทยากร (instructor_ids) is the one that stayed out, and its
-              removal is UI-ONLY: the schema still declares the field, the
-              stored rosters are untouched, no migration was written, and the
-              grid still renders the names. Do not read the absent input as
-              "this column is dead". The full note, including why an omitted key
-              cannot overwrite stored data and why the two inputs below send
-              theirs unconditionally, is at the `maxSeats` state declaration.
-            */}
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="block">
-                <span className="text-sm font-medium text-9e-navy dark:text-white">
-                  จำนวนที่นั่ง (max_seats)
-                </span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={maxSeats}
-                  onChange={(e) => setMaxSeats(e.target.value)}
-                  placeholder="ไม่จำกัด"
-                  className={inputCls}
-                />
-                <span className="mt-1 block text-xs text-9e-slate-dp-50">
-                  เว้นว่าง = ไม่จำกัด
-                </span>
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-medium text-9e-navy dark:text-white">
-                  ราคาต่อท่าน (บาท, ต่อรอบ)
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={priceOverride}
-                  onChange={(e) => setPriceOverride(e.target.value)}
-                  placeholder="เว้นว่าง = ใช้ราคาปกติของหลักสูตร"
-                  className={inputCls}
-                />
-                <span className="mt-1 block text-xs text-9e-slate-dp-50">
-                  เว้นว่าง = ใช้ราคาปกติของหลักสูตร
-                </span>
-              </label>
-            </div>
-          </div>
+          {/* หมายเหตุ — where the hidden "ข้อมูลเฉพาะ Genesis" block was.
+              Admin-only, never sent to MSDB. See the `adminNote` state note. */}
+          <label className="block">
+            <span className="text-sm font-medium text-9e-navy dark:text-white">
+              หมายเหตุ
+            </span>
+            <textarea
+              name="admin_note"
+              value={adminNote}
+              onChange={(e) => setAdminNote(e.target.value)}
+              maxLength={ADMIN_NOTE_MAX}
+              rows={3}
+              placeholder="บันทึกภายในสำหรับทีมงาน เช่น เหตุผลที่ยกเลิกรอบ"
+              className={inputCls}
+            />
+            <span className="mt-1 block text-xs text-9e-slate-dp-50">
+              เห็นเฉพาะผู้ดูแลระบบ · ไม่ส่งไป MSDB · {adminNote.length}/{ADMIN_NOTE_MAX}
+            </span>
+          </label>
         </form>
 
         {/* Out-of-window confirm step. In-modal rather than window.confirm so
@@ -1803,20 +1810,47 @@ function ScheduleModal({
             >
               {pendingWarning.title}
             </p>
-            <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-9e-navy dark:text-[#cbd5e1]">
-              {pendingWarning.lines.map((line, i) => (
-                <li key={i}>{line}</li>
-              ))}
-            </ul>
-            <p className="mt-2 text-xs font-medium text-9e-navy dark:text-white">
-              วันที่อยู่นอกช่วง: {pendingWarning.dates.join(', ')}
-            </p>
+            {pendingWarning.lines.length > 0 && (
+              <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-9e-navy dark:text-[#cbd5e1]">
+                {pendingWarning.lines.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+            )}
+            {pendingWarning.dates.length > 0 && (
+              <p className="mt-2 text-xs font-medium text-9e-navy dark:text-white">
+                วันที่อยู่นอกช่วง: {pendingWarning.dates.join(', ')}
+              </p>
+            )}
+            {pendingWarning.kind === 'close' && (
+              <p className="mt-2 text-xs text-9e-navy dark:text-[#cbd5e1]">
+                ข้อมูลผู้ลงทะเบียนจะไม่ถูกแก้ไข และยังดูได้ที่หน้าผู้ลงทะเบียน
+              </p>
+            )}
           </div>
         )}
 
         {/* Footer (sticky) */}
         <div className="sticky bottom-0 flex justify-end gap-2 border-t border-[var(--surface-border)] bg-white px-5 py-3 dark:bg-[#111d2c]">
-          {pendingWarning ? (
+          {pendingWarning?.kind === 'close' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setPendingWarning(null)}
+                className="rounded-9e-md border border-[var(--surface-border)] px-4 py-2 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+              >
+                กลับไปแก้ไข
+              </button>
+              <button
+                type="button"
+                onClick={submitNow}
+                disabled={pending}
+                className="rounded-9e-md bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {pending ? 'กำลังบันทึก…' : 'ยืนยันยกเลิกรอบ'}
+              </button>
+            </>
+          ) : pendingWarning ? (
             <>
               <button
                 type="button"
@@ -1827,8 +1861,10 @@ function ScheduleModal({
               </button>
               <button
                 type="button"
-                onClick={submitNow}
-                disabled={pending}
+                // The out-of-window warning was acknowledged; a change TO
+                // closed still gets its own confirm before anything is saved.
+                onClick={confirmCloseOrSubmit}
+                disabled={pending || checkingClose}
                 className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
               >
                 {pending ? 'กำลังบันทึก…' : 'บันทึกต่อ'}
@@ -1846,10 +1882,10 @@ function ScheduleModal({
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={pending || !courseCode}
+                disabled={pending || checkingClose || !courseCode}
                 className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
               >
-                {pending ? 'กำลังบันทึก…' : isEdit ? 'บันทึก' : 'สร้างตารางอบรม'}
+                {pending || checkingClose ? 'กำลังบันทึก…' : isEdit ? 'บันทึก' : 'สร้างตารางอบรม'}
               </button>
             </>
           )}
@@ -1998,7 +2034,27 @@ function RoundDetailsModal({ schedule, local, onClose }) {
                 </>
               )}
             </div>
+            {/* A cancelled round says so here too, in the same grey and word
+                the grid uses — the colours come from resolveScheduleBadge. */}
+            {isClosedRound(schedule) && (() => {
+              const badge = resolveScheduleBadge(schedule.status);
+              return (
+                <span className={`mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${badge.soft}`}>
+                  {badge.state}
+                </span>
+              );
+            })()}
           </div>
+
+          {/* หมายเหตุ — read-only here; edited in the round's edit modal. */}
+          {typeof local?.admin_note === 'string' && local.admin_note.trim() !== '' && (
+            <div>
+              <h3 className="text-sm font-medium text-9e-navy dark:text-white">หมายเหตุ</h3>
+              <p className="mt-1 whitespace-pre-wrap break-words rounded-9e-md border border-[var(--surface-border)] px-3 py-2 text-xs text-9e-navy dark:text-[#cbd5e1]">
+                {local.admin_note}
+              </p>
+            </div>
+          )}
 
           <h3 className="text-sm font-medium text-9e-navy dark:text-white">
             ผู้ลงทะเบียน (รอบสาธารณะ)

@@ -40,7 +40,7 @@
  */
 
 import { roundFirstDayKey, roundLastDayKey, roundHasStarted } from '@/lib/schedule/roundHasStarted';
-import { normalizeScheduleStatus } from '@/lib/scheduleStatus';
+import { isClosedRound, normalizeScheduleStatus } from '@/lib/scheduleStatus';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo. The ONE normaliser for a bundle item's offered rounds.
 // Load-bearing: nothing parses on read, so a module that read `item.rounds`
@@ -218,7 +218,14 @@ function reasonFor({ round, live, today, locked, prevLastDay }) {
    * here and not elsewhere; by falling through to `normalizeScheduleStatus`,
    * anything outside the three-value vocabulary is still refused.
    */
-  if (typeof live?.status === 'string' && live.status.trim().toLowerCase() === 'closed') {
+  // The shared predicate, plus the trimmed/lower-cased spelling this check
+  // always accepted. `isClosedRound` also covers `cancelled`/`canceled`, which
+  // the normaliser now folds to `closed` rather than null — without it those
+  // would fall past the `null` gate below and read as pickable.
+  if (
+    isClosedRound(live) ||
+    (typeof live?.status === 'string' && live.status.trim().toLowerCase() === 'closed')
+  ) {
     return 'closed';
   }
   const status = normalizeScheduleStatus(live?.status);

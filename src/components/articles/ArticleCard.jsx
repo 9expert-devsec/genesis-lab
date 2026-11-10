@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowRight, Pin } from 'lucide-react';
 import { shouldShowPinBadge } from '@/lib/articlePositioning';
+import { ArticleCardByline } from '@/components/articles/ArticleCardByline';
 import { ProgramOverlay, SkillChips } from '@/components/articles/ArticleTaxonomyChips';
 import { withListQuery } from '@/lib/articles/publicListQuery';
 
@@ -141,6 +142,8 @@ export function ArticleCard({ article, programNames = {}, skillNames = {}, listQ
           </Link>
         </div>
       </div>
+
+      <ArticleCardByline writers={article.writers} />
     </article>
   );
 }

@@ -28,7 +28,8 @@ import { summariseRegistrationsByStatus } from '@/lib/registrations/summariseByS
 // coerced inside `sidecarSetFields` now, and importing it here would invite the
 // next edit to read a sidecar key directly off the FormData again — which is
 // exactly the clobber that module exists to prevent.
-import { sidecarSetFields, toStr, toStrArr } from '@/lib/schedule/scheduleLocalFields';
+import { adminNoteError, sidecarSetFields, toStr, toStrArr } from '@/lib/schedule/scheduleLocalFields';
+import { refreshRoundCachesOutsideTags } from '@/lib/schedule/scheduleRoundCacheRefresh';
 
 const ADMIN_PATH = '/admin/schedules';
 
@@ -88,6 +89,27 @@ function bustScheduleCaches(courseObjectId) {
   try { revalidatePath(ADMIN_PATH); } catch (err) {
     console.warn('[schedules] revalidatePath failed:', err?.message);
   }
+  // The two caches holding rounds that no tag reaches: the in-process /search
+  // corpus (serving instance only) and landing_cache (full sync, after the
+  // response). Fire-and-forget by design — the write already happened.
+  refreshRoundCachesOutsideTags().catch((err) =>
+    console.warn('[schedules] round cache refresh failed:', err?.message)
+  );
+}
+
+/**
+ * Did MSDB store the status we sent? `msdbUpdate`/`msdbCreate` return the
+ * written `item`; a 2xx with a different (or missing) status is NOT a success.
+ * Closing a round is the case this exists for: reporting "saved" while the
+ * round is still open upstream would leave it bookable with the admin believing
+ * otherwise.
+ *
+ * @returns {string|null} a Thai error, or null when the status matches
+ */
+function statusMismatchError(item, sentStatus) {
+  const stored = item?.status;
+  if (stored === sentStatus) return null;
+  return `MSDB ไม่ได้บันทึกสถานะตามที่ส่ง (ส่ง "${sentStatus}" ได้รับ "${stored ?? '—'}") กรุณาตรวจสอบและลองใหม่`;
 }
 
 /*
@@ -194,6 +216,8 @@ export async function createSchedule(formData) {
   if (!body.dates.length) {
     return { ok: false, error: 'กรุณาเลือกอย่างน้อย 1 วัน' };
   }
+  const noteError = adminNoteError(formData);
+  if (noteError) return { ok: false, error: noteError };
 
   try {
     const { item } = await msdbCreate('schedules', body);
@@ -222,11 +246,20 @@ export async function createSchedule(formData) {
       }
     }
 
+    // Save verification. The round EXISTS upstream either way (it has an id),
+    // so the sidecar is still written — otherwise a note typed into the form
+    // would be lost — but the admin is told the status did not take, and the
+    // public caches are not busted as if it had.
     await upsertLocal({
       msdbScheduleId: newId,
       courseIdString,
       formData,
     });
+    const createMismatch = statusMismatchError(finalItem, body.status);
+    if (createMismatch) {
+      try { revalidatePath(ADMIN_PATH); } catch {}
+      return { ok: false, error: createMismatch, id: newId };
+    }
     bustScheduleCaches(courseObjectId);
 
     recordAdminActionAfter({
@@ -284,9 +317,19 @@ export async function updateSchedule(idOrFormData, maybeFormData) {
   if (!body.dates.length) {
     return { ok: false, error: 'กรุณาเลือกอย่างน้อย 1 วัน' };
   }
+  const noteError = adminNoteError(formData);
+  if (noteError) return { ok: false, error: noteError };
 
   try {
     const { item } = await msdbUpdate('schedules', id, body);
+    // Save verification, BEFORE anything else is written or busted: a PUT that
+    // came back with another status did not do what the admin asked. No
+    // sidecar write, no cache bust, no audit row claiming the change.
+    const updateMismatch = statusMismatchError(item, body.status);
+    if (updateMismatch) {
+      try { revalidatePath(ADMIN_PATH); } catch {}
+      return { ok: false, error: updateMismatch };
+    }
     await upsertLocal({
       msdbScheduleId: id,
       courseIdString,
@@ -445,6 +488,24 @@ export async function getScheduleLocals(scheduleIds) {
     Array.isArray(scheduleIds) && scheduleIds.length > 0
       ? { msdb_schedule_id: { $in: scheduleIds.map(String) } }
       : {};
-  const rows = await ScheduleLocal.find(filter).lean();
+  // `admin_note` is PROJECTED OUT. This action has no auth check and the public
+  // registration page calls it, so as a `'use server'` export it is reachable
+  // from any browser — the admin note must never ride on it. The admin page
+  // reads `getScheduleLocalsForAdmin` below instead.
+  const rows = await ScheduleLocal.find(filter, PUBLIC_LOCAL_PROJECTION).lean();
+  return JSON.parse(JSON.stringify(rows));
+}
+
+/** The sidecar fields no public read may carry. */
+const PUBLIC_LOCAL_PROJECTION = { admin_note: 0 };
+
+/**
+ * Every sidecar row INCLUDING `admin_note` (หมายเหตุ) — /admin/schedules only,
+ * behind the same `requireAdmin('schedules')` as the writes.
+ */
+export async function getScheduleLocalsForAdmin() {
+  await requireAdmin('schedules');
+  await dbConnect();
+  const rows = await ScheduleLocal.find({}).lean();
   return JSON.parse(JSON.stringify(rows));
 }

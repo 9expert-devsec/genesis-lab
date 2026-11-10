@@ -12,31 +12,13 @@ import { dbConnect } from '@/lib/db/connect';
 import ProgramPageConfig from '@/models/ProgramPageConfig';
 import SkillPageConfig from '@/models/SkillPageConfig';
 import { requireAdmin } from '@/lib/actions/auth';
+import { normalizeSlug, shapePageConfigUpdate } from '@/lib/pageConfigUpdate';
 
 const ADMIN_PATH = '/admin/page-configs';
 
 function serialize(doc) {
   if (!doc) return null;
   return JSON.parse(JSON.stringify(doc));
-}
-
-function normalizeSlug(input) {
-  if (!input) return null;
-  const trimmed = String(input).trim().replace(/^\/+/, '');
-  return trimmed || null;
-}
-
-function shapeUpdate(programOrSkillId, key, data) {
-  const slug = normalizeSlug(data?.urlSlug);
-  return {
-    [key]: programOrSkillId,
-    urlSlug: slug,
-    metaTitle: String(data?.metaTitle ?? '').trim(),
-    metaDescription: String(data?.metaDescription ?? '').trim(),
-    ogImage: String(data?.ogImage ?? '').trim(),
-    isPublished:
-      typeof data?.isPublished === 'boolean' ? data.isPublished : true,
-  };
 }
 
 // ── Programs ────────────────────────────────────────────────────────
@@ -72,7 +54,7 @@ export async function saveProgramConfig(programId, data) {
   }
 
   try {
-    const update = shapeUpdate(programId, 'programId', data);
+    const update = shapePageConfigUpdate(programId, 'programId', data);
     const doc = await ProgramPageConfig.findOneAndUpdate(
       { programId },
       update,
@@ -136,7 +118,7 @@ export async function saveSkillConfig(skillId, data) {
   }
 
   try {
-    const update = shapeUpdate(skillId, 'skillId', data);
+    const update = shapePageConfigUpdate(skillId, 'skillId', data);
     const doc = await SkillPageConfig.findOneAndUpdate(
       { skillId },
       update,

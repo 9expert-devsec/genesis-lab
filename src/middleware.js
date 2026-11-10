@@ -2,7 +2,9 @@
  * Edge middleware — gates the /admin/* surface.
  *
  * Access rules:
- *  1. Valid admin session (NextAuth JWT)  → pass through to any /admin/* page.
+ *  1. Valid admin session (NextAuth JWT)  → pass through to any /admin/* page,
+ *                                           except a GET of the login page,
+ *                                           which redirects into the admin.
  *  2. Login page (/admin/9x-portal)       → always reachable (never blocked).
  *  3. /admin/door                         → sets a 30-min gate cookie then
  *                                           redirects to login. This is the
@@ -23,11 +25,14 @@
 import NextAuth from 'next-auth';
 import { NextResponse } from 'next/server';
 import { authConfig } from '@/lib/auth/config';
+import {
+  DOOR_PATH,
+  LOGIN_PATH,
+  loginRedirectTarget,
+} from '@/lib/auth/loginRedirectTarget';
 
 const GATE_COOKIE  = 'admin_gate';
 const GATE_TTL     = 60 * 30;          // 30 min — time window to complete login
-const LOGIN_PATH   = '/admin/9x-portal';
-const DOOR_PATH    = '/admin/door';
 
 const { auth } = NextAuth(authConfig);
 
@@ -63,6 +68,16 @@ export default auth((req) => {
   // Gate cookie state is irrelevant once a user is logged in.
   const isLoggedIn = Boolean(req.auth?.user);
   if (isLoggedIn) {
+    // The login page is pointless to a signed-in admin, so send them in. This
+    // cannot loop: requirePage only redirects here when auth() finds no session,
+    // and that is the same JWT this branch just accepted. A disabled admin or an
+    // empty role lands on the dashboard or /admin/403, never back here. GET and
+    // HEAD only, because LoginForm's server action POSTs to this path and a tab
+    // left open across a sign-in elsewhere must not have that POST redirected.
+    if (pathname === LOGIN_PATH && (req.method === 'GET' || req.method === 'HEAD')) {
+      const target = loginRedirectTarget(searchParams.get('callbackUrl'));
+      return NextResponse.redirect(new URL(target, req.url));
+    }
     return passThrough(req, pathname);
   }
 

@@ -35,6 +35,13 @@ const ScheduleLocalSchema = new mongoose.Schema(
 
     // Instructor `_id` strings (from the Genesis Instructor model).
     instructor_ids: { type: [String], default: [] },
+
+    // หมายเหตุ — free-text ADMIN note about the round (e.g. why it was
+    // cancelled). Never sent to MSDB and ADMIN-ONLY: the unauthenticated
+    // `getScheduleLocals` projects it out; only `getScheduleLocalsForAdmin`
+    // (requireAdmin) returns it. Trimmed and capped at 2000 chars server-side
+    // (lib/schedule/scheduleLocalFields ADMIN_NOTE_MAX).
+    admin_note: { type: String, default: '', maxlength: 2000 },
   },
   { timestamps: true, collection: 'schedule_locals' }
 );

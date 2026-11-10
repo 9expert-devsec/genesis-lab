@@ -46,6 +46,7 @@ export function toBlogCardModel(article) {
     // the shared name maps, exactly as it does on the landing page.
     programs: Array.isArray(a.programs) ? a.programs : [],
     skills: Array.isArray(a.skills) ? a.skills : [],
+    writers: Array.isArray(a.writers) ? a.writers : [],
     title: a.title ?? '',
     excerpt: a.excerpt ?? '',
     thumbnail:

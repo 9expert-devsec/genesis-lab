@@ -76,7 +76,21 @@ export function toNullableNum(v) {
  * test that proves a removed input sends nothing. A fourth copy is how one of
  * them starts clobbering again.
  */
-export const SIDECAR_KEYS = ['max_seats', 'price_override', 'instructor_ids'];
+export const SIDECAR_KEYS = ['max_seats', 'price_override', 'instructor_ids', 'admin_note'];
+
+/** หมายเหตุ cap, in characters (after trim). Enforced server-side by `adminNoteError`. */
+export const ADMIN_NOTE_MAX = 2000;
+
+/**
+ * Thai refusal when the submitted note is over the cap, else null. A key the
+ * form did not send is not an error — it is "leave the stored note alone".
+ */
+export function adminNoteError(formData) {
+  if (!formData || typeof formData.has !== 'function' || !formData.has('admin_note')) return null;
+  return toStr(formData.get('admin_note')).length > ADMIN_NOTE_MAX
+    ? `หมายเหตุยาวเกิน ${ADMIN_NOTE_MAX} ตัวอักษร`
+    : null;
+}
 
 /**
  * The `$set` fragment for a schedule's sidecar — ONLY the keys the form sent.
@@ -109,6 +123,12 @@ export function sidecarSetFields(formData) {
   // only the first instructor. `has` still answers presence for a repeated key.
   if (formData.has('instructor_ids')) {
     out.instructor_ids = toStrArr(formData.getAll('instructor_ids'));
+  }
+  // Presence rule like the rest: '' (a cleared textarea) clears the note.
+  // Sliced as a last line of defence — the actions refuse an over-long note
+  // with `adminNoteError` before anything is written.
+  if (formData.has('admin_note')) {
+    out.admin_note = toStr(formData.get('admin_note')).slice(0, ADMIN_NOTE_MAX);
   }
   return out;
 }

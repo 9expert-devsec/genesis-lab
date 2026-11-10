@@ -18,7 +18,7 @@
  *     audit writer, and test/fs/adminPresence holds that on `withImports`.
  *
  * ── WHAT IT CHECKS, AND WHAT IT DOES NOT ────────────────────────────────────
- * `auth()` only: any signed-in admin may stamp their own row — there is no
+ * `getActiveSession()` only: any active admin may stamp their own row — there is no
  * page key for "being here". The filter carries `active: true` so a disabled
  * account's still-valid session stamps nothing (matchedCount 0 is still 204;
  * the client has nothing to do with the answer). No body is read, no
@@ -34,7 +34,7 @@
  * production calls POST → handlePost(req) with the real auth and model.
  */
 import { NextResponse } from 'next/server';
-import { auth as realAuth } from '@/lib/auth/options';
+import { getActiveSession } from '@/lib/auth/assertActiveAdmin';
 import { dbConnect } from '@/lib/db/connect';
 import Admin from '@/models/Admin';
 
@@ -45,7 +45,7 @@ const NO_STORE = { 'cache-control': 'no-store' };
 
 export async function handlePost(_req, deps = {}) {
   const {
-    auth = realAuth,
+    auth = getActiveSession,
     connect = dbConnect,
     updateOne = (filter, update) => Admin.updateOne(filter, update),
     now = () => new Date(),

@@ -7,6 +7,7 @@ import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 import { ProgramOnlineCoursesSection } from '@/components/program/ProgramOnlineCoursesSection';
 import { ProgramArticlesSection } from '@/components/program/ProgramArticlesSection';
 import { PageCatalogButton } from '@/components/ui/PageCatalogButton';
+import { programHeroDescription, resolveHeroTitle } from '@/lib/pageHero';
 
 /**
  * Public program detail page.
@@ -63,11 +64,8 @@ export function ProgramPageClient({
    */
   const roadmapUrl = program?.program_roadmap_url ?? null;
 
-  const description =
-    config?.metaDescription?.trim() ||
-    program?.program_description ||
-    program?.program_teaser ||
-    '';
+  const heroTitle = resolveHeroTitle(config, program?.program_name);
+  const description = programHeroDescription(config, program);
 
   const heroBackground = program?.programcolor
     ? `linear-gradient(135deg, ${program.programcolor}22, ${program.programcolor}55)`
@@ -97,7 +95,7 @@ export function ProgramPageClient({
               )}
               <div>
                 <h1 className="text-3xl font-bold text-9e-navy dark:text-white md:text-4xl">
-                  {program?.program_name}
+                  {heroTitle}
                 </h1>
                 <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
                   กลุ่มหลักสูตร {program?.program_name} มีทั้งหมด{' '}

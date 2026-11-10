@@ -9,11 +9,13 @@ import {
 } from '@/lib/actions/page-configs';
 import { PageCatalogUpload } from '@/components/admin/PageCatalogUpload';
 import { hasCatalog } from '@/lib/pageCatalog';
+import { SEO_DESCRIPTION_GUIDE, seoLengthState } from '@/lib/seo/seoLengths';
 
 /**
  * Generic editor for ProgramPageConfig / SkillPageConfig. Renders a
  * collapsible row per upstream item; expanding reveals the edit form
- * (urlSlug, metaTitle, metaDescription, ogImage, isPublished).
+ * (urlSlug, heroTitle, heroDescription, metaTitle, metaDescription, ogImage,
+ * isPublished).
  *
  * `kind` switches which server action runs; everything else is
  * identical between the two flavours.
@@ -41,7 +43,7 @@ export function PageConfigEditor({ kind, items, configs, urlPrefix }) {
           const config = configById.get(item.id);
           const isOpen = openId === item.id;
           return (
-            <li key={item.id} className="px-4 py-3">
+            <li key={`${kind}:${item.id}`} className="px-4 py-3">
               <Row
                 item={item}
                 config={config}
@@ -116,6 +118,8 @@ function Row({ item, config, urlPrefix, isOpen, onToggle }) {
 function EditForm({ kind, item, config, onSaved }) {
   const [form, setForm] = useState({
     urlSlug: config?.urlSlug ?? '',
+    heroTitle: config?.heroTitle ?? '',
+    heroDescription: config?.heroDescription ?? '',
     metaTitle: config?.metaTitle ?? '',
     metaDescription: config?.metaDescription ?? '',
     ogImage: config?.ogImage ?? '',
@@ -123,6 +127,9 @@ function EditForm({ kind, item, config, onSaved }) {
   });
   const [pending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState(null);
+  // A warning only: past the guide the counter turns amber and the save still
+  // goes through. Graphemes, not .length — see lib/seo/seoLengths.
+  const metaDescriptionLen = seoLengthState(form.metaDescription, SEO_DESCRIPTION_GUIDE);
 
   const update = (key) => (e) =>
     setForm((f) => ({
@@ -158,6 +165,8 @@ function EditForm({ kind, item, config, onSaved }) {
       await action(item.id);
       setForm({
         urlSlug: '',
+        heroTitle: '',
+        heroDescription: '',
         metaTitle: '',
         metaDescription: '',
         ogImage: '',
@@ -180,6 +189,33 @@ function EditForm({ kind, item, config, onSaved }) {
         />
       </Field>
 
+      <Field
+        label="หัวข้อบนหน้าเว็บ (H1)"
+        hint={`เว้นว่าง = ใช้ชื่อ ${kind} — เมนูยังแสดงชื่อสั้นเหมือนเดิม`}
+      >
+        <input
+          type="text"
+          value={form.heroTitle}
+          onChange={update('heroTitle')}
+          placeholder={item.name}
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-9e-navy dark:text-white"
+        />
+      </Field>
+
+      {/* The hint differs because the fallback does: only the program hero
+          falls back to Meta Description. See lib/pageHero. */}
+      <Field
+        label="คำอธิบายบนหน้าเว็บ"
+        hint={kind === 'program' ? 'เว้นว่าง = ใช้ Meta Description' : 'เว้นว่าง = ใช้คำอธิบายของ Skill'}
+      >
+        <textarea
+          value={form.heroDescription}
+          onChange={update('heroDescription')}
+          rows={4}
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-9e-navy dark:text-white"
+        />
+      </Field>
+
       <Field label="Meta Title">
         <input
           type="text"
@@ -189,7 +225,16 @@ function EditForm({ kind, item, config, onSaved }) {
         />
       </Field>
 
-      <Field label="Meta Description">
+      <Field
+        label={
+          <>
+            Meta Description{' '}
+            <span className={metaDescriptionLen.over ? 'text-amber-600 dark:text-amber-400' : undefined}>
+              {metaDescriptionLen.length}/{SEO_DESCRIPTION_GUIDE}
+            </span>
+          </>
+        }
+      >
         <textarea
           value={form.metaDescription}
           onChange={update('metaDescription')}

@@ -1,5 +1,6 @@
 import { getDashboardMetrics } from '@/lib/actions/dashboard';
 import { ADMIN_SCHEDULE_STATUSES, getAllSchedules } from '@/lib/api/schedules';
+import { isClosedRound } from '@/lib/scheduleStatus';
 import { requirePage } from '@/lib/rbac/guard';
 import { dashboardScopes } from '@/lib/dashboard/scopes';
 import { DEFAULT_RANGE, normaliseRange } from '@/lib/dashboard/ranges';
@@ -85,7 +86,11 @@ export default async function Page({ searchParams }) {
    * answer, and DashboardClient draws no tile for it.
    */
   const openSchedulesCount = scopes.system
-    ? (schedulesRes.status === 'fulfilled' ? (schedulesRes.value?.items?.length ?? 0) : 0)
+    ? (schedulesRes.status === 'fulfilled'
+        // `status: all` brings CANCELLED rounds back; a cancelled round is not
+        // an open one, so it is not counted here.
+        ? (schedulesRes.value?.items ?? []).filter((s) => !isClosedRound(s)).length
+        : 0)
     : null;
 
   return (

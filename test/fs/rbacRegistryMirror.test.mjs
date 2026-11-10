@@ -57,6 +57,8 @@ const MIRROR_MAY_OMIT = new Map([
     + 'the dashboard round\'s to make'],
   ['redirects', 'pre-existing drift, measured round E2 — same reason as `media`'],
   ['audit_log', 'pre-existing drift, measured round E2 — same reason as `media`'],
+  ['writers', 'granted per role after deploy, deliberately: seeding it here would hand '
+    + 'the page to every seeded role, which is a permissions decision'],
 ]);
 
 /** The braced literal that follows `const NAME = ` — brackets walked, not regexed. */

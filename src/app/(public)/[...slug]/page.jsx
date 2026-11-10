@@ -73,6 +73,7 @@ import { chipHref, programHref, skillHref } from '@/lib/utils';
 import { listSkills } from '@/lib/api/skills';
 import { getOnlineCourses } from '@/lib/api/online-courses';
 import { getArticles } from '@/lib/actions/articles';
+import { withCardWriters } from '@/lib/writers/writerReads';
 import { PROGRAM_ARTICLE_CARD_FIELDS, PROGRAM_ARTICLE_LIMIT } from '@/lib/articleListFields';
 import { buildProgramNames, buildSkillNames } from '@/lib/articleTaxonomy';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
@@ -288,7 +289,7 @@ async function loadProgram(slug) {
     program, config, courses, earlyBirdMap, faqs,
     skillSlugs: linkability.skillSlugs,
     onlineCourses,
-    articles: articlesRes.items ?? [],
+    articles: await withCardWriters(articlesRes.items),
     articlesTotal: articlesRes.total ?? 0,
     programNames: buildProgramNames(programsRes.items ?? []),
     skillNames: buildSkillNames(skillsRes.items ?? []),
@@ -362,7 +363,7 @@ async function loadSkill(slug) {
     skill, config, coursesByProgram, totalCourses: skillCourses.length, faqs,
     skillSlugs: linkability.skillSlugs,
     onlineCourses,
-    articles: articlesRes.items ?? [],
+    articles: await withCardWriters(articlesRes.items),
     articlesTotal: articlesRes.total ?? 0,
     programNames: buildProgramNames(programsRes.items ?? []),
     skillNames: buildSkillNames(skillsRes.items ?? []),

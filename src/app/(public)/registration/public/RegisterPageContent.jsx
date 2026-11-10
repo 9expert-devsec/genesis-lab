@@ -6,6 +6,7 @@ import {
   listSchedulesByCourse,
 } from '@/lib/api/schedules';
 import { resolveScheduleStatusBatch } from '@/lib/schedule-status';
+import { isClosedRound } from '@/lib/scheduleStatus';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo. The MAP says WHICH round is Early Bird and nothing else:
@@ -138,8 +139,26 @@ export async function RegisterPageContent({ searchParams, step }) {
     getEarlyBirdByCourse(course.course_id).catch(() => null),
   ]);
 
-  // Apply admin status overrides (open → closed, scheduled changes).
-  const resolved = await resolveScheduleStatusBatch(rawSchedules);
+  // Apply admin status overrides (open → closed, scheduled changes), then drop
+  // every CANCELLED round. The PUBLIC fetch never returns MSDB `closed`, but the
+  // local override can still turn a round `closed` — which used to read as เต็ม
+  // through an alias and now reads as the cancelled state, so it must leave the
+  // carousel here rather than arrive looking like an unknown, pickable status.
+  const resolved = (await resolveScheduleStatusBatch(rawSchedules)).filter(
+    (s) => !isClosedRound(s)
+  );
+
+  /**
+   * A `?class=` that names NO round we can offer — cancelled (MSDB `closed`
+   * never arrives on this feed), withdrawn, or bogus. It used to fail closed
+   * SILENTLY (the wizard simply had nothing selected); now the page says so and
+   * links back to the course. It never falls back to another round or to the
+   * upstream signup_url. A round that has STARTED is still in `resolved` and
+   * keeps the wizard's own started-round notice.
+   */
+  const classNotFound =
+    Boolean(initialClassId) &&
+    !resolved.some((s) => String(s?._id ?? '') === initialClassId);
 
   /**
    * THE PARTITION. One clock read, one predicate, two disjoint lists.
@@ -233,7 +252,9 @@ export async function RegisterPageContent({ searchParams, step }) {
         </h1>
       </header>
 
-      {schedules.length === 0 ? (
+      {classNotFound ? (
+        <RoundNotFoundNotice courseDetailHref={courseDetailHref} />
+      ) : schedules.length === 0 ? (
         <EmptyState />
       ) : (
         <RegisterWizard
@@ -253,6 +274,28 @@ export async function RegisterPageContent({ searchParams, step }) {
         />
       )}
     </article>
+  );
+}
+
+/** Shown INSTEAD of the wizard when `?class=` names no offerable round. */
+export const ROUND_NOT_FOUND_MESSAGE = 'ไม่พบรอบอบรมนี้ หรือรอบถูกยกเลิกแล้ว กรุณาเลือกรอบอื่น';
+
+function RoundNotFoundNotice({ courseDetailHref }) {
+  return (
+    <div
+      role="alert"
+      className="rounded-9e-lg border border-dashed border-[var(--surface-border)] px-6 py-12 text-center"
+    >
+      <h2 className="text-xl font-semibold text-[var(--text-primary)]">
+        {ROUND_NOT_FOUND_MESSAGE}
+      </h2>
+      <Link
+        href={courseDetailHref}
+        className="mt-4 inline-block text-sm font-semibold text-9e-action underline"
+      >
+        ดูรอบอบรมอื่นของหลักสูตรนี้
+      </Link>
+    </div>
   );
 }
 

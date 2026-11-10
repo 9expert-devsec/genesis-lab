@@ -9,6 +9,7 @@ import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { getOnlineCourses } from '@/lib/api/online-courses';
 import { listSkills } from '@/lib/api/skills';
 import { getArticles } from '@/lib/actions/articles';
+import { withCardWriters } from '@/lib/writers/writerReads';
 import { PROGRAM_ARTICLE_CARD_FIELDS, PROGRAM_ARTICLE_LIMIT } from '@/lib/articleListFields';
 import { buildProgramNames, buildSkillNames } from '@/lib/articleTaxonomy';
 import { ProgramPageClient } from './_components/ProgramPageClient';
@@ -106,7 +107,7 @@ export default async function ProgramPage({ params }) {
       currentYear={siteCurrentYear()}
       skillSlugs={linkability.skillSlugs}
       onlineCourses={onlineRes.items ?? []}
-      articles={articlesRes.items ?? []}
+      articles={await withCardWriters(articlesRes.items)}
       articlesTotal={articlesRes.total ?? 0}
       programNames={buildProgramNames(programs)}
       skillNames={buildSkillNames(skillsRes.items ?? [])}

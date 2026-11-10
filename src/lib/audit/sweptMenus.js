@@ -59,6 +59,9 @@ export const SWEPT = Object.freeze([
   // those are one audit row with the collateral counted in `meta.alsoTouched`.
   { file: 'src/lib/actions/articles.js', menus: ['articles'] },
 
+  // ── Writers — new code, instrumented from the start. ─────────────────────
+  { file: 'src/lib/actions/writers.js', menus: ['writers'] },
+
   // ── Cache console round 3 — NOT a sweep round, but it adds the first
   //    destructive action outside the sweep and it is instrumented from the
   //    start rather than joining a later round already un-audited.

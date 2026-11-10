@@ -288,6 +288,7 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
   entry('nearby_places',    'nearby_place',    'โรงแรม/ร้านอาหารใกล้เคียง', 'full'),
   entry('featured_reviews', 'featured_review', 'รีวิวแนะนำ', 'full'),
   entry('articles',         'article',         'บทความ', 'full'),
+  entry('writers',          'writer',          'ผู้เขียน', 'full'),
 
   entry('pages', 'builder', 'หน้าเพจ (Page Builder)', 'full'),
   // No row has ever been written for this one — customPages.js has five

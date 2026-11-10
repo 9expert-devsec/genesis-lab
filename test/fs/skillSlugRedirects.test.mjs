@@ -116,9 +116,12 @@ const PAGE_REDIRECT_SOURCES = [
   '/online-course/:path*',
   '/promotion',
   '/rpa-all-courses',
+  // Writer profiles moved to /author on 2026-11-09.
+  '/writer',
+  '/writer/:slug',
 ];
 
-test('the page-level redirect table is EXACTLY these five sources', () => {
+test('the page-level redirect table is EXACTLY these seven sources', () => {
   // An exact set, not a `.some()`: the pre-existing rules
   // (/online-course, /online-course/:path*, /promotion) are load-bearing too,
   // and a subset check would let any of them be deleted in silence. Adding a
@@ -145,7 +148,7 @@ test('CONTROL: deleting a page-level rule reddens, and the filter does not hide 
     .filter((s) => !s.startsWith('/sites/') && !s.startsWith('/images/'))
     .sort();
   assert.notDeepEqual(pageRules, PAGE_REDIRECT_SOURCES);
-  assert.equal(pageRules.length, 4, 'the filter is dropping page rules it should keep');
+  assert.equal(pageRules.length, PAGE_REDIRECT_SOURCES.length - 1, 'the filter is dropping page rules it should keep');
 });
 
 // ── the legacy course-outline batch ────────────────────────────────────────

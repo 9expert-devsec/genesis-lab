@@ -18,6 +18,11 @@ const SkillPageConfigSchema = new mongoose.Schema(
 
     urlSlug: { type: String, default: null, trim: true },
 
+    // The page's own H1 and hero description, separate from the meta tags and
+    // from the short upstream name the menu shows. Empty → see lib/pageHero.
+    heroTitle:       { type: String, default: '' },
+    heroDescription: { type: String, default: '' },
+
     metaTitle:       { type: String, default: '' },
     metaDescription: { type: String, default: '' },
     ogImage:         { type: String, default: '' },

@@ -43,6 +43,9 @@ export async function getScheduleLocals() {
  * by rendering RegistrationSummaryPanel directly with a real summary; nothing
  * needs this to return.
  */
+export async function getScheduleLocalsForAdmin() {
+  throw new Error('stub-schedule-actions: getScheduleLocalsForAdmin must not be called in a render test');
+}
 export async function getRoundRegistrationSummary() {
   throw new Error('stub-schedule-actions: getRoundRegistrationSummary must not be called in a render test');
 }

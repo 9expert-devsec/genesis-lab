@@ -76,7 +76,7 @@ import { siteTodayKey } from '@/lib/articlePublishTime';
 import { McpToolError, SITE_ORIGIN, dropEmpty, publicCourseUrl, withCourseAlias } from '@/lib/mcp/shape';
 import { roundHasEnded, roundHasStarted, roundFirstDayKey, roundLastDayKey } from '@/lib/schedule/roundHasStarted';
 import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';
-import { scheduleStatusLabel } from '@/lib/scheduleStatus';
+import { isClosedRound, scheduleStatusLabel } from '@/lib/scheduleStatus';
 import { isHiddenCourse } from '@/lib/courses/hiddenCourses';
 
 export const LIST_TRAINING_ROUNDS_DESCRIPTION =
@@ -206,6 +206,11 @@ export async function listTrainingRounds(input, deps) {
     }
     if (isHiddenCourse(hidden, row.course.course_id)) continue;
 
+    // A CANCELLED round (MSDB `closed`) is not a round a customer can be told
+    // about at all — `status=all` (1) brings it back, so it is dropped here,
+    // before any other rule, and never emitted in any form.
+    if (isClosedRound(row)) continue;
+
     const days = dayKeys(row.dates);
     // A round with no usable date is a data fault, not a round. It cannot be
     // placed on either side of today, so it is dropped rather than guessed at.
@@ -234,7 +239,8 @@ export async function listTrainingRounds(input, deps) {
         last_day: roundLastDayKey(row.dates),
         delivery: row.type ?? null,
         in_progress: started,
-        registration_open: started ? false : row.status !== 'full',
+        // `isClosedRound` is belt-and-braces: closed rows were dropped above.
+        registration_open: started ? false : row.status !== 'full' && !isClosedRound(row),
         // (2) — a started round's stored status is stale by construction and is
         // never emitted. Only a future round's status is worth a word.
         status: started ? null : scheduleStatusLabel(row.status),

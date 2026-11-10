@@ -8,19 +8,18 @@ import { readSource } from '../sourceScan.mjs';
  * The writer (`sidecarSetFields`) reads PRESENCE, so which keys the form carries
  * is the whole contract:
  *
- *   max_seats       SENT, unconditionally, blank included — the admin can set
- *                   the cap AND clear it back to ไม่จำกัด.
- *   price_override  SENT, unconditionally, blank included — same rule, and it
- *                   additionally feeds resolveCheckoutPricing and the Omise
- *                   charge.
+ *   admin_note      SENT, unconditionally, blank included — หมายเหตุ, on screen.
+ *   max_seats       NOT SENT AT ALL (input hidden 2026-11-09). The 8 stored
+ *                   seat counts must be left alone.
+ *   price_override  NOT SENT AT ALL (input hidden 2026-11-09; 0 rows use it).
+ *                   Its public readers — resolveCheckoutPricing, the Omise
+ *                   charge — are unchanged.
  *   instructor_ids  NOT SENT AT ALL. It has no input on this form, so the form
  *                   has no opinion, and the 4 stored rosters must be left alone.
  *
- * `max_seats` was briefly removed from this modal and is BACK: "keep max_seats"
- * meant the admin must still be able to ENTER it, not merely that the stored
- * number survives. The 5 stored seat counts were never at risk — the
- * presence-based writer is what guarantees that — so restoring it was re-adding
- * an input, with no data to recover.
+ * History: `max_seats` was once removed, restored as "wanted for in-house
+ * quotations", and is now hidden again by an explicit decision after a grep of
+ * src/ found no reader of it outside /admin/schedules.
  *
  * ── WHY A SOURCE GUARD AND NOT A RENDER ASSERTION ───────────────────────────
  * The payload is built inside `submitNow`, a click handler on a component that
@@ -66,71 +65,36 @@ test('the modal writes NO instructor_ids key into its submit payload', () => {
   );
 });
 
-test('it DOES write max_seats and price_override, the two inputs on screen', () => {
-  /**
-   * The positive half, and load-bearing rather than symmetric.
-   *
-   * `max_seats` was briefly removed from this modal and is BACK — the admin
-   * must be able to ENTER a seat cap, not merely have the stored number
-   * survive. `price_override` never left, and additionally has live PUBLIC
-   * readers (the registration wizard's per-round price) and decides the amount
-   * charged through Omise (lib/registration/resolve-price.js).
-   *
-   * With the writer treating an absent key as "leave alone", a modal that
-   * stopped sending either would render an input that silently does nothing.
-   */
+/*
+ * ── 2026-11-09: THE "ข้อมูลเฉพาะ Genesis" BLOCK IS HIDDEN ─────────────────────
+ * Decision: hide the per-round price input (0 rows use it) and — because a grep
+ * of src/ found no `max_seats` reader outside /admin/schedules — the seat input
+ * too. UI only. The three tests that pinned those inputs ON SCREEN and SENT are
+ * replaced by their inverse: neither key is sent at all, so the presence-based
+ * writer leaves the 8 stored seat counts (and any price) exactly as they are.
+ * `admin_note` (หมายเหตุ) takes the block's place and IS sent, unconditionally.
+ */
+
+test('the modal sends NEITHER max_seats NOR price_override — the stored values survive', () => {
   const keys = formDataKeys(readSource(MODAL).code);
-  assert.equal(keys.has('max_seats'), true, `${MODAL} no longer sends max_seats at all`);
-  assert.equal(keys.has('price_override'), true, `${MODAL} no longer sends price_override at all`);
+  assert.equal(keys.has('max_seats'), false, `${MODAL} sends max_seats — even blank, that nulls a stored seat count`);
+  assert.equal(keys.has('price_override'), false, `${MODAL} sends price_override — even blank, that nulls a stored price`);
 });
 
-test('BOTH are sent UNCONDITIONALLY, so a cleared box can reset either', () => {
-  /**
-   * A field an admin can SET must be one they can UNSET. The retired shapes
-   * were `if (maxSeats) fd.set(…)` and `if (priceOverride !== '') fd.set(…)`.
-   * Those guards were harmless while the writer clobbered everything — a
-   * missing key nulled the field, which happened to be what clearing the box
-   * meant. Now that an absent key means "leave alone", either guard would make
-   * its field settable but never removable: clearing จำนวนที่นั่ง would fail to
-   * restore ไม่จำกัด, and clearing ราคาต่อท่าน would fail to restore the
-   * course's normal price. Both sets must be unguarded.
-   */
+test('the seat and price INPUTS are gone from the JSX', () => {
   const code = readSource(MODAL).code;
-
-  assert.match(
-    code,
-    /(?<!\)\s*)fd\.set\(\s*['"]max_seats['"]\s*,\s*maxSeats\s*\)/,
-    'max_seats must be set unconditionally, not behind an emptiness guard',
-  );
-  assert.match(
-    code,
-    /(?<!\)\s*)fd\.set\(\s*['"]price_override['"]\s*,\s*priceOverride\s*\)/,
-    'price_override must be set unconditionally, not behind an emptiness guard',
-  );
-
-  // The two retired guards, named so the probe fires on the real regression.
-  assert.equal(
-    /if\s*\([^)]*maxSeats[^)]*\)\s*fd\.set/.test(code),
-    false,
-    'the `if (maxSeats)` guard is back — a cleared seat count would no longer clear',
-  );
-  assert.equal(
-    /if\s*\([^)]*priceOverride[^)]*\)\s*fd\.set/.test(code),
-    false,
-    "the `!== ''` guard is back — a cleared price would no longer reset the round",
-  );
+  assert.equal(/setMaxSeats|setPriceOverride|value=\{maxSeats\}|value=\{priceOverride\}/.test(code), false,
+    'a seat or price input (or its state) is still in the modal');
+  assert.equal(code.includes('ข้อมูลเฉพาะ Genesis (ไม่ส่งไป MSDB)'), false, 'the hidden section heading is still rendered');
 });
 
-test('the max_seats INPUT is back in the JSX, wired to its state', () => {
-  /**
-   * A payload guard alone would pass on a modal that sends `maxSeats` from a
-   * state nothing can edit — the field would be permanently whatever it loaded
-   * as, which is the failure C1 exists to undo.
-   */
+test('admin_note is sent UNCONDITIONALLY from a textarea bound to its state', () => {
   const code = readSource(MODAL).code;
-  assert.match(code, /const \[maxSeats, setMaxSeats\] = useState\(/, 'the จำนวนที่นั่ง state is missing');
-  assert.match(code, /value=\{maxSeats\}/, 'no input is bound to it');
-  assert.match(code, /onChange=\{\(e\) => setMaxSeats\(e\.target\.value\)\}/, 'the input cannot be typed into');
+  assert.ok(formDataKeys(code).has('admin_note'), 'the note is not in the submit payload');
+  assert.match(code, /(?<!\)\s*)fd\.set\(\s*['"]admin_note['"]\s*,\s*adminNote\s*\)/, 'admin_note must be set unconditionally');
+  assert.match(code, /<textarea[\s\S]*?value=\{adminNote\}/, 'no textarea is bound to the note');
+  assert.match(code, /setAdminNote\(e\.target\.value\)/, 'the textarea cannot be typed into');
+  assert.match(code, /หมายเหตุ/);
 });
 
 test('the วิทยากร input is really gone from the JSX, not just from submit', () => {
@@ -188,7 +152,7 @@ test('CONTROL: the key extractor DOES find the keys the modal really sends', () 
    * probe is proved to see the keys that ARE there.
    */
   const keys = formDataKeys(readSource(MODAL).code);
-  for (const present of ['course_id', 'dates_json', 'status', 'type', 'signup_url', 'schedule_id']) {
+  for (const present of ['course_id', 'dates_json', 'status', 'type', 'signup_url', 'schedule_id', 'admin_note']) {
     assert.ok(keys.has(present), `the extractor missed "${present}" — it is not reading the payload`);
   }
   assert.ok(keys.size >= 6);
@@ -201,23 +165,11 @@ test('CONTROL: the extractor DOES fire on a reintroduced roster key', () => {
   assert.ok(formDataKeys("fd.set('instructor_ids', '');").has('instructor_ids'));
 });
 
-test('CONTROL: the guard probes DO fire on the two retired shapes', () => {
-  /**
-   * The unconditional-send assertions are two absences and one match each. The
-   * absences are proved against the real retired lines, so "no guard" cannot
-   * pass by the probe simply never matching anything.
-   */
-  const guardedSeats = "if (maxSeats) fd.set('max_seats', maxSeats);";
-  const guardedPrice = "if (priceOverride !== '') fd.set('price_override', priceOverride);";
-  assert.ok(/if\s*\([^)]*maxSeats[^)]*\)\s*fd\.set/.test(guardedSeats), 'the seats-guard probe is blind');
-  assert.ok(/if\s*\([^)]*priceOverride[^)]*\)\s*fd\.set/.test(guardedPrice), 'the price-guard probe is blind');
-
-  // …and do NOT fire on the unguarded form the modal actually ships.
-  assert.equal(/if\s*\([^)]*maxSeats[^)]*\)\s*fd\.set/.test("fd.set('max_seats', maxSeats);"), false);
-  assert.equal(
-    /if\s*\([^)]*priceOverride[^)]*\)\s*fd\.set/.test("fd.set('price_override', priceOverride);"),
-    false,
-  );
+test('CONTROL: the extractor DOES fire on a reintroduced seat or price key', () => {
+  // The two lines this round removed. If the extractor could not see them, the
+  // "sends NEITHER" assertion above would pass vacuously.
+  assert.ok(formDataKeys("fd.set('max_seats', maxSeats);").has('max_seats'));
+  assert.ok(formDataKeys("fd.set('price_override', priceOverride);").has('price_override'));
 });
 
 test('CONTROL: the sweep is reading real code, not an empty string', () => {

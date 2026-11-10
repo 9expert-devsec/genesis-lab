@@ -5,6 +5,7 @@ import RegisterPublic from '@/models/RegisterPublic';
 import { publicRegistrationSchema } from '@/lib/schemas/register-public';
 import { sendPublicRegistrationEmails } from '@/lib/email/template-senders/public-registration';
 import { resolveScheduleStatus } from '@/lib/schedule-status';
+import { checkRegistrableRound } from '@/lib/registration/roundGuard';
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { buildAttendees, buildQuoteRegistration } from '@/lib/registration/build-public';
 import { requestMetaFor } from '@/lib/registration/requestMeta';
@@ -66,6 +67,14 @@ export async function POST(req) {
       { error: 'schedule_closed', message: 'รอบนี้ปิดรับสมัครแล้ว' },
       { status: 409 }
     );
+  }
+
+  // The round itself, read FRESH from MSDB: a cancelled (`closed`) round, a
+  // round the course does not have, or a failed read all refuse here — before
+  // anything is written. See lib/registration/roundGuard.js.
+  const roundCheck = await checkRegistrableRound(data);
+  if (!roundCheck.ok) {
+    return NextResponse.json(roundCheck.body, { status: roundCheck.status });
   }
 
   const headersList = await headers();

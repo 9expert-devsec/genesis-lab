@@ -182,6 +182,19 @@ const nextConfig = {
         destination: '/refund-policy',
         permanent: true,
       },
+      // Writer profiles moved from /writer to /author (2026-11-09). Here, not in
+      // the Redirect Panel, for the reason this function's header gives. A query
+      // string such as ?page=2 is carried over by Next.
+      {
+        source: '/writer',
+        destination: '/author',
+        permanent: true,
+      },
+      {
+        source: '/writer/:slug',
+        destination: '/author/:slug',
+        permanent: true,
+      },
 
       // ── LEGACY COURSE-OUTLINE PDFs → THE CURRENT DOCUMENT ─────────────────
       //

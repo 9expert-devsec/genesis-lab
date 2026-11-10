@@ -11,7 +11,7 @@ import mongoose from 'mongoose';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Article from '@/models/Article';
-import { articleSchema } from '@/lib/schemas/article';
+import { articleSchema, articleUpdateSchema } from '@/lib/schemas/article';
 import { parseArticleFormData } from '@/lib/articleFormPayload';
 import { toSelectString } from '@/lib/articleListFields';
 import {
@@ -31,6 +31,9 @@ import { isUnsetKeyword, normalizeForMatch, parseFocusKeywords } from '@/lib/seo
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo.
 import { searchTermPattern } from '@/lib/searchTerm';
+import { joinWriterNames, planArticleWriters } from '@/lib/writers/articleWriters';
+import { castWriterIds } from '@/lib/writers/castWriterIds';
+import { readDefaultWriter, readWritersForSave } from '@/lib/writers/writerReads';
 
 const ADMIN_PATH  = '/admin/articles';
 const PUBLIC_PATH = '/articles';
@@ -97,6 +100,7 @@ function articleFields(doc) {
     title:             doc.title,
     excerpt:           doc.excerpt,
     author:            doc.author,
+    writerIds:         doc.writerIds ?? [],
     articleType:       doc.articleType,
     active:            doc.active,
     publishedAt:       doc.publishedAt,
@@ -190,6 +194,8 @@ function bustCaches(slug) {
 function firstZodMessage(error) {
   const issue = error?.issues?.[0] ?? error?.errors?.[0];
   if (!issue) return 'รูปแบบข้อมูลไม่ถูกต้อง';
+  // Already a sentence for the admin, and no input on the form is called this.
+  if (issue.path?.[0] === 'writerIds') return issue.message;
   const path = issue.path?.join('.') || 'field';
   return `${path}: ${issue.message}`;
 }
@@ -215,6 +221,7 @@ export async function getArticles({
   articleType = '', // 'article' | 'video' | '' (all)
   active,
   select = '',
+  writer = '', // a writer's _id
 } = {}) {
   await dbConnect();
 
@@ -227,6 +234,7 @@ export async function getArticles({
   // in the commit before this one — the measurement lives beside it).
   if (skill)       filter.skills      = String(skill);
   if (articleType) filter.articleType = String(articleType);
+  if (writer)      filter.writerIds   = String(writer);
   /**
    * ESCAPED, AND THIS IS THE SITE THAT WAS CRASHING PRODUCTION.
    *
@@ -410,7 +418,16 @@ export async function findArticlesSharingFocusKeyword(focusKeyword, excludeId) {
 
 // ── mutations ────────────────────────────────────────────────────
 
-function buildModelData(data) {
+/** The writers this save may store, or the refusal. Needs a connection. */
+async function resolveArticleWriters(ids, { creating = false } = {}) {
+  const [found, defaultWriter] = await Promise.all([
+    readWritersForSave(ids),
+    creating && ids.length === 0 ? readDefaultWriter() : null,
+  ]);
+  return planArticleWriters({ ids, found, defaultWriter, creating });
+}
+
+function buildModelData(data, writers) {
   // ObjectId-cast relatedArticles so Mongo accepts them; silently
   // drop anything that isn't a valid 24-char id.
   const relatedArticles = (data.relatedArticles || [])
@@ -420,6 +437,10 @@ function buildModelData(data) {
   const out = {
     ...data,
     relatedArticles,
+    writerIds: castWriterIds(writers.map((writer) => writer._id)),
+    // COMPAT, GOES AWAY IN ROUND 4. Production still renders `author` and shares
+    // this database, so every save keeps the text in step with the writers.
+    author: joinWriterNames(writers),
     // Sanitised on the way IN, not just at render: a server action is a POST
     // endpoint, and the client-side editor is not a trust boundary — see
     // lib/sanitizeRichHtml.js. The render path (ArticleDetailClient via
@@ -464,6 +485,9 @@ export async function createArticle(formData) {
     return { ok: false, error: firstZodMessage(parsed.error) };
   }
 
+  const resolved = await resolveArticleWriters(parsed.data.writerIds, { creating: true });
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+
   // A new article goes to the TOP — max + GAP, regardless of `publishedAt`.
   // Backdating the publish date must not bury a new article: "I wrote it and I
   // can't find it" is the worst outcome this ordering can produce, and dragging
@@ -485,7 +509,7 @@ export async function createArticle(formData) {
 
   try {
     const doc = await Article.create({
-      ...buildModelData(parsed.data),
+      ...buildModelData(parsed.data, resolved.writers),
       sortKey,
       createdAt: now,
       contentUpdatedAt: now,
@@ -522,13 +546,16 @@ export async function updateArticle(id, formData) {
   await dbConnect();
 
   const raw = parseArticleFormData(formData);
-  const parsed = articleSchema.safeParse(raw);
+  const parsed = articleUpdateSchema.safeParse(raw);
   if (!parsed.success) {
     return { ok: false, error: firstZodMessage(parsed.error) };
   }
 
   try {
-    const data = buildModelData(parsed.data);
+    const resolved = await resolveArticleWriters(parsed.data.writerIds);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+
+    const data = buildModelData(parsed.data, resolved.writers);
 
     // contentUpdatedAt moves only when title/excerpt/content/coverUrl actually
     // differ (src/lib/articles/contentChanged.js). That needs the stored values
@@ -1129,7 +1156,7 @@ export async function getFeaturedArticlesForLanding(limit = 6) {
     // renders no taxonomy at all, which is indistinguishable from an article
     // that simply has none. `tags` stays: the field is untouched and still
     // searched, it is just no longer what the card displays.
-    .select('slug title excerpt coverUrl tags articleType publishedAt programs skills')
+    .select('slug title excerpt coverUrl tags articleType publishedAt programs skills writerIds')
     .lean();
   return serialize(docs);
 }

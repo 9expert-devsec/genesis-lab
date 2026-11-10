@@ -2,7 +2,7 @@ import { ADMIN_SCHEDULE_STATUSES, listSchedules } from '@/lib/api/schedules';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
-import { getScheduleLocals } from '@/lib/actions/schedules';
+import { getScheduleLocalsForAdmin } from '@/lib/actions/schedules';
 import { listInstructorsForAdmin } from '@/lib/actions/instructors';
 import { requirePage } from '@/lib/rbac/guard';
 import { siteTodayKey } from '@/lib/articlePublishTime';
@@ -117,7 +117,8 @@ export default async function AdminSchedulesPage({ searchParams }) {
   const instructors =
     instructorRes.status === 'fulfilled' ? instructorRes.value : [];
 
-  const scheduleLocals = await getScheduleLocals();
+  // The ADMIN read — the only one that carries `admin_note` (หมายเหตุ).
+  const scheduleLocals = await getScheduleLocalsForAdmin();
 
   return (
     <div>

@@ -32,7 +32,7 @@
  *
  * Derived from what ArticlesAdminClient renders plus what its two pure helpers
  * read, NOT from what looks useful:
- *   · the table columns          — slug, title, author, tags, articleType,
+ *   · the table columns          — slug, title, author, writerIds, tags, articleType,
  *                                  active, featuredOnLanding, publishedAt
  *   · OrderCell                  — isPinnedOnArticlePage, pinOrder, sortKey,
  *                                  showPinBadge
@@ -72,7 +72,7 @@
  * reaches through an import in a shape the scanner cannot see.
  */
 export const ADMIN_LIST_FIELDS =
-  '_id slug title author tags articleType active featuredOnLanding ' +
+  '_id slug title author writerIds tags articleType active featuredOnLanding ' +
   'publishedAt createdAt isPinnedOnArticlePage pinOrder sortKey showPinBadge';
 
 /**
@@ -91,7 +91,13 @@ export const ADMIN_LIST_FIELDS =
  * in production.
  */
 export const PUBLIC_LIST_FIELDS =
-  '_id slug title excerpt coverUrl tags articleType publishedAt';
+  '_id slug title excerpt coverUrl tags articleType publishedAt writerIds';
+
+/**
+ * What makes an article public, as /articles asks for it. Counting writers' articles
+ * uses this too, so a profile cannot claim an article the list would not show.
+ */
+export const PUBLIC_ARTICLE_FILTER = Object.freeze({ active: true });
 
 /**
  * Normalise a projection to the space-joined string `.select()` wants.
@@ -154,9 +160,19 @@ export function toFieldList(spec) {
  *
  * NOT LISTED, deliberately: `pinOrder` and `sortKey`. They order the result and
  * the sort runs in the database, so nothing renders them.
+ *
+ * `writerIds` feeds the card's byline, through one batched read per page
+ * (withCardWriters in lib/writers/writerReads).
  */
 export const PROGRAM_ARTICLE_CARD_FIELDS =
-  '_id slug title excerpt coverUrl programs skills';
+  '_id slug title excerpt coverUrl programs skills writerIds';
+
+/**
+ * The profile page's grid renders ArticleCard, which also draws the pin badge, so
+ * this carries the two fields shouldShowPinBadge reads.
+ */
+export const WRITER_ARTICLE_CARD_FIELDS =
+  `${PROGRAM_ARTICLE_CARD_FIELDS} isPinnedOnArticlePage showPinBadge`;
 
 /**
  * How many related articles a program page shows: 8, two full rows of the

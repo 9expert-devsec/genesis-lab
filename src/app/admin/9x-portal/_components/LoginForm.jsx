@@ -7,6 +7,8 @@ import { adminLogin } from '@/lib/actions/auth';
 
 const initialState = { error: null, require2fa: false };
 
+const INACTIVE_MESSAGE = 'บัญชีนี้ถูกปิดการใช้งาน กรุณาติดต่อผู้ดูแลระบบ';
+
 /**
  * ══ THE FIELD TREATMENT, AS A cva VARIANT RATHER THAN A className OVERRIDE ══
  *
@@ -91,7 +93,7 @@ const field = cva(
  * and `isPending` come straight out of useActionState, and BOTH steps read the
  * same two, so the OTP step gets the same four states as the first.
  */
-export function LoginForm() {
+export function LoginForm({ inactive = false }) {
   const [state, formAction, isPending] = useActionState(
     adminLogin,
     initialState
@@ -104,6 +106,9 @@ export function LoginForm() {
 
   const otpInputRef = useRef(null);
   const isOtpStep = state?.require2fa === true;
+  // `inactive` is why they landed here. Once they submit, the action's answer
+  // is the one that matters.
+  const errorMessage = state?.error ?? (inactive && !isOtpStep ? INACTIVE_MESSAGE : null);
 
   // When the action returns require2fa for the first time, focus the
   // OTP input. Stays in step 2 if the user fat-fingers the OTP.
@@ -155,13 +160,13 @@ export function LoginForm() {
         the exception is exactly one hue, on the text and its icon, and nothing
         else on the page.
       */}
-      {state?.error && (
+      {errorMessage && (
         <div
           role="alert"
           className="flex items-start gap-2.5 rounded-9e-md border border-9e-border bg-9e-card px-4 py-3"
         >
           <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-400" aria-hidden />
-          <p className="text-sm text-red-400">{state.error}</p>
+          <p className="text-sm text-red-400">{errorMessage}</p>
         </div>
       )}
 

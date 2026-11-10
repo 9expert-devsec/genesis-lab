@@ -6,6 +6,7 @@ import { listPublicCourses } from '@/lib/api/public-courses';
 import { requirePage } from '@/lib/rbac/guard';
 import { RecordHistory } from '@/components/audit/RecordHistory';
 import { articleListQuery } from '@/lib/articles/adminListQuery';
+import { readWriterOptions } from '@/lib/writers/writerReads';
 import { ArticleForm } from '../../_components/ArticleForm';
 
 export const metadata = { title: 'แก้ไขบทความ' };
@@ -38,6 +39,7 @@ export default async function EditArticlePage({ params, searchParams }) {
     listPublicCourses({ includeHidden: true }).catch(() => ({ items: [] })),
   ]);
   if (!article) notFound();
+  const writerOptions = await readWriterOptions(article.writerIds);
   const isSuperAdmin = session?.user?.isSuperadmin ?? false;
 
   const programs = (programsRes.items ?? []).map((p) => ({
@@ -63,6 +65,7 @@ export default async function EditArticlePage({ params, searchParams }) {
       isSuperAdmin={isSuperAdmin}
       pinCapacity={pinCapacity}
       listQuery={listQuery}
+      writerOptions={writerOptions}
       /*
         ── THE HISTORY PANEL IS A SLOT NOW, NOT A BLOCK BELOW THE FORM ───────
         It was `<div className="mx-auto mt-6 max-w-7xl">` after `<ArticleForm>`,

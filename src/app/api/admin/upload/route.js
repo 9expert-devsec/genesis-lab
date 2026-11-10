@@ -18,7 +18,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/options';
+import { getActiveSession } from '@/lib/auth/assertActiveAdmin';
 import { uploadToCloudinary } from '@/lib/cloudinary';
 import { checkUpload } from '@/lib/uploads/uploadRules';
 
@@ -59,6 +59,9 @@ const ALLOWED_FOLDERS = new Set([
   // the worst failure available here. It also carries its own, stricter rules
   // (see uploadRules.js): JPG/PNG/WebP only, no SVG, no PDF, 2 MB.
   'avatars',
+  // Writer profile photos, already cropped to a square in the browser. Same
+  // reason and same rules as 'avatars'.
+  'writers',
   // Logos of custom PRIVATE programs/skills (/admin/courses/private-taxonomy).
   // Same reason as 'avatars': unlisted, the upload "succeeds" into `uploads`.
   // Default rule (image or PDF, 5 MB); the field's file picker asks for images.
@@ -67,7 +70,7 @@ const ALLOWED_FOLDERS = new Set([
 ]);
 
 export async function POST(req) {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

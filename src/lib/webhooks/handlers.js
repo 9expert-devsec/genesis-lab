@@ -24,6 +24,7 @@ import {
   planCourseRevalidation,
 } from '@/lib/webhooks/courseRevalidatePlan';
 import { assessSchedulePublicVisibility } from '@/lib/webhooks/schedulePublicVisibility';
+import { refreshRoundCachesOutsideTags } from '@/lib/schedule/scheduleRoundCacheRefresh';
 
 // ── shared utils (mirror the sync libs) ─────────────────────────────
 
@@ -148,7 +149,8 @@ export async function handleCourseEvent(event, data, deps = {}) {
   return { revalidated };
 }
 
-export async function handleScheduleEvent(event, data) {
+export async function handleScheduleEvent(event, data, deps = {}) {
+  const { refreshRoundCaches = refreshRoundCachesOutsideTags } = deps;
   // Genesis does not cache schedules in Mongo — public pages call
   // listSchedulesByCourse() with ISR (30-min revalidate + 'schedules'
   // tag). Same revalidation for create/update/delete; `event` is read only to
@@ -168,9 +170,21 @@ export async function handleScheduleEvent(event, data) {
   // nothing, so WebhookLog.revalidated was null while status said "ok", and the
   // log attested "processed" without saying what it touched.
   track(safeRevalidateTag('schedules'));
+  // The PER-COURSE tag too — listSchedulesByCourse (course cards, the detail
+  // page, the registration page, landing) caches under `schedules:course:<oid>`
+  // and the bare `schedules` tag never reached it, so a round closed upstream
+  // lingered on those for up to 30 min. Same tag the admin save busts. The
+  // course ref arrives as an ObjectId string or a populated `{ _id }`.
+  const courseOid =
+    toStr(data?.course?._id) ||
+    (typeof data?.course === 'string' ? toStr(data.course) : '');
+  if (courseOid) track(safeRevalidateTag(`schedules:course:${courseOid}`));
   const path = coursePathFromId(courseId);
   if (path) track(safeRevalidate(path));
   track(safeRevalidate('/search'));
+  // The two non-tag caches holding rounds: the in-process /search corpus and
+  // landing_cache. See lib/schedule/scheduleRoundCacheRefresh.js.
+  await refreshRoundCaches();
 
   // Will this row actually be visible to us? Upstream's /schedules endpoint
   // filters rows out silently (docs/api-domains.md:276-278), so a perfectly

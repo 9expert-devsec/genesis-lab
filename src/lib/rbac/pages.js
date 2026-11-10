@@ -149,6 +149,7 @@ export const ADMIN_PAGES = [
     group: 'เนื้อหา',
     pages: [
       { key: 'articles',      label: 'บทความ',           href: '/admin/articles',      match: 'prefix' },
+      { key: 'writers',       label: 'ผู้เขียน',          href: '/admin/writers',       match: 'prefix' },
       { key: 'promotions',    label: 'โปรโมชั่น',        href: '/admin/promotions',    match: 'prefix' },
       { key: 'pages',         label: 'จัดการหน้าเพจ',    href: '/admin/pages',         match: 'prefix' },
       { key: 'about',         label: 'เกี่ยวกับเรา',     href: '/admin/about',         match: 'prefix' },

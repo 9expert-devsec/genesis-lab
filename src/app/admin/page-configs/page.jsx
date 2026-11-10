@@ -71,8 +71,13 @@ export default async function PageConfigsAdmin({ searchParams }) {
         ))}
       </div>
 
+      {/* THE KEYS ARE LOAD-BEARING. Both editors sit at the same tree position
+          and a program and a skill can share a code (`DEV` is both), so without
+          them the open row and its form survive the tab switch, and a save
+          writes one kind's values onto the other. */}
       {tab === 'programs' ? (
         <PageConfigEditor
+          key="program"
           kind="program"
           items={programs}
           configs={programConfigs}
@@ -80,6 +85,7 @@ export default async function PageConfigsAdmin({ searchParams }) {
         />
       ) : (
         <PageConfigEditor
+          key="skill"
           kind="skill"
           items={skills}
           configs={skillConfigs}

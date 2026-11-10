@@ -64,6 +64,11 @@ export const STUBS = {
   // only compares app-source stubs, leaves it alone: there is no export set to
   // compare, the real module has none.
   "server-only": path.join(ROOT, "test", "stub-server-only.mjs"),
+  // Every guard calls this, and the real one reads Mongo. Same reasoning as
+  // `@/lib/actions/auth`: tests drive the guards with fake ids and the session
+  // from fakeDb. test/pure/activeAdminGuard reaches the real module by relative
+  // path, which is the one specifier this key does not catch.
+  "@/lib/auth/assertActiveAdmin": path.join(ROOT, "test", "stub-active-admin.mjs"),
   // PreviewGate calls useActionState (React 19; installed React is 18.3.1) and
   // imports an action whose graph reaches the db layer. See the stub for what
   // stubbing it costs and what covers the gap.

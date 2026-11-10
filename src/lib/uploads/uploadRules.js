@@ -47,7 +47,7 @@ export const DEFAULT_RULE = Object.freeze({
 });
 
 /**
- * Folders that deviate. One entry today; the shape is what matters.
+ * Folders that deviate. The shape is what matters.
  *
  * `avatars` is the strictest surface on this endpoint and deliberately so — it
  * is the only one whose output is rendered inside the admin panel's own chrome,
@@ -64,14 +64,20 @@ export const DEFAULT_RULE = Object.freeze({
  *   · 2 MB, not 5. A 2 MB photograph is already far larger than a 512px avatar
  *     needs, and the cap is the only backstop — there is no `sharp` in this
  *     repo and nothing resizes server-side.
+ *
+ * `writers` is the same rule, shared rather than copied: a writer's photo is the
+ * same kind of file, and the admin form and the crop dialog read it client-side.
  */
+const PROFILE_PHOTO_RULE = Object.freeze({
+  maxBytes: 2 * MB,
+  accept: (type) => type === 'image/jpeg' || type === 'image/png' || type === 'image/webp',
+  typeError: 'รูปโปรไฟล์รองรับเฉพาะ JPG, PNG หรือ WebP',
+  sizeError: 'ไฟล์ใหญ่เกินไป (สูงสุด 2 MB)',
+});
+
 export const FOLDER_RULES = Object.freeze({
-  avatars: Object.freeze({
-    maxBytes: 2 * MB,
-    accept: (type) => type === 'image/jpeg' || type === 'image/png' || type === 'image/webp',
-    typeError: 'รูปโปรไฟล์รองรับเฉพาะ JPG, PNG หรือ WebP',
-    sizeError: 'ไฟล์ใหญ่เกินไป (สูงสุด 2 MB)',
-  }),
+  avatars: PROFILE_PHOTO_RULE,
+  writers: PROFILE_PHOTO_RULE,
 });
 
 /** The rule for a folder — its own, or the pre-existing default. */

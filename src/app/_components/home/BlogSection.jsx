@@ -7,6 +7,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { ExternalLink, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSwipe } from '@/hooks/useSwipe';
+import { ArticleCardByline } from '@/components/articles/ArticleCardByline';
 import { ProgramOverlay, SkillChips } from '@/components/articles/ArticleTaxonomyChips';
 import { clampSlideIndex, perPageForWidth } from '@/lib/blogSliderLayout';
 
@@ -39,6 +40,7 @@ export function BlogSection({ articles = [], programNames = {}, skillNames = {} 
     // ArticleCard on /articles, resolved through the shared name maps.
     programs:  Array.isArray(a.programs) ? a.programs : [],
     skills:    Array.isArray(a.skills) ? a.skills : [],
+    writers:   Array.isArray(a.writers) ? a.writers : [],
     title:     a.title ?? '',
     excerpt:   a.excerpt ?? '',
     thumbnail: a.coverUrl && a.coverUrl.trim() !== ''
@@ -314,6 +316,8 @@ export function BlogCard({ blog, programNames = {}, skillNames = {} }) {
             384px there: 25% narrower, and a third chip wraps. */}
         <SkillChips ids={blog.skills} names={skillNames} cap={2} />
       </div>
+
+      <ArticleCardByline writers={blog.writers} />
     </article>
   );
 }

@@ -53,6 +53,7 @@ export const RESERVED_PATHS = Object.freeze([
   // ── app-router tree: src/app/(public) ────────────────────────────────────
   { segment: 'about-us', source: 'tree' },
   { segment: 'articles', source: 'tree' },
+  { segment: 'author', source: 'tree' },
   { segment: 'career-path-project', source: 'tree' },
   { segment: 'career-path-register', source: 'tree' },
   { segment: 'contact-us', source: 'tree' },
@@ -96,6 +97,8 @@ export const RESERVED_PATHS = Object.freeze([
   { segment: 'online-course', source: 'redirect' },
   { segment: 'promotion', source: 'redirect' },
   { segment: 'rpa-all-courses', source: 'redirect' },
+  // Writer profiles' old prefix, now a permanent redirect to /author.
+  { segment: 'writer', source: 'redirect' },
   // The legacy course-outline redirects (src/lib/legacyOutlineRedirects.mjs).
   // 162 rules, but only TWO segments: this list compares the FIRST segment
   // only, and every one of those sources is /sites/default/files/… or

@@ -29,7 +29,9 @@ export const metadata = {
  * panel collapses to a fixed-height header (200px, 240px from `sm`) with the
  * form filling the rest. That is a height change, not a second layout.
  */
-export default function Page() {
+export default async function Page({ searchParams }) {
+  const { error } = (await searchParams) ?? {};
+
   return (
     <div className="min-h-dvh bg-9e-navy lg:grid lg:grid-cols-[45fr_55fr]">
 
@@ -250,7 +252,7 @@ export default function Page() {
       {/* ══ RIGHT — the form ════════════════════════════════════════════════ */}
       <main className="flex items-center justify-center px-6 py-12 lg:px-12 lg:py-16">
         <div className="w-full max-w-[420px]">
-          <LoginForm />
+          <LoginForm inactive={error === 'inactive'} />
 
           <p className="mt-8 text-center">
             <Link

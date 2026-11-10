@@ -26,6 +26,7 @@ import {
   toggleArticleFeaturedOnLanding,
 } from '@/lib/actions/articles';
 import { assignArticleRanks } from '@/lib/articleRank';
+import { articleAuthorLabel } from '@/lib/writers/articleWriters';
 import { formatSiteDateTime } from '@/lib/articlePublishTime';
 import { describeListWindow } from '@/lib/adminListWindow';
 // `describeRankTarget` is a DESCRIBER, not a plan builder. The client renders
@@ -83,6 +84,8 @@ export function ArticlesAdminClient({
    * next person accepts it.
    */
   page: urlPage = 1,
+  // writer id → display name, read once by page.jsx for the whole list.
+  writerNames = {},
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -137,11 +140,11 @@ export function ArticlesAdminClient({
     const q = query.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((a) =>
-      [a.title, a.slug, a.author, ...(a.tags ?? [])]
+      [a.title, a.slug, articleAuthorLabel(a, writerNames), ...(a.tags ?? [])]
         .filter(Boolean)
         .some((s) => String(s).toLowerCase().includes(q))
     );
-  }, [rows, query]);
+  }, [rows, query, writerNames]);
 
   // ── Client-side pagination over the filtered rows ──────────────
   // The SLICE is still client-side and PAGE_SIZE is unchanged. Only WHERE the
@@ -486,7 +489,7 @@ export function ArticlesAdminClient({
                   {/* Below xl the ประเภท / ผู้เขียน columns are collapsed — the
                       same two values surface here so nothing is lost. */}
                   <p className="mt-0.5 truncate text-xs text-9e-slate-dp-50 dark:text-[#94a3b8] xl:hidden">
-                    {a.articleType === 'video' ? 'วิดีโอ' : 'บทความ'} · {a.author || '—'}
+                    {a.articleType === 'video' ? 'วิดีโอ' : 'บทความ'} · {articleAuthorLabel(a, writerNames) || '—'}
                   </p>
                 </td>
                 <td className="hidden px-3 py-3 xl:table-cell">
@@ -519,8 +522,8 @@ export function ArticlesAdminClient({
                   </div>
                 </td>
                 <td className="hidden px-3 py-3 text-xs text-9e-navy dark:text-white xl:table-cell">
-                  <span className="block max-w-[5.5rem] truncate" title={a.author || undefined}>
-                    {a.author || '—'}
+                  <span className="block max-w-[5.5rem] truncate" title={articleAuthorLabel(a, writerNames) || undefined}>
+                    {articleAuthorLabel(a, writerNames) || '—'}
                   </span>
                 </td>
                 <td className="px-3 py-3 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
