@@ -196,6 +196,7 @@ export default async function WriterProfilePage({ params, searchParams }) {
         videos={writer.youtubeVideos}
         channelUrl={writer.youtubeChannelUrl}
         shortName={shortName}
+        hasArticles={total > 0}
       />
 
       {total > 0 && (

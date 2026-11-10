@@ -10,10 +10,10 @@ const video = { videoId: 'dQw4w9WgXcQ', url: 'https://youtu.be/dQw4w9WgXcQ', tit
 const program = { name: 'Power BI', href: '/program/power-bi', iconUrl: '' };
 const onlineCourse = { o_course_id: 'ONL-A', o_course_name: 'Course A', o_course_price: 0 };
 
-function render({ sections = empty, programs = [], onlineCourses = [], videos = [], channelUrl = '' } = {}) {
+function render({ sections = empty, programs = [], onlineCourses = [], videos = [], channelUrl = '', ...extra } = {}) {
   const layout = writerProfileLayout({ sections, programs, onlineCourses, videos });
   return renderToStaticMarkup(createElement(WriterProfileBody, {
-    layout, programs, onlineCourses, videos, channelUrl, shortName: 'อ.เวท',
+    layout, programs, onlineCourses, videos, channelUrl, shortName: 'อ.เวท', ...extra,
   })).replace(/<!-- -->/g, '');
 }
 
@@ -70,4 +70,25 @@ test('ปี column: absent when no row in the section has one', () => {
   assert.equal(html.includes('max-content'), false);
   assert.equal(html.includes('writer-section-period'), false);
   assert.equal(html.includes('md:col-span-2'), false, 'nothing to span without a ปี column');
+});
+
+// The class strings as they were before hasArticles existed: with articles the
+// body must render exactly these.
+const BODY_WIDE = 'mx-auto mt-8 grid max-w-[1200px] items-start gap-6 px-4 lg:px-6 ';
+const BODY_ASIDE = 'mx-auto mt-8 grid max-w-[1200px] items-start gap-6 px-4 lg:px-6 lg:grid-cols-[minmax(0,1fr)_396px]';
+const bodyClass = (html) => html.match(/<div class="([^"]*)" data-testid="writer-body"/)[1];
+const certs = { ...empty, certifications: ['Cert A'] };
+
+test('footer gap: with 0 articles the body carries pb-10 (the articles section\'s py-10 bottom)', () => {
+  assert.equal(bodyClass(render({ sections: certs, hasArticles: false })), `${BODY_WIDE} pb-10`);
+  assert.equal(bodyClass(render({ sections: certs, programs: [program], hasArticles: false })), `${BODY_ASIDE} pb-10`);
+});
+
+test('footer gap: with articles no pb-10, and the markup matches the prop left out', () => {
+  for (const extra of [{}, { programs: [program] }]) {
+    const html = render({ sections: certs, ...extra, hasArticles: true });
+    assert.equal(html.includes('pb-10'), false);
+    assert.equal(bodyClass(html), extra.programs ? BODY_ASIDE : BODY_WIDE);
+    assert.equal(html, render({ sections: certs, ...extra }));
+  }
 });
