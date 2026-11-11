@@ -111,6 +111,12 @@ export function RoundPickChip({
   title,
   srReason = '',
   nearlyFull = false,
+  /**
+   * Career-path's prerequisite lock: the chip is out of reach entirely —
+   * `aria-disabled` and out of the tab order on top of `disabled`. Not passed
+   * by the bundle, whose markup is unchanged.
+   */
+  locked = false,
   onClick,
 }) {
   const badge = badgeClassFor(type);
@@ -135,6 +141,8 @@ export function RoundPickChip({
         an unresponsive box with no way to tell it is the one they picked.
       */
       disabled={!enabled && !selected}
+      aria-disabled={locked ? 'true' : undefined}
+      tabIndex={locked ? -1 : undefined}
       title={title}
       onClick={onClick}
       className={cn(
@@ -210,6 +218,14 @@ export function RoundPickCourseCard({
   testId,
   dataAttrs = null,
   headerAction = null,
+  /**
+   * `{ id, message }` — career-path's prerequisite lock. The chip row is dimmed
+   * and blurred (the row only) and the message sits centred over it, sharp, in
+   * the same grid cell so a message that wraps on a phone grows the cell
+   * instead of overflowing it. The row is a `group` described by the message.
+   * Not passed by the bundle: its chip row is the plain div it was.
+   */
+  chipsLock = null,
   children,
 }) {
   return (
@@ -263,6 +279,26 @@ export function RoundPickCourseCard({
 
       {!hasRounds ? (
         <p className="text-xs italic text-9e-slate-dp-50">{emptyLabel}</p>
+      ) : chipsLock ? (
+        <div data-round-pick-locked-row="" className="grid">
+          <div
+            data-round-pick-chips=""
+            role="group"
+            aria-disabled="true"
+            aria-describedby={chipsLock.id}
+            className="col-start-1 row-start-1 flex cursor-not-allowed select-none flex-wrap gap-2 opacity-60 blur-[1.5px] grayscale"
+          >
+            {children}
+          </div>
+          <p
+            id={chipsLock.id}
+            data-round-pick-prereq-lock=""
+            className="col-start-1 row-start-1 z-10 flex max-w-full items-center gap-1.5 place-self-center rounded-9e-md border border-amber-200 bg-white px-3 py-1.5 text-center text-xs font-medium text-amber-800 shadow-sm dark:border-amber-500/40 dark:bg-[#0D1B2A] dark:text-amber-300"
+          >
+            <Lock aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <span>{chipsLock.message}</span>
+          </p>
+        </div>
       ) : (
         <div data-round-pick-chips="" className="flex flex-wrap gap-2">
           {children}
