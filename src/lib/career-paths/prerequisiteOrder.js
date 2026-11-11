@@ -154,9 +154,10 @@ export function canonicaliseCurriculumCodes(curriculum, canonicalByCode) {
 // THE RULE. Course D lists course P under "ต้องเรียนก่อน". When BOTH are
 // picked, D's round must START strictly after P's round ENDS — by day, so the
 // same day or any overlap is a violation. A round with no dates cannot satisfy
-// a pair it is part of. An unpicked P imposes nothing on D (it may simply not
-// have been chosen in a Choice group), and chains A → B → C hold because every
-// pair is checked on its own.
+// a pair it is part of. An unpicked P imposes no ORDER on D, and chains
+// A → B → C hold because every pair is checked on its own. (An unpicked,
+// untransferred P does LOCK D — see "Prerequisite lock" below; that is a
+// separate rule, and these pair functions still say nothing about it.)
 
 /**
  * Every (dependent, prerequisite) pair in the curriculum, both as spelled on
@@ -250,6 +251,125 @@ export function roundBlocker(curriculum, picks, code, dates) {
     }
   }
   return null;
+}
+
+// ── Prerequisite lock ────────────────────────────────────────────
+//
+// THE RULE (on top of the pair order above). A course is LOCKED while any of
+// its prerequisites is UNSATISFIED, and a locked course's rounds cannot be
+// picked. A prerequisite is SATISFIED by ANY pick for it — a round (resolved
+// hybrid or not: its dates are known, so the pair order can judge it) or a
+// transfer. A transfer carries no date constraint (`pairViolations` already
+// skips it). Every prerequisite must be satisfied.
+//
+// A course the learner TRANSFERS is never locked: someone who already attended
+// it needs none of its prerequisites. So only a non-transfer pick on a locked
+// course is a violation.
+
+/** Has the learner picked a round for, or transferred, this prerequisite? */
+export function isPrerequisiteSatisfied(pick) {
+  return Boolean(pick);
+}
+
+/**
+ * The prerequisites of `code` that are not satisfied by `picks`, as spelled on
+ * their curriculum items, in curriculum order. `[]` = unlocked.
+ */
+export function unsatisfiedPrerequisites(curriculum, picks, code) {
+  const pickOf = pickLookup(picks);
+  const self = courseCodeKey(code);
+  return prerequisitePairs(curriculum)
+    .filter(({ dependent }) => courseCodeKey(dependent) === self)
+    .map(({ prerequisite }) => prerequisite)
+    .filter((p) => !isPrerequisiteSatisfied(pickOf(p)));
+}
+
+/**
+ * Why `code` is locked, or `null` when it is not.
+ *
+ *   kind 'no-rounds' — at least one unsatisfied prerequisite has no open round
+ *     (and, being unsatisfied, was not transferred): `codes` are THOSE courses,
+ *     since picking the others would not unlock this one anyway.
+ *   kind 'pick'      — otherwise; `codes` are every unsatisfied prerequisite.
+ *
+ * @param {(code: string) => boolean} hasOpenRounds
+ * @returns {{ kind: 'pick' | 'no-rounds', codes: string[] } | null}
+ */
+export function prerequisiteLock(curriculum, picks, code, hasOpenRounds) {
+  const missing = unsatisfiedPrerequisites(curriculum, picks, code);
+  if (missing.length === 0) return null;
+  const closed = missing.filter((p) => !hasOpenRounds?.(p));
+  return closed.length ? { kind: 'no-rounds', codes: closed } : { kind: 'pick', codes: missing };
+}
+
+/**
+ * A Thai list with separators, as parts so the caller can put nodes (buttons)
+ * between them: `[A]`, `[A, ' และ ', B]`, `[A, ', ', B, ' และ ', C]`.
+ */
+export function thaiListParts(items) {
+  const out = [];
+  items.forEach((it, i) => {
+    if (i > 0) out.push(i === items.length - 1 ? ' และ ' : ', ');
+    out.push(it);
+  });
+  return out;
+}
+
+/** Text around the course list in each lock sentence. */
+export const PREREQUISITE_LOCK_TEXT = {
+  pick: { before: 'กรุณาเลือกรอบอบรมหลักสูตร ', after: ' ก่อน' },
+  'no-rounds': {
+    before: 'ยังไม่มีรอบเปิดรับของหลักสูตร ',
+    after: ' — ติดต่อเจ้าหน้าที่หรือเลือก Transfer หากเคยเรียนแล้ว',
+  },
+};
+
+/** The lock sentence as plain text (tooltips, tests). */
+export function prerequisiteLockMessage(lock, nameOf = {}) {
+  if (!lock) return '';
+  const t = PREREQUISITE_LOCK_TEXT[lock.kind];
+  const names = lock.codes.map((c) => nameOf[c] ?? c);
+  return `${t.before}${thaiListParts(names).join('')}${t.after}`;
+}
+
+/** The notice on a card whose round was cleared because a prerequisite was. */
+export function prerequisiteClearedNotice(prerequisiteName) {
+  return `ล้างรอบที่เลือกไว้ เพราะยกเลิกรอบของ ${prerequisiteName}`;
+}
+
+/**
+ * Non-transfer picks on locked courses.
+ *
+ * @returns {Array<{ dependent: string, prerequisites: string[] }>}
+ */
+export function prerequisiteLockViolations(curriculum, picks) {
+  const out = [];
+  for (const [code, pick] of Object.entries(picks ?? {})) {
+    if (!pick || isTransfer(pick)) continue;
+    const missing = unsatisfiedPrerequisites(curriculum, picks, code);
+    if (missing.length) out.push({ dependent: code, prerequisites: missing });
+  }
+  return out;
+}
+
+/**
+ * Remove every non-transfer pick whose course is now locked, repeating until
+ * none is left, so a chain A → B → C clears C once B is cleared. Returns a new
+ * object; `cleared` maps each removed code to the FIRST unsatisfied
+ * prerequisite that locked it (its own, not the chain's root).
+ *
+ * @returns {{ picks: object, cleared: Record<string, string> }}
+ */
+export function clearLockedPicks(curriculum, picks) {
+  const out = { ...(picks ?? {}) };
+  const cleared = {};
+  for (let v = prerequisiteLockViolations(curriculum, out); v.length; v = prerequisiteLockViolations(curriculum, out)) {
+    for (const { dependent, prerequisites } of v) {
+      delete out[dependent];
+      cleared[dependent] = prerequisites[0];
+    }
+  }
+  return { picks: out, cleared };
 }
 
 // ── Transfer Module ──────────────────────────────────────────────
@@ -539,6 +659,8 @@ const HYBRID_RESOLVED = /^hybrid \((classroom|ms teams)\)$/i;
  *   · ordinary pick whose round is not offered   → "… ไม่เปิดรับสมัครแล้ว"
  *   · any transfer problem                       → transferViolations' message
  *     (a transfer is never reported as "ไม่เปิดรับสมัครแล้ว")
+ *   · a round picked on a course whose prerequisite is neither picked nor
+ *     transferred (the prerequisite lock)
  *   · a group not satisfied
  *   · a prerequisite pair broken (pairs with a transfer are skipped)
  *
@@ -639,6 +761,19 @@ export function resolveSubmittedPicks({
     }
     row.type = 'transfer';
     picks[row.code].dates = row.dates;
+  }
+
+  // A round picked on a locked course (a prerequisite neither picked nor
+  // transferred). Before the group rule, so a payload that simply left the
+  // prerequisite out is told which course it is missing.
+  const locked = prerequisiteLockViolations(curriculum, picks)[0];
+  if (locked) {
+    const names = locked.prerequisites.map((c) => nameOf[c] ?? c);
+    return {
+      error:
+        `ต้องเลือกรอบอบรมหรือ Transfer หลักสูตร ${thaiListParts(names).join('')} ก่อน ` +
+        `จึงจะเลือกรอบของ ${nameOf[locked.dependent] ?? locked.dependent} ได้`,
+    };
   }
 
   for (const g of Array.isArray(curriculum) ? curriculum : []) {

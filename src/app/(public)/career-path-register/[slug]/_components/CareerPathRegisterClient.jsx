@@ -81,6 +81,14 @@ import {
   shiftDaysKey,
   TRANSFER_LIMIT_HINT,
   TRANSFER_OUT_OF_WINDOW_MESSAGE,
+  prerequisiteLock,
+  prerequisiteLockMessage,
+  prerequisiteLockViolations,
+  prerequisiteClearedNotice,
+  unsatisfiedPrerequisites,
+  clearLockedPicks,
+  thaiListParts,
+  PREREQUISITE_LOCK_TEXT,
 } from '@/lib/career-paths/prerequisiteOrder';
 
 // ── Constants ───────────────────────────────────────────────────
@@ -525,6 +533,13 @@ export function CareerPathRegisterClient({
       delete restoredSelected[broken[0].dependent];
       droppedPick = true;
     }
+    // …and a round on a course whose prerequisite is no longer picked or
+    // transferred (the prerequisite lock), down the chain.
+    const unlocked = clearLockedPicks(curriculum, restoredSelected);
+    if (Object.keys(unlocked.cleared).length) {
+      restoredSelected = unlocked.picks;
+      droppedPick = true;
+    }
     const keptIds =new Set(Object.values(restoredSelected).map((s) => s.scheduleId));
     const restoredHybrid = {};
     for (const [sid, val] of Object.entries(draft?.hybridChoice ?? {})) {
@@ -610,6 +625,37 @@ export function CareerPathRegisterClient({
     () => computeGroupEligibility(curriculum, selected),
     [curriculum, selected]
   );
+
+  // `{ [code]: prerequisiteCode }` — cards whose round settlePicks cleared
+  // because that prerequisite stopped being picked / transferred. Derived by
+  // diffing consecutive selections rather than inside the setSelected updater
+  // (which must stay pure). A card's notice goes once it holds a pick again.
+  const [clearedBecause, setClearedBecause] = useState({});
+  const prevSelectedRef = useRef(null);
+  useEffect(() => {
+    const prev = prevSelectedRef.current;
+    prevSelectedRef.current = selected;
+    if (!prev) return;
+    setClearedBecause((cur) => {
+      const next = { ...cur };
+      let changed = false;
+      for (const code of Object.keys(cur)) {
+        if (selected[code]) {
+          delete next[code];
+          changed = true;
+        }
+      }
+      for (const [code, pick] of Object.entries(prev)) {
+        if (!pick || isTransfer(pick) || selected[code]) continue;
+        const cause = unsatisfiedPrerequisites(curriculum, selected, code).find((p) => prev[p]);
+        if (cause) {
+          next[code] = cause;
+          changed = true;
+        }
+      }
+      return changed ? next : cur;
+    });
+  }, [selected, curriculum]);
 
   // ── selection mutation ──────────────────────────────────────
 
@@ -763,6 +809,13 @@ export function CareerPathRegisterClient({
           changed = true;
         }
       }
+      // Prerequisite lock: a round on a course whose prerequisite is no longer
+      // picked or transferred is cleared, down the chain (A → B → C). Its card
+      // relocks and says why — see `clearedBecause` below.
+      for (const c of Object.keys(clearLockedPicks(curriculum, next).cleared)) {
+        delete next[c];
+        changed = true;
+      }
     }
 
     return next;
@@ -797,6 +850,7 @@ export function CareerPathRegisterClient({
     curriculum.length > 0 &&
     curriculum.every((g) => isGroupSatisfied(g, selected)) &&
     pairViolations(curriculum, selected).length === 0 &&
+    prerequisiteLockViolations(curriculum, selected).length === 0 &&
     transferLimitError(curriculum, selected) === null &&
     transferPicks.every((p) =>
       isManualTransfer(p)
@@ -1001,6 +1055,7 @@ export function CareerPathRegisterClient({
               onTransfer={pickTransfer}
               onManualTransfer={pickManualTransfer}
               onCancelTransfer={cancelTransfer}
+              clearedBecause={clearedBecause}
               total={total}
               selectedCount={selectedCount}
               canProceed={canProceed}
@@ -1432,17 +1487,29 @@ function TransferredState({ round, onCancel }) {
 
 // ── Step 1: Curriculum-driven course selection ─────────────────
 
+/** The lock message's course name: scroll to that course's card and ring it briefly. */
+function focusCourseCard(code) {
+  const el = document.querySelector(`[data-course-code="${CSS.escape(code)}"]`);
+  if (!el) return;
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+  el.classList.add('ring-2', 'ring-9e-action');
+  setTimeout(() => el.classList.remove('ring-2', 'ring-9e-action'), 1600);
+}
+
 function Step1Courses({
   curriculum, schedulesByCourse, selected, eligibility, codeToName,
   hybridChoice, onHybridChoice,
   onPick, total, selectedCount, canProceed, onNext,
   pastSchedulesByCourse, todayKey, transferCount, transferLimit, onTransfer,
-  onManualTransfer, onCancelTransfer,
+  onManualTransfer, onCancelTransfer, clearedBecause = {},
 }) {
   // Transfer Module UI state: the course whose past-round picker is open, and
   // the course whose out-of-window notice is showing. One of each at a time.
   const [transferOpen, setTransferOpen] = useState(null);
   const [transferNotice, setTransferNotice] = useState(null);
+  const hasOpenRounds = (c) =>
+    Array.isArray(schedulesByCourse[c]) && schedulesByCourse[c].length > 0;
 
   if (curriculum.length === 0) {
     return (
@@ -1536,6 +1603,33 @@ function Step1Courses({
                 const transfersFull = transferCount >= transferLimit && !transferred;
                 const pickerOpen = transferOpen === code && !transferred;
 
+                // Prerequisite lock (lib/career-paths/prerequisiteOrder): the
+                // card's chips are out of reach until every prerequisite is
+                // picked or transferred. A transferred card is never locked,
+                // and the Transfer button stays live on a locked one.
+                const lock = transferred
+                  ? null
+                  : prerequisiteLock(curriculum, selected, code, hasOpenRounds);
+                const lockText = prerequisiteLockMessage(lock, codeToName);
+                const lockMessage = lock && (
+                  <>
+                    {PREREQUISITE_LOCK_TEXT[lock.kind].before}
+                    {thaiListParts(
+                      lock.codes.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => focusCourseCard(c)}
+                          className="rounded-sm font-semibold underline underline-offset-2 hover:text-9e-action focus-visible:outline focus-visible:outline-2 focus-visible:outline-9e-action dark:hover:text-9e-air"
+                        >
+                          {codeToName[c] ?? c}
+                        </button>
+                      ))
+                    )}
+                    {PREREQUISITE_LOCK_TEXT[lock.kind].after}
+                  </>
+                );
+
                 // One future round's chip — the same chip and the same verdicts
                 // whether or not the past-round panel is open above it.
                 const renderUpcomingChip = (sched) => {
@@ -1543,7 +1637,7 @@ function Step1Courses({
                   const start = minDateOf(sched.dates);
                   const dateOk = !latestPriorDate || isAfter(start, latestPriorDate);
                   const pairBlock = pairBlocks.get(sched._id);
-                  const isEnabled = eligible && dateOk && !choiceFull && !pairBlock;
+                  const isEnabled = !lock && eligible && dateOk && !choiceFull && !pairBlock;
 
                   return (
                     <RoundPickChip
@@ -1553,8 +1647,11 @@ function Step1Courses({
                       selected={isSelected}
                       enabled={isEnabled}
                       nearlyFull={sched.status === 'nearly_full'}
+                      locked={Boolean(lock)}
                       title={
-                        pairBlock
+                        lock
+                          ? lockText
+                          : pairBlock
                           ? pairBlockReason(pairBlock, selected, codeToName)
                           : !eligible
                             ? 'กรุณาเลือกรอบอบรมของกลุ่มก่อนหน้าก่อน'
@@ -1591,6 +1688,12 @@ function Step1Courses({
                     code={code}
                     lockReason={transferred ? '' : cardLockReason}
                     hasRounds={transferred || schedules.length > 0}
+                    dataAttrs={{ 'data-course-code': code }}
+                    chipsLock={
+                      lock && !pickerOpen
+                        ? { id: `prereq-lock-${gi}-${ii}`, message: lockMessage }
+                        : null
+                    }
                     headerAction={
                       <TransferHeaderAction
                         transferred={transferred}
@@ -1605,6 +1708,16 @@ function Step1Courses({
                     }
                     notices={
                       <>
+                      {/* It explains a RELOCK, so it goes once the card unlocks. */}
+                      {clearedBecause[code] && !selected[code] && lock && (
+                        <p
+                          role="status"
+                          data-prereq-cleared=""
+                          className="mt-2 rounded-9e-sm bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 dark:bg-[#111d2c] dark:text-amber-400"
+                        >
+                          {prerequisiteClearedNotice(codeToName[clearedBecause[code]] ?? clearedBecause[code])}
+                        </p>
+                      )}
                       {pickerOpen && (
                         <TransferPicker
                           rounds={pastRounds}
