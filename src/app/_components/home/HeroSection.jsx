@@ -62,8 +62,11 @@ import { HERO_OVERLAY_SENTINEL_ID } from "@/lib/heroOverlay";
  * DOM-walking contrast checker computes. The image covers it completely.
  */
 
-const HERO_DESCRIPTION =
-  "9Expert ช่วยให้คุณเรียนรู้ได้จริง เข้าใจง่าย และนำไปใช้งานได้ทันที ด้วยหลักสูตรคุณภาพจากวิทยากรตัวจริง";
+// Two halves so the second can start its own line from md up (see the <br>
+// in the <p> below). Below md the text wraps naturally.
+const HERO_DESCRIPTION_LEAD =
+  "9Expert ช่วยให้คุณเรียนรู้ได้จริง เข้าใจง่าย และนำไปใช้งานได้ทันที";
+const HERO_DESCRIPTION_TAIL = "ด้วยหลักสูตรคุณภาพจากวิทยากรตัวจริง";
 
 export function HeroSection() {
   return (
@@ -202,8 +205,14 @@ export function HeroSection() {
             positioned, and this is the element it anchors to — the CENTRED
             1200px container, never the viewport. Anchored to the viewport's
             right edge it would fly away from the text on an ultra-wide screen
-            and leave a dead gap in the middle. */}
-        <div className="relative mx-auto flex min-h-[calc(100dvh-81px)] max-w-[1200px] flex-col justify-center px-4 py-8 sm:px-6 lg:min-h-[520px] lg:px-8 lg:py-16 min-[1537px]:h-full min-[1537px]:min-h-0 [@media(orientation:landscape)_and_(max-height:500px)]:min-h-0 [@media(orientation:landscape)_and_(max-height:500px)]:justify-start [@media(orientation:landscape)_and_(max-height:500px)]:pt-3 [@media(orientation:landscape)_and_(max-height:500px)]:pb-24">
+            and leave a dead gap in the middle.
+
+            `xl:justify-start xl:pt-[133px]`: at xl the copy is TOP-pinned
+            instead of centred, so a longer subtitle grows it downward and the
+            headline stays put (centred, one extra line lifted it 14px).
+            133 = 64 padding + the 69px the centring used to add. From 1537px
+            the box is content-sized, so it goes back to the plain `pt-16`. */}
+        <div className="relative mx-auto flex min-h-[calc(100dvh-81px)] max-w-[1200px] flex-col justify-center px-4 py-8 sm:px-6 lg:min-h-[520px] lg:px-8 lg:py-16 xl:justify-start xl:pt-[133px] min-[1537px]:pt-16 min-[1537px]:h-full min-[1537px]:min-h-0 [@media(orientation:landscape)_and_(max-height:500px)]:min-h-0 [@media(orientation:landscape)_and_(max-height:500px)]:justify-start [@media(orientation:landscape)_and_(max-height:500px)]:pt-3 [@media(orientation:landscape)_and_(max-height:500px)]:pb-24">
           {/* The cap is what decides whether the headline is two lines or
               three. Measured in Chrome: at 560px the browser broke
               `มืออาชีพ` across lines — Thai has no inter-word spaces and is
@@ -250,7 +259,12 @@ export function HeroSection() {
             </h2>
 
             <p className="mt-5 text-base leading-relaxed text-white/85 sm:text-lg [@media(orientation:landscape)_and_(max-height:500px)]:mt-2 [@media(orientation:landscape)_and_(max-height:500px)]:text-sm">
-              {HERO_DESCRIPTION}
+              {/* The space stays BEFORE the <br>: below md the <br> is
+                  display:none and that space is the line-break opportunity
+                  between the halves. From md up it collapses at the line end. */}
+              {HERO_DESCRIPTION_LEAD}{" "}
+              <br className="hidden md:block [@media(orientation:landscape)_and_(max-height:500px)]:hidden" />
+              {HERO_DESCRIPTION_TAIL}
             </p>
 
             {/* Mobile: both buttons full-width and stacked, so neither is a
@@ -298,6 +312,16 @@ export function HeroSection() {
               reasons (49px of measured horizontal clearance; a flush bottom
               edge that must not lift). No scale, so the mascot never changes
               size. `data-hero-motion` is the reduced-motion hook. */}
+          {/* TOP-ANCHORED FROM xl UP, so the copy's height can never move it.
+              It used to be bottom-anchored with a PERCENTAGE offset, which
+              resolves against this container — and from 1537px the container
+              is content-sized (its `h-full` has no definite parent height to
+              resolve against), so every extra px of copy moved the mascot 2px
+              down: the two-line subtitle sank it 56px. `top-[32px]` (xl) and
+              `-top-[36px]` (1537px+) are exactly where the old offsets put it
+              with the one-line copy, measured. Pixels, not %, for the same
+              reason. Below xl it is still bottom-anchored to a min-height box
+              the copy does not fill. */}
           <div
             data-hero-motion="mascot"
             className="
@@ -334,18 +358,19 @@ export function HeroSection() {
     lg:h-[460px]
     lg:w-[640px]
 
-    /* Large Desktop 1280px+ */
-    xl:-bottom-[60%]
+    /* Large Desktop 1280px+ (top-anchored, see the note above) */
+    xl:bottom-auto
+    xl:top-[32px]
     xl:-right-[15%]
     xl:h-[800px]
     xl:w-[700px]
 
-    /* Large Desktop 1280px+ */
-    min-[1537px]:-bottom-[100%]
+    /* 1537px+ (top-anchored, see the note above) */
+    min-[1537px]:-top-[36px]
     min-[1537px]:-right-[15%]
 
     /* Short landscape phone — beside the copy, never under it */
-    [@media(orientation:landscape)_and_(max-height:500px)]:left-auto [@media(orientation:landscape)_and_(max-height:500px)]:right-0 [@media(orientation:landscape)_and_(max-height:500px)]:bottom-0 [@media(orientation:landscape)_and_(max-height:500px)]:mx-0 [@media(orientation:landscape)_and_(max-height:500px)]:translate-x-0 [@media(orientation:landscape)_and_(max-height:500px)]:h-[80%] [@media(orientation:landscape)_and_(max-height:500px)]:w-[38%]
+    [@media(orientation:landscape)_and_(max-height:500px)]:top-auto [@media(orientation:landscape)_and_(max-height:500px)]:left-auto [@media(orientation:landscape)_and_(max-height:500px)]:right-0 [@media(orientation:landscape)_and_(max-height:500px)]:bottom-0 [@media(orientation:landscape)_and_(max-height:500px)]:mx-0 [@media(orientation:landscape)_and_(max-height:500px)]:translate-x-0 [@media(orientation:landscape)_and_(max-height:500px)]:h-[80%] [@media(orientation:landscape)_and_(max-height:500px)]:w-[38%]
   "
           >
             <Image
