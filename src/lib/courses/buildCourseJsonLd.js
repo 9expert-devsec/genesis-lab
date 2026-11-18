@@ -10,10 +10,26 @@
  */
 import { courseCanonicalUrl } from '@/lib/courses/courseCanonicalPath';
 import { courseNodeUrl } from '@/lib/seo/courseNode';
+import { homeGraphIds } from '@/lib/seo/homeJsonLd';
 import { SITE_URL } from '@/lib/seo/siteUrl';
-import { isClosedRound } from '@/lib/scheduleStatus';
 
-export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }) {
+/**
+ * ── A BARE COURSE: NO hasCourseInstance (standing ruling, 2026-09-29) ───────
+ * The normal course detail page emits a Course and nothing about its rounds.
+ * Masterclass detail keeps its instances (lib/masterclass/generateJsonLd).
+ * This builder carried the instance block regardless (D12, R2): up to five
+ * CourseInstance nodes per course, each with a HARD-CODED, WRONG address
+ * ('สามเสนใน พญาไท' — the venue is in ถนนเพชรบุรี, ราชเทวี) and no real round
+ * dates, because it read `start_date`/`startDate` from rows that carry
+ * `dates`. All of it is gone, and the builder no longer accepts `schedules`.
+ *
+ * ── provider BY @id ──────────────────────────────────────────────────────────
+ * The provider is the home page's Organization, referenced by the id home
+ * DECLARES (homeGraphIds), not an inline second Organization that a crawler
+ * would have to guess is the same one. courseNode / courseListJsonLd already
+ * reference it this way.
+ */
+export function buildCourseJsonLd({ course, extension, siteUrl }) {
   if (!course?.course_name) return null;
 
   /**
@@ -99,35 +115,9 @@ export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }
     String(base ?? '').replace(/\/+$/, '')
   );
 
-  // Build hasCourseInstance from live schedules (open/nearly_full only).
-  // Each schedule becomes a CourseInstance with startDate/endDate/location.
-  const instances = schedules
-    .filter((s) => !isClosedRound(s))
-    .slice(0, 5) // cap at 5 to keep payload reasonable
-    .map((s) => ({
-      '@type': 'CourseInstance',
-      courseMode: s.scheduleType === 'online' ? ['Online'] : ['Onsite', 'Blended'],
-      startDate: s.start_date ?? s.startDate ?? undefined,
-      endDate:   s.end_date   ?? s.endDate   ?? undefined,
-      location: {
-        '@type': 'Place',
-        name:    '9Expert Training',
-        address: {
-          '@type':           'PostalAddress',
-          streetAddress:     'สามเสนใน พญาไท',
-          addressLocality:   'กรุงเทพมหานคร',
-          postalCode:        '10400',
-          addressCountry:    'TH',
-        },
-      },
-      offers: {
-        '@type':         'Offer',
-        price:           String(s.price_override ?? course.course_price ?? ''),
-        priceCurrency:   'THB',
-        availability:    'https://schema.org/InStock',
-        validFrom:       s.start_date ?? s.startDate ?? undefined,
-      },
-    }));
+  // The same pre-trimmed origin courseId uses, so the provider id is
+  // byte-identical to the one the home graph declares.
+  const { organization: organizationId } = homeGraphIds(String(base ?? '').replace(/\/+$/, ''));
 
   return {
     '@context': 'https://schema.org',
@@ -136,11 +126,7 @@ export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }
     name:        course.course_name,
     description: course.course_teaser?.slice(0, 300) || course.course_name,
     url:         courseUrl,
-    provider: {
-      '@type':  'Organization',
-      name:     '9Expert Training',
-      sameAs:   base,
-    },
+    provider: { '@id': organizationId },
     // Top-level offers (price summary — shown in Google search snippets)
     offers: course.course_price
       ? {
@@ -150,8 +136,7 @@ export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }
           category:      'Public Training',
         }
       : undefined,
-    // Live schedule instances
-    hasCourseInstance: instances.length > 0 ? instances : undefined,
+    // NO hasCourseInstance — see the ruling at the top of this file.
     // NO aggregateRating, NO review — deliberately absent, not missing.
     //
     // This builder used to emit a site-wide AggregateRating (4.9 / 5, with

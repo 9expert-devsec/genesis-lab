@@ -22,6 +22,7 @@ import { sanitizeRichHtml } from "@/lib/sanitizeRichHtml";
 import { getCustomPageBySlug } from "@/lib/actions/customPages";
 import { CustomPageView } from "@/app/(public)/[...slug]/_components/CustomPageView";
 import { buildPageJsonLd } from "@/lib/customPages/buildPageJsonLd";
+import { truncateForMeta } from "@/lib/seo/metaDescription";
 
 export const revalidate = 3600;
 
@@ -160,7 +161,8 @@ export async function generateMetadata({ params }) {
   const shareTitle = `${title} | ${siteConfig.name}`;
   const description =
     config?.meta_description?.trim() ||
-    promotion.detail_plain?.slice(0, 160) ||
+    // D06 (R2): word-boundary cut of the fallback, not a mid-word slice.
+    truncateForMeta(promotion.detail_plain ?? '') ||
     promotion.title;
   const ogImage = config?.og_image_url?.trim() || promotion.thumbnail_url || "";
 

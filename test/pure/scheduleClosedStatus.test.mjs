@@ -262,7 +262,12 @@ test('MCP list_training_rounds never emits a closed round', async () => {
   assert.equal(out.rounds.find((r) => r.status === 'เปิดรับ').registration_open, true);
 });
 
-test('JSON-LD hasCourseInstance: closed/cancelled dropped, others kept — behaviour unchanged', () => {
+test('course JSON-LD carries NO rounds at all, so a closed one cannot leak into it', () => {
+  // R2 (D12): per the standing ruling the course detail builder emits a bare
+  // Course — no hasCourseInstance — so the old "closed dropped, others kept"
+  // filter has nothing left to filter. What this file guards (a closed round
+  // never reaching a public surface) now holds by construction: handed every
+  // status, closed included, the builder emits no round at all.
   const course = { course_id: 'POWER-BI', course_name: 'Power BI', course_price: 5000 };
   const mk = (id, status) => ({ _id: id, status, dates: ['2026-12-08', '2026-12-09'], type: 'classroom' });
   const ld = buildCourseJsonLd({
@@ -270,8 +275,9 @@ test('JSON-LD hasCourseInstance: closed/cancelled dropped, others kept — behav
     schedules: [mk('a', 'open'), mk('b', 'closed'), mk('c', 'cancelled'), mk('d', 'full'), mk('e', 'nearly_full')],
     siteUrl: 'https://www.9experttraining.com',
   });
-  const instances = Array.isArray(ld?.hasCourseInstance) ? ld.hasCourseInstance : [];
-  assert.equal(instances.length, 3, 'open + full + nearly_full survive, exactly as before');
+  assert.equal(ld['@type'], 'Course', 'CONTROL: the builder still returns a Course');
+  assert.equal(ld.hasCourseInstance, undefined, 'no rounds on course detail');
+  assert.doesNotMatch(JSON.stringify(ld), /CourseInstance|"b"|"c"/);
 });
 
 // ── the admin close confirm ───────────────────────────────────────────────

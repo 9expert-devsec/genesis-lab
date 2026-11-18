@@ -1,4 +1,5 @@
 import { brandAwareTitle } from '@/lib/seo/brandAwareTitle';
+import { truncateForMeta } from '@/lib/seo/metaDescription';
 
 /**
  * The course detail page's metadata — public and private — from the resolved
@@ -21,8 +22,11 @@ export function courseMetadata({ course, extension, canonicalUrl, isPrivate = fa
   // `{ absolute }` so the root template does not append the brand a second
   // time. Open Graph gets the bare base. See lib/seo/brandAwareTitle.
   const { base, title } = brandAwareTitle(extension?.metaTitle?.trim() || `${course.course_name}`);
+  // D06 (R2): the authored metaDescription goes out as written; only the
+  // teaser FALLBACK is cut, and on a word boundary (no mid-word / mid-Thai-
+  // syllable slice, ellipsis within the 160 budget) — the article helper.
   const description =
-    extension?.metaDescription?.trim() || course.course_teaser?.slice(0, 160) || '';
+    extension?.metaDescription?.trim() || truncateForMeta(course.course_teaser ?? '') || '';
   const ogImage = extension?.ogImage?.trim() || course.course_cover_url || '';
 
   return {
