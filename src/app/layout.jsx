@@ -18,24 +18,36 @@ import { CookieConsentBanner } from '@/components/consent/CookieConsentBanner';
 import './globals.css';
 
 // ── Fonts ────────────────────────────────────────────────────────
-// Both families are self-hosted from /public/fonts/ via next/font/local.
+// Both families are self-hosted from src/fonts/ via next/font/local.
 // --font-en  → Google Sans (body / detail / EN)
 // --font-thai → LINE Seed Sans TH (Thai + headings)
+//
+// Google Sans is the official SIL OFL release (google/fonts, ofl/googlesans;
+// licence in src/fonts/OFL.txt): ONE variable file, wght 400–700, so the
+// 400/500/600/700 weights the site uses all come from it. opsz and GRAD were
+// pinned at their defaults (18 / 0) and the file subset to Latin
+// (U+0000-00FF, U+2000-206F, € ™ and friends) as WOFF2 — 44 KB instead of
+// four ~2 MB full-glyph TTFs. Characters outside that range fall through the
+// font stack to LINE Seed Sans TH, then the system sans-serif.
+//
+// preload is per localFont() call in next/font, not per face, and splitting
+// one family across two calls would make two families and break weight
+// matching. So both calls keep preload on: Google Sans is a single file, and
+// LINE Seed's 400/700 are above the fold on / and course pages (800/900 come
+// along at ~30 KB each). Weight 100 (Thin) was dropped — the one font-light
+// paragraph now matches Regular 400 instead of Thin.
 
 const googleSans = localFont({
   src: [
-    { path: '../fonts/GoogleSans-Regular.ttf',        weight: '400', style: 'normal' },
-    { path: '../fonts/GoogleSans-Medium.ttf',         weight: '500', style: 'normal' },
-    { path: '../fonts/GoogleSans-SemiBold.ttf',       weight: '600', style: 'normal' },
-    { path: '../fonts/GoogleSans-Bold.ttf',           weight: '700', style: 'normal' },
+    { path: '../fonts/GoogleSans-Latin-wght.woff2', weight: '400 700', style: 'normal' },
   ],
   variable: '--font-en',
   display: 'swap',
+  preload: true,
 });
 
 const lineSeedSansTH = localFont({
   src: [
-    { path: '../fonts/LINESeedSansTH_W_Th.woff2',  weight: '100', style: 'normal' },
     { path: '../fonts/LINESeedSansTH_W_Rg.woff2',  weight: '400', style: 'normal' },
     { path: '../fonts/LINESeedSansTH_W_Bd.woff2',  weight: '700', style: 'normal' },
     { path: '../fonts/LINESeedSansTH_W_He.woff2',  weight: '800', style: 'normal' },
@@ -43,6 +55,7 @@ const lineSeedSansTH = localFont({
   ],
   variable: '--font-thai',
   display: 'swap',
+  preload: true,
 });
 
 // ── Metadata ─────────────────────────────────────────────────────
