@@ -108,6 +108,7 @@ import {
 } from '@/lib/actions/pageBuilder';
 import { PageBuilderView } from '@/components/pageBuilder/PageBuilderView';
 import { stripDraft } from '@/lib/pageBuilder/draftState';
+import { UTILITY_ROBOTS, isNoindexPageSlug } from '@/lib/seo/utilityRobots';
 
 /**
  * Catch-all route for legacy-style pattern URLs:
@@ -523,7 +524,11 @@ export async function generateMetadata({ params, searchParams }) {
       title,
       description,
       alternates: { canonical },
-      robots: seo.noIndex ? { index: false, follow: false } : undefined,
+      // The author's noIndex wins (follow:false); otherwise a code-listed
+      // utility slug (D05, lib/seo/utilityRobots) is noindex, follow.
+      robots: seo.noIndex
+        ? { index: false, follow: false }
+        : (isNoindexPageSlug(segment) ? UTILITY_ROBOTS : undefined),
       openGraph: {
         title: ogTitle,
         description: ogDesc,
@@ -568,7 +573,11 @@ export async function generateMetadata({ params, searchParams }) {
       alternates: { canonical },
       // Force noindex for preview renders so a shared preview URL can never
       // get indexed, regardless of the page's own noIndex setting.
-      robots: (cp.isPreview || customPage.noIndex) ? { index: false, follow: false } : undefined,
+      // D05: a code-listed utility slug (lib/seo/utilityRobots, e.g.
+      // /evaluation) is noindex, follow when nothing stricter applies.
+      robots: (cp.isPreview || customPage.noIndex)
+        ? { index: false, follow: false }
+        : (isNoindexPageSlug(segment) ? UTILITY_ROBOTS : undefined),
       openGraph: {
         title: ogTitle,
         description: ogDesc,

@@ -142,7 +142,14 @@ test('/articles page: an unknown ?skill= falls back to ทุก Skill, validate
   assert.doesNotMatch(code, /<Suspense/, 'no Suspense boundary around the list');
 });
 
-test('/articles canonical stays bare — no query string', () => {
+test('/articles canonical: bare for any filter; ?page=N only on an unfiltered page ≥ 2 (D07)', () => {
   const { code } = readSource('src/app/(public)/articles/page.jsx');
-  assert.match(code, /alternates: \{ canonical: `\$\{process\.env\.NEXT_PUBLIC_SITE_URL\}\/articles` \}/);
+  // The base is still the bare index URL…
+  assert.match(code, /const base = `\$\{process\.env\.NEXT_PUBLIC_SITE_URL\}\/articles`;/);
+  // …and the ONLY query a canonical may carry is ?page=, gated on no filter.
+  assert.match(code, /canonical: !filtered && page >= 2 \? `\$\{base\}\?page=\$\{page\}` : base/);
+  // Every list filter counts as "filtered" — a skill/tag/program/q/type view
+  // never becomes its own canonical.
+  assert.match(code, /const FILTER_KEYS = \['q', 'tag', 'program', 'skill', 'type'\];/);
+  assert.equal((code.match(/canonical:/g) || []).length, 1, 'a second canonical expression appeared');
 });

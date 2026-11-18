@@ -1,9 +1,12 @@
 import { SearchClient } from './_components/SearchClient';
+import { UTILITY_ROBOTS } from '@/lib/seo/utilityRobots';
 
 export const metadata = {
   title: 'ค้นหา',
   description: 'ค้นหาหลักสูตร บทความ และตารางอบรมที่ 9Expert Training',
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/search` },
+  // D05 — a results page, not content: noindex, follow.
+  robots: UTILITY_ROBOTS,
 };
 
 export const revalidate = 1800;

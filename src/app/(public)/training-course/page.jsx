@@ -7,6 +7,7 @@ import { projectCourseListRows } from '@/lib/courses/courseListRow';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { CourseListClient } from './_components/CourseListClient';
+import { CourseListStatic } from './_components/CourseListStatic';
 import { siteCurrentYear } from '@/lib/articlePublishTime';
 import { getPageLinkability } from '@/lib/resolvePageSlug';
 import { SITE_URL } from '@/lib/seo/siteUrl';
@@ -90,6 +91,11 @@ export default async function Page() {
   // script tag is emitted at all — see lib/seo/courseListJsonLd.js.
   const listJsonLd = buildCourseListJsonLd(items);
 
+  // Both renderers get the SAME values, read once here. Spelled out as props
+  // on each mount (not a spread) so the currentYear threading scan in
+  // test/fs/currentYearThreading can see every CourseCard subtree is fed.
+  const currentYear = siteCurrentYear();
+
   // Suspense boundary — CourseListClient reads useSearchParams, which
   // under Next 15 forces dynamic rendering without a boundary above it.
   return (
@@ -125,19 +131,38 @@ export default async function Page() {
           (.next/server/app/training-course.html), and `hidden` governs rendered
           content, not script[type="application/ld+json"].
 
-          The boundary below and its `fallback={null}` are untouched. */}
+          The graph still describes the catalog on its own; since D03 the
+          fallback below also server-renders the H1 and every course link. */}
       {listJsonLd && (
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(listJsonLd) }}
         />
       )}
-      <Suspense fallback={null}>
+      {/* D03 — the fallback IS the server HTML. CourseListClient still bails
+          out to client rendering (useSearchParams), so whatever stands in the
+          fallback is what crawlers and pre-hydration visitors get. It used to
+          be `null`: no H1, no course links, the footer under the header.
+          CourseListStatic renders the unfiltered catalog with the same view and
+          the same grouping, so on the bare URL hydration swaps in identical
+          markup. Do NOT "fix" the filtered-URL flash by reading `searchParams`
+          here — that makes this static/ISR route render per request. */}
+      <Suspense
+        fallback={
+          <CourseListStatic
+            items={items}
+            programOrder={programOrder}
+            earlyBirdMap={earlyBirdMap}
+            currentYear={currentYear}
+            skillSlugs={skillSlugs}
+          />
+        }
+      >
         <CourseListClient
           items={items}
           programOrder={programOrder}
           earlyBirdMap={earlyBirdMap}
-          currentYear={siteCurrentYear()}
+          currentYear={currentYear}
           skillSlugs={skillSlugs}
         />
       </Suspense>

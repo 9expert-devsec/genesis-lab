@@ -34,8 +34,13 @@ import { readSource, ROOT } from '../sourceScan.mjs';
  * and written up in the round's report. No test re-runs that judgement.
  */
 
-/** The one path the component and the asset must agree on. */
-const WALLPAPER = '/motto/wallpaper-motto.png';
+/**
+ * The one path the component and the asset must agree on. WebP since D08: the
+ * placed PNG (2,030,328 B) was re-encoded once at the same 2171×724, quality
+ * 82, opaque (99,054 B). The checks below are the PNG checks restated for the
+ * WebP container — same invariants, new byte layout.
+ */
+const WALLPAPER = '/motto/wallpaper-motto.webp';
 
 const QUOTE = readSource('src/app/_components/home/InstructorQuote.jsx');
 
@@ -61,18 +66,18 @@ test('the wallpaper exists under public/ with EXACTLY the case the source uses',
   assert.ok(!entries.includes(base.toUpperCase()), 'the matcher is not case-sensitive');
 });
 
-test('it is a real PNG with real bytes, not a 0-byte stub or an LFS pointer', () => {
+test('it is a real WebP with real bytes, not a 0-byte stub or an LFS pointer', () => {
   // readdirSync passes on an empty file and on the ~130-byte text stub git-lfs
   // leaves behind. Reading the signature is what separates "the path resolves"
-  // from "the path resolves to an image".
+  // from "the path resolves to an image". The floor is the encoded artwork's
+  // order of magnitude (99 KB), far above any stub.
   const file = publicFile(WALLPAPER);
   const bytes = statSync(file).size;
-  assert.ok(bytes > 100_000, `${WALLPAPER} is only ${bytes} bytes — that is not the placed artwork`);
-  const head = readFileSync(file).subarray(0, 8);
-  assert.deepEqual(
-    [...head], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
-    `${WALLPAPER} does not start with the PNG signature`,
-  );
+  assert.ok(bytes > 50_000, `${WALLPAPER} is only ${bytes} bytes — that is not the placed artwork`);
+  const b = readFileSync(file);
+  assert.equal(b.subarray(0, 4).toString('latin1'), 'RIFF', `${WALLPAPER} is not a RIFF container`);
+  assert.equal(b.subarray(8, 12).toString('latin1'), 'WEBP', `${WALLPAPER} does not carry the WEBP signature`);
+  assert.equal(b.readUInt32LE(4) + 8, bytes, 'the RIFF size does not match the file — truncated?');
 });
 
 test('the asset is the wide banner the crop rule assumes, and is fully opaque', () => {
@@ -89,21 +94,25 @@ test('the asset is the wide banner the crop rule assumes, and is fully opaque', 
    * through and mix, which is a different picture from the one that was judged.
    */
   const b = readFileSync(publicFile(WALLPAPER));
-  assert.equal(b.subarray(12, 16).toString(), 'IHDR', 'the first PNG chunk is not IHDR');
-  const width = b.readUInt32BE(16);
-  const height = b.readUInt32BE(20);
-  const colourType = b[25];
+  // A simple lossy WebP is RIFF / WEBP / one `VP8 ` chunk. That chunk type
+  // carries NO alpha channel by definition — alpha needs VP8X + ALPH, or the
+  // lossless VP8L — which is this file's "fully opaque" check.
+  const chunk = b.subarray(12, 16).toString('latin1');
+  assert.equal(
+    chunk, 'VP8 ',
+    `the first WebP chunk is "${chunk}", not "VP8 " — an alpha-capable layout; the #0D1B2A beneath it could blend through`,
+  );
+  // VP8 frame header: chunk data starts at 20; 3-byte frame tag, 3-byte start
+  // code 9d 01 2a, then 14-bit width and height (little-endian).
+  assert.deepEqual([...b.subarray(23, 26)], [0x9d, 0x01, 0x2a], 'no VP8 key-frame start code');
+  const width = b.readUInt16LE(26) & 0x3fff;
+  const height = b.readUInt16LE(28) & 0x3fff;
   const ratio = width / height;
   assert.ok(
     ratio > 2.5 && ratio < 3.5,
     `the wallpaper is ${width}x${height} (${ratio.toFixed(2)}:1); the band's crop reasoning assumes a ~3:1 banner`,
   );
   assert.ok(width >= 1920, `${width}px wide will visibly soften on a desktop-width full-bleed band`);
-  // PNG colour types: 4 = grey+alpha, 6 = RGBA. 0 / 2 / 3 carry no alpha channel.
-  assert.ok(
-    colourType !== 4 && colourType !== 6,
-    `the wallpaper has an alpha channel (colour type ${colourType}); the #0D1B2A beneath it would blend through`,
-  );
 });
 
 // ── The component and the asset agree, and the old art is gone ──────────────

@@ -280,6 +280,10 @@ export function SectionRenderer({
   pageId = null,
   // A PREVIEW render. Carried for promotion_bundle only; see PageBuilderView.
   preview = false,
+  // D08 — the id of the page's hero image section (lib/pageBuilder/heroImage),
+  // threaded through the recursion like pageId. Only that one section gets
+  // `priority`; null for every caller but PageBuilderView.
+  heroImageId = null,
 }) {
   if (!section || typeof section !== "object") return null;
   if (section.enabled === false) return null;
@@ -337,6 +341,7 @@ export function SectionRenderer({
           fillHeight={FILLS_ITS_TRACK.has(section.type)}
           pageId={pageId}
           preview={preview}
+          heroImageId={heroImageId}
         />
       ));
     }
@@ -392,6 +397,8 @@ export function SectionRenderer({
       pageId={pageId}
       sectionId={section.id}
       preview={preview}
+      // D08 — true for the hero image only; ignored by every other type.
+      priority={heroImageId != null && section.id != null && String(section.id) === heroImageId}
       {...childProps}
     />
   );

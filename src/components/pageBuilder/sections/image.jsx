@@ -16,7 +16,14 @@ import Image from 'next/image';
  */
 export const CLOUDINARY = /^https:\/\/(res\.cloudinary\.com|ddva7xvdt\.res\.cloudinary\.com)\//;
 
-export function ImageSection({ content }) {
+/**
+ * `priority` (D08) — true only for the page's hero image, as decided by
+ * lib/pageBuilder/heroImage and threaded in by SectionRenderer: next/image then
+ * loads it eagerly with fetchPriority="high" instead of the default lazy. The
+ * `unoptimized` rule above is untouched (that cost question is a separate
+ * decision).
+ */
+export function ImageSection({ content, priority = false }) {
   const src = typeof content?.src === 'string' ? content.src.trim() : '';
   if (!src) return null;
   const alt = typeof content?.alt === 'string' ? content.alt : '';
@@ -31,6 +38,11 @@ export function ImageSection({ content }) {
         height={900}
         sizes="(max-width: 768px) 100vw, 1200px"
         unoptimized={!CLOUDINARY.test(src)}
+        priority={priority}
+        // `priority` alone makes it eager and preloaded but sets NO
+        // fetchpriority in this Next version (measured) — the home hero passes
+        // both for the same reason (HeroSection.jsx).
+        fetchPriority={priority ? 'high' : undefined}
         className="h-auto w-full rounded-9e-lg"
       />
       {caption.trim() && (

@@ -45,15 +45,20 @@ test('the sitemap lists the writers from the read /author renders', () => {
 });
 
 test('the writers reach the returned array', () => {
-  assert.match(sitemap, /return \[[^\]]*\.\.\.writerEntries\]/);
+  // D04: the groups are concatenated inside dedupeSitemapEntries([...]).
+  assert.match(sitemap, /return dedupeSitemapEntries\(\[[^\]]*\.\.\.writerEntries,[^\]]*\]\)/);
 });
 
-test('the writer block is best-effort', () => {
-  assert.match(sitemap, /try \{\s*writerEntries = [\s\S]*?\} catch \{/);
+test('the writer block is best-effort, and says so when it fails', () => {
+  // D04: still caught (one source must not 500 the sitemap), but logged.
+  assert.match(sitemap, /try \{\s*writerEntries = [\s\S]*?\} catch \(err\) \{\s*blockFailed\('writers', err\);/);
 });
 
-test('the articles limit is untouched', () => {
-  assert.match(sitemap, /Article\.find\(\{ active: true \}\)[\s\S]*?\.limit\(500\)/);
+test('the articles query has no cap (D04)', () => {
+  // It stopped at 500 and the live sitemap sat exactly on 500 — the oldest
+  // articles had silently fallen out. No .limit() anywhere in the sitemap.
+  assert.match(sitemap, /Article\.find\(\{ active: true \}\)/);
+  assert.equal(/\.limit\(/.test(sitemap), false, 'a .limit() is back in src/app/sitemap.js');
 });
 
 // ── the public predicate ────────────────────────────────────────────────────

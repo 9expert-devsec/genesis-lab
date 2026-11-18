@@ -101,7 +101,7 @@ export function ArticlesPageClient({
    * handler, which reintroduces a second source of truth for the URL to serve a
    * case with no reader.
    */
-  const navigate = useCallback(
+  const listUrl = useCallback(
     (updates = {}) => {
       const next = { page: 1, q, tag, program, skill, type: articleType, ...updates };
       const params = new URLSearchParams();
@@ -111,9 +111,14 @@ export function ArticlesPageClient({
         params.set(k, String(v));
       });
       const qs = params.toString();
-      router.push(qs ? `${pathname}?${qs}` : pathname);
+      return qs ? `${pathname}?${qs}` : pathname;
     },
-    [router, pathname, q, tag, program, skill, articleType]
+    [pathname, q, tag, program, skill, articleType]
+  );
+
+  const navigate = useCallback(
+    (updates = {}) => router.push(listUrl(updates)),
+    [router, listUrl]
   );
 
   // Debounce the search box → URL ?q=. Driven by the input event, so there is
@@ -136,8 +141,11 @@ export function ArticlesPageClient({
     if (el.value !== q) el.value = q;
   }, [q]);
 
-  const goToPage = (p) => {
-    navigate({ page: p });
+  // D07 — the pager is LINKS now (crawlable `?page=N`, filters kept), built by
+  // the same listUrl the filters use. The <Link> does the client navigation
+  // (a push, as before) and this keeps the old scroll-to-top.
+  const pageHref = (p) => listUrl({ page: p });
+  const onPageClick = () => {
     if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
   };
 
@@ -224,24 +232,33 @@ export function ArticlesPageClient({
       ) : (
         <>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {articles.map((a) => (
+            {articles.map((a, i) => (
               <ArticleCard
                 key={a._id}
                 article={a}
                 programNames={programNames}
                 skillNames={skillNames}
                 listQuery={listQuery}
+                // D08 — the first cover is the mobile LCP: eager + high.
+                priority={i === 0}
               />
             ))}
           </div>
-          <Pager page={page} totalPages={totalPages} onGo={goToPage} />
+          <Pager page={page} totalPages={totalPages} hrefFor={pageHref} onPageClick={onPageClick} />
         </>
       )}
     </div>
   );
 }
 
-function Pager({ page, totalPages, onGo }) {
+/**
+ * Page links, not buttons (D07): a crawler only follows an `<a href>`, so with
+ * buttons it saw page 1 and nothing else. `scroll={false}` because onPageClick
+ * already scrolls to the top — the same single scroll the buttons did. At
+ * either end the arrow is a non-link <span aria-disabled> with the old
+ * disabled look, since an <a> cannot be disabled.
+ */
+function Pager({ page, totalPages, hrefFor, onPageClick }) {
   if (totalPages <= 1) return null;
 
   // Compact window: 1 … (p-1) p (p+1) … last
@@ -256,25 +273,32 @@ function Pager({ page, totalPages, onGo }) {
   if (hi < totalPages - 1) pages.push('…');
   if (totalPages > 1) push(totalPages);
 
-  const btn = 'min-w-9 h-9 px-3 rounded-9e-md border text-sm transition';
+  // inline-flex + centring: an <a> does not centre its label the way a
+  // <button> does, so the boxes would otherwise sit the text at the top-left.
+  const btn = 'inline-flex min-w-9 h-9 items-center justify-center px-3 rounded-9e-md border text-sm transition';
+  const arrow = `${btn} border-[var(--surface-border)]`;
+
+  const arrowEl = (to, rel, label) =>
+    to < 1 || to > totalPages ? (
+      <span aria-disabled="true" className={`${arrow} opacity-40`}>{label}</span>
+    ) : (
+      <Link href={hrefFor(to)} rel={rel} scroll={false} onClick={onPageClick} className={arrow}>
+        {label}
+      </Link>
+    );
+
   return (
     <nav className="mt-8 flex items-center justify-center gap-2" aria-label="แบ่งหน้า">
-      <button
-        type="button"
-        disabled={page <= 1}
-        onClick={() => onGo(page - 1)}
-        className={`${btn} border-[var(--surface-border)] disabled:opacity-40`}
-      >
-        ก่อนหน้า
-      </button>
+      {arrowEl(page - 1, 'prev', 'ก่อนหน้า')}
       {pages.map((p, i) =>
         p === '…' ? (
           <span key={`e${i}`} className="px-1 text-9e-slate-dp-50">…</span>
         ) : (
-          <button
+          <Link
             key={p}
-            type="button"
-            onClick={() => onGo(p)}
+            href={hrefFor(p)}
+            scroll={false}
+            onClick={onPageClick}
             aria-current={p === page ? 'page' : undefined}
             className={
               p === page
@@ -283,17 +307,10 @@ function Pager({ page, totalPages, onGo }) {
             }
           >
             {p}
-          </button>
+          </Link>
         )
       )}
-      <button
-        type="button"
-        disabled={page >= totalPages}
-        onClick={() => onGo(page + 1)}
-        className={`${btn} border-[var(--surface-border)] disabled:opacity-40`}
-      >
-        ถัดไป
-      </button>
+      {arrowEl(page + 1, 'next', 'ถัดไป')}
     </nav>
   );
 }
