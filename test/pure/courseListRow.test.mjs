@@ -169,6 +169,10 @@ const COMPONENTS_DIR = path.join(ROOT, 'src', 'app', '(public)', 'training-cours
 const ROW_HELPERS = [
   'src/lib/courses/courseLinkHref.js',
   'src/lib/courses/courseCanonicalPath.js',
+  // D03: the filter/group/sort reads (course_name, course_id, skills,
+  // program) moved here out of CourseListClient, shared with the server
+  // fallback.
+  'src/lib/courses/courseListGrouping.js',
 ];
 
 /** Top-level row keys a file reads through `c.` / `course.` / a destructure of `course`. */
@@ -198,7 +202,7 @@ test('the scan sees the reads it is built on', () => {
   // chain, and the helper's own read. A scanner that found none of these
   // would make the coverage assertions below pass on an empty set.
   assert.ok(readsByFile.get('src/app/(public)/training-course/_components/CourseCard.jsx').has('course_cover_url'), 'destructure not seen');
-  assert.ok(readsByFile.get('src/app/(public)/training-course/_components/CourseListClient.jsx').has('program'), 'optional-chain read not seen');
+  assert.ok(readsByFile.get('src/lib/courses/courseListGrouping.js').has('program'), 'optional-chain read not seen');
   assert.ok(readsByFile.get('src/app/(public)/training-course/_components/CourseTableGroup.jsx').has('course_trainingdays'), 'dotted read not seen');
   assert.ok(readsByFile.get('src/lib/courses/courseCanonicalPath.js').has('course_id'), 'helper read not seen');
   assert.ok(readsByFile.get('src/lib/courses/courseLinkHref.js').has('urlAlias'), 'helper read not seen');

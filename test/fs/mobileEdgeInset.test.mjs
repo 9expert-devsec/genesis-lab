@@ -54,7 +54,9 @@ import { readSource } from '../sourceScan.mjs';
 // these files should bump the number HERE, in the same commit, which is the
 // moment to ask whether the new box carries the inset.
 const CONTENT_BOX_FILES = [
-  ['src/app/(public)/training-course/_components/CourseListClient.jsx', 1],
+  // The list markup moved from CourseListClient into CourseListView (D03), so
+  // the server fallback and the client render the same box.
+  ['src/app/(public)/training-course/_components/CourseListView.jsx',   1],
   ['src/app/(public)/training-course/_components/FilterBar.jsx',        1],
   ['src/app/(public)/training-course/_components/HeroSearch.jsx',       1],
   ['src/app/(public)/promotions/page.jsx',                              3],
