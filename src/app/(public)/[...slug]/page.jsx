@@ -64,6 +64,7 @@ import {
 import { dbConnect } from '@/lib/db/connect';
 import ProgramPageConfig from '@/models/ProgramPageConfig';
 import SkillPageConfig from '@/models/SkillPageConfig';
+import { catalogPageMetadata } from '@/lib/seo/catalogPageMetadata';
 import {
   getPageLinkability,
   resolveProgramBySlug,
@@ -394,26 +395,20 @@ export async function generateMetadata({ params, searchParams }) {
       const resolved = await resolveProgramBySlug(segment, programsRes.items ?? []);
       if (resolved) {
         const { program, config } = resolved;
-        const title =
-          config?.metaTitle?.trim() ||
-          `${program.program_name}`;
         const description =
           config?.metaDescription?.trim() ||
           program.program_description ||
           program.program_teaser ||
           '';
         const ogImage = config?.ogImage?.trim() || program.programiconurl || '';
-        return {
-          title,
+        // Brand-aware title — see lib/seo/catalogPageMetadata.
+        return catalogPageMetadata({
+          metaTitle: config?.metaTitle,
+          name: program.program_name,
           description,
-          alternates: { canonical: pageUrl },
-          openGraph: {
-            title,
-            description,
-            url: pageUrl,
-            images: ogImage ? [{ url: ogImage }] : [],
-          },
-        };
+          ogImage,
+          pageUrl,
+        });
       }
     }
 
@@ -422,26 +417,20 @@ export async function generateMetadata({ params, searchParams }) {
       const resolved = await resolveSkillBySlug(segment, skillsRes.items ?? []);
       if (resolved) {
         const { skill, config } = resolved;
-        const title =
-          config?.metaTitle?.trim() ||
-          `${skill.skill_name}`;
         const description =
           config?.metaDescription?.trim() ||
           skill.skill_description ||
           skill.skill_teaser ||
           '';
         const ogImage = config?.ogImage?.trim() || skill.skilliconurl || '';
-        return {
-          title,
+        // Brand-aware title — see lib/seo/catalogPageMetadata.
+        return catalogPageMetadata({
+          metaTitle: config?.metaTitle,
+          name: skill.skill_name,
           description,
-          alternates: { canonical: pageUrl },
-          openGraph: {
-            title,
-            description,
-            url: pageUrl,
-            images: ogImage ? [{ url: ogImage }] : [],
-          },
-        };
+          ogImage,
+          pageUrl,
+        });
       }
     }
   }

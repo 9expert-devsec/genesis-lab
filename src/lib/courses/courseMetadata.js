@@ -1,3 +1,5 @@
+import { brandAwareTitle } from '@/lib/seo/brandAwareTitle';
+
 /**
  * The course detail page's metadata — public and private — from the resolved
  * course, its CourseExtension row, and the canonical URL the page already
@@ -15,7 +17,10 @@
  * Not added to robots.txt: a disallowed URL cannot have its noindex read.
  */
 export function courseMetadata({ course, extension, canonicalUrl, isPrivate = false }) {
-  const title = extension?.metaTitle?.trim() || `${course.course_name}`;
+  // Brand-aware: a stored title that already ends in `| 9Expert` goes out as
+  // `{ absolute }` so the root template does not append the brand a second
+  // time. Open Graph gets the bare base. See lib/seo/brandAwareTitle.
+  const { base, title } = brandAwareTitle(extension?.metaTitle?.trim() || `${course.course_name}`);
   const description =
     extension?.metaDescription?.trim() || course.course_teaser?.slice(0, 160) || '';
   const ogImage = extension?.ogImage?.trim() || course.course_cover_url || '';
@@ -25,7 +30,7 @@ export function courseMetadata({ course, extension, canonicalUrl, isPrivate = fa
     description,
     alternates: { canonical: canonicalUrl },
     openGraph: {
-      title,
+      title: base,
       description,
       url: canonicalUrl,
       images: ogImage ? [{ url: ogImage }] : [],
