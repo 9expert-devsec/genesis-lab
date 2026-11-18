@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readSource } from '../sourceScan.mjs';
+import { readSource, sourceExists } from '../sourceScan.mjs';
 import {
   buildProgramRank,
   groupCoursesByProgram,
@@ -38,6 +38,17 @@ test('page: reads nothing from the request (searchParams / cookies / headers / f
     // withImports: the subject IS an import line.
     assert.doesNotMatch(readSource(rel).withImports, /next\/navigation/, rel);
   }
+});
+
+test('the route has NO loading.jsx (R2) — it would hide the server-rendered list', () => {
+  // A route-level loading.jsx wraps the page in a Suspense boundary: the
+  // prerendered HTML then shows the skeleton and parks the real body (H1 and
+  // every course link) in a hidden container until an inline script reveals it
+  // (~300 ms, measured in R1). The page's own Suspense fallback already
+  // server-renders the list, so the skeleton only got in its way.
+  assert.equal(sourceExists('src/app/(public)/training-course/loading.jsx'), false);
+  // CONTROL: the probe resolves real paths (the page itself exists).
+  assert.equal(sourceExists('src/app/(public)/training-course/page.jsx'), true);
 });
 
 test('grouping: admin order first, unranked programs after, alphabetical among themselves', () => {

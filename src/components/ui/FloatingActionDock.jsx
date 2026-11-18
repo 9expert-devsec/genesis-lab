@@ -56,15 +56,19 @@ import {
  * Mounted ONCE from the root layout — see src/app/layout.jsx for why that is
  * not the (public) layout.
  *
- * ── CLEARING A PAGE'S BOTTOM BAR: padding, NOT a bottom-* offset ────────────
- * `bottomInset` is applied as an inline `padding-bottom`, and the mechanism is
- * deliberate three times over:
+ * ── CLEARING A PAGE'S BOTTOM BAR: a transform, NOT a bottom-* offset ────────
+ * `bottomInset` is applied as an inline `transform: translateY(-Npx)` (D10,
+ * R2 — it was `padding-bottom`, which is a layout property: every lift was a
+ * layout change, and a layout shift the moment the inset arrived). The buttons
+ * land exactly where the padding put them. The mechanism is deliberate three
+ * times over:
  *
  *   1. The container is bottom-ANCHORED and grows upward (see the section
- *      above — that is what keeps the bottom slot still). Padding pushes the
- *      children up without moving the anchor, so the "removing an upper slot
- *      cannot move the lower one" property survives untouched. Changing the
- *      anchor instead would move the very thing the anchor exists to hold.
+ *      above — that is what keeps the bottom slot still). The translate moves
+ *      the whole box up without touching the anchor or the box's layout, so
+ *      the "removing an upper slot cannot move the lower one" property survives
+ *      untouched. Changing the anchor instead would move the very thing the
+ *      anchor exists to hold.
  *   2. The anchor tokens stay untouched. test/pure/floatingDockStack and
  *      test/render/stickyBarButtonCoordination read this file as RAW TEXT and
  *      match the anchor and lift classes as literals: `lg:bottom-8`, the
@@ -86,7 +90,7 @@ import {
  *      repo has already shipped that exact defect once (the schedule-status
  *      colours). An inline style is not scanned and cannot fail that way.
  *
- * The TRANSITION is a static class trio, `transition-[padding-bottom]
+ * The TRANSITION is a static class trio, `transition-transform
  * duration-300 ease-in-out`, matching CourseStickyCTA's own
  * `transition-transform duration-300 ease-in-out` so the dock travels with the
  * bar instead of snapping. Classes rather than an inline `transition` string
@@ -138,12 +142,16 @@ export function FloatingActionDockView({
     <div
       ref={containerRef}
       data-floating-dock=""
-      className={`fixed right-4 z-50 flex flex-col items-end gap-3 transition-[padding-bottom] duration-300 ease-in-out pointer-events-none [&>*]:pointer-events-auto [&>[data-dock-passthrough]]:pointer-events-none lg:bottom-8 lg:right-8 ${
+      className={`fixed right-4 z-50 flex flex-col items-end gap-3 transition-transform duration-300 ease-in-out pointer-events-none [&>*]:pointer-events-auto [&>[data-dock-passthrough]]:pointer-events-none lg:bottom-8 lg:right-8 ${
         dockLiftsForBottomBar(pathname) ? 'bottom-24' : 'bottom-8'
       }`}
-      // Inline, never a class — see the header. 0 today for every page,
-      // because no publisher exists yet.
-      style={{ paddingBottom: bottomInset }}
+      // Inline, never a class — see the header. D10 (R2): the lift is a
+      // TRANSFORM, not padding-bottom. The dock lands in exactly the same
+      // place (it is bottom-anchored, so lifting its contents by N px via
+      // padding and translating the whole box up by N px put the buttons at
+      // the same coordinates), but a transform is composited: no layout, no
+      // layout shift, and no height change for the ResizeObserver to see.
+      style={{ transform: `translateY(${-bottomInset}px)` }}
     >
       {/* SLOT 1 — top. Empty on most pages; an absent slot renders no flex
           item, so `gap-3` adds nothing and the slots below do not move. */}
@@ -182,14 +190,16 @@ export function FloatingActionDock({ topSlot = null, bottomSlot = null }) {
     if (!el) return undefined;
 
     // ── HORIZONTAL ONLY, AND THAT SCOPE IS LOAD-BEARING ────────────────────
-    // Reading the height here would be a feedback loop, not a detail: the
-    // query's answer becomes this element's padding, padding changes its
-    // height, the observer fires on that height, and the measurement feeds its
-    // own output back into its input. Left and right are unaffected by
-    // padding-bottom, so the loop has no path to close. The bail-out below is
-    // the second half of the same protection — the observer DOES fire on every
-    // padding change, and returning the previous object means React re-renders
-    // nothing and the cascade stops on the first hop.
+    // Reading the vertical position here would be a feedback loop, not a
+    // detail: the query's answer becomes this element's translate, and a
+    // getBoundingClientRect().top / .bottom includes that translate, so the
+    // measurement would feed its own output back into its input. (Under the
+    // old padding-bottom the loop ran through the HEIGHT instead; since D10 the
+    // lift no longer changes the box's size, so the ResizeObserver does not
+    // even fire on it.) Left and right are unaffected by a vertical translate,
+    // so the loop has no path to close. The bail-out below still returns the
+    // previous object when nothing horizontal moved, so a stray observer call
+    // re-renders nothing.
     const measure = () => {
       const rect = el.getBoundingClientRect();
       setSpan((prev) =>
@@ -212,7 +222,7 @@ export function FloatingActionDock({ topSlot = null, bottomSlot = null }) {
     // is the original defect in miniature: the expanded capsule would sit on
     // top of the bar's button with the dock at z-50, making that button
     // unclickable exactly while the user is reaching for it. So the dock moves,
-    // and the padding transition turns the move into a glide rather than a
+    // and the transform transition turns the move into a glide rather than a
     // snap. An observer also catches the layout changes a resize listener
     // structurally cannot — font loading, zoom, a scrollbar appearing.
     if (typeof ResizeObserver === 'undefined') {

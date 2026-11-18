@@ -133,7 +133,10 @@ export function InstructorQuote() {
             height={500}
             className="object-contain object-bottom"
             style={{ maxHeight: '425px' }}
-            priority
+            // R2: was `priority`, which preloaded this portrait in <head> on
+            // every home visit although it sits ~5,800px (1280) / ~7,000px
+            // (390) down the page. next/image's default lazy is right here.
+            loading="lazy"
           />
 
           <div className="text-center lg:hidden py-6">

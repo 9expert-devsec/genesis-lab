@@ -373,10 +373,18 @@ export function HeroSection() {
     [@media(orientation:landscape)_and_(max-height:500px)]:top-auto [@media(orientation:landscape)_and_(max-height:500px)]:left-auto [@media(orientation:landscape)_and_(max-height:500px)]:right-0 [@media(orientation:landscape)_and_(max-height:500px)]:bottom-0 [@media(orientation:landscape)_and_(max-height:500px)]:mx-0 [@media(orientation:landscape)_and_(max-height:500px)]:translate-x-0 [@media(orientation:landscape)_and_(max-height:500px)]:h-[80%] [@media(orientation:landscape)_and_(max-height:500px)]:w-[38%]
   "
           >
+            {/* D08 (R2) — MEASURED: this astronaut, not background.png, is the
+                LCP element on / at 390 and 1280. So it loads eagerly at high
+                fetch priority. Still NOT `priority` (no <link rel=preload>):
+                that would put a second preload in <head> beside the
+                background's — the rule heroOverlayOptIn guards. WebP since R2:
+                same 1254×1254 with alpha, 1,569,363 B → 147,030 B (q88). */}
             <Image
-              src="/hero-img/nongnai-to-the-moon.png"
+              src="/hero-img/nongnai-to-the-moon.webp"
               alt=""
               fill
+              loading="eager"
+              fetchPriority="high"
               sizes="
       (min-width: 1280px) 700px,
       (min-width: 1024px) 640px,
