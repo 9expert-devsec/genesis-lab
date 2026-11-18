@@ -7,6 +7,11 @@ import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 import { ProgramOnlineCoursesSection } from '@/components/program/ProgramOnlineCoursesSection';
 import { ProgramArticlesSection } from '@/components/program/ProgramArticlesSection';
 import { PageCatalogButton } from '@/components/ui/PageCatalogButton';
+import {
+  ProgramIntroSection,
+  ProgramWhySection,
+  ProgramBenefitSection,
+} from '@/components/program/ProgramCopySections';
 import { programHeroDescription, resolveHeroTitle } from '@/lib/pageHero';
 
 /**
@@ -135,6 +140,9 @@ export function ProgramPageClient({
         </div>
       </section>
 
+      {/* ── Intro (admin copy; nothing when empty) ─────────────────── */}
+      <ProgramIntroSection config={config} />
+
       {/* ── Course grid ───────────────────────────────────────────── */}
       {/* `px-4 lg:px-6` is the skill page's card-container padding, verbatim
           (SkillPageClient's per-program block) and this page's own hero
@@ -188,6 +196,10 @@ export function ProgramPageClient({
         program={program}
         skillSlugs={skillSlugs}
       />
+
+      {/* ── Why + benefit (admin copy; nothing when empty) ────────── */}
+      <ProgramWhySection config={config} />
+      <ProgramBenefitSection config={config} />
 
       {/* ── FAQ ───────────────────────────────────────────────────── */}
       <FaqAccordionSection faqs={faqs} />

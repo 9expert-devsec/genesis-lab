@@ -33,6 +33,47 @@ const ProgramPageConfigSchema = new mongoose.Schema(
     isPublished: { type: Boolean, default: true },
 
     /**
+     * THE PROGRAM COPY — two content sections on the public program page
+     * (ProgramPageClient): "intro" under the hero, "why + benefit" before the
+     * FAQ. All optional; empty renders neither section. Shaped by
+     * lib/pageConfigUpdate.shapeProgramCopy (trim, empty rows dropped, ≤ 8
+     * rows, icon from lib/programCopyIcons). introHtml is sanitised on save
+     * AND at render. Rows carry no _id so a raw seed write and an admin save
+     * store the same shape.
+     */
+    introHeading:   { type: String, default: '' },
+    introHtml:      { type: String, default: '' },
+    whyHeading:     { type: String, default: '' },
+    whyLead:        { type: String, default: '' },
+    whyItems: {
+      type: [
+        new mongoose.Schema(
+          {
+            title:       { type: String, default: '' },
+            description: { type: String, default: '' },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+    benefitHeading: { type: String, default: '' },
+    benefitLead:    { type: String, default: '' },
+    benefitCards: {
+      type: [
+        new mongoose.Schema(
+          {
+            icon:        { type: String, default: '' },
+            title:       { type: String, default: '' },
+            description: { type: String, default: '' },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+
+    /**
      * THE CATALOG PDF, one per program, Thai only — see lib/pageCatalog.
      *
      * `path` is the root-relative `/files/catalog/…` string derived from the

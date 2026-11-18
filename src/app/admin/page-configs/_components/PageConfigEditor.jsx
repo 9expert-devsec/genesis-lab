@@ -10,6 +10,7 @@ import {
 import { PageCatalogUpload } from '@/components/admin/PageCatalogUpload';
 import { hasCatalog } from '@/lib/pageCatalog';
 import { SEO_DESCRIPTION_GUIDE, seoLengthState } from '@/lib/seo/seoLengths';
+import { ProgramCopyPanel, programCopyFromConfig, EMPTY_PROGRAM_COPY } from './ProgramCopyPanel';
 
 /**
  * Generic editor for ProgramPageConfig / SkillPageConfig. Renders a
@@ -124,7 +125,12 @@ function EditForm({ kind, item, config, onSaved }) {
     metaDescription: config?.metaDescription ?? '',
     ogImage: config?.ogImage ?? '',
     isPublished: config?.isPublished ?? true,
+    // The program copy (ProgramCopyPanel) rides in the same state, so บันทึก
+    // sends it; a skill form never carries these keys.
+    ...(kind === 'program' ? programCopyFromConfig(config) : {}),
   });
+  // Remounts the intro rich-text editor on reset — it seeds once, by design.
+  const [editorKey, setEditorKey] = useState(0);
   const [pending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState(null);
   // A warning only: past the guide the counter turns amber and the save still
@@ -171,7 +177,9 @@ function EditForm({ kind, item, config, onSaved }) {
         metaDescription: '',
         ogImage: '',
         isPublished: true,
+        ...(kind === 'program' ? EMPTY_PROGRAM_COPY : {}),
       });
+      setEditorKey((k) => k + 1);
       setFeedback({ type: 'ok', message: 'ลบแล้ว' });
       setTimeout(onSaved, 600);
     });
@@ -269,6 +277,8 @@ function EditForm({ kind, item, config, onSaved }) {
         />
         เผยแพร่หน้านี้ (ถ้าปิด หน้าจะ 404)
       </label>
+
+      {kind === 'program' && <ProgramCopyPanel form={form} setForm={setForm} editorKey={editorKey} />}
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <button

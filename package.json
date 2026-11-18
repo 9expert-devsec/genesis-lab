@@ -25,6 +25,8 @@
     "audit:page-meta": "node --env-file=.env.local scripts/audit-page-meta.mjs",
     "apply:page-meta": "node --env-file=.env.local scripts/apply-page-meta.mjs",
     "restore:page-meta": "node --env-file=.env.local scripts/restore-page-meta.mjs",
+    "apply:program-copy": "node --env-file=.env.local scripts/apply-program-page-copy.mjs",
+    "restore:program-copy": "node --env-file=.env.local scripts/restore-program-page-copy.mjs",
     "audit:extension-anchor": "node --env-file=.env.local scripts/audit-extension-upstream-id.mjs",
     "backfill:extension-anchor": "node --env-file=.env.local scripts/backfill-extension-upstream-id.mjs",
     "normalize:positions": "node --env-file=.env.local scripts/normalize-article-positions.mjs",
