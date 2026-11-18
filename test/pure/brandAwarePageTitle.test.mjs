@@ -25,10 +25,16 @@ const BRANDED = 'อบรม Excel Advanced หลักสูตรสูต�
 const SHORT = 'Microsoft Excel Advanced';
 const URL = 'https://www.9experttraining.com/excel-advanced-training-course';
 
-test('the article helper delegates: identical output for every branch of the rule', () => {
-  for (const t of [BRANDED, SHORT, 'x'.repeat(47), 'x'.repeat(46), 'คอร์ส 9EXPERT', '']) {
-    assert.deepEqual(articleMetaTitle({ seoTitle: t, title: 'fallback' }), brandAwareTitle(t || 'fallback'));
+test('articles diverge from the shared rule only where the template would apply', () => {
+  // Branded and over-cap: both opt out of the template, identically.
+  // (56 is over the cap for both: 56 + 10 = 66, 56 + 19 = 75.)
+  for (const t of [BRANDED, 'คอร์ส 9EXPERT', 'x'.repeat(56)]) {
+    assert.deepEqual(articleMetaTitle({ seoTitle: t, title: 'fallback' }), brandAwareTitle(t));
   }
+  // Short and unbranded: courses / programs / skills hand the template a plain
+  // string (→ ` | 9Expert Training`); articles bake in ` | 9Expert` (R2c).
+  assert.deepEqual(brandAwareTitle(SHORT), { base: SHORT, title: SHORT });
+  assert.deepEqual(articleMetaTitle({ seoTitle: SHORT }), { base: SHORT, title: { absolute: `${SHORT} | 9Expert` } });
 });
 
 test('course: a stored title ending in | 9Expert → absolute, og:title the bare base', () => {

@@ -66,9 +66,10 @@ export async function generateMetadata({ params }) {
     article.title
   );
   const pageUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${slug}`;
-  // Brand-aware: `title` may be `{ absolute }` so the root template does not
-  // append the brand twice or push a long title past the SERP cut. `base` is
-  // the bare title for the share cards. See lib/articles/articleTitle.js.
+  // Brand-aware: `title` is always `{ absolute }` (` … | 9Expert`, or the bare
+  // title when it already names the brand or would pass 65 characters), so the
+  // root template's ` | 9Expert Training` never applies here. `base` is the
+  // bare title for the share cards. See lib/articles/articleTitle.js.
   const { base, title } = articleMetaTitle(article);
   // A child's `openGraph` / `twitter` REPLACE the root layout's objects
   // wholesale (no deep merge), so everything the article still wants from the
