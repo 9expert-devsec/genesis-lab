@@ -52,34 +52,8 @@ const sheet = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
 const { skills: siteSkills } = await import('@/config/site');
 const mongoose = (await import('mongoose')).default;
 
-// ── helpers ─────────────────────────────────────────────────────────────────
-const s = (v) => String(v ?? '');
-const normUrl = (v) => {
-  const t = s(v).trim().toLowerCase();
-  if (!t) return '';
-  return t.startsWith('/') ? t : `/${t}`;
-};
-const slugOf = (url) => s(url).trim().replace(/^\/+/, '');
-
-// The page renders `stored.trim() || fallback`, so compare trimmed values.
-function diff(current, next) {
-  const c = s(current).trim();
-  const n = s(next).trim();
-  if (!c) return 'FILL';
-  return c === n ? 'SAME' : 'CHANGE';
-}
-
-function hygiene(value) {
-  const v = s(value);
-  const flags = [];
-  if (v !== v.replace(/^\s+/, '')) flags.push('leading whitespace');
-  if (v !== v.replace(/\s+$/, '')) flags.push('trailing whitespace');
-  if (/ {2,}/.test(v)) flags.push('double space');
-  if (/[\r\n]/.test(v)) flags.push('newline');
-  if (/[^ ]\||\|[^ ]/.test(v)) flags.push('"|" not spaced on both sides');
-  if (/[ ​‌‍﻿]/.test(v)) flags.push('nbsp / zero-width char');
-  return flags;
-}
+const { s, diff, hygiene, resolveSheetRows, loadPageMetaCollections } =
+  await import('./lib/page-meta-resolve.mjs');
 
 // ── data ────────────────────────────────────────────────────────────────────
 if (!process.env.MONGODB_URI) {
@@ -90,97 +64,11 @@ await mongoose.connect(process.env.MONGODB_URI, {
   dbName: process.env.MONGODB_DB_NAME,
   serverSelectionTimeoutMS: 15000,
 });
-const db = mongoose.connection.db;
-const [extensions, programCfgs, skillCfgs] = await Promise.all([
-  db.collection('course_extensions').find({}).toArray(),
-  db.collection('program_page_configs').find({}).toArray(),
-  db.collection('skill_page_configs').find({}).toArray(),
-]);
-
-const touched = { course: new Set(), program: new Set(), skill: new Set() };
-const results = [];
-
-// ── courses ─────────────────────────────────────────────────────────────────
-for (const r of sheet.courses ?? []) {
-  const id = s(r.courseId).trim();
-  const url = normUrl(r.url);
-  const hits = extensions.filter((e) => s(e.courseId).trim().toLowerCase() === id.toLowerCase());
-  const notes = [];
-  let status;
-  let doc = null;
-
-  if (hits.length === 0) {
-    status = 'NOT_FOUND';
-    const byAlias = extensions.find((e) => normUrl(e.urlAlias) === url);
-    notes.push(byAlias
-      ? `sheet url IS the urlAlias of courseId "${byAlias.courseId}" — sheet likely has the wrong ID`
-      : 'no extension holds the sheet url as urlAlias');
-    const byFormerAlias = extensions.find((e) => (e.formerAliases ?? []).some((a) => normUrl(a) === url));
-    if (byFormerAlias) notes.push(`sheet url is a FORMER alias of "${byFormerAlias.courseId}"`);
-    const byFormerCode = extensions.find((e) => (e.formerCodes ?? []).some((c) => s(c).toLowerCase() === id.toLowerCase()));
-    if (byFormerCode) notes.push(`courseId is a FORMER code of "${byFormerCode.courseId}"`);
-  } else {
-    doc = hits[0];
-    if (hits.length > 1) notes.push(`${hits.length} extension rows match case-insensitively: ${hits.map((h) => h.courseId).join(', ')}`);
-    if (doc.courseId !== id) notes.push(`stored courseId casing is "${doc.courseId}"`);
-    if (normUrl(doc.urlAlias) === url) {
-      status = 'MATCH';
-    } else {
-      status = 'URL_MISMATCH';
-      notes.push(`urlAlias is "${s(doc.urlAlias) || '(empty)'}"`);
-      if ((doc.formerAliases ?? []).some((a) => normUrl(a) === url)) notes.push('sheet url is a FORMER alias of this row');
-      if (!s(doc.urlAlias).trim() && url === `/${doc.courseId.toLowerCase()}-training-course`) {
-        notes.push('no alias; the sheet url equals the code path the page serves');
-      }
-      const other = extensions.find((e) => e !== doc && normUrl(e.urlAlias) === url);
-      if (other) notes.push(`sheet url is the urlAlias of another row "${other.courseId}"`);
-    }
-    if (doc.isPublished === false) notes.push('extension isPublished=false');
-    for (const h of hits) touched.course.add(String(h._id));
-  }
-
-  results.push({ kind: 'course', row: r.row, url: r.url, courseId: id, status, doc, sheetRow: r, notes });
-}
-
-// ── programs / skills ───────────────────────────────────────────────────────
+const { extensions, programCfgs, skillCfgs } = await loadPageMetaCollections(mongoose.connection.db);
 const siteSkillSlugs = new Set(siteSkills.map((k) => `${k.slug}-all-courses`));
 
-for (const [kind, rows, cfgs] of [
-  ['program', sheet.programs ?? [], programCfgs],
-  ['skill', sheet.skills ?? [], skillCfgs],
-]) {
-  for (const r of rows) {
-    const slug = slugOf(r.url);
-    const hits = cfgs.filter((c) => s(c.urlSlug) === slug);
-    const notes = [];
-    let status;
-    let doc = null;
-
-    if (hits.length === 0) {
-      status = 'NOT_FOUND';
-      const ci = cfgs.filter((c) => s(c.urlSlug).toLowerCase() === slug.toLowerCase());
-      if (ci.length) notes.push(`case-insensitive hit: "${ci.map((c) => c.urlSlug).join('", "')}"`);
-      const other = (kind === 'program' ? skillCfgs : programCfgs).filter((c) => s(c.urlSlug) === slug);
-      if (other.length) notes.push(`slug exists in the ${kind === 'program' ? 'SKILL' : 'PROGRAM'} config collection`);
-      if (kind === 'skill') {
-        notes.push(siteSkillSlugs.has(slug)
-          ? 'slug IS one of the 7 site.js skills (+ -all-courses)'
-          : 'slug is NOT in site.js skills');
-      }
-    } else if (hits.length > 1) {
-      status = 'MULTIPLE';
-      doc = hits[0];
-      notes.push(`${hits.length} rows: ${hits.map((h) => `${h._id}(isPublished=${h.isPublished})`).join(', ')}`);
-    } else {
-      doc = hits[0];
-      status = doc.isPublished === false ? 'UNPUBLISHED' : 'MATCH';
-    }
-    if (kind === 'skill' && hits.length && !siteSkillSlugs.has(slug)) notes.push('slug is NOT in site.js skills');
-    for (const h of hits) touched[kind].add(String(h._id));
-
-    results.push({ kind, row: r.row, url: r.url, courseId: '', status, doc, sheetRow: r, notes });
-  }
-}
+// ── resolve (shared with apply-page-meta) ───────────────────────────────────
+const { results, touched } = resolveSheetRows(sheet, { extensions, programCfgs, skillCfgs, siteSkillSlugs });
 
 for (const x of results) {
   x.titleChange = x.doc ? diff(x.doc.metaTitle, x.sheetRow.metaTitle) : '';

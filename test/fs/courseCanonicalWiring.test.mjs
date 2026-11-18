@@ -159,13 +159,23 @@ test('program, skill and career-path branches still self-canonicalise', () => {
   // Counted, not spot-checked: three branches each emit `canonical: pageUrl`,
   // and the course branch used to be a fourth. If a later edit "tidies" one of
   // these onto the course helper, the count moves and this says so.
-  const selfCanonical = [...code.matchAll(/alternates: \{ canonical: pageUrl \}/g)];
+  //
+  // SEO-META R2 moved the program and skill objects into
+  // lib/seo/catalogPageMetadata (brand-aware title), so the count is now in two
+  // halves: one inline in the page (career path) plus two catalogPageMetadata
+  // calls handed `pageUrl`, and the helper canonicalises to that `pageUrl`.
+  const inline = [...code.matchAll(/alternates: \{ canonical: pageUrl \}/g)];
+  const viaHelper = [...code.matchAll(/catalogPageMetadata\(\{[^}]*\bpageUrl,?\s*\}\)/g)];
+  const selfCanonical = inline.length + viaHelper.length;
   assert.equal(
-    selfCanonical.length, 3,
-    `${selfCanonical.length} branches self-canonicalise; expected exactly 3 `
-    + '(program, skill, career path). The course branch must NOT be among them, '
-    + 'and the other three must NOT have been changed.',
+    selfCanonical, 3,
+    `${selfCanonical} branches self-canonicalise (${inline.length} inline + ${viaHelper.length} via `
+    + 'catalogPageMetadata); expected exactly 3 (program, skill, career path). The course '
+    + 'branch must NOT be among them, and the other three must NOT have been changed.',
   );
+  const helper = readSource('src/lib/seo/catalogPageMetadata.js').code;
+  assert.match(helper, /alternates: \{ canonical: pageUrl \}/, 'catalogPageMetadata canonical');
+  assert.match(helper, /url: pageUrl,/, 'catalogPageMetadata openGraph.url');
 });
 
 // ── CONTROL ─────────────────────────────────────────────────────────────────
