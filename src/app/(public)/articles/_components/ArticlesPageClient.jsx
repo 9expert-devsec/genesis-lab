@@ -165,6 +165,8 @@ export function ArticlesPageClient({
             ref={inputRef}
             defaultValue={q}
             onChange={onSearchInput}
+            // D26 — a placeholder is not a name; it vanishes as you type.
+            aria-label="ค้นหาบทความ"
             placeholder="ค้นหาบทความ..."
             className="w-full rounded-9e-md border border-[var(--surface-border)] bg-white py-2 pl-9 pr-3 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
           />
@@ -173,6 +175,8 @@ export function ArticlesPageClient({
         <select
           value={program}
           onChange={(e) => navigate({ program: e.target.value })}
+          // D26 — the visible first option is a value, not a name.
+          aria-label="กรองตาม Program"
           className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
         >
           <option value="">ทุก Program</option>
@@ -197,6 +201,7 @@ export function ArticlesPageClient({
         <select
           value={skill}
           onChange={(e) => navigate({ skill: e.target.value })}
+          aria-label="กรองตาม Skill"
           className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
         >
           <option value="">ทุก Skill</option>

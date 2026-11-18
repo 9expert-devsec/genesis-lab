@@ -131,7 +131,11 @@ export const SCHEDULE_STATUS = {
     dot: 'bg-[#39b980]',
     text: 'text-[#39b980]',
     solid: 'bg-[#39b980] text-white',
-    soft: 'bg-[#39b980]/10 text-[#39b980] dark:bg-[#39b980]/20',
+    // D15 e (R2): the 11px pill TEXT is the nearest shade of the status colour
+    // that passes AA on its own tint over the worst ground it sits on — light
+    // #257853 over #EEF5FF (the pale blue course-page card; was #39b980,
+    // 2.09:1 → 4.54), dark #42BC85 over #132638 (4.33 → 4.50). Tint unchanged.
+    soft: 'bg-[#39b980]/10 text-[#257853] dark:bg-[#39b980]/20 dark:text-[#42BC85]',
   },
   nearly_full: {
     state: 'ใกล้เต็ม',
@@ -139,7 +143,8 @@ export const SCHEDULE_STATUS = {
     dot: 'bg-[#ffc94a]',
     text: 'text-[#d4a017] dark:text-[#ffc94a]',
     solid: 'bg-[#ffc94a] text-white',
-    soft: 'bg-[#ffc94a]/15 text-[#d4a017] dark:bg-[#ffc94a]/20 dark:text-[#ffc94a]',
+    // D15 e: light #89670F (was #d4a017, 2.05:1 → 4.52 over #EEF5FF); dark already passes.
+    soft: 'bg-[#ffc94a]/15 text-[#89670F] dark:bg-[#ffc94a]/20 dark:text-[#ffc94a]',
   },
   full: {
     state: 'เต็ม',
@@ -147,7 +152,8 @@ export const SCHEDULE_STATUS = {
     dot: 'bg-[#ff4b55]',
     text: 'text-[#ff4b55]',
     solid: 'bg-[#ff4b55] text-white',
-    soft: 'bg-[#ff4b55]/10 text-[#ff4b55] dark:bg-[#ff4b55]/20',
+    // D15 e: light #BC373F (was #ff4b55, 2.66:1 → 4.52 over #EEF5FF); dark #FF6B73 (3.80 → 4.52).
+    soft: 'bg-[#ff4b55]/10 text-[#BC373F] dark:bg-[#ff4b55]/20 dark:text-[#FF6B73]',
   },
   /**
    * Cancelled round. Seen ONLY in admin (public reads exclude it). Grey, and

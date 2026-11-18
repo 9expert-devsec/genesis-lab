@@ -400,20 +400,29 @@ function NextButton({ show, onClick, compact = false }) {
 function PageDots({ total, current, onChange, className }) {
   if (total <= 1) return null;
   return (
-    <div className={cn("flex items-center justify-center gap-2", className)}>
+    // D15 i (R2) — WCAG 2.2 SC 2.5.8: each button is a ≥24×24 hit area with
+    // the SAME dot / active pill drawn inside, instead of the 10px dot being the
+    // whole button. The `group` lets the inner dot keep its hover colour.
+    <div className={cn("flex items-center justify-center", className)}>
       {Array.from({ length: total }).map((_, i) => (
         <button
           key={i}
           type="button"
           onClick={() => onChange(i)}
           aria-label={`ไปหน้า ${i + 1}`}
-          className={cn(
-            "rounded-full transition-all duration-9e-micro ease-9e",
-            i === current
-              ? "h-2.5 w-6 bg-9e-brand dark:bg-9e-lime "
-              : "h-2.5 w-2.5 bg-gray-300 hover:bg-9e-air dark:hover:bg-9e-lime-lt",
-          )}
-        />
+          aria-current={i === current ? "true" : undefined}
+          className="group flex h-6 min-w-6 items-center justify-center px-1"
+        >
+          <span
+            aria-hidden="true"
+            className={cn(
+              "rounded-full transition-all duration-9e-micro ease-9e",
+              i === current
+                ? "h-2.5 w-6 bg-9e-brand dark:bg-9e-lime "
+                : "h-2.5 w-2.5 bg-gray-300 group-hover:bg-9e-air dark:group-hover:bg-9e-lime-lt",
+            )}
+          />
+        </button>
       ))}
     </div>
   );

@@ -19,6 +19,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ThaiAddressFields } from '@/components/registration/ThaiAddressFields';
 import { BranchFields, TaxIdField } from '@/components/registration/BranchFields';
+// D26 — the shared label/control/error wrapper (was a local copy here).
+import { FieldGroup } from '@/components/registration/FieldGroup';
 import { formatBranchLabel } from '@/lib/registration/branchLabel';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatThaiAddress } from '@/lib/address/formatThaiAddress';
@@ -617,23 +619,24 @@ export function InhouseStepForm({ courses = [], preselectedCourse = null, initia
       <FormSection icon={<Phone className="h-5 w-5" />} title="ผู้ประสานงาน">
         <div className="grid gap-4 sm:grid-cols-2">
           <FieldGroup label="ชื่อ" required error={errors.contactFirstName?.message}>
-            <Input {...register('contactFirstName')} placeholder="กรุณากรอกชื่อ" aria-invalid={!!errors.contactFirstName} />
+            <Input {...register('contactFirstName')} autoComplete="given-name" placeholder="กรุณากรอกชื่อ" aria-invalid={!!errors.contactFirstName} />
           </FieldGroup>
           <FieldGroup label="นามสกุล" required error={errors.contactLastName?.message}>
-            <Input {...register('contactLastName')} placeholder="กรุณากรอกนามสกุล" aria-invalid={!!errors.contactLastName} />
+            <Input {...register('contactLastName')} autoComplete="family-name" placeholder="กรุณากรอกนามสกุล" aria-invalid={!!errors.contactLastName} />
           </FieldGroup>
           <FieldGroup label="ตำแหน่ง" error={errors.contactRole?.message}>
-            <Input {...register('contactRole')} placeholder="เช่น HR Manager" />
+            <Input {...register('contactRole')} autoComplete="organization-title" placeholder="เช่น HR Manager" />
           </FieldGroup>
           <FieldGroup label="แผนก" error={errors.contactDepartment?.message}>
             <Input {...register('contactDepartment')} placeholder="เช่น Human Resources" />
           </FieldGroup>
           <FieldGroup label="อีเมล" required error={errors.contactEmail?.message}>
-            <Input type="email" {...register('contactEmail')} placeholder="name@company.com" aria-invalid={!!errors.contactEmail} />
+            <Input type="email" {...register('contactEmail')} autoComplete="email" placeholder="name@company.com" aria-invalid={!!errors.contactEmail} />
           </FieldGroup>
           <FieldGroup label="เบอร์โทรศัพท์" required error={contactPhoneReveal.shouldShow ? errors.contactPhone?.message : undefined}>
             <Input
               type="tel"
+              autoComplete="tel"
               {...contactPhoneProps}
               onBlur={(e) => { contactPhoneProps.onBlur(e); contactPhoneReveal.reveal(); }}
               placeholder="เช่น 0812345678 หรือ 02-219-4304 ต่อ 1234"
@@ -661,7 +664,7 @@ export function InhouseStepForm({ courses = [], preselectedCourse = null, initia
             </select>
           </FieldGroup>
           <FieldGroup label={isTH ? 'ชื่อบริษัทสำหรับออกใบเสนอราคา' : 'Company name for quotation'} required error={errors.quotationCompany?.message}>
-            <Input {...register('quotationCompany')} placeholder={isTH ? 'บริษัท ตัวอย่าง จำกัด' : 'Company Inc.'} aria-invalid={!!errors.quotationCompany} />
+            <Input {...register('quotationCompany')} autoComplete="organization" placeholder={isTH ? 'บริษัท ตัวอย่าง จำกัด' : 'Company Inc.'} aria-invalid={!!errors.quotationCompany} />
           </FieldGroup>
         </div>
 
@@ -692,22 +695,22 @@ export function InhouseStepForm({ courses = [], preselectedCourse = null, initia
               <Input {...register('taxId')} placeholder="Optional for international" aria-invalid={!!errors.taxId} />
             </FieldGroup>
             <FieldGroup label="Address line 1" required error={errors.internationalAddress?.line1?.message} className="sm:col-span-2">
-              <Input {...register('internationalAddress.line1')} placeholder="Street address" aria-invalid={!!errors.internationalAddress?.line1} />
+              <Input {...register('internationalAddress.line1')} autoComplete="address-line1" placeholder="Street address" aria-invalid={!!errors.internationalAddress?.line1} />
             </FieldGroup>
             <FieldGroup label="Address line 2 (optional)" error={errors.internationalAddress?.line2?.message} className="sm:col-span-2">
-              <Input {...register('internationalAddress.line2')} placeholder="Apartment, suite, building, floor, etc." />
+              <Input {...register('internationalAddress.line2')} autoComplete="address-line2" placeholder="Apartment, suite, building, floor, etc." />
             </FieldGroup>
             <FieldGroup label="City" required error={errors.internationalAddress?.city?.message}>
-              <Input {...register('internationalAddress.city')} placeholder="City" aria-invalid={!!errors.internationalAddress?.city} />
+              <Input {...register('internationalAddress.city')} autoComplete="address-level2" placeholder="City" aria-invalid={!!errors.internationalAddress?.city} />
             </FieldGroup>
             <FieldGroup label="State / Province / Region (optional)" error={errors.internationalAddress?.state?.message}>
-              <Input {...register('internationalAddress.state')} placeholder="State or region" />
+              <Input {...register('internationalAddress.state')} autoComplete="address-level1" placeholder="State or region" />
             </FieldGroup>
             <FieldGroup label="Postal code (optional)" error={errors.internationalAddress?.postalCode?.message}>
-              <Input {...register('internationalAddress.postalCode')} placeholder="Postal code" />
+              <Input {...register('internationalAddress.postalCode')} autoComplete="postal-code" placeholder="Postal code" />
             </FieldGroup>
             <FieldGroup label="Country" required error={errors.internationalAddress?.country?.message}>
-              <Input {...register('internationalAddress.country')} placeholder="e.g. Singapore" aria-invalid={!!errors.internationalAddress?.country} />
+              <Input {...register('internationalAddress.country')} autoComplete="country-name" placeholder="e.g. Singapore" aria-invalid={!!errors.internationalAddress?.country} />
             </FieldGroup>
           </div>
         )}
@@ -716,6 +719,8 @@ export function InhouseStepForm({ courses = [], preselectedCourse = null, initia
       {/* ── Section 5: Notes ── */}
       <FormSection icon={<StickyNote className="h-5 w-5" />} title="หมายเหตุเพิ่มเติม">
         <Textarea
+          // D26: no <label> here — the section heading names it.
+          aria-label="หมายเหตุเพิ่มเติม"
           {...register('message')}
           rows={4}
           placeholder="ระบุข้อมูลเพิ่มเติม"
@@ -958,19 +963,6 @@ function FormSection({ icon, title, children }) {
       </div>
       {children}
     </section>
-  );
-}
-
-function FieldGroup({ label, error, required, children, className }) {
-  return (
-    <div className={className}>
-      <Label className="mb-1.5 block">
-        {label}
-        {required && <span className="ml-0.5 text-red-500">*</span>}
-      </Label>
-      {children}
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
-    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -87,6 +87,8 @@ export function PublicHeaderClient({
   overlay = false,
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // D25 — where focus returns when the drawer closes.
+  const menuButtonRef = useRef(null);
 
   // Is the header currently sitting ON the hero artwork?
   //
@@ -284,9 +286,11 @@ export function PublicHeaderClient({
 
           {/* Hamburger — mobile only */}
           <button
+            ref={menuButtonRef}
             type="button"
             aria-label={drawerOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
             aria-expanded={drawerOpen}
+            aria-controls="mobile-drawer"
             onClick={() => setDrawerOpen((v) => !v)}
             className={cn(
               'inline-flex h-10 w-10 items-center justify-center rounded-full',
@@ -324,6 +328,7 @@ export function PublicHeaderClient({
           navOnlineCourses={navOnlineCourses}
           navMenuData={navMenuData}
           navMasterclasses={navMasterclasses}
+          returnFocusRef={menuButtonRef}
           onClose={() => setDrawerOpen(false)}
         />,
         document.body
@@ -1409,6 +1414,31 @@ function Col4Skeleton() {
 
 // ── Mobile drawer ───────────────────────────────────────────────
 
+// Layout effect in the browser (runs before paint), plain effect on the server
+// render that the test tier performs — where neither runs, but useLayoutEffect
+// would print a warning.
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+
+const DRAWER_FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * D25 — the drawer as a real modal dialog for keyboard and screen-reader users.
+ *
+ *   · CLOSED: the wrapper is `inert` as well as `aria-hidden`. aria-hidden alone
+ *     hid it from assistive tech but left its 9 links in the Tab order — focus
+ *     could land on things a screen reader would not announce. `inert` removes
+ *     them from both. Set as the DOM PROPERTY from a layout effect, not as a JSX
+ *     attribute: the app router runs React 19 and this repo's render tests run
+ *     react-dom 18, and the two disagree about how a JSX `inert` is spelled.
+ *     The drawer is portalled only after mount, so there is no server HTML in
+ *     which it could be missing; the layout effect sets it before first paint.
+ *   · OPEN: focus moves to the close button, Tab / Shift+Tab wrap inside the
+ *     panel, and Esc closes.
+ *   · ON CLOSE (any way — Esc, ✕, backdrop, a link): focus returns to the
+ *     hamburger that opened it.
+ * Nothing visual changes: same classes, same slide.
+ */
 export function MobileDrawer({
   open,
   programs,
@@ -1418,13 +1448,66 @@ export function MobileDrawer({
   navOnlineCourses = [],
   navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {}, skillOrder: {} },
   navMasterclasses = [],
+  returnFocusRef = null,
   onClose,
 }) {
+  const wrapperRef = useRef(null);
+  const panelRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const wasOpenRef = useRef(false);
+  // The latest onClose without re-binding the key listener on every render.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useIsomorphicLayoutEffect(() => {
+    if (wrapperRef.current) wrapperRef.current.inert = !open;
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      if (wasOpenRef.current) {
+        wasOpenRef.current = false;
+        returnFocusRef?.current?.focus({ preventScroll: true });
+      }
+      return undefined;
+    }
+    wasOpenRef.current = true;
+    closeButtonRef.current?.focus({ preventScroll: true });
+
+    const onKey = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current?.();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      // Visible focusables only — a collapsed accordion's links are not.
+      const items = [...panel.querySelectorAll(DRAWER_FOCUSABLE)].filter(
+        (el) => el.getClientRects().length > 0
+      );
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !panel.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, returnFocusRef]);
+
   // Always mounted so the translate-x slide animation has a stable
   // starting position. Pointer events on the backdrop are gated by
   // `open` so the closed state doesn't intercept clicks.
   return (
-    <div className="lg:hidden" aria-hidden={!open}>
+    <div ref={wrapperRef} className="lg:hidden" aria-hidden={!open}>
       <div
         className={cn(
           'fixed inset-0 z-[9998] bg-black/50 transition-opacity duration-9e-reveal ease-9e',
@@ -1433,6 +1516,7 @@ export function MobileDrawer({
         onClick={onClose}
       />
       <aside
+        ref={panelRef}
         id="mobile-drawer"
         role="dialog"
         aria-modal="true"
@@ -1447,6 +1531,7 @@ export function MobileDrawer({
         <div className="flex items-center justify-between border-b border-[var(--surface-border)] px-4 py-3">
           <Logo />
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             aria-label="ปิดเมนู"

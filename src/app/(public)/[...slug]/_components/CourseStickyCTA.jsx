@@ -6,6 +6,9 @@ import { X } from "lucide-react";
 import { setOccupiedBox, clearOccupiedBox } from "@/lib/viewportBottomInset";
 import { stickyBarOccupancyHeight } from "@/lib/stickyBarOccupancy";
 
+/** D29 — sessionStorage key for "the visitor closed the sticky bar". */
+const STICKY_CTA_DISMISSED_KEY = "course_sticky_cta_dismissed";
+
 /**
  * Pure resolver for the bar's single action. Exported so the three behaviours
  * are testable without a DOM — the render path below just executes whatever
@@ -103,6 +106,28 @@ export function CourseStickyCTA({
 }) {
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [barDismissed, setBarDismissed] = useState(false);
+
+  // D29 — the ✕ is remembered for the rest of this TAB's session, across course
+  // pages, rather than only until the next page load. One key for every course:
+  // someone who closed the bar does not want it back on the next course they
+  // open. Read in an effect (sessionStorage is client-only); the bar is hidden
+  // until the user scrolls anyway, so there is nothing to flash.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(STICKY_CTA_DISMISSED_KEY)) setBarDismissed(true);
+    } catch {
+      // Storage blocked — the bar just behaves as before.
+    }
+  }, []);
+
+  const dismissBar = () => {
+    try {
+      sessionStorage.setItem(STICKY_CTA_DISMISSED_KEY, '1');
+    } catch {
+      // Storage blocked — still hide it for this page.
+    }
+    setBarDismissed(true);
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -266,7 +291,7 @@ export function CourseStickyCTA({
           described above for the sidebar; it is two live controls fighting.
 
           It is now resolved, and NOT by a lift rule in this file. This bar
-          publishes how much of the bottom edge it occupies and the dock pads
+          publishes how much of the bottom edge it occupies and the dock lifts
           itself clear of whatever it is told. No offset here has to agree with
           an offset there — that coupling is exactly what the dock was created
           to remove, and it stays removed, because the number is measured rather
@@ -310,10 +335,11 @@ export function CourseStickyCTA({
 
               <button
                 type="button"
-                onClick={() => setBarDismissed(true)}
+                onClick={dismissBar}
+                aria-label="ปิดแถบลงทะเบียน"
                 className="absolute right-1.5 top-1.5 p-1 rounded-full text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
               >
-                <X size={16} />
+                <X size={16} aria-hidden="true" />
               </button>
 
               {/* Actions */}

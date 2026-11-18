@@ -442,7 +442,7 @@ export function ArticleDetailClient({
             {showProgress && (
               <>
                 <span
-                  className="mb-1 text-[12px] text-gray-400"
+                  className="mb-1 text-[12px] text-gray-500 dark:text-gray-400"
                   style={{ writingMode: 'vertical-rl', transform: 'rotate(270deg)' }}
                 >
                   Share
@@ -561,7 +561,7 @@ export function ArticleDetailClient({
           {tocItems.length > 1 && (
             <aside className="sticky top-28 hidden w-60 flex-shrink-0 xl:block">
               <div className="rounded-xl border border-[var(--surface-border)] bg-white p-4 dark:bg-[#111d2c]">
-                <p className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-400">
+                <p className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   สารบัญ
                 </p>
                 {/* Internal scroll capped at 400 px so a heading-heavy
@@ -675,11 +675,33 @@ function slugifyHeading(text) {
 
 // ── Share buttons ────────────────────────────────────────────────
 
+/**
+ * `fg` is the brand colour and still paints the tint and the border. The TEXT
+ * and icon colour is a shade of it that passes WCAG AA (4.5:1) on that tint —
+ * solved against the stronger hover tint (`fg` at 0x33), the worst case, over
+ * the page ground of each theme (D15 b, R2). Before, `fg` itself was the text:
+ * LINE 2.06:1 on light, Facebook 3.72 / 3.68, LinkedIn 2.81 on dark.
+ *   text      light ground #FFFFFF
+ *   textDark  dark ground  #0D1B2A
+ */
 const BRAND = {
-  facebook: { fg: '#1877F2' },
-  line:     { fg: '#06C755' },
-  linkedin: { fg: '#0A66C2' },
+  facebook: { fg: '#1877F2', text: '#1462C6', textDark: '#4A95F5' },
+  line:     { fg: '#06C755', text: '#047B35', textDark: '#06C755' },
+  linkedin: { fg: '#0A66C2', text: '#0A62BA', textDark: '#5393D4' },
 };
+
+/** Tint + border from the brand colour; text from the per-theme AA shade. */
+function shareStyle(brand, tintAlpha = '1a') {
+  const { fg, text, textDark } = BRAND[brand];
+  return {
+    backgroundColor: `${fg}${tintAlpha}`,
+    borderColor: `${fg}33`,
+    '--share-text': text,
+    '--share-text-dark': textDark,
+  };
+}
+// Literal class strings so Tailwind's scan emits them.
+const SHARE_TEXT = 'text-[color:var(--share-text)] dark:text-[color:var(--share-text-dark)]';
 
 // The system share sheet has no brand: it is a button, not a link, and it
 // says แชร์ rather than Facebook because the sheet may hand the URL to LINE,
@@ -689,17 +711,22 @@ const BRAND = {
 // variant on purpose (see canNativeShare).
 const NATIVE_SHARE_FG = '#005CFF'; // 9e-action
 
+// D15 b (R2): #005CFF passes on light (4.54:1) but is 3.03:1 on the dark
+// ground; #3E84FF is the nearest shade that passes there (4.53:1).
+const NATIVE_SHARE_TEXT_DARK = '#3E84FF';
+
 function NativeShareLink({ onShare }) {
   const fg = NATIVE_SHARE_FG;
   return (
     <button
       type="button"
       onClick={onShare}
-      className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${SHARE_TEXT}`}
       style={{
         backgroundColor: `${fg}1a`,
-        color: fg,
         borderColor: `${fg}33`,
+        '--share-text': fg,
+        '--share-text-dark': NATIVE_SHARE_TEXT_DARK,
       }}
     >
       <Share2 className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -716,12 +743,8 @@ function ShareIcon({ href, brand }) {
       target="_blank"
       rel="noopener noreferrer"
       title={`Share ${brand}`}
-      className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors hover:text-white"
-      style={{
-        backgroundColor: `${fg}1a`,
-        color: fg,
-        borderColor: `${fg}33`,
-      }}
+      className={`flex h-9 w-9 items-center justify-center rounded-full border transition-colors ${SHARE_TEXT}`}
+      style={shareStyle(brand)}
       onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = `${fg}33`; }}
       onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = `${fg}1a`; }}
     >
@@ -731,18 +754,13 @@ function ShareIcon({ href, brand }) {
 }
 
 function ShareLink({ href, brand, label }) {
-  const { fg } = BRAND[brand];
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
-      style={{
-        backgroundColor: `${fg}1a`,
-        color: fg,
-        borderColor: `${fg}33`,
-      }}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${SHARE_TEXT}`}
+      style={shareStyle(brand)}
     >
       <BrandGlyph brand={brand} />
       {label}

@@ -238,20 +238,32 @@ function BlogCarousel({ blogs, programNames, skillNames }) {
         </div>
       </div>
 
-      <div className="mt-4 flex justify-center gap-2">
+      {/* D15 i (R2) — WCAG 2.2 SC 2.5.8 target size. Each button is a 24×24
+          hit area with the SAME 8px dot drawn inside it. The dots used to be
+          the buttons (8×8, 16px centre to centre), which no spacing can save:
+          the rule needs 24px between centres. So the dots now sit 16px apart
+          instead of 8px — the one visible change, and the minimum the rule
+          allows. */}
+      <div className="mt-4 flex justify-center">
         {blogs.map((_, i) => (
           <button
             key={i}
             type="button"
             onClick={() => setCurrentIndex(i)}
             aria-label={`ไปบทความที่ ${i + 1}`}
-            className={cn(
-              'h-2 w-2 rounded-full transition-colors',
-              i === currentIndex
-                ? 'bg-9e-action dark:bg-[#48B0FF]'
-                : 'bg-[#CBD5E1] dark:bg-[#1e3a5f]'
-            )}
-          />
+            aria-current={i === currentIndex ? 'true' : undefined}
+            className="flex h-6 w-6 items-center justify-center"
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                'h-2 w-2 rounded-full transition-colors',
+                i === currentIndex
+                  ? 'bg-9e-action dark:bg-[#48B0FF]'
+                  : 'bg-[#CBD5E1] dark:bg-[#1e3a5f]'
+              )}
+            />
+          </button>
         ))}
       </div>
     </div>

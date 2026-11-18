@@ -315,7 +315,9 @@ test('the status badge renders on a card round', () => {
   const cards = cardRegion(renderBoard());
   assert.ok(cards.includes('ลงทะเบียน'), 'open badge missing from the card');
   assert.ok(cards.includes('ใกล้เต็ม'), 'nearly_full badge missing from the card');
-  assert.ok(cards.includes('text-[#39b980]'), 'the open green is not the badge colour');
+  // The open pill's TEXT is the AA shade of the open green since D15 e (R2);
+  // its tint is still the open green itself.
+  assert.ok(cards.includes('bg-[#39b980]/10 text-[#257853]'), 'the open green is not the badge colour');
 });
 
 test('a BLANK status renders no badge at all — not a default label', () => {

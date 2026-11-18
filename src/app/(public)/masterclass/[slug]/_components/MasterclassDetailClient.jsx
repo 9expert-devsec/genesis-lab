@@ -347,7 +347,7 @@ export function MasterclassDetailClient({
             <span className="text-lg md:text-2xl font-bold text-9e-navy dark:text-white">
               {course.duration_days} Day{course.duration_days > 1 ? "s" : ""}
             </span>
-            <span className="text-[12px] font-semibold uppercase tracking-widest text-9e-brand mt-0.5">
+            <span className="text-[12px] font-semibold uppercase tracking-widest text-9e-brand-text dark:text-9e-air mt-0.5">
               EXCLUSIVE
             </span>
           </div>
@@ -356,7 +356,7 @@ export function MasterclassDetailClient({
             <span className="text-lg md:text-2xl font-bold text-9e-navy dark:text-white">
               {visibleBatches[0]?.capacity ?? 50} Participants
             </span>
-            <span className="text-[12px] font-semibold uppercase tracking-widest text-9e-brand mt-0.5">
+            <span className="text-[12px] font-semibold uppercase tracking-widest text-9e-brand-text dark:text-9e-air mt-0.5">
               MAX CAPACITY
             </span>
           </div>
@@ -936,9 +936,11 @@ export function MasterclassDetailClient({
               <button
                 type="button"
                 onClick={() => setBarDismissed(true)}
+                // D15 g (R2): the ✕ had no accessible name.
+                aria-label="ปิดแถบลงทะเบียน"
                 className="absolute right-1.5 top-1.5 p-1 text-9e-navy rounded-full hover:bg-9e-ice dark:text-white dark:hover:bg-white/5"
               >
-                <X size={16} />
+                <X size={16} aria-hidden="true" />
               </button>
 
               {/* Actions */}

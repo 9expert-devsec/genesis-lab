@@ -108,7 +108,7 @@ export function BundleSummary({
         */}
         <span
           data-testid="bundle-summary-count"
-          className="rounded-9e-sm bg-9e-brand/10 px-2 py-0.5 text-xs font-bold text-9e-brand"
+          className="rounded-9e-sm bg-9e-brand/10 px-2 py-0.5 text-xs font-bold text-9e-brand-text dark:text-9e-air"
         >
           {lines.length} หลักสูตร
         </span>
@@ -129,7 +129,7 @@ export function BundleSummary({
           >
             <span
               aria-hidden
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-9e-md bg-9e-brand/10 font-en text-xs font-bold text-9e-brand"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-9e-md bg-9e-brand/10 font-en text-xs font-bold text-9e-brand-text dark:text-9e-air"
             >
               {String(i + 1).padStart(2, "0")}
             </span>
@@ -238,7 +238,7 @@ export function BundleSummary({
               replace trap. `ลด` was rejected because the row's own <dt> already
               reads ส่วนลด, and the value would then say the label again.
             */}
-            <dd className="font-en text-sm font-bold text-9e-brand">
+            <dd className="font-en text-sm font-bold text-9e-brand-text dark:text-9e-air">
               -{formatBaht(amount)} บาท
             </dd>
           </div>

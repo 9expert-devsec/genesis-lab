@@ -445,7 +445,9 @@ const CARD_EARLY_BIRD_ROW =
   + '<span class="flex-none rounded-sm whitespace-nowrap bg-[#D4F73F] px-1.5 py-[2px] text-[0.5rem] '
   + 'font-black leading-none text-9e-navy shadow-sm">Early Bird</span></span>'
   + '<span class="flex-none whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold '
-  + 'bg-[#39b980]/10 text-[#39b980] dark:bg-[#39b980]/20">ลงทะเบียน</span>'
+  // D15 e (R2): the status pill's TEXT is the AA shade of the open green; the
+  // early-bird chip this golden exists to watch is unchanged.
+  + 'bg-[#39b980]/10 text-[#257853] dark:bg-[#39b980]/20 dark:text-[#42BC85]">ลงทะเบียน</span>'
   + '<span aria-hidden="true" class="flex h-6 w-6 flex-none items-center justify-center rounded-full '
   + 'bg-9e-air/20 text-9e-action dark:text-9e-air">'
   + '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" '

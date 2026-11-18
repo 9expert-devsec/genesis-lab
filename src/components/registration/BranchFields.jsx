@@ -1,7 +1,8 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+// D26 — the shared label/control/error wrapper (was a local copy here).
+import { FieldGroup } from '@/components/registration/FieldGroup';
 import { digitsOnly } from '@/lib/registration/digitsOnly';
 import { cn } from '@/lib/utils';
 
@@ -110,15 +111,3 @@ function selectCls() {
   );
 }
 
-function FieldGroup({ label, error, required, children }) {
-  return (
-    <div>
-      <Label className="mb-1.5 block">
-        {label}
-        {required && <span className="ml-0.5 text-red-500">*</span>}
-      </Label>
-      {children}
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
-    </div>
-  );
-}
