@@ -9,11 +9,35 @@ import { withCardWriters } from '@/lib/writers/writerReads';
 import { redirect } from 'next/navigation';
 import { ArticlesPageClient } from './_components/ArticlesPageClient';
 
-export const metadata = {
-  title: 'บทความ',
-  description: 'แบ่งปันความรู้เทคโนโลยี เพื่อ "ขับเคลื่อนประเทศไทย"',
-  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/articles` },
-};
+/**
+ * D07 — the canonical follows the page, not the filters.
+ *
+ *   · /articles, or any FILTERED view (q / tag / program / skill / type),
+ *     → /articles. A filtered list is a view of the index, not a page to rank.
+ *   · an UNFILTERED page ≥ 2 → itself, /articles?page=N. Those pages hold
+ *     articles page 1 does not, and the pager now links them; pointing them
+ *     at /articles would ask crawlers to fold them into page 1 and drop the
+ *     very links the pager exists to expose.
+ *
+ * Costs nothing extra: this route is already force-dynamic (below), so the
+ * metadata was always resolved per request alongside the page.
+ */
+const FILTER_KEYS = ['q', 'tag', 'program', 'skill', 'type'];
+
+export async function generateMetadata({ searchParams }) {
+  const sp = (await searchParams) ?? {};
+  const page = Math.max(1, Math.floor(Number(sp.page)) || 1);
+  const filtered = FILTER_KEYS.some((k) => {
+    const v = (sp[k] ?? '').toString().trim();
+    return v !== '' && v !== 'all';
+  });
+  const base = `${process.env.NEXT_PUBLIC_SITE_URL}/articles`;
+  return {
+    title: 'บทความ',
+    description: 'แบ่งปันความรู้เทคโนโลยี เพื่อ "ขับเคลื่อนประเทศไทย"',
+    alternates: { canonical: !filtered && page >= 2 ? `${base}?page=${page}` : base },
+  };
+}
 
 // The list is now page- and filter-driven via searchParams, so render
 // fresh per request rather than serving a single ISR snapshot. Server

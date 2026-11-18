@@ -27,7 +27,8 @@ const WRITER_REL = 'src/lib/actions/articles.js';
 const MODEL_REL = 'src/models/Article.js';
 const FIELD = /\bcontentUpdatedAt\b/;
 // /admin/article-views: the "แก้เนื้อหาล่าสุด" column and the stale-content card.
-const READERS_REL = ['src/lib/articleViews/dashboard.js', 'src/lib/articleViews/queries.js'];
+// src/app/sitemap.js (D04): each article's <lastmod> is its content date.
+const READERS_REL = ['src/lib/articleViews/dashboard.js', 'src/lib/articleViews/queries.js', 'src/app/sitemap.js'];
 const WRITE_CALL = /\.(create|insertMany|updateOne|updateMany|findOneAndUpdate|findByIdAndUpdate|replaceOne|bulkWrite|save)\(|\$set\b/;
 
 function walk(dir, out = []) {

@@ -8,11 +8,41 @@ import { courseSitemapEntries } from '@/lib/courses/courseSitemapEntries';
 import { getPublishedMasterclasses } from '@/lib/masterclass/getMasterclass';
 import { readPublicWriters } from '@/lib/writers/writerReads';
 import { writerSitemapEntries } from '@/lib/writers/writerProfile';
+import ProgramPageConfig from '@/models/ProgramPageConfig';
+import SkillPageConfig from '@/models/SkillPageConfig';
+import { getActiveCareerPaths } from '@/lib/career-paths/getCareerPaths';
+import {
+  getActivePromotions, getSlugMap, getActiveBuilderPromotions,
+  getActiveCustomPagePromotions,
+} from '@/lib/promotions/getPromotions';
+import { buildPromotionCards } from '@/lib/promotions/promotionCards';
+import { isNoindexPageSlug } from '@/lib/seo/utilityRobots';
+import {
+  catalogConfigSitemapPaths,
+  dedupeSitemapEntries,
+  isReviewCopySlug,
+  promotionSitemapPaths,
+} from '@/lib/seo/sitemapGroups';
 
 // Regenerate hourly — fresh enough for new articles, cheap enough that
 // crawlers don't trigger a Mongo round-trip on every hit.
 export const revalidate = 3600;
 
+/**
+ * ── EVERY BLOCK BELOW FAILS LOUD, NOT SILENT (D04) ─────────────────────────
+ * Each group is still best-effort — one failing source must not take the
+ * whole sitemap (and every other group) down with a 500. But a failure is
+ * logged with the block's name: before D04 each block swallowed its error, so
+ * a Mongo or upstream hiccup at regeneration time quietly shipped a sitemap
+ * missing a whole group for the next hour, and nothing said so.
+ */
+function blockFailed(block, err) {
+  console.error(`[sitemap] ${block} block failed — group omitted from this regeneration`, err);
+}
+
+// Static routes carry NO lastModified (D04): stamping `new Date()` told
+// crawlers every hub changed at every hourly regeneration, which is noise
+// they learn to ignore — including on the entries whose dates are real.
 const STATIC_ROUTES = [
   '',                       // homepage
   '/training-course',
@@ -28,6 +58,14 @@ const STATIC_ROUTES = [
   '/join-us',
   '/social',
   '/author',
+  // Policy pages and the venue guide (D04) — plain static routes, no redirect,
+  // no noindex, each with its own canonical.
+  '/policies',
+  '/privacy-policy',
+  '/cookie-policy',
+  '/refund-policy',
+  '/terms',
+  '/restaurant-and-hotel-nearby-9expert-training',
 ];
 
 export default async function sitemap() {
@@ -35,29 +73,41 @@ export default async function sitemap() {
 
   const staticEntries = STATIC_ROUTES.map((route) => ({
     url: `${base}${route}`,
-    lastModified: new Date(),
     changeFrequency: route === '' ? 'daily' : 'weekly',
     priority: route === '' ? 1.0 : 0.8,
   }));
 
-  // Articles are best-effort — if Mongo is unreachable at build/ISR time
-  // we still want a valid sitemap with the static routes.
+  /**
+   * Articles — ALL active ones (D04). This used to stop at `.limit(500)` and
+   * the live sitemap sat exactly on 500, so the oldest published articles had
+   * silently fallen out. One query of four small fields is fine at today's
+   * ~600; the sitemap protocol's ceiling is 50,000 URLs per file, and only
+   * past that would this need generateSitemaps() — nowhere near it.
+   *
+   * lastModified is the reader-visible content date: `contentUpdatedAt` is
+   * set by the content-change detector (models/Article.js), whereas
+   * `updatedAt` also moves on non-content writes; publishedAt next.
+   *
+   * `-review-YYYYMMDD` slugs are dated working copies of an article, not
+   * pages of their own (lib/seo/sitemapGroups).
+   */
   let articleEntries = [];
   try {
     await dbConnect();
     const articles = await Article.find({ active: true })
       .sort({ publishedAt: -1 })
-      .limit(500)
-      .select('slug updatedAt publishedAt')
+      .select('slug contentUpdatedAt publishedAt updatedAt')
       .lean();
-    articleEntries = articles.map((a) => ({
-      url: `${base}/articles/${a.slug}`,
-      lastModified: a.updatedAt ?? a.publishedAt ?? new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.6,
-    }));
-  } catch {
-    // swallow — static entries still ship
+    articleEntries = articles
+      .filter((a) => a?.slug && !isReviewCopySlug(a.slug))
+      .map((a) => ({
+        url: `${base}/articles/${a.slug}`,
+        lastModified: a.contentUpdatedAt ?? a.publishedAt ?? a.updatedAt ?? undefined,
+        changeFrequency: 'monthly',
+        priority: 0.6,
+      }));
+  } catch (err) {
+    blockFailed('articles', err);
   }
 
   // Custom pages — best-effort, same defensive style as articles.
@@ -99,16 +149,21 @@ export default async function sitemap() {
        * typed.
        */
       .select('slug updatedAt')
-      .limit(500)
+      // No cap (D04) — a silent .limit() drops the oldest pages without a
+      // word, the same failure the article cap had.
       .lean();
-    customPageEntries = pages.map((p) => ({
-      url: `${base}/${p.slug}`,
-      lastModified: p.updatedAt ?? new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    }));
-  } catch {
-    // swallow — static + article entries still ship
+    customPageEntries = pages
+      // D05: utility forms held as CMS pages (/evaluation) are noindex in
+      // their metadata, so listing them here would contradict it.
+      .filter((p) => p?.slug && !isNoindexPageSlug(p.slug))
+      .map((p) => ({
+        url: `${base}/${p.slug}`,
+        lastModified: p.updatedAt ?? undefined,
+        changeFrequency: 'monthly',
+        priority: 0.5,
+      }));
+  } catch (err) {
+    blockFailed('custom pages', err);
   }
 
   /**
@@ -144,8 +199,8 @@ export default async function sitemap() {
       CourseExtension.find({}).select('courseId urlAlias isPublished updatedAt').lean(),
     ]);
     courseEntries = courseSitemapEntries({ courses, extensions, base });
-  } catch {
-    // swallow — static + article + custom-page entries still ship
+  } catch (err) {
+    blockFailed('courses', err);
   }
 
   /**
@@ -189,8 +244,8 @@ export default async function sitemap() {
         // (0.5), below the static hubs (0.8) that link to them.
         priority: 0.7,
       }));
-  } catch {
-    // swallow — every other entry type still ships
+  } catch (err) {
+    blockFailed('masterclass', err);
   }
 
   // Writers — best-effort like every block above, and the same read /author
@@ -198,9 +253,98 @@ export default async function sitemap() {
   let writerEntries = [];
   try {
     writerEntries = writerSitemapEntries(await readPublicWriters(), base);
-  } catch {
-    // swallow — every other entry type still ships
+  } catch (err) {
+    blockFailed('writers', err);
   }
 
-  return [...staticEntries, ...articleEntries, ...customPageEntries, ...courseEntries, ...masterclassEntries, ...writerEntries];
+  /**
+   * ── PROGRAM AND SKILL CATALOG PAGES (/<x>-all-courses) — D04 ─────────────
+   * The same rows getPageLinkability() reads to decide where a program/skill
+   * chip links: a config with a urlSlug is that page's one public address
+   * (programHref/skillHref return `/${urlSlug}`, and /program|/skill/<x>
+   * redirect to it). `isPublished === false` is the hidden flag — those pages
+   * call notFound(), so they are left out. An entity with NO config, or a
+   * config without a urlSlug, has no -all-courses address (it is served at
+   * /program|/skill/<kebab>) and is not listed here.
+   */
+  let catalogEntries = [];
+  try {
+    await dbConnect();
+    const [programConfigs, skillConfigs] = await Promise.all([
+      ProgramPageConfig.find({}).select('urlSlug isPublished updatedAt').lean(),
+      SkillPageConfig.find({}).select('urlSlug isPublished updatedAt').lean(),
+    ]);
+    catalogEntries = catalogConfigSitemapPaths([...programConfigs, ...skillConfigs])
+      .map(({ path, updatedAt }) => ({
+        url: `${base}${path}`,
+        lastModified: updatedAt ?? undefined,
+        changeFrequency: 'weekly',
+        // A hub of courses: the same rung as the static hubs.
+        priority: 0.8,
+      }));
+  } catch (err) {
+    blockFailed('program/skill catalogs', err);
+  }
+
+  /**
+   * ── CAREER PATHS — D04 ─────────────────────────────────────────────────────
+   * getActiveCareerPaths() is the read /career-path-project lists from
+   * (`is_active: true`), and the link is built the way that page builds it:
+   * `/${api_slug}`. A path without an api_slug has no page of its own there
+   * (its card links back to the hub), so it is not listed.
+   */
+  let careerPathEntries = [];
+  try {
+    const paths = await getActiveCareerPaths();
+    careerPathEntries = (Array.isArray(paths) ? paths : [])
+      .filter((p) => p?.api_slug)
+      .map((p) => ({
+        url: `${base}/${p.api_slug}`,
+        lastModified: p.updatedAt ? new Date(p.updatedAt) : undefined,
+        changeFrequency: 'weekly',
+        priority: 0.7,
+      }));
+  } catch (err) {
+    blockFailed('career paths', err);
+  }
+
+  /**
+   * ── PROMOTION DETAIL PAGES — D04 ───────────────────────────────────────────
+   * Exactly the cards /promotions shows: the same four loaders and the same
+   * buildPromotionCards() union (live MSDB promotions + visible builder and
+   * custom-page promotions), so a URL is listed only while the promotion is
+   * live on the index. No lastModified — the cards carry no content date.
+   */
+  let promotionEntries = [];
+  try {
+    const [promotions, slugMap, builderPromotions, customPromotions] = await Promise.all([
+      getActivePromotions(),
+      getSlugMap(),
+      getActiveBuilderPromotions(),
+      getActiveCustomPagePromotions(),
+    ]);
+    const cards = buildPromotionCards({ promotions, slugMap, builderPromotions, customPromotions });
+    promotionEntries = promotionSitemapPaths(cards).map((path) => ({
+      url: `${base}${path}`,
+      changeFrequency: 'weekly',
+      priority: 0.6,
+    }));
+  } catch (err) {
+    blockFailed('promotions', err);
+  }
+
+  // De-duplicated by URL: the groups come from independent sources (a CMS
+  // page slug could equal a catalog urlSlug), and a URL listed twice is
+  // noise at best.
+  return dedupeSitemapEntries([
+    ...staticEntries,
+    ...catalogEntries,
+    ...careerPathEntries,
+    ...articleEntries,
+    ...customPageEntries,
+    ...courseEntries,
+    ...masterclassEntries,
+    ...promotionEntries,
+    ...writerEntries,
+  ]);
 }
