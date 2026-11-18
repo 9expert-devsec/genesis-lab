@@ -36,7 +36,7 @@ import { InstructorQuote } from '@/app/_components/home/InstructorQuote';
  * PNG, and the remaining browser-only judgement is stated in the report.
  */
 
-const WALLPAPER = '/motto/wallpaper-motto.png';
+const WALLPAPER = '/motto/wallpaper-motto.webp'; // WebP since D08
 const PORTRAIT = '/people/Aj.Chalaivate.webp';
 
 const html = renderToStaticMarkup(createElement(InstructorQuote, {}));

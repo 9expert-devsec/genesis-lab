@@ -68,7 +68,12 @@ import { withListQuery } from '@/lib/articles/publicListQuery';
  * card too, and a reader arriving from those has no list position to return to,
  * so their links stay bare. '' — the default — appends nothing.
  */
-export function ArticleCard({ article, programNames = {}, skillNames = {}, listQuery = '' }) {
+/**
+ * `priority` (D08) — set by /articles on its FIRST card only, which is the
+ * mobile LCP: that cover loads eagerly with fetchPriority="high". Every other
+ * card, and every other page that renders this card, stays lazy.
+ */
+export function ArticleCard({ article, programNames = {}, skillNames = {}, listQuery = '', priority = false }) {
   const href = withListQuery(`/articles/${article.slug}`, listQuery);
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--surface-border)] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-9e-lg dark:bg-[#0D1B2A]">
@@ -79,7 +84,8 @@ export function ArticleCard({ article, programNames = {}, skillNames = {}, listQ
             src={article.coverUrl}
             alt={article.title}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            loading="lazy"
+            loading={priority ? 'eager' : 'lazy'}
+            fetchPriority={priority ? 'high' : undefined}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-9e-action">

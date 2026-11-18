@@ -52,11 +52,20 @@ export function InstructorQuote() {
           is wide and the crop is horizontal, onto the middle of the frame.
 
           The SVG's base `<rect fill="#0D1B2A">` moves to the section itself
-          (below) so the band keeps exactly that colour while the PNG loads. */}
+          (below) so the band keeps exactly that colour while the image loads.
+
+          D08 — WebP, same 2171×724 pixels, encoded once from the placed PNG
+          (2,030,328 B → 99,054 B, quality 82; still opaque, so the #0D1B2A
+          base does not blend through). LAZY because the band sits ~5,800px
+          (1280) / ~6,800px (390) down the home page, far below the first
+          viewport: an eager <img> made React emit a <link rel="preload"> for
+          it in <head>, putting 2 MB ahead of everything above the fold. */}
       <img
-        src="/motto/wallpaper-motto.png"
+        src="/motto/wallpaper-motto.webp"
         alt=""
         aria-hidden="true"
+        loading="lazy"
+        decoding="async"
         className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
       />
 

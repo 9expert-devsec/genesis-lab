@@ -146,7 +146,7 @@ export const RESERVED_PATHS = Object.freeze([
   { segment: 'logo', source: 'static' },
   { segment: 'mock-article', source: 'static' },
   // The Home motto band's wallpaper (src/app/_components/home/InstructorQuote.jsx
-  // renders /motto/wallpaper-motto.png). Listed on the same conservative basis
+  // renders /motto/wallpaper-motto.webp). Listed on the same conservative basis
   // as /avatar above: public/motto/ makes Next serve the file but does not claim
   // the bare URL /motto, so an alias of /motto would probably still resolve —
   // and "probably" is exactly what this block refuses, because an alias that

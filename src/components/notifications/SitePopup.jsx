@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { X } from 'lucide-react';
+import { withCloudinaryTransform } from '@/lib/cloudinaryUrl';
 
 function isOnCooldown(notif) {
   if (!notif?._id) return true;
@@ -153,6 +154,20 @@ export function SitePopup() {
 
   if (!active || !active.image_url) return null;
 
+  /**
+   * D02 — the uploaded original was served as-is (a 0.44 MB PNG, and the LCP
+   * element on /articles at 390px). Cloudinary re-encodes at its edge: f_auto
+   * picks WebP/AVIF per browser, q_auto the quality, and c_limit,w_880 caps the
+   * width at 880px — 2× the 440px the dialog is on a phone, and wide enough
+   * for the 700px desktop maximum. Never upscales. A non-Cloudinary or
+   * already-transformed URL passes through unchanged (lib/cloudinaryUrl).
+   *
+   * NO width/height attributes: the model stores no image dimensions and
+   * popups are free-form uploads with no fixed ratio, so any value written
+   * here would be a guess. See the R1 report.
+   */
+  const imageSrc = withCloudinaryTransform(active.image_url, 'f_auto,q_auto,c_limit,w_880');
+
   return (
     <div
       role="dialog"
@@ -165,13 +180,18 @@ export function SitePopup() {
         className="relative w-[92vw] max-w-[360px] sm:max-w-[480px] min-[1537px]:max-w-[700px] rounded-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* D02 — a 44×44 hit area (WCAG 2.5.5 / Apple HIG) at the corner; the
+            visible 28px dark circle is drawn INSIDE it, so it sits exactly
+            where it did (8px in from the top-right) and looks unchanged. */}
         <button
           type="button"
           onClick={close}
           aria-label="ปิด"
-          className="absolute right-2 top-2 z-10 rounded-full bg-black/50 p-1.5 text-white transition-colors hover:bg-black/70"
+          className="group absolute right-0 top-0 z-10 flex h-11 w-11 items-center justify-center text-white"
         >
-          <X className="h-4 w-4" />
+          <span className="flex items-center justify-center rounded-full bg-black/50 p-1.5 transition-colors group-hover:bg-black/70">
+            <X className="h-4 w-4" aria-hidden="true" />
+          </span>
         </button>
 
         {active.click_href ? (
@@ -183,7 +203,7 @@ export function SitePopup() {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={active.image_url}
+              src={imageSrc}
               alt={active.name || 'promotion'}
               className="block h-auto w-full cursor-pointer"
               draggable={false}
@@ -192,7 +212,7 @@ export function SitePopup() {
         ) : (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
-            src={active.image_url}
+            src={imageSrc}
             alt={active.name || 'promotion'}
             className="block h-auto w-full"
             draggable={false}

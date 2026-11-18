@@ -232,13 +232,15 @@ export function ArticlesPageClient({
       ) : (
         <>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {articles.map((a) => (
+            {articles.map((a, i) => (
               <ArticleCard
                 key={a._id}
                 article={a}
                 programNames={programNames}
                 skillNames={skillNames}
                 listQuery={listQuery}
+                // D08 — the first cover is the mobile LCP: eager + high.
+                priority={i === 0}
               />
             ))}
           </div>

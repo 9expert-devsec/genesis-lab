@@ -2,6 +2,7 @@ import { cn } from '@/lib/utils';
 import { themeSurface, themeStyle } from '@/lib/pageBuilder/presets';
 import { resolveSectionData } from '@/lib/pageBuilder/resolveSectionData';
 import { SectionRenderer } from './SectionRenderer';
+import { heroImageSectionId } from '@/lib/pageBuilder/heroImage';
 
 /**
  * PageBuilderView — public renderer for one builder page. Server component.
@@ -72,6 +73,11 @@ export async function PageBuilderView({ page, preview = false }) {
   // so there is still ONE renderer. Keyed by section id (unique), so this pre-
   // pass needs no agreement with the render order (including the sort above).
   const resolvedData = await resolveSectionData(page.sections);
+
+  // D08 — the image that opens the page (if one does) loads eagerly with high
+  // fetch priority; every other image stays lazy. Computed on the SORTED
+  // sections, because "first" means first on screen.
+  const heroImageId = heroImageSectionId(sections);
 
   const { pageClass } = themeSurface(page.theme);
 
@@ -146,6 +152,7 @@ export async function PageBuilderView({ page, preview = false }) {
           resolvedData={resolvedData}
           pageId={page._id ? String(page._id) : null}
           preview={preview}
+          heroImageId={heroImageId}
         />
       ))}
     </div>
