@@ -1,6 +1,7 @@
 import { CircleCheck } from 'lucide-react';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import { programCopyIcon } from '@/lib/programCopyIcons';
+import { programTint } from '@/lib/programTint';
 
 /**
  * The program page's admin-authored copy (ProgramPageConfig introHeading …
@@ -17,6 +18,12 @@ import { programCopyIcon } from '@/lib/programCopyIcons';
  * future writer go around the admin save.
  *
  * Every class below is a complete literal (the JIT only emits what it sees).
+ *
+ * PROGRAM COLOUR (`programColor`, the upstream `programcolor` hex): the accent
+ * bars at full opacity and the benefit band's tint come in as INLINE values —
+ * a style, or the private custom properties --program-band-light /
+ * --program-band-dark read by literal arbitrary classes. An invalid or missing
+ * colour (lib/programTint returns null) keeps the lime bar and peach band.
  */
 
 const CONTAINER = 'mx-auto max-w-[1200px] px-4 lg:px-6';
@@ -26,12 +33,32 @@ const MUTED = 'text-9e-slate-dp-50 dark:text-[#94a3b8]';
 const nonEmpty = (s) => typeof s === 'string' && s.trim() !== '';
 const rows = (v) => (Array.isArray(v) ? v.filter((r) => nonEmpty(r?.title) || nonEmpty(r?.description)) : []);
 
-/** The short lime bar under each heading. */
-function AccentBar({ className = '' }) {
-  return <span aria-hidden="true" className={`block h-1 w-16 rounded-full bg-9e-lime ${className}`} />;
+/**
+ * Benefit band tint, as alpha over the band. Light: over the page, faint
+ * enough that white cards and muted text keep their contrast on a yellow
+ * program. Dark: over the 9e-card surface, enough to read as the program's
+ * hue without lifting the surface into the outlined cards.
+ */
+export const BAND_ALPHA_LIGHT = 0.08;
+export const BAND_ALPHA_DARK = 0.1;
+
+/** The short bar under each heading: the program colour, else brand lime. */
+function AccentBar({ className = '', color = null }) {
+  const accent = programTint(color, 1);
+  if (accent) {
+    return (
+      <span
+        aria-hidden="true"
+        data-accent="program"
+        className={`block h-1 w-16 rounded-full ${className}`}
+        style={{ backgroundColor: accent }}
+      />
+    );
+  }
+  return <span aria-hidden="true" data-accent="fallback" className={`block h-1 w-16 rounded-full bg-9e-lime ${className}`} />;
 }
 
-export function ProgramIntroSection({ config }) {
+export function ProgramIntroSection({ config, programColor = null }) {
   const heading = config?.introHeading ?? '';
   const html = nonEmpty(config?.introHtml) ? sanitizeRichHtml(config.introHtml) : '';
   if (!nonEmpty(heading) && !nonEmpty(html)) return null;
@@ -41,7 +68,7 @@ export function ProgramIntroSection({ config }) {
       {nonEmpty(heading) && (
         <>
           <h2 className={H2}>{heading}</h2>
-          <AccentBar className="mt-3" />
+          <AccentBar className="mt-3" color={programColor} />
         </>
       )}
       {html && (
@@ -54,7 +81,7 @@ export function ProgramIntroSection({ config }) {
   );
 }
 
-export function ProgramWhySection({ config }) {
+export function ProgramWhySection({ config, programColor = null }) {
   const heading = config?.whyHeading ?? '';
   const lead = config?.whyLead ?? '';
   const items = rows(config?.whyItems);
@@ -67,7 +94,7 @@ export function ProgramWhySection({ config }) {
           {nonEmpty(heading) && (
             <>
               <h2 className={H2}>{heading}</h2>
-              <AccentBar className="mt-3" />
+              <AccentBar className="mt-3" color={programColor} />
             </>
           )}
           {nonEmpty(lead) && <p className={`mt-4 text-base leading-relaxed ${MUTED}`}>{lead}</p>}
@@ -93,20 +120,37 @@ export function ProgramWhySection({ config }) {
   );
 }
 
-export function ProgramBenefitSection({ config }) {
+export function ProgramBenefitSection({ config, programColor = null }) {
   const heading = config?.benefitHeading ?? '';
   const lead = config?.benefitLead ?? '';
   const cards = rows(config?.benefitCards);
   if (!nonEmpty(heading) && cards.length === 0) return null;
 
+  // Two complete class literals, picked here, never built. Dark mode is the
+  // 9e-card surface either way (it must differ from <main>'s 9e-border); the
+  // program colour is layered on it as a flat gradient so it does not replace
+  // the surface underneath.
+  const light = programTint(programColor, BAND_ALPHA_LIGHT);
+  const dark = programTint(programColor, BAND_ALPHA_DARK);
+  const tinted = Boolean(light && dark);
+  const bandClass = tinted
+    ? 'mt-10 py-12 [background-color:var(--program-band-light)] dark:bg-9e-card dark:[background-image:linear-gradient(var(--program-band-dark),var(--program-band-dark))] lg:mt-14 lg:py-16'
+    : 'mt-10 bg-9e-orange-900 py-12 dark:bg-9e-card lg:mt-14 lg:py-16';
+  const bandStyle = tinted ? { '--program-band-light': light, '--program-band-dark': dark } : undefined;
+
   return (
-    <section id="program-benefit" className="mt-10 bg-9e-orange-900 py-12 dark:bg-transparent lg:mt-14 lg:py-16">
+    <section
+      id="program-benefit"
+      data-band={tinted ? 'program' : 'fallback'}
+      className={bandClass}
+      style={bandStyle}
+    >
       <div className={CONTAINER}>
         <div className="flex flex-col items-center text-center">
           {nonEmpty(heading) && (
             <>
               <h2 className={H2}>{heading}</h2>
-              <AccentBar className="mt-3" />
+              <AccentBar className="mt-3" color={programColor} />
             </>
           )}
           {nonEmpty(lead) && <p className={`mt-4 max-w-2xl text-base leading-relaxed ${MUTED}`}>{lead}</p>}

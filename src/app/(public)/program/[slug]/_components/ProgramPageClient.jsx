@@ -141,7 +141,7 @@ export function ProgramPageClient({
       </section>
 
       {/* ── Intro (admin copy; nothing when empty) ─────────────────── */}
-      <ProgramIntroSection config={config} />
+      <ProgramIntroSection config={config} programColor={program?.programcolor} />
 
       {/* ── Course grid ───────────────────────────────────────────── */}
       {/* `px-4 lg:px-6` is the skill page's card-container padding, verbatim
@@ -198,8 +198,8 @@ export function ProgramPageClient({
       />
 
       {/* ── Why + benefit (admin copy; nothing when empty) ────────── */}
-      <ProgramWhySection config={config} />
-      <ProgramBenefitSection config={config} />
+      <ProgramWhySection config={config} programColor={program?.programcolor} />
+      <ProgramBenefitSection config={config} programColor={program?.programcolor} />
 
       {/* ── FAQ ───────────────────────────────────────────────────── */}
       <FaqAccordionSection faqs={faqs} />

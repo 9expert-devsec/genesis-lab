@@ -93,6 +93,46 @@ test('benefit: 4 <article> with an icon and an H3; an unknown key renders the fa
   assert.match(cards[3].querySelector('svg').getAttribute('class'), /lucide-sparkles/);
 });
 
+// ── program colour (P2) ─────────────────────────────────────────────────────
+
+const accentBars = (doc) =>
+  ['program-intro', 'program-why', 'program-benefit'].map((id) => doc.querySelector(`#${id} [data-accent]`));
+
+test('with a programcolor: all three accent bars and the light band carry it inline', () => {
+  const doc = render(FULL, { program: { ...PROGRAM, programcolor: '#F2C811' } });
+  for (const bar of accentBars(doc)) {
+    assert.ok(bar, 'accent bar missing');
+    assert.equal(bar.getAttribute('data-accent'), 'program');
+    // The raw attribute React emitted; jsdom's CSSOM rewrites alpha-1 rgba() as rgb().
+    assert.equal(bar.getAttribute('style'), 'background-color:rgba(242, 200, 17, 1)');
+    assert.doesNotMatch(bar.className, /bg-9e-lime/);
+  }
+  const band = doc.getElementById('program-benefit');
+  assert.equal(band.getAttribute('data-band'), 'program');
+  assert.equal(band.style.getPropertyValue('--program-band-light'), 'rgba(242, 200, 17, 0.08)');
+  assert.equal(band.style.getPropertyValue('--program-band-dark'), 'rgba(242, 200, 17, 0.1)');
+  assert.match(band.className, /\[background-color:var\(--program-band-light\)\]/);
+  assert.match(band.className, /dark:bg-9e-card/);
+  assert.doesNotMatch(band.className, /bg-9e-orange-900/);
+  assert.doesNotMatch(band.getAttribute('style'), /--tw-/);
+});
+
+test('without a valid programcolor: lime bars, peach light band, untinted dark surface', () => {
+  for (const programcolor of [undefined, '', 'not-a-colour', '#12345']) {
+    const doc = render(FULL, { program: { ...PROGRAM, programcolor } });
+    for (const bar of accentBars(doc)) {
+      assert.equal(bar.getAttribute('data-accent'), 'fallback', String(programcolor));
+      assert.match(bar.className, /bg-9e-lime/);
+      assert.equal(bar.getAttribute('style'), null);
+    }
+    const band = doc.getElementById('program-benefit');
+    assert.equal(band.getAttribute('data-band'), 'fallback');
+    assert.match(band.className, /bg-9e-orange-900/);
+    assert.match(band.className, /dark:bg-9e-card/);
+    assert.equal(band.getAttribute('style'), null);
+  }
+});
+
 test('order: hero → intro → courses → online → why → benefit → FAQ, one H1', () => {
   const doc = render(FULL, { onlineCourses: ONLINE, faqs: FAQS });
   assert.equal(doc.querySelectorAll('h1').length, 1);
