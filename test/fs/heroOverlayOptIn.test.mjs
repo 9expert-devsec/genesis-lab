@@ -214,9 +214,10 @@ test('the headline column is wide enough for two lines', () => {
   );
 });
 
-// The astronaut is /hero-img/nongnai-to-the-moon.png; nongnai.png was retired
-// (and deleted from public/) when the moon pose replaced it.
-const ASTRONAUT = '/hero-img/nongnai-to-the-moon.png';
+// The astronaut is /hero-img/nongnai-to-the-moon.webp (WebP since R2; the PNG
+// was removed); nongnai.png was retired (and deleted from public/) when the
+// moon pose replaced it.
+const ASTRONAUT = '/hero-img/nongnai-to-the-moon.webp';
 
 test('the astronaut is NOT priority, and is never object-cover', () => {
   const art = imageBlock(HERO.code, ASTRONAUT);

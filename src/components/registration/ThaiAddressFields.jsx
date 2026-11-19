@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useId } from 'react';
+// D26 — the shared label/control/error wrapper (was a local copy here).
+import { FieldGroup, fieldErrorId } from '@/components/registration/FieldGroup';
 import { lookupPostcode, unambiguousLocation } from '@/lib/address/postcodeIndex';
 import {
   subDistrictFieldState,
   SUB_DISTRICT_MANUAL,
 } from '@/lib/address/subDistrictFieldState';
 import { gtagEvent } from '@/lib/analytics/gtag';
-import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
 /**
@@ -87,6 +88,8 @@ export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' 
     optionCount: subDistrictOptions.length,
   });
   const hintId = `${prefix}-subdistrict-hint`;
+  // D26 — the combobox's own id (FieldGroup cannot reach it inside its div).
+  const subDistrictId = useId();
 
   /**
    * WHICH POSTCODE MISSED, and nothing else.
@@ -271,6 +274,7 @@ export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' 
       <FieldGroup label="ที่อยู่" error={err('addressLine')} required>
         <input
           type="text"
+          autoComplete="address-line1"
           value={value.addressLine ?? ''}
           onChange={(e) => update('addressLine', e.target.value)}
           className={inputCls}
@@ -284,6 +288,7 @@ export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' 
           <input
             type="text"
             inputMode="numeric"
+            autoComplete="postal-code"
             maxLength={5}
             value={value.postalCode ?? ''}
             onChange={(e) => update('postalCode', e.target.value.replace(/\D/g, ''))}
@@ -293,10 +298,20 @@ export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' 
         </FieldGroup>
 
         {/* ── แขวง / ตำบล with dropdown ────────────────── */}
-        <FieldGroup label="แขวง / ตำบล" error={err('subDistrict')} required>
+        {/* The input sits inside the dropdown's positioning <div>, where
+            FieldGroup cannot see it — so it is wired by id here (D26). It is a
+            combobox (typed value + a listbox of suggestions); with the default
+            textbox role, aria-expanded / aria-haspopup are not allowed, which
+            axe flagged as aria-allowed-attr. */}
+        <FieldGroup label="แขวง / ตำบล" error={err('subDistrict')} required controlId={subDistrictId}>
           <div className="relative" ref={dropdownRef}>
             <input
+              id={subDistrictId}
               type="text"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-required="true"
+              autoComplete="address-level3"
               value={value.subDistrict ?? ''}
               onChange={(e) => {
                 update('subDistrict', e.target.value);
@@ -308,7 +323,11 @@ export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' 
               readOnly={subDistrictField.readOnly}
               aria-haspopup="listbox"
               aria-expanded={showDropdown}
-              aria-describedby={subDistrictField.hint ? hintId : undefined}
+              aria-describedby={
+                [subDistrictField.hint ? hintId : null, err('subDistrict') ? fieldErrorId(subDistrictId) : null]
+                  .filter(Boolean)
+                  .join(' ') || undefined
+              }
             />
 
             {showDropdown && subDistrictOptions.length > 0 && (
@@ -374,6 +393,7 @@ export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' 
         <FieldGroup label="เขต / อำเภอ" error={err('district')} required>
           <input
             type="text"
+            autoComplete="address-level2"
             value={value.district ?? ''}
             onChange={(e) => update('district', e.target.value)}
             className={inputCls}
@@ -385,6 +405,7 @@ export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' 
         <FieldGroup label="จังหวัด" error={err('province')} required>
           <input
             type="text"
+            autoComplete="address-level1"
             value={value.province ?? ''}
             onChange={(e) => update('province', e.target.value)}
             className={inputCls}
@@ -396,17 +417,3 @@ export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' 
   );
 }
 
-// ── Shared atom ─────────────────────────────────────────────────
-
-function FieldGroup({ label, error, required, children }) {
-  return (
-    <div>
-      <Label className="mb-1.5 block">
-        {label}
-        {required && <span className="ml-0.5 text-red-500">*</span>}
-      </Label>
-      {children}
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
-    </div>
-  );
-}

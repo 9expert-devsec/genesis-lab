@@ -27,6 +27,11 @@ module.exports = {
         '9e': {
           // Primary Blues (60%)
           brand:      '#2486FF',  // Primary brand/logo color — large text/icons/dark bg; NOT small text on white (3.4:1 contrast)
+          // D15 f (R2): Brand Blue for SMALL text (< 18.66px bold / 24px
+          // regular) on light grounds — the nearest shade of #2486FF that passes
+          // AA on its own 10% tint (4.63:1; 5.22:1 on white). Pair it with
+          // `dark:text-9e-air` where the element also shows on a dark ground.
+          'brand-text': '#1D6BCD',
           action:     '#005CFF',  // Links, small text on light bg, interactive (5.3:1 contrast ✅ WCAG AA)
           air:        '#48B0FF',  // Decorative, gradient, icons — dark backgrounds only; NOT text on light bg (2.3:1 contrast)
           ice:        '#F8FAFD',  // Light backgrounds, text on dark

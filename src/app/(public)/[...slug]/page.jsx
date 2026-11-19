@@ -109,6 +109,7 @@ import {
 import { PageBuilderView } from '@/components/pageBuilder/PageBuilderView';
 import { stripDraft } from '@/lib/pageBuilder/draftState';
 import { UTILITY_ROBOTS, isNoindexPageSlug } from '@/lib/seo/utilityRobots';
+import { toMetaDescription } from '@/lib/seo/metaDescription';
 
 /**
  * Catch-all route for legacy-style pattern URLs:
@@ -443,10 +444,9 @@ export async function generateMetadata({ params, searchParams }) {
     if (careerPath) {
       const title =
         `${careerPath.title} | เส้นทางอาชีพ`.trim();
-      const description =
-        careerPath.short_description?.slice(0, 160) ||
-        careerPath.tagline?.slice(0, 160) ||
-        '';
+      // D06 (R2): first non-empty of the two, cut on a word boundary by the
+      // article helper instead of a mid-word .slice(0, 160).
+      const description = toMetaDescription(careerPath.short_description, careerPath.tagline);
       const ogImage = careerPath.hero_image_url || '';
       return {
         title,
@@ -877,10 +877,11 @@ export default async function CatchAllPage({ params, searchParams }) {
 
     // Course + BreadcrumbList JSON-LD (separate <script> tags, as Google
     // recommends). courseUrl mirrors the slug logic in buildCourseJsonLd.
+    // No `schedules`: per the standing ruling (2026-09-29) the course detail
+    // page emits a bare Course with NO hasCourseInstance (D12, R2).
     const courseJsonLd = buildCourseJsonLd({
       course,
       extension,
-      schedules,
       siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
     });
     // The BreadcrumbList's last item is the course itself, so it is the same
@@ -904,7 +905,12 @@ export default async function CatchAllPage({ params, searchParams }) {
           '@type': 'ListItem',
           position: 2,
           name: course.program?.program_name ?? 'หลักสูตร',
-          item: `${process.env.NEXT_PUBLIC_SITE_URL}/training-course`,
+          // D12 (R2): the course's OWN program page — the same href the page's
+          // program chip uses (courseProgramHref, above), so the breadcrumb and
+          // the visible link cannot disagree. It was always /training-course,
+          // under the program's name. A course with no program, or whose
+          // program page is unpublished, keeps /training-course.
+          item: `${process.env.NEXT_PUBLIC_SITE_URL}${courseProgramHref || '/training-course'}`,
         },
         {
           '@type': 'ListItem',

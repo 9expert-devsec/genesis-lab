@@ -45,6 +45,10 @@ const SCHEDULES = [
   { status: 'nearly_full', scheduleType: 'online', start_date: '2026-11-05', end_date: '2026-11-06' },
 ];
 
+// R2 (D12): the builder emits NO hasCourseInstance (standing ruling,
+// 2026-09-29) and takes no schedules. The PRICED fixture is still HANDED
+// schedules — the old call shape — to prove they cannot bring instances back.
+// The two branches are now "priced, offers present" vs "unpriced, none".
 const withInstances = buildCourseJsonLd({ course: PRICED, extension: EXT, schedules: SCHEDULES, siteUrl: SITE });
 const bare = buildCourseJsonLd({ course: UNPRICED, extension: null, schedules: [], siteUrl: SITE });
 
@@ -70,7 +74,8 @@ test('the fixtures exercise BOTH branches of the builder', () => {
   // With offers and instances…
   assert.equal(withInstances['@type'], 'Course');
   assert.equal(withInstances.offers?.['@type'], 'Offer');
-  assert.equal(withInstances.hasCourseInstance?.length, 2);
+  // Handed two open rounds, and still no instances (D12).
+  assert.equal(withInstances.hasCourseInstance, undefined);
   // …and without either. If a fixture drifted into the other branch, the
   // assertions below would be checking the same shape twice.
   assert.equal(bare['@type'], 'Course');
@@ -103,12 +108,14 @@ test('the rest of the document is unchanged by the removal', () => {
   // via the detail builder). Both fixtures have a course_id, so both get one.
   // Whitelisting it here is the point of a whitelist — a key that appears
   // without this line being edited is still a failure.
+  // `hasCourseInstance` LEFT the list in R2 (D12) — a deliberate edit of this
+  // whitelist, the same way `@id` joined it.
   assert.deepEqual(Object.keys(withInstances).sort(), [
-    '@context', '@id', '@type', 'description', 'hasCourseInstance', 'image',
+    '@context', '@id', '@type', 'description', 'image',
     'inLanguage', 'name', 'offers', 'provider', 'url',
   ]);
   assert.deepEqual(Object.keys(bare).sort(), [
-    '@context', '@id', '@type', 'description', 'hasCourseInstance', 'image',
+    '@context', '@id', '@type', 'description', 'image',
     'inLanguage', 'name', 'offers', 'provider', 'url',
   ]);
   // JSON.stringify drops the undefined ones; that is what the page serialises.
@@ -121,9 +128,11 @@ test('the rest of the document is unchanged by the removal', () => {
 test('CONTROL: the deep readers DO see a rating when one is present', () => {
   // Without this, "no AggregateRating anywhere" would also be true of readers
   // that never descend into the tree.
+  // Planted one level down, under `offers` (the instances it used to ride in
+  // no longer exist — D12, R2).
   const poisoned = {
     ...withInstances,
-    hasCourseInstance: [{ ...withInstances.hasCourseInstance[0], aggregateRating: { '@type': 'AggregateRating', ratingValue: '4.9' } }],
+    offers: { ...withInstances.offers, aggregateRating: { '@type': 'AggregateRating', ratingValue: '4.9' } },
   };
   assert.equal(deepKeys(poisoned).has('aggregateRating'), true);
   assert.equal(deepTypes(poisoned).has('AggregateRating'), true);

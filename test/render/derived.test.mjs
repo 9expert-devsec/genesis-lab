@@ -127,7 +127,8 @@ test('course_schedule: body copy is NOT accented — the first negative rule', (
     'min-w-0 flex-1',
     'block text-sm font-bold text-[var(--text-primary)]',
     'block text-xs text-[var(--text-secondary)]',
-    'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold bg-[#39b980]/10 text-[#39b980] dark:bg-[#39b980]/20',
+    // D15 e (R2): the pill text is the AA shade of the status colour.
+    'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold bg-[#39b980]/10 text-[#257853] dark:bg-[#39b980]/20 dark:text-[#42BC85]',
   ], 'a span in the schedule row changed its classes — check it did not take the accent');
 
   // Stated separately from the exact set above, so the failure names the RULE.
@@ -151,8 +152,10 @@ test('course_schedule: the status badge is NOT accented — the second negative 
   const badges = [...html.matchAll(/<span class="(shrink-0 rounded-full[^"]*)"/g)].map((m) => m[1]);
 
   assert.deepEqual(badges, [
-    'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold bg-[#39b980]/10 text-[#39b980] dark:bg-[#39b980]/20',
-    'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold bg-[#ffc94a]/15 text-[#d4a017] dark:bg-[#ffc94a]/20 dark:text-[#ffc94a]',
+    // D15 e (R2): text in each pill is the AA shade of its status colour;
+    // the tints are unchanged.
+    'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold bg-[#39b980]/10 text-[#257853] dark:bg-[#39b980]/20 dark:text-[#42BC85]',
+    'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold bg-[#ffc94a]/15 text-[#89670F] dark:bg-[#ffc94a]/20 dark:text-[#ffc94a]',
   ], 'the status badges changed — the two variants must stay semantically coloured, and distinct');
 
   // …and they are DIFFERENT from each other, which is what "semantic" means

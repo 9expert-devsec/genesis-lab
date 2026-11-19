@@ -45,7 +45,9 @@ test('the field no longer decides readOnly from the option count itself', () => 
 
 test('the manual hint is rendered and tied to the input for screen readers', () => {
   assert.match(FIELD.code, /subDistrictField\.hint && \(/, 'the hint is never rendered');
-  assert.match(FIELD.code, /aria-describedby=\{subDistrictField\.hint \? hintId : undefined\}/);
+  // Since D26 (R2) the describedby list also carries the field's error id, so
+  // the hint is ONE of its entries rather than the whole expression.
+  assert.match(FIELD.code, /aria-describedby=\{\s*\[subDistrictField\.hint \? hintId : null,/);
 });
 
 // ── R2: the requirement is NOT relaxed ──────────────────────────────────────

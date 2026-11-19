@@ -92,13 +92,23 @@ test('every status carries both fields — no silent fallback', () => {
  * drifted apart in the first place.
  */
 test('the open green is #39b980 and nothing else', () => {
+  // `soft` is checked separately below: since D15 e (R2) its 11px TEXT uses the
+  // two AA shades of this green, and ONLY those two.
   const tokens = Object.entries(SCHEDULE_STATUS.open)
-    .filter(([k]) => k !== 'label')
+    .filter(([k]) => k !== 'label' && k !== 'soft')
     .map(([, v]) => v)
     .join(' ');
   assert.ok(tokens.includes('#39b980'), `expected #39b980 in: ${tokens}`);
   const otherHex = tokens.match(/#(?!39b980\b)[0-9a-fA-F]{3,8}\b/g);
   assert.equal(otherHex, null, `open must use only #39b980, found ${otherHex}`);
+
+  // The pill: the tint is still #39b980; the text is the nearest shade of it
+  // that passes AA on that tint — #257853 light, #42BC85 dark — and no other.
+  const soft = SCHEDULE_STATUS.open.soft;
+  assert.ok(soft.includes('bg-[#39b980]/10'), `the pill tint moved: ${soft}`);
+  const softOther = soft.match(/#(?!39b980\b|257853\b|42BC85\b)[0-9a-fA-F]{3,8}\b/g);
+  assert.equal(softOther, null, `the open pill may only add the two AA shades, found ${softOther}`);
+  assert.ok(soft.includes('text-[#257853]') && soft.includes('dark:text-[#42BC85]'), soft);
 });
 
 test('amber and red are the pre-existing values, not new ones', () => {

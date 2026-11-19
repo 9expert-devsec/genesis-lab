@@ -327,9 +327,10 @@ test('the dock READS the measured bottom-inset store, and only reads it', () => 
     !/CourseStickyCTA|MasterclassRegisterClient/.test(imports),
     'and it never imports a bar — it is handed pixels, not a component'
   );
-  // The offset is applied as padding; a computed anchor class would not
-  // survive Tailwind's content scan and would fail silently.
-  assert.ok(/paddingBottom/.test(DOCK), 'the inset lands as padding');
+  // The offset is applied as an inline transform (D10, R2 — it was padding);
+  // a computed anchor class would not survive Tailwind's content scan and
+  // would fail silently.
+  assert.ok(/translateY\(/.test(DOCK), 'the inset lands as an inline translate');
   assert.ok(!/bottom-\[\$\{/.test(DOCK), 'never as an interpolated bottom-* class');
 });
 

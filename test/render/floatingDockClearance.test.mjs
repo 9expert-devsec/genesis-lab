@@ -14,7 +14,9 @@ import {
 
 /**
  * The dock clears whatever occupies the bottom edge IN ITS OWN COLUMN, applied
- * as an inline padding-bottom.
+ * as an inline transform: translateY(-Npx). (It was padding-bottom until D10
+ * in R2; the transform puts the buttons in the same place without a layout
+ * change, so lifting the dock can no longer cause a layout shift.)
  *
  * ── THE DEFECT THIS FILE NOW GUARDS ─────────────────────────────────────────
  * The store used to answer with a single greatest height, so the dock lifted at
@@ -104,7 +106,7 @@ describe('FloatingActionDock bottom-inset clearance', { concurrency: 1 }, () => 
     );
     // ...and that zero is what the dock renders.
     const tag = container(dockHtml({ bottomInset: bottomInsetAcross(DOCK_COLUMN.left, DOCK_COLUMN.right) }));
-    assert.match(tag, /style="padding-bottom:0"/, 'so the dock does not move');
+    assert.match(tag, /style="transform:translateY\(0px\)"/, 'so the dock does not move');
   });
 
   test('CONTROL: the SAME box in the SAME store does lift a dock that overlaps it', () => {
@@ -116,7 +118,7 @@ describe('FloatingActionDock bottom-inset clearance', { concurrency: 1 }, () => 
     assert.equal(overlapping, 120, 'a column that overlaps the bar gets the height');
 
     const tag = container(dockHtml({ bottomInset: overlapping }));
-    assert.match(tag, /style="padding-bottom:120px"/, 'and it lands as padding');
+    assert.match(tag, /style="transform:translateY\(-120px\)"/, 'and it lands as an upward translate');
   });
 
   test('the 904px threshold: touching is not overlapping', () => {
@@ -127,23 +129,24 @@ describe('FloatingActionDock bottom-inset clearance', { concurrency: 1 }, () => 
 
   // ── the inert default ─────────────────────────────────────────────────────
 
-  test('with no inset supplied the dock renders zero padding', () => {
-    // `0`, not `0px`: React omits the unit for a zero-valued numeric style.
+  test('with no inset supplied the dock renders a zero translate', () => {
+    // A string-built value, so the unit is always there: `0px`, never `-0px`.
     const tag = container(dockHtml());
-    assert.match(tag, /style="padding-bottom:0"/);
+    assert.match(tag, /style="transform:translateY\(0px\)"/);
   });
 
-  test('CONTROL: the padding probe reads a real value when there is one', () => {
+  test('CONTROL: the translate probe reads a real value when there is one', () => {
     const tag = container(dockHtml({ bottomInset: 64 }));
-    assert.equal(/style="padding-bottom:0"/.test(tag), false, 'it is no longer 0');
-    assert.match(tag, /style="padding-bottom:64px"/, 'it is the supplied value');
+    assert.equal(/style="transform:translateY\(0px\)"/.test(tag), false, 'it is no longer 0');
+    assert.match(tag, /style="transform:translateY\(-64px\)"/, 'it is the supplied value, upward');
   });
 
   // ── the applied value ─────────────────────────────────────────────────────
 
-  test('a non-zero inset lands as inline padding-bottom, not as an anchor class', () => {
+  test('a non-zero inset lands as an inline translate, not as an anchor class', () => {
     const tag = container(dockHtml({ bottomInset: 96 }));
-    assert.match(tag, /style="padding-bottom:96px"/, 'inline style carries the value');
+    assert.match(tag, /style="transform:translateY\(-96px\)"/, 'inline style carries the value');
+    assert.equal(/padding-bottom/.test(tag), false, 'no layout property carries the lift (D10)');
     assert.match(tag, /\bbottom-8\b/, 'the bottom anchor is still the literal resting one');
     assert.equal(
       /bottom-96px|bottom-\[96px\]/.test(tag),
@@ -166,7 +169,8 @@ describe('FloatingActionDock bottom-inset clearance', { concurrency: 1 }, () => 
 
   test('the transition is a static class trio, so Tailwind can actually see it', () => {
     const tag = container(dockHtml({ bottomInset: 32 }));
-    assert.match(tag, /transition-\[padding-bottom\]/, 'transitions the padding property');
+    assert.match(tag, /\btransition-transform\b/, 'transitions the transform (D10: not a layout property)');
+    assert.equal(/transition-\[padding-bottom\]/.test(tag), false, 'the padding transition is gone');
     assert.match(tag, /duration-300/, "matches the bar's duration");
     assert.match(tag, /ease-in-out/, "matches the bar's easing");
     assert.equal(
@@ -184,7 +188,7 @@ describe('FloatingActionDock bottom-inset clearance', { concurrency: 1 }, () => 
     // snapshot, so the seam is still what makes every non-zero assertion above
     // possible. Asserted rather than assumed, because losing it would silently
     // reduce this whole file to testing 0.
-    assert.match(container(dockHtml({ bottomInset: 77 })), /style="padding-bottom:77px"/);
+    assert.match(container(dockHtml({ bottomInset: 77 })), /style="transform:translateY\(-77px\)"/);
   });
 
   test('a server render reads getServerRevision, so a live store cannot leak into markup', () => {

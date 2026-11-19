@@ -81,7 +81,11 @@ export default function JoinUsHero() {
             ดูตำแหน่งที่เปิดรับ
             <ArrowRight className="h-4 w-4" strokeWidth={2} />
           </a>
-          <Link href="/about-us" className="btn-9e-outline">
+          {/* D15 f (R2): this outline button sits on a LIGHT ground, where the
+              class's Brand Blue text is 3.54:1. Utilities override the
+              component class here only; the same class on PortfolioCTA's navy
+              ground already passes and is left alone. */}
+          <Link href="/about-us" className="btn-9e-outline text-9e-brand-text border-9e-brand-text hover:text-9e-ice dark:text-9e-air dark:border-9e-air dark:hover:text-9e-ice">
             ดูเกี่ยวกับเรา
           </Link>
         </motion.div>

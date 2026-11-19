@@ -7,10 +7,21 @@
  * styles. Tailwind cannot generate arbitrary hex classes at runtime, so
  * `bg_color`, `text_color`, and the button overrides go through `style`.
  *
- * Dismissal is per-tab (sessionStorage). To avoid a flash where the
- * server-rendered HTML shows the bar before we know the user dismissed
- * it, the component starts in `dismissed=true` and only reveals the bar
- * after the first effect tick confirms there is no dismissal marker.
+ * Dismissal is per-tab (sessionStorage), which the server cannot read.
+ *
+ * D10 (R2) — THE BAR IS IN THE SERVER HTML AND HOLDS ITS HEIGHT FROM FIRST
+ * PAINT. It used to start `dismissed=true` and reveal itself in an effect
+ * after hydration, i.e. it was absent from the server HTML and then pushed
+ * the whole page down by its own height — a guaranteed layout shift on every
+ * page that has a bar, for every visitor. Now it starts VISIBLE (the server
+ * and the first client render agree, so there is no hydration mismatch) and
+ * only COLLAPSES, client-side, for a tab that already dismissed it. That
+ * rare case is the only one that moves anything, and it moves content UP
+ * into space the visitor chose to close — not down.
+ *
+ * The countdown follows the same rule: its text depends on the clock, so it
+ * starts empty on both sides and fills in after mount. It is an inline badge
+ * on the same single line, so filling it in cannot change the bar's height.
  *
  * `pathname` matching is performed here — the server payload doesn't
  * know which page the bar will render on, so per-page scoping has to
@@ -54,7 +65,10 @@ function formatDiff(targetDate) {
  * future. Cleanup tears down the interval on unmount or target change.
  */
 function useCountdown(targetDate) {
-  const [display, setDisplay] = useState(() => formatDiff(targetDate));
+  // null on the server AND on the first client render (D10): formatDiff reads
+  // Date.now(), so computing it during render would make the server text and
+  // the hydrating text differ. The effect below fills it in on mount.
+  const [display, setDisplay] = useState(null);
 
   useEffect(() => {
     if (!targetDate) {
@@ -87,19 +101,21 @@ function isLightBg(hex) {
 
 export function TopNotificationBarClient({ bar }) {
   const pathname = usePathname();
-  const [dismissed, setDismissed] = useState(true);
+  // false on the server and on the first client render — see the header.
+  const [dismissed, setDismissed] = useState(false);
   const [copied, setCopied] = useState(false);
   const countdown = useCountdown(bar?.countdown_target ?? null);
 
   useEffect(() => {
     try {
       const key = `topbar_dismissed_${bar._id}`;
-      if (!sessionStorage.getItem(key)) {
-        setDismissed(false);
+      if (sessionStorage.getItem(key)) {
+        // Dismissed earlier in this tab: collapse. The only path that moves
+        // anything after load, and it moves content up, not down.
+        setDismissed(true);
       }
     } catch {
-      // sessionStorage disabled — show the bar.
-      setDismissed(false);
+      // sessionStorage disabled — keep the bar shown.
     }
   }, [bar._id]);
 

@@ -74,11 +74,15 @@ test('the DISPLAY clamps are untouched — they are a different concern', () => 
   // (shared by public and private courses); the clamp moved with it, unchanged.
   const PAGE = readSource('src/lib/courses/courseMetadata.js');
   const JSONLD = readSource('src/lib/courses/buildCourseJsonLd.js');
+  // D06 (R2): still a 160 clamp at display time, now on a word boundary
+  // (truncateForMeta defaults to META_DESCRIPTION_MAX = 160) instead of a
+  // mid-word .slice(0, 160). Still deliberate, still not an input cap.
   assert.match(
     PAGE.code,
-    /course_teaser\?\.slice\(0,\s*160\)/,
+    /truncateForMeta\(course\.course_teaser\b/,
     'the meta-description clamp moved; it is deliberate and not an input cap'
   );
+  assert.doesNotMatch(PAGE.code, /course_teaser\?\.slice\(0,\s*160\)/, 'the mid-word slice is back');
   assert.match(
     JSONLD.code,
     /course_teaser\?\.slice\(0,\s*300\)/,

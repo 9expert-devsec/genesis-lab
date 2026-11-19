@@ -27,7 +27,7 @@ export function ArticleByline({ writers = [], author = '', minutes = null }) {
     <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm" data-testid="article-byline">
       {writers.length > 0 ? (
         <span className="flex flex-wrap items-center gap-2">
-          <span className="text-gray-400 dark:text-[#94a3b8]">บทความโดย</span>
+          <span className="text-gray-500 dark:text-[#94a3b8]">บทความโดย</span>
           <span className="flex -space-x-2">
             {writers.map((writer) => (
               <Link
@@ -59,7 +59,7 @@ export function ArticleByline({ writers = [], author = '', minutes = null }) {
           </span>
         </span>
       ) : author ? (
-        <span className="text-gray-400 dark:text-[#94a3b8]">บทความโดย: {author}</span>
+        <span className="text-gray-500 dark:text-[#94a3b8]">บทความโดย: {author}</span>
       ) : null}
 
       {timed && (

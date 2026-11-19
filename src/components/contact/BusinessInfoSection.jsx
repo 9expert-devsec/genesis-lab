@@ -31,7 +31,10 @@ const COMPANY_CARDS = [
       label: "คัดลอกที่อยู่",
       copiedLabel: "คัดลอกแล้ว",
       failedLabel: "คัดลอกไม่สำเร็จ",
-      ariaLabel: "คัดลอกชื่อบริษัท ที่อยู่ และเลขประจำตัวผู้เสียภาษี (ภาษาไทย)",
+      // D15 j (R2) — WCAG 2.5.3 Label in Name: the accessible name STARTS with
+      // the visible words, so a voice-control user saying "คัดลอกที่อยู่"
+      // hits this button; the rest keeps the extra detail it carried.
+      ariaLabel: "คัดลอกที่อยู่ — ชื่อบริษัท ที่อยู่ และเลขประจำตัวผู้เสียภาษี (ภาษาไทย)",
     },
   },
   {
@@ -47,7 +50,7 @@ const COMPANY_CARDS = [
       label: "Copy address",
       copiedLabel: "Copied",
       failedLabel: "Copy failed",
-      ariaLabel: "Copy company name, address and tax ID (English)",
+      ariaLabel: "Copy address — company name, address and tax ID (English)",
     },
   },
 ].map((card) => ({
