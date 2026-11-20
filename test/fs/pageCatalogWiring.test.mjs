@@ -31,7 +31,10 @@ const calls = (code, name) => new RegExp(`\\b${name}\\s*\\(`).test(code);
 test('the action scan found real code', () => {
   const { code } = readSource(ACTION);
   assert.ok(code.length > 1500, `scrubbed to ${code.length} chars`);
-  assert.match(code, /export async function signPageCatalogUpload/);
+  // CATALOG-UPLOAD BUILD: the Cloudinary signer is gone; prepare issues a Blob
+  // upload receipt instead.
+  assert.match(code, /export async function preparePageCatalogUpload/);
+  assert.doesNotMatch(code, /export async function signPageCatalogUpload/);
   assert.match(code, /export async function recordPageCatalogUpload/);
   assert.match(code, /export async function removePageCatalog/);
 });
@@ -47,13 +50,41 @@ test('every action derives its target through catalogTarget and gates on require
   }
 });
 
-test('the signer refuses a non-PDF through refuseNonPdf on the PICKED file, and runs the shared policy', () => {
+test('prepare refuses a non-PDF on the PICKED file, applies THIS field\'s 64 MB limit, and issues a receipt', () => {
+  const { code, withImports } = readSource(ACTION);
+  const prepare = code.split(/export async function /)[1];
+  assert.match(prepare, /^preparePageCatalogUpload/);
+  assert.match(prepare, /refuseNonPdf\(\{ filename, contentType \}\)/, 'the PDF check does not read the picked file');
+  // The field's own limit — NOT the shared Cloudinary policy (RAW_MAX_BYTES,
+  // 10 MB), which /admin/media keeps unchanged.
+  assert.match(prepare, /refusePageCatalogSize\(bytes\)/);
+  assert.doesNotMatch(code, /refuseUpload\(/, 'the 10 MB Cloudinary refusal is still applied to catalogs');
+  // A single-use receipt, and the SERVER-derived Blob pathname handed back.
+  assert.match(prepare, /issuePageCatalogReceipt\(doc\)/);
+  assert.match(prepare, /blobPathname: target\.blobPathname/);
+  // No Cloudinary signing is left anywhere in the action.
+  assert.doesNotMatch(withImports, /from 'cloudinary'/, 'the action still imports cloudinary');
+  assert.doesNotMatch(code, /api_sign_request|overwrite: true,\s*invalidate: true/);
+});
+
+test('record re-checks the receipt and the URL, HEADs the blob, THEN writes — in that order', () => {
   const { code } = readSource(ACTION);
-  const signer = code.split(/export async function /)[1];
-  assert.match(signer, /refuseNonPdf\(\{ filename, contentType \}\)/, 'the PDF check does not read the picked file');
-  assert.match(signer, /refuseUpload\(\{ filename: target\.fileName, bytes \}\)/);
-  // Signed overwrite + invalidate, exactly as the outline is signed.
-  assert.match(signer, /overwrite: true,\s*invalidate: true,\s*unique_filename: false/);
+  const record = code.split(/export async function /)[2];
+  assert.match(record, /^recordPageCatalogUpload/);
+  const at = (re) => record.search(re);
+  const check = at(/refusePageCatalogRecord\(/);
+  const headAt = at(/await head\(/);
+  const headCheck = at(/refusePageCatalogHead\(/);
+  const claim = at(/claimPageCatalogReceiptForRecord\(/);
+  const write = at(/findOneAndUpdate\(/);
+  for (const [name, i] of Object.entries({ check, headAt, headCheck, claim, write })) {
+    assert.ok(i > 0, `${name} missing from recordPageCatalogUpload`);
+  }
+  assert.ok(check < headAt && headAt < headCheck && headCheck < claim && claim < write,
+    'the record step does not check → HEAD → claim → write in that order');
+  // bytes come from the HEAD, not from the client.
+  assert.match(record, /const bytes = Number\(blob\.size\)/);
+  assert.match(record, /blobBase: process\.env\.BLOB_PUBLIC_BASE/);
 });
 
 test('the action builds NO path and NO public_id of its own', () => {
@@ -149,14 +180,23 @@ test('the page-config editor mounts the uploader with kind, id and the stored re
   assert.match(code, /hasCatalog\(config\)/, 'the delete confirm does not check for a catalog');
 });
 
-test('the uploader is the outline flow: sign → POST verbatim → record; and remove is an action', () => {
+test('the uploader is prepare → Blob client upload → record, for every size; and remove is an action', () => {
   const { code, withImports } = readSource(UPLOADER);
   assert.match(withImports, /^'use client';/m);
-  for (const fn of ['signPageCatalogUpload', 'recordPageCatalogUpload', 'removePageCatalog']) {
+  assert.match(withImports, /import \{ upload \} from '@vercel\/blob\/client'/);
+  for (const fn of ['preparePageCatalogUpload', 'upload', 'recordPageCatalogUpload', 'removePageCatalog']) {
     assert.ok(calls(code, fn), `${fn} is not called`);
   }
-  assert.match(code, /filename: file\.name, contentType: file\.type, bytes: file\.size/, 'the picked file\'s name and type do not reach the signer');
-  assert.match(code, /for \(const \[k, v\] of Object\.entries\(signed\.params\)\) body\.append\(k, String\(v\)\);/, 'the signed params are not sent verbatim');
+  assert.match(code, /filename: file\.name, contentType: file\.type, bytes: file\.size/, 'the picked file\'s name and type do not reach prepare');
+  // The SERVER-derived pathname, the catalog route, and ONLY the receipt.
+  assert.match(code, /upload\(prep\.blobPathname, file,/, 'upload() is not given the server-derived pathname');
+  assert.match(code, /handleUploadUrl: '\/api\/admin\/page-catalogs\/upload'/);
+  assert.match(code, /clientPayload: JSON\.stringify\(\{ receiptId: prep\.receiptId \}\)/);
+  assert.match(code, /onUploadProgress:/, 'no progress for a large upload');
+  // What Blob returned goes back for the server to check — not trusted here.
+  assert.match(code, /receiptId: prep\.receiptId, url: blob\?\.url, pathname: blob\?\.pathname/);
+  // No size-based branch back to Cloudinary: one path for every size.
+  assert.doesNotMatch(code, /signed\.params|api\.cloudinary\.com|RAW_MAX_BYTES/);
   assert.match(code, /accept="application\/pdf,\.pdf"/);
   assert.doesNotMatch(code, /type="hidden"/, 'a hidden form input — this editor saves through actions, not a form');
 });

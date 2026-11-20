@@ -1,50 +1,56 @@
 'use server';
 
 /**
- * CATALOG PDFs ON PROGRAM AND SKILL PAGES — sign an upload, record what
+ * CATALOG PDFs ON PROGRAM AND SKILL PAGES — prepare an upload, record what
  * landed, or clear it.
  *
- * ══ THE OUTLINE ACTIONS, WITH THE LANGUAGE REMOVED ══════════════════════════
+ * ══ WHERE THE FILE GOES: VERCEL BLOB, EVERY SIZE ════════════════════════════
  *
- * lib/actions/course-outlines is the precedent and this follows it hop for
- * hop: a browser-direct signed upload to Cloudinary at a public_id DERIVED
- * from the entity's key, signed `overwrite: true` + `invalidate: true` so a
- * replacement lands at the same URL and is served within a second; then a
- * second call that records what actually landed. What differs: no `lang`
- * (Thai only, one file — see lib/pageCatalog), the record lands on the page
- * config row itself rather than in a side collection, and there IS a remove
- * action, because the config editor saves field-by-field rather than through
- * a form whose hidden input the outline's "clear" button could empty.
+ * Catalogs used to be browser-direct SIGNED CLOUDINARY uploads. Cloudinary
+ * refuses raw files over 10 MB, and catalogs are routinely bigger, so every
+ * catalog now goes to Blob through ONE code path whatever its size: a Blob
+ * CLIENT upload (Vercel caps a function request body at 4.5 MB, so the bytes
+ * go browser → store, never through a function). The public URL does not move:
+ * it stays the root-relative path on the config row, served from Blob by one
+ * narrow rewrite in next.config.mjs (lib/pageCatalogPaths.mjs).
  *
- * ══ WHY ITS OWN MODULE AND NOT page-configs.js ══════════════════════════════
- * page-configs.js is the URL/SEO editor's read-and-save surface. Cloudinary
- * signing, the shared upload policy and the derived-path contract are a
- * different storage story, and keeping them in one module — as the outline
- * does — is what lets a source-scan guard assert that nothing here builds a
- * path or a public_id of its own (test/fs/pageCatalogDerivation).
+ * ══ THE WEBROOT REPLACEMENT'S MECHANISM, REUSED ═════════════════════════════
  *
- * ══ requireAdmin, NOT requirePageAction ═════════════════════════════════════
+ *   1. preparePageCatalogUpload — derives the target from (kind, id) and issues
+ *      a single-use, short-TTL RECEIPT. It returns the server-derived Blob
+ *      pathname; the client passes it to upload() unchanged.
+ *   2. /api/admin/page-catalogs/upload — burns the receipt, re-derives the
+ *      pathname from it and refuses unless the client asked for exactly that.
+ *   3. recordPageCatalogUpload — re-checks permission, checks the receipt was
+ *      burned for THIS page and not yet recorded, checks the URL is exactly this
+ *      page's Blob URL, HEADs it (PDF, real size), and only then writes the
+ *      record. Blob's onUploadCompleted callback is NOT used: it never reaches
+ *      localhost, so nothing load-bearing may depend on it.
+ *
+ * ══ requireAdmin('page_configs'), NOT requirePageAction ═════════════════════
  * Same reason course-outlines.js gives: the audit sweep pairs the recorded
  * menu against the requireAdmin LITERAL in the same body.
  *
  * ── THE RULE THE WHOLE FEATURE RESTS ON ─────────────────────────────────────
- * The filename and the public_id come from catalogTarget(kind, id) and are
- * never accepted from the client. `overwrite: true` means whoever names the
- * path names the asset that gets destroyed, so the only thing a caller can
- * influence is WHICH program or skill it writes to — which the page guard
- * already governs.
+ * The filename, the public path and the Blob pathname come from
+ * catalogTarget(kind, id) and are never accepted from the client. Re-upload
+ * overwrites the same Blob key (allowOverwrite), so whoever names the path
+ * names the object that gets replaced; the only thing a caller can influence
+ * is WHICH program or skill — which the page guard already governs.
  *
  * ── WHAT HAPPENS TO THE OLD FILE ────────────────────────────────────────────
- * REPLACED: overwritten in place at the same public_id — nothing is orphaned,
- * and `version` counts it. REMOVED: the config's field is cleared and the
- * bytes are LEFT at the derived id, deliberately, as the outline's clear
- * does. Nothing links to that id once the field is empty (the path is derived,
- * never shared), the next upload overwrites it, and a destroy here would be a
- * second deletion idiom beside /admin/media's guarded one. The honest cost:
- * the old URL keeps resolving until a new file replaces it.
+ * REPLACED: overwritten in place at the same Blob key — the URL is unchanged
+ * and `version` counts it. A catalog that was on Cloudinary before this round
+ * is copied to Blob once by scripts/migrate-page-catalogs-to-blob.mjs; the
+ * Cloudinary original is left untouched and is simply no longer served.
+ * REMOVED: the config's field is cleared and the bytes are LEFT in the store,
+ * deliberately — nothing links to the derived key once the field is empty, and
+ * the next upload overwrites it. The honest cost: the public URL keeps
+ * resolving until a new file replaces it.
  */
 
-import { v2 as cloudinary } from 'cloudinary';
+import { randomUUID } from 'node:crypto';
+import { head } from '@vercel/blob';
 import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
@@ -52,7 +58,17 @@ import { dbConnect } from '@/lib/db/connect';
 import ProgramPageConfig from '@/models/ProgramPageConfig';
 import SkillPageConfig from '@/models/SkillPageConfig';
 import { catalogTarget, emptyCatalog, refuseNonPdf } from '@/lib/pageCatalog';
-import { refuseUpload } from '@/lib/legacyUploadPolicy.mjs';
+import { refusePageCatalogSize } from '@/lib/pageCatalogPaths.mjs';
+import {
+  buildPageCatalogReceipt,
+  refusePageCatalogHead,
+  refusePageCatalogRecord,
+} from '@/lib/pageCatalogUploadFlow.mjs';
+import {
+  claimPageCatalogReceiptForRecord,
+  issuePageCatalogReceipt,
+  readPageCatalogReceipt,
+} from '@/lib/pageCatalogReceiptStore';
 
 const ADMIN_PATH = '/admin/page-configs';
 
@@ -75,79 +91,116 @@ function revalidatePages({ prefix }, id, doc) {
 }
 
 /**
- * Sign a browser-direct upload of one catalog PDF for a program or a skill.
+ * Prepare a Blob client upload of one catalog PDF for a program or a skill.
  *
  * `filename` and `contentType` are the PICKED file's, as the browser reports
- * them, and exist only to be refused — the target's name is derived. Returns
- * the same envelope signCourseOutlineUpload does, so the client component can
- * be the outline's with the language removed.
+ * them, and exist only to be refused — the target's name is derived. The size
+ * check is THIS field's (64 MB), not the shared Cloudinary policy: these files
+ * are not on Cloudinary, and /admin/media keeps its own 10 MB rule untouched.
  */
-export async function signPageCatalogUpload({ kind, id, filename, contentType, bytes } = {}) {
+export async function preparePageCatalogUpload({ kind, id, filename, contentType, bytes } = {}) {
   const session = await requireAdmin('page_configs');
 
   const target = catalogTarget(kind, id);
   if (!target.ok) return { ok: false, error: target.error };
 
-  // The picked file, not the derived name: the derived name is always .pdf,
-  // so a check on it would pass everything. A picker filter is a convenience;
-  // this is the validation.
+  // The picked file, not the derived name: the derived name is always a PDF
+  // name, so a check on it would pass everything.
   const notPdf = refuseNonPdf({ filename, contentType });
   if (notPdf) return { ok: false, error: notPdf };
 
-  // The SHARED policy for the size ceiling and the empty-file case — not a
-  // second opinion that can drift from what /admin/media enforces.
-  const refusal = refuseUpload({ filename: target.fileName, bytes });
-  if (refusal) return { ok: false, error: refusal };
+  const tooBig = refusePageCatalogSize(bytes);
+  if (tooBig) return { ok: false, error: tooBig };
 
-  const timestamp = Math.round(Date.now() / 1000);
-  // EXACTLY the params the browser will send, or the signature will not match.
-  const toSign = {
-    public_id: target.publicId,
-    timestamp,
-    overwrite: true,
-    invalidate: true,
-    unique_filename: false,
-  };
-  const signature = cloudinary.utils.api_sign_request(toSign, process.env.CLOUDINARY_API_SECRET);
+  // crypto.randomUUID() and nothing derivable — a guessable receipt is not one.
+  const doc = buildPageCatalogReceipt({
+    receiptId: randomUUID(),
+    kind: target.kind,
+    key: target.key,
+    rawId: String(id).trim(),
+    issuedBy: session.user?.name || session.user?.id || '',
+    now: Date.now(),
+  });
+  try {
+    await issuePageCatalogReceipt(doc);
+  } catch (err) {
+    return { ok: false, error: `ออกใบอนุญาตอัปโหลดไม่สำเร็จ — ${err?.message ?? err}` };
+  }
 
   recordAdminActionAfter({
     menu: 'page_configs',
     action: 'update',
     entity: storeFor(target.kind).entity,
     recordId: target.key,
-    recordLabel: `catalog — ${target.publicPath}`,
-    after: { publicPath: target.publicPath, publicId: target.publicId, bytes: Number(bytes) || 0 },
+    recordLabel: `catalog upload prepared — ${target.publicPath}`,
+    after: { publicPath: target.publicPath, blobPathname: target.blobPathname, bytes: Number(bytes) || 0 },
     actor: { id: session.user?.id, name: session.user?.name },
   });
 
   return {
     ok: true,
-    uploadUrl: `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/raw/upload`,
-    apiKey: process.env.CLOUDINARY_API_KEY,
-    params: { ...toSign, signature },
-    resourceType: 'raw',
-    publicId: target.publicId,
+    // Server-derived. The client passes it to upload() as-is; the token route
+    // re-derives it from the receipt and refuses any other value.
+    blobPathname: target.blobPathname,
     publicPath: target.publicPath,
     fileName: target.fileName,
+    // The ONLY value the token route trusts, spent the first time it is used.
+    receiptId: doc.receiptId,
+    receiptExpiresAt: doc.expiresAt,
   };
 }
 
 /**
- * Record what Cloudinary accepted, on the config row. Called by the browser
- * AFTER the upload, because only the browser knows whether it finished. The
- * target is re-derived rather than trusted from the request.
+ * Record what landed on Blob, on the config row. Called by the browser AFTER
+ * upload() resolves, with what Blob returned (`url`, `pathname`) and the
+ * receipt. Everything is re-derived or re-checked; nothing is trusted.
  *
  * Upserts the config: a program that has never had its URL or SEO touched
  * still gets a row, keyed exactly as saveProgramConfig would key it.
  */
-export async function recordPageCatalogUpload({ kind, id, bytes, contentType } = {}) {
+export async function recordPageCatalogUpload({ kind, id, receiptId, url, pathname } = {}) {
   const session = await requireAdmin('page_configs');
 
   const target = catalogTarget(kind, id);
   if (!target.ok) return { ok: false, error: target.error };
   const store = storeFor(target.kind);
 
+  // ── the receipt, the URL and the pathname — before any network or write ──
+  let receipt = null;
   try {
+    receipt = await readPageCatalogReceipt(receiptId);
+  } catch (err) {
+    return { ok: false, error: `อ่านใบอนุญาตอัปโหลดไม่สำเร็จ — ${err?.message ?? err}` };
+  }
+  const refused = refusePageCatalogRecord({
+    receipt,
+    kind: target.kind,
+    key: target.key,
+    url,
+    pathname,
+    blobBase: process.env.BLOB_PUBLIC_BASE,
+  });
+  if (refused) return { ok: false, error: refused };
+
+  // ── what is ACTUALLY in the store at that URL ────────────────────────────
+  let blob = null;
+  try {
+    blob = await head(String(url), { token: process.env.BLOB_READ_WRITE_TOKEN });
+  } catch (err) {
+    return { ok: false, error: `ตรวจสอบไฟล์ใน Blob ไม่สำเร็จ — ${err?.message ?? err}` };
+  }
+  const badHead = refusePageCatalogHead(blob);
+  if (badHead) return { ok: false, error: badHead };
+  const bytes = Number(blob.size) || 0;
+
+  try {
+    // ONE guarded claim — a second record call for the same receipt (a double
+    // click, a retry) matches nothing and cannot bump `version` twice.
+    const claimed = await claimPageCatalogReceiptForRecord(
+      receiptId, { kind: target.kind, key: target.key }, Date.now(),
+    );
+    if (!claimed) return { ok: false, error: 'การอัปโหลดนี้ถูกบันทึกไปแล้ว' };
+
     await dbConnect();
     // Keyed on the id AS TYPED — that is the value page-configs.js keys on and
     // the resolver matches case-insensitively; the lowercased form belongs to
@@ -157,8 +210,9 @@ export async function recordPageCatalogUpload({ kind, id, bytes, contentType } =
       { [store.keyField]: key },
       {
         $set: {
+          // UNCHANGED: the public path, served from Blob by the rewrite.
           'catalogPdf.path': target.publicPath,
-          'catalogPdf.bytes': Number(bytes) || 0,
+          'catalogPdf.bytes': bytes,
           'catalogPdf.uploadedAt': new Date(),
           'catalogPdf.uploadedBy': String(session.user?.name || session.user?.id || ''),
         },
@@ -177,8 +231,9 @@ export async function recordPageCatalogUpload({ kind, id, bytes, contentType } =
       recordLabel: `catalog v${updated?.catalogPdf?.version ?? 1} — ${target.publicPath}`,
       after: {
         publicPath: target.publicPath,
-        bytes: Number(bytes) || 0,
-        contentType: String(contentType || 'application/pdf'),
+        blobPathname: target.blobPathname,
+        bytes,
+        contentType: String(blob.contentType || ''),
         version: updated?.catalogPdf?.version ?? 1,
       },
       actor: { id: session.user?.id, name: session.user?.name },
@@ -203,8 +258,8 @@ export async function recordPageCatalogUpload({ kind, id, bytes, contentType } =
 }
 
 /**
- * Clear the catalog from a config. The button disappears; the bytes stay at
- * the derived id until the next upload overwrites them — see the header.
+ * Clear the catalog from a config. The button disappears; the bytes stay in the
+ * store until the next upload overwrites them — see the header.
  */
 export async function removePageCatalog({ kind, id } = {}) {
   const session = await requireAdmin('page_configs');

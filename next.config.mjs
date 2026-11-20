@@ -15,6 +15,7 @@ import {
 } from './src/lib/legacyTransforms.mjs';
 import { LEGACY_BLOB_FILES } from './src/lib/legacyBlobFiles.mjs';
 import { webrootRewrites } from './src/lib/webrootDocuments.mjs';
+import { pageCatalogRewrites } from './src/lib/pageCatalogPaths.mjs';
 import { outlineRedirectEntries } from './src/lib/legacyOutlineRedirects.mjs';
 
 /** @type {import('next').NextConfig} */
@@ -561,7 +562,25 @@ const nextConfig = {
       },
     ]);
 
+    // ── PAGE CATALOGS: ONE NARROW RULE, SERVED FROM BLOB ──────────────────
+    //
+    // Program/skill catalogs (catalogPdf) live on Blob at
+    // `page-catalogs/<kind>-<key>-catalog.pdf`, every size. Their PUBLIC URL
+    // is unchanged — `/files/catalog/<kind>-<key>-catalog.pdf`, stored on every
+    // config row — and this rule maps it onto Blob.
+    //
+    // ⚠ ORDER IS LOAD-BEARING: FIRST, before every /files/ Cloudinary rule,
+    // which would otherwise claim the path (first match wins) and serve the
+    // stale Cloudinary copy. ⚠ AND IT IS NARROW ON PURPOSE: /files/catalog/
+    // is also an ordinary /admin/media category, and a file there that is not
+    // `<program|skill>-…-catalog.pdf` must keep reaching Cloudinary. The
+    // pattern is built from CATALOG_KINDS in src/lib/pageCatalogPaths.mjs,
+    // the same module catalogTarget() names files with. Inert without
+    // BLOB_PUBLIC_BASE, like the rules below.
+    const pageCatalogs = pageCatalogRewrites(blobBase);
+
     return [
+      ...pageCatalogs,
       ...webrootDocuments,
       ...blobFiles,
       // Named variants first: `/_img/w800/sites/…` must not be eaten by the
@@ -590,7 +609,10 @@ const nextConfig = {
           "style-src 'self' 'unsafe-inline'",
           "font-src 'self' data:",
           "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
-          "connect-src 'self' https://api.omise.co https://9exp-sec.com https://msdb.9expert.app https://res.cloudinary.com https://www.google-analytics.com https://analytics.google.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.google.com https://www.google.co.th https://region1.google-analytics.com https://stats.g.doubleclick.net https://connect.facebook.net https://www.facebook.com",
+          // https://vercel.com — the Blob CLIENT upload (admin page catalogs,
+          // webroot documents) PUTs to `https://vercel.com/api/blob`: read off
+          // @vercel/blob's `defaultVercelBlobApiUrl`, not guessed.
+          "connect-src 'self' https://vercel.com https://api.omise.co https://9exp-sec.com https://msdb.9expert.app https://res.cloudinary.com https://www.google-analytics.com https://analytics.google.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.google.com https://www.google.co.th https://region1.google-analytics.com https://stats.g.doubleclick.net https://connect.facebook.net https://www.facebook.com",
           "media-src 'self' blob:",
           "frame-ancestors 'self'",
           "base-uri 'self'",

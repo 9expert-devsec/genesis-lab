@@ -1,32 +1,44 @@
 'use client';
 
 import { useState } from 'react';
+import { upload } from '@vercel/blob/client';
 import { Upload, X, FileText } from 'lucide-react';
 import {
-  signPageCatalogUpload,
+  preparePageCatalogUpload,
   recordPageCatalogUpload,
   removePageCatalog,
 } from '@/lib/actions/page-catalogs';
 import { hasCatalog } from '@/lib/pageCatalog';
+import { PAGE_CATALOG_CONTENT_TYPE, refusePageCatalogSize } from '@/lib/pageCatalogPaths.mjs';
+
+/** The note after a successful upload — Blob serves new bytes ~10 s later. */
+export const PAGE_CATALOG_PROPAGATION_NOTE =
+  'อัปโหลดแล้ว — หน้าเว็บอาจใช้เวลาประมาณ 10 วินาทีกว่าจะแสดงไฟล์ใหม่';
 
 /**
  * Upload / replace / remove the catalog PDF of one program or skill.
  *
- * ── CourseOutlineUpload WITH THE LANGUAGE REMOVED, AND ONE REAL DIFFERENCE ──
- * The outline's component is a FORM FIELD: it holds the path in a hidden
- * input and the course form's save writes it. This one has no form to ride —
- * the page-config editor saves through actions field by field — so the record
- * step persists the upload itself and "remove" is an action too. Everything
- * else is the outline's flow: sign → browser-direct POST to Cloudinary with
- * the signed params VERBATIM → record what landed.
+ * ── ONE PATH FOR EVERY SIZE: A BLOB CLIENT UPLOAD ───────────────────────────
+ * prepare → upload() straight from the browser to Vercel Blob → record. The
+ * bytes never pass through a function (Vercel caps request bodies at 4.5 MB),
+ * and Cloudinary's 10 MB raw ceiling no longer applies to this field — the
+ * limit here is 64 MB. The public URL is unchanged: the config keeps its
+ * root-relative path and next.config.mjs serves it from Blob.
+ *
+ * The pathname handed to upload() is the one the SERVER derived in prepare;
+ * the token route re-derives it from the receipt and refuses anything else, so
+ * this component cannot steer which file is overwritten.
  *
  * The file is live the moment it lands (overwrite in place, same URL), so
- * there is no "unsaved" state here and nothing to discard.
+ * there is no "unsaved" state here and nothing to discard — but the CDN can
+ * take ~10 s to serve the new bytes, which the success note says.
  */
 export function PageCatalogUpload({ kind, id, initialCatalog = null }) {
   const [catalog, setCatalog] = useState(initialCatalog);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(null); // null | 0..100
   const [error, setError] = useState(null);
+  const [note, setNote] = useState(null);
 
   const present = hasCatalog({ catalogPdf: catalog });
 
@@ -35,39 +47,50 @@ export function PageCatalogUpload({ kind, id, initialCatalog = null }) {
     event.target.value = ''; // so re-picking the same file re-fires
     if (!file) return;
 
-    setBusy(true);
     setError(null);
+    setNote(null);
+
+    // Refuse locally first — the server repeats every check.
+    const tooBig = refusePageCatalogSize(file.size);
+    if (tooBig) { setError(tooBig); return; }
+
+    setBusy(true);
     try {
-      const signed = await signPageCatalogUpload({
+      const prep = await preparePageCatalogUpload({
         kind, id, filename: file.name, contentType: file.type, bytes: file.size,
       });
-      if (!signed?.ok) { setError(signed?.error ?? 'ขอลายเซ็นอัปโหลดไม่สำเร็จ'); return; }
+      if (!prep?.ok) { setError(prep?.error ?? 'เตรียมการอัปโหลดไม่สำเร็จ'); return; }
 
-      // The signed params go up VERBATIM. Adding or dropping one invalidates
-      // the signature, and Cloudinary's error for that is not obvious.
-      const body = new FormData();
-      for (const [k, v] of Object.entries(signed.params)) body.append(k, String(v));
-      body.append('api_key', signed.apiKey);
-      body.append('file', file);
-
-      const res = await fetch(signed.uploadUrl, { method: 'POST', body });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(json?.error?.message ?? `อัปโหลดไม่สำเร็จ (HTTP ${res.status})`);
+      setProgress(0);
+      let blob;
+      try {
+        blob = await upload(prep.blobPathname, file, {
+          access: 'public',
+          contentType: PAGE_CATALOG_CONTENT_TYPE,
+          handleUploadUrl: '/api/admin/page-catalogs/upload',
+          // THE ONLY VALUE THE ROUTE TRUSTS. It reads the target out of the
+          // stored receipt, never out of here.
+          clientPayload: JSON.stringify({ receiptId: prep.receiptId }),
+          onUploadProgress: ({ percentage }) => setProgress(Math.round(Number(percentage) || 0)),
+        });
+      } catch (err) {
+        setError(`อัปโหลดไม่สำเร็จ — ${err?.message ?? err}`);
         return;
       }
 
       // The file is up. A failure to RECORD it is reported but must not read as
       // a failed upload, or the admin re-sends bytes that are already there.
       const recorded = await recordPageCatalogUpload({
-        kind, id, bytes: json?.bytes ?? file.size, contentType: file.type,
+        kind, id, receiptId: prep.receiptId, url: blob?.url, pathname: blob?.pathname,
       });
       if (!recorded?.ok) { setError(recorded?.error ?? null); return; }
       setCatalog(recorded.catalogPdf);
+      setNote(PAGE_CATALOG_PROPAGATION_NOTE);
     } catch (err) {
       setError(err?.message ?? 'อัปโหลดไม่สำเร็จ');
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }
 
@@ -75,6 +98,7 @@ export function PageCatalogUpload({ kind, id, initialCatalog = null }) {
     if (!window.confirm('ลบแคตตาล็อกออกจากหน้านี้? ปุ่มดาวน์โหลดจะหายไปทันที')) return;
     setBusy(true);
     setError(null);
+    setNote(null);
     try {
       const res = await removePageCatalog({ kind, id });
       if (!res?.ok) { setError(res?.error ?? 'ลบไม่สำเร็จ'); return; }
@@ -137,7 +161,9 @@ export function PageCatalogUpload({ kind, id, initialCatalog = null }) {
         }`}
       >
         <Upload className="h-3.5 w-3.5" />
-        {busy ? 'กำลังดำเนินการ…' : present ? 'อัปโหลดแทนที่ (PDF)' : 'อัปโหลด PDF'}
+        {busy
+          ? progress !== null ? `กำลังอัปโหลด… ${progress}%` : 'กำลังดำเนินการ…'
+          : present ? 'อัปโหลดแทนที่ (PDF)' : 'อัปโหลด PDF'}
         <input
           type="file"
           accept="application/pdf,.pdf"
@@ -147,6 +173,20 @@ export function PageCatalogUpload({ kind, id, initialCatalog = null }) {
         />
       </label>
 
+      {progress !== null ? (
+        <div
+          className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-9e-ice dark:bg-[#0D1B2A]"
+          role="progressbar"
+          aria-label="ความคืบหน้าการอัปโหลด"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progress}
+        >
+          <div className="h-full bg-9e-action transition-[width]" style={{ width: `${progress}%` }} />
+        </div>
+      ) : null}
+
+      {note ? <p className="mt-1 text-[11px] text-green-700 dark:text-green-400">{note}</p> : null}
       {error ? <p className="mt-1 text-[11px] text-red-700">{error}</p> : null}
     </div>
   );
