@@ -193,3 +193,94 @@ test('an mp3 is typed audio/mpeg, not octet-stream', () => {
   // stops <audio> seeking altogether.
   assert.equal(documentContentType('mp3'), 'audio/mpeg');
 });
+
+// ── PAGE CATALOGS (CATALOG-UPLOAD BUILD) ────────────────────────────────────
+//
+// Every program/skill catalog lives on Blob at page-catalogs/<file>, served at
+// its UNCHANGED public path /files/catalog/<file> by ONE narrow rule that must
+// precede the generic /files/ Cloudinary rules. /files/catalog/ is also an
+// ordinary /admin/media category (8 images there today), so the rule must NOT
+// claim anything that is not `<program|skill>-…-catalog.pdf`.
+
+const PROGRAM_CATALOG = '/files/catalog/program-power-bi-catalog.pdf';
+const SKILL_CATALOG = '/files/catalog/skill-dev-catalog.pdf';
+
+/**
+ * The destination Next would request: the first matching rule with its named
+ * params substituted. (routeOf returns the RULE; the older blob rules have
+ * literal destinations, this one has a `:file` param.)
+ */
+function resolvedDestination(rules, pathname) {
+  const rule = routeOf(rules, pathname);
+  if (!rule) return null;
+  const keys = [];
+  const m = pathToRegexp(rule.source, keys).exec(pathname);
+  let dest = rule.destination;
+  keys.forEach((k, i) => { dest = dest.replace(`:${k.name}`, m[i + 1]); });
+  return dest;
+}
+
+test('a program catalog and a skill catalog route to Blob under page-catalogs/', () => {
+  assert.equal(resolvedDestination(activeRules, PROGRAM_CATALOG),
+    `${BASE}/page-catalogs/program-power-bi-catalog.pdf`);
+  assert.equal(resolvedDestination(activeRules, SKILL_CATALOG),
+    `${BASE}/page-catalogs/skill-dev-catalog.pdf`);
+});
+
+test('anything else under /files/catalog/ still routes to Cloudinary', () => {
+  for (const p of [
+    '/files/catalog/some-other-file.pdf',
+    '/files/catalog/excel-cover.png',
+    '/files/catalog/course-power-bi-catalog.pdf', // a third "kind" is not a page catalog
+    '/files/catalog/program-power-bi-catalog.pdf.bak',
+  ]) {
+    const hit = routeOf(activeRules, p);
+    assert.ok(hit, `nothing matched ${p}`);
+    assert.ok(hit.destination.includes('res.cloudinary.com'), `${p} → ${hit.destination}`);
+  }
+});
+
+test('UPPERCASE: matched by the catalog rule (Next matches case-insensitively), case kept in the destination', () => {
+  // routes-manifest has `caseSensitive: false`, and this matcher uses the same
+  // path-to-regexp default, so the rule CLAIMS an uppercase path — and passes
+  // the filename through as typed. Blob pathnames ARE case-sensitive, so
+  // `/files/catalog/PROGRAM-X-CATALOG.PDF` asks Blob for an object that does not
+  // exist and 404s. Before this round the same URL reached the Cloudinary RAW
+  // rule, whose public_id is equally case-sensitive — also a 404. Same outcome
+  // for uppercase as before; lowercase (the only form ever stored) is served.
+  assert.equal(resolvedDestination(activeRules, '/files/catalog/PROGRAM-X-CATALOG.PDF'),
+    `${BASE}/page-catalogs/PROGRAM-X-CATALOG.PDF`);
+});
+
+test('ORDERING: the catalog rule precedes EVERY Cloudinary rule', () => {
+  const idx = activeRules.findIndex((r) => r.destination === `${BASE}/page-catalogs/:file`);
+  const firstCloudinary = activeRules.findIndex((r) => r.destination.includes('res.cloudinary.com'));
+  assert.ok(idx >= 0, 'no page-catalog rule');
+  assert.ok(idx < firstCloudinary, `catalog rule at ${idx}, first Cloudinary rule at ${firstCloudinary}`);
+});
+
+test('CONTROL: moved AFTER the generic /files/ rules, the same path resolves to Cloudinary', () => {
+  // Proves the ordering assertion above is not vacuous: in a COPY of the array
+  // with the catalog rule moved to the end, the generic rule claims the path.
+  const idx = activeRules.findIndex((r) => r.destination === `${BASE}/page-catalogs/:file`);
+  const reordered = [...activeRules.slice(0, idx), ...activeRules.slice(idx + 1), activeRules[idx]];
+  const hit = routeOf(reordered, PROGRAM_CATALOG);
+  assert.ok(hit.destination.includes('res.cloudinary.com'), hit.destination);
+});
+
+test('CONTROL: without BLOB_PUBLIC_BASE the catalog rule is INERT and the path falls to Cloudinary', () => {
+  assert.equal(inertRules.some((r) => String(r.destination).includes('/page-catalogs/')), false);
+  assert.ok(routeOf(inertRules, PROGRAM_CATALOG).destination.includes('res.cloudinary.com'));
+});
+
+test('a catalog PDF is held out of the edge cache (no-store), so Range keeps answering 206', async () => {
+  // The no-store document rule matches the INCOMING path, before any rewrite —
+  // the same rule that protects every other legacy PDF covers these.
+  const headers = await nextConfig.headers();
+  const noStore = headers.find((h) => h.headers.some(
+    (x) => x.key === 'Cache-Control' && /no-store/.test(x.value),
+  ));
+  assert.ok(noStore, 'no no-store header rule found');
+  assert.ok(matcher(noStore.source)(PROGRAM_CATALOG), noStore.source);
+  assert.ok(matcher(noStore.source)(SKILL_CATALOG), noStore.source);
+});

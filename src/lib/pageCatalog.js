@@ -30,9 +30,16 @@
  *
  * ══ WHY THE PATH IS ROOT-RELATIVE ═══════════════════════════════════════════
  * `/files/catalog/<kind>-<key>-catalog.pdf`, the same `/files/<category>/…`
- * shape the outline uses, so the existing RAW rewrite in next.config.mjs
- * serves it from Cloudinary with no new rule — the category segment is any
- * valid isValidCategory() and needs no registration.
+ * shape the outline uses. It is the URL on every config row and it does NOT
+ * change.
+ *
+ * ── WHERE THE BYTES LIVE: VERCEL BLOB, EVERY SIZE (CATALOG-UPLOAD BUILD) ────
+ * Catalogs used to be Cloudinary raw uploads, served by the generic /files/
+ * RAW rewrite. Cloudinary refuses raw files over 10 MB, so every catalog now
+ * lives on Blob at `page-catalogs/<file>` (lib/pageCatalogPaths.mjs) and ONE
+ * narrow rewrite, placed before the Cloudinary rules, serves that same public
+ * path from Blob. Narrow because /files/catalog/ is also an ordinary
+ * /admin/media category whose other files stay on Cloudinary.
  *
  * ══ ONE PREDICATE, BOTH PAGES, AND THE TESTS ════════════════════════════════
  * `hasCatalog(config)` is the only test of "does this page have a file". The
@@ -43,12 +50,17 @@
 import { normaliseKeyForPath } from '@/lib/files/pathKey';
 import { LEGACY_PUBLIC_ID_PREFIX, legacyPathToPublicId } from '@/lib/legacyPublicId';
 import { extensionOf } from '@/lib/legacyUploadPolicy.mjs';
+// The kinds, the category and the filename's ONE spelling live in the
+// alias-free module next.config.mjs and the copy script also read, so the
+// rewrite that SERVES a catalog and this function that NAMES one cannot drift.
+import {
+  CATALOG_CATEGORY,
+  CATALOG_KINDS,
+  catalogFileName,
+  pageCatalogBlobPathname,
+} from '@/lib/pageCatalogPaths.mjs';
 
-/** The category segment catalogs live in. A valid isValidCategory(). */
-export const CATALOG_CATEGORY = 'catalog';
-
-/** The two entities that may carry a catalog, and the only two. */
-export const CATALOG_KINDS = Object.freeze(['program', 'skill']);
+export { CATALOG_CATEGORY, CATALOG_KINDS, catalogFileName };
 
 /** Per kind: the config field that keys it, and how the refusal names it. */
 const KIND_NAMES = Object.freeze({
@@ -67,11 +79,6 @@ export const CATALOG_DOWNLOAD_LABEL = 'ดาวน์โหลด Catalog';
 /** Is `kind` one of the two? Anything else is refused, never defaulted. */
 export function isCatalogKind(kind) {
   return CATALOG_KINDS.includes(String(kind ?? ''));
-}
-
-/** `<kind>-<key>-catalog.pdf`, all lowercase. */
-export function catalogFileName(kind, normalisedKey) {
-  return `${kind}-${normalisedKey}-catalog.pdf`;
 }
 
 /** The root-relative public path — the string stored on the config. */
@@ -96,8 +103,12 @@ export function catalogTarget(kind, rawKey) {
 
   const fileName = catalogFileName(kind, normalised.value);
   const publicPath = catalogPublicPath(kind, normalised.value);
+  // `publicId` is where the file USED to live on Cloudinary; the one-time copy
+  // script reads it as the source. `blobPathname` is where it lives now — every
+  // size, served at the SAME publicPath by the narrow rewrite in next.config.
   const { publicId } = legacyPathToPublicId(publicPath, 'raw', LEGACY_PUBLIC_ID_PREFIX);
-  return { ok: true, kind, key: normalised.value, fileName, publicPath, publicId };
+  const blobPathname = pageCatalogBlobPathname(fileName);
+  return { ok: true, kind, key: normalised.value, fileName, publicPath, publicId, blobPathname };
 }
 
 /**
