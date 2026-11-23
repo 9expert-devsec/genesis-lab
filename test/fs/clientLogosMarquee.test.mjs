@@ -7,35 +7,53 @@ import { fileURLToPath } from 'node:url';
 /**
  * Marquee behaviour that rendered markup cannot see.
  *
- * The colour fix touched the slot inside MarqueeRow. Pause-on-hover is wired
- * through React event props and the scroll through requestAnimationFrame —
- * neither survives renderToStaticMarkup, so the render tier can assert the
- * mask and the geometry but not these. Source-level guards are the only
- * thing standing between a future edit and a marquee that silently stops
- * pausing.
+ * LOGO-MARQUEE round: the motion moved from a requestAnimationFrame loop (main
+ * thread — it stuttered under hydration, and wrapped at `scrollWidth / 3`, one
+ * 48px gap short of the real period, so every loop jumped 16px) to a CSS
+ * @keyframes animation on the compositor. Pause-on-hover and the
+ * reduced-motion stop are CSS rules now, which renderToStaticMarkup cannot
+ * exercise — so these source guards pin them, in the component AND in
+ * globals.css.
  */
 
 const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const SRC = readFileSync(
   path.join(ROOT, 'src/components/portfolio/ClientLogosSection.jsx'), 'utf8'
 );
+const CSS = readFileSync(path.join(ROOT, 'src/app/globals.css'), 'utf8');
 
-test('pause-on-hover is still wired to the row container', () => {
-  assert.match(SRC, /onMouseEnter=\{pause\}/);
-  assert.match(SRC, /onMouseLeave=\{resume\}/);
-  assert.match(SRC, /pausedRef\.current = true/);
-  assert.match(SRC, /pausedRef\.current = false/);
+test('the motion is a CSS animation: no rAF loop, no effect, no client JS left', () => {
+  const code = SRC.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  for (const gone of ['requestAnimationFrame', 'cancelAnimationFrame', 'useEffect', 'useRef', 'scrollWidth', "'use client'"]) {
+    assert.ok(!code.includes(gone), `"${gone}" is back in the marquee`);
+  }
+  assert.match(code, /marquee-track marquee-track--\$\{direction === 'right' \? 'right' : 'left'\}/);
+  assert.match(code, /marqueeTrackVars\(logos\.length, speed\)/, 'the duration/shift vars are not set from the geometry');
+  assert.match(CSS, /@keyframes marquee-to-left\s*\{[\s\S]*?translate3d\(var\(--marquee-shift\), 0, 0\)/);
+  assert.match(CSS, /@keyframes marquee-to-right\s*\{[\s\S]*?from\s*\{ transform: translate3d\(var\(--marquee-shift\), 0, 0\); \}/);
+  assert.match(CSS, /\.marquee-track--left\s*\{ animation: marquee-to-left\s+var\(--marquee-duration\) linear infinite; \}/);
+  assert.match(CSS, /\.marquee-track--right \{ animation: marquee-to-right var\(--marquee-duration\) linear infinite; \}/);
 });
 
-test('the animation loop and its reduced-motion opt-out survive', () => {
-  assert.match(SRC, /requestAnimationFrame\(step\)/);
-  assert.match(SRC, /cancelAnimationFrame/);
-  assert.match(SRC, /prefers-reduced-motion: reduce/);
+test('pause-on-hover survives, as animation-play-state on the row', () => {
+  assert.match(SRC, /className="marquee-row /);
+  assert.match(CSS, /\.marquee-row:hover \.marquee-track \{ animation-play-state: paused; \}/);
 });
 
-test('the triple-copy track that makes the loop seamless is intact', () => {
-  assert.match(SRC, /\[\.\.\.logos, \.\.\.logos, \.\.\.logos\]/);
-  assert.match(SRC, /scrollWidth \/ 3/);
+test('the reduced-motion opt-out survives: no animation at all', () => {
+  assert.match(CSS, /@media \(prefers-reduced-motion: reduce\) \{\s*\.marquee-track \{ animation: none; \}\s*\}/);
+});
+
+test('each copy carries its trailing gap, so one copy IS the period (no 16px seam)', () => {
+  // gap-12 between a copy's logos AND pr-12 after its last — copies abut.
+  assert.match(SRC, /<div key=\{copy\} className="flex shrink-0 items-center gap-12 pr-12">/);
+  assert.match(SRC, /Array\.from\(\{ length: copies \}/);
+});
+
+test('the marquee logos load eagerly; the About wall keeps lazy', () => {
+  assert.match(SRC, /loading="eager"/);
+  assert.match(SRC, /export function ClientLogoImage\(\{ logo, className, loading = 'lazy' \}\)/);
+  assert.match(SRC, /decoding="async"/);
 });
 
 /**
