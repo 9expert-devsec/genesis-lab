@@ -2500,6 +2500,36 @@ a.about-instructor-program:focus-visible { outline: 2px solid var(--9e-air); out
   background: linear-gradient(160deg, var(--9e-navy) 0%, var(--9e-card) 60%, var(--9e-action) 140%);
 }
 
+/* ═══ CLIENT LOGO MARQUEE (home: "องค์กรที่ให้ความไว้วางใจ") ════════════════
+   A compositor animation — it no longer depends on the main thread, which is
+   what made the old requestAnimationFrame loop stutter during hydration.
+   ClientLogosSection sets two custom properties on each track:
+     --marquee-shift     one copy, as −100/copies % of the track's own width
+     --marquee-duration  one period ÷ the row's px/s speed
+   Each copy carries its trailing gap, so moving the track by one copy lands
+   exactly where it started: the loop has no seam.
+   Placed BEFORE the course-outline rich-bullets section on purpose: every
+   rule after that section must be scoped to it, and the guard finds the
+   section by its class name — so this comment must not spell it
+   (test/fs/courseOutlineRichSeam). */
+@keyframes marquee-to-left {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(var(--marquee-shift), 0, 0); }
+}
+@keyframes marquee-to-right {
+  from { transform: translate3d(var(--marquee-shift), 0, 0); }
+  to   { transform: translate3d(0, 0, 0); }
+}
+.marquee-track--left  { animation: marquee-to-left  var(--marquee-duration) linear infinite; }
+.marquee-track--right { animation: marquee-to-right var(--marquee-duration) linear infinite; }
+/* Pause on hover — the behaviour the old onMouseEnter/onMouseLeave had. */
+.marquee-row:hover .marquee-track { animation-play-state: paused; }
+/* Reduced motion: no movement at all, both rows at rest at 0 — exactly what
+   the old loop did (it returned before starting). */
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none; }
+}
+
 /* ──────────────────────────────────────────────────────────────
    Course outline — RICH section-7 bullets, rendered via
    dangerouslySetInnerHTML from CourseExtension.trainingTopicsRich

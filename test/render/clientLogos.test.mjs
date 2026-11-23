@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import ClientLogosSection from '@/components/portfolio/ClientLogosSection';
+import { marqueeCopyCount } from '@/lib/marqueeGeometry.mjs';
 
 /**
  * Client logo strip — a monochrome white wall in dark mode.
@@ -99,9 +100,14 @@ test('CONTROL: an unflagged logo MUST receive it — neither direction is vacuou
   const out = html();
   const filtered = (out.match(/dark:brightness-0/g) ?? []).length;
   const imgs = (out.match(/<img/g) ?? []).length;
-  // 3 logos x 3 marquee copies = 9 images; 1 of the 3 is flagged, so 6 filtered.
-  assert.equal(imgs, 9);
-  assert.equal(filtered, 6, 'exactly the two unflagged logos, across all three copies');
+  // The rows split by display_order: row A = sony + pandora (both unflagged),
+  // row B = scb (flagged). Each row renders marqueeCopyCount(n) copies — as
+  // many as keep its 1200px window covered (LOGO-MARQUEE round; it was a
+  // fixed 3). So: images = 2·copies(2) + 1·copies(1); filtered = 2·copies(2).
+  const a = marqueeCopyCount(2);
+  const b = marqueeCopyCount(1);
+  assert.equal(imgs, 2 * a + b);
+  assert.equal(filtered, 2 * a, 'exactly the two unflagged logos, across every copy of their row');
 });
 
 test('the flag is read from the record, not matched on company name', () => {
