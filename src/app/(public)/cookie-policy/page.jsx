@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { SiYoutube, SiGoogleanalytics, SiGoogleads, SiMeta } from 'react-icons/si';
+import { SiYoutube, SiGoogleanalytics, SiGoogleads, SiMeta, SiOpenai } from 'react-icons/si';
 import { PolicyLayout } from '@/components/policies/PolicyLayout';
 import { PolicyAccordion } from '@/components/policies/PolicyAccordion';
 import { PolicyIcon } from '@/components/policies/PolicyIcon';
@@ -136,7 +136,7 @@ const COOKIE_TYPES = [
      * must agree. If the pixel is ever moved to a different category, or
      * ungated, this line is wrong the same day.
      */
-    provider: 'Google Ads, Meta (Facebook Pixel)',
+    provider: 'Google Ads, Meta (Facebook Pixel), OpenAI (ChatGPT Ads)',
   },
 ];
 
@@ -231,6 +231,13 @@ const THIRD_PARTY = [
       'วัดผลโฆษณาและ conversion บน Facebook และ Instagram '
       + 'โดยจะเริ่มทำงานเมื่อท่านให้ความยินยอมคุกกี้ประเภทการตลาดแล้วเท่านั้น '
       + 'หากท่านไม่ให้ความยินยอม เว็บไซต์จะไม่เรียกใช้งานสคริปต์ของ Meta เลย',
+    confirmed: true,
+  },
+  {
+    Icon: SiOpenai,
+    name: 'OpenAI Ads Pixel',
+    purpose:
+      'ใช้วัดผลโฆษณาของเราบน ChatGPT เช่น การลงทะเบียนที่มาจากโฆษณา โหลดเฉพาะเมื่อท่านยินยอมคุกกี้ด้านการตลาดเท่านั้น ข้อมูลที่เก็บจะถูกประมวลผลโดย OpenAI ตามนโยบายความเป็นส่วนตัวของ OpenAI',
     confirmed: true,
   },
 ];
