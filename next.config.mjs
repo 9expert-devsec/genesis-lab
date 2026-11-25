@@ -605,14 +605,14 @@ const nextConfig = {
         value: [
           "default-src 'self'",
           "img-src 'self' https://res.cloudinary.com https://ddva7xvdt.res.cloudinary.com https://9expert-cdn.s3.ap-southeast-1.amazonaws.com https://www.9experttraining.com https://9experttraining.com https://9exp-sec.com https://msdb.9expert.app https://i.ytimg.com https://cdn.jsdelivr.net https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://www.google.co.th https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.facebook.com data: blob:",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.omise.co https://www.youtube.com https://www.googletagmanager.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://connect.facebook.net",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.omise.co https://www.youtube.com https://www.googletagmanager.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://connect.facebook.net https://bzrcdn.openai.com",
           "style-src 'self' 'unsafe-inline'",
           "font-src 'self' data:",
           "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
           // https://vercel.com — the Blob CLIENT upload (admin page catalogs,
           // webroot documents) PUTs to `https://vercel.com/api/blob`: read off
           // @vercel/blob's `defaultVercelBlobApiUrl`, not guessed.
-          "connect-src 'self' https://vercel.com https://api.omise.co https://9exp-sec.com https://msdb.9expert.app https://res.cloudinary.com https://www.google-analytics.com https://analytics.google.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.google.com https://www.google.co.th https://region1.google-analytics.com https://stats.g.doubleclick.net https://connect.facebook.net https://www.facebook.com",
+          "connect-src 'self' https://vercel.com https://api.omise.co https://9exp-sec.com https://msdb.9expert.app https://res.cloudinary.com https://www.google-analytics.com https://analytics.google.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.google.com https://www.google.co.th https://region1.google-analytics.com https://stats.g.doubleclick.net https://connect.facebook.net https://www.facebook.com https://bzrcdn.openai.com https://bzr.openai.com",
           "media-src 'self' blob:",
           "frame-ancestors 'self'",
           "base-uri 'self'",

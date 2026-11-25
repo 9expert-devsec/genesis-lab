@@ -34,6 +34,7 @@ import {
   metaPixelTrack,
   metaPixelTrackCustom,
 } from '@/lib/analytics/metaPixel';
+import { isOaiPixelReady } from '@/lib/analytics/oaiPixel';
 import {
   ADS_CONVERSION_LABELS,
   adsSendTo,
@@ -180,6 +181,13 @@ function trackRegistration(event, params, { registrationId, value }) {
     value != null ? { value, currency: DEFAULT_CURRENCY } : {},
     metaEventOptions(registrationId),
   );
+  // OpenAI Ads: public registrations only, AFTER the dataLayer push above and
+  // under the same claimOnce. Guarded so it can never throw into this handler.
+  if (event === EVENTS.registerPublic) {
+    try {
+      if (isOaiPixelReady()) window.oaiq?.('measure', 'registration_completed', { type: 'customer_action' });
+    } catch { /* never affects the push above */ }
+  }
 }
 
 /** Public registration. formType: 'public' (no online payment) | 'public_paid'. */

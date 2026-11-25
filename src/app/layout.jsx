@@ -8,6 +8,7 @@ import { AnalyticsPageTracker } from '@/components/analytics/AnalyticsPageTracke
 import { LinkerParamCleaner } from '@/components/analytics/LinkerParamCleaner';
 import { MetaPixel } from '@/components/analytics/MetaPixel';
 import { MetaPixelPageTracker } from '@/components/analytics/MetaPixelPageTracker';
+import { OaiPixel } from '@/components/analytics/OaiPixel';
 import { AttributionCapture } from '@/components/analytics/AttributionCapture';
 import { ContactClickTracker } from '@/components/analytics/ContactClickTracker';
 import { FloatingActionDock } from '@/components/ui/FloatingActionDock';
@@ -138,6 +139,9 @@ export default function RootLayout({ children }) {
             loaded one line above. That asymmetry is deliberate and its
             reasoning is in consentMode.js; do not "make them consistent". */}
         <MetaPixel />
+        {/* OpenAI Ads pixel: the Meta rule (nothing until marketing consent),
+            and nothing at all without NEXT_PUBLIC_OAI_PIXEL_ID. */}
+        <OaiPixel />
         <Suspense fallback={null}>
           <AnalyticsPageTracker />
           {/* A SIBLING, not a few lines inside AnalyticsPageTracker: GA4
