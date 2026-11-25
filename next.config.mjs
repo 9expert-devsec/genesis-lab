@@ -734,6 +734,21 @@ const nextConfig = {
           ],
         })),
 
+      // ── llms.txt / llms-full.txt: PLAIN TEXT, DECLARED UTF-8 ───────────────
+      //
+      // Static files in public/, supplied as-is. Both are Thai, and a browser
+      // that is not told the charset renders them as mojibake, so it is stated
+      // here rather than left to the server's guess. Two literal sources, no
+      // pattern: the site root is where every page lives.
+      //
+      // ADDITIVE: the `/:path*` entry above still matches these paths, and Next
+      // applies every matching entry, so the security headers are kept. This
+      // entry sets no key that one sets. No X-Robots-Tag: indexing is left alone.
+      ...['/llms.txt', '/llms-full.txt'].map((source) => ({
+        source,
+        headers: [{ key: 'Content-Type', value: 'text/plain; charset=utf-8' }],
+      })),
+
       // ── REMOVED: the `public` Cache-Control override on legacy image paths ─
       //
       // It attempted to recover the edge cache for f_auto by overriding
