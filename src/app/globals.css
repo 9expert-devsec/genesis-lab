@@ -1021,7 +1021,9 @@ html.dark   { color-scheme: dark; }
   }
 
   p, span {
-    font-family: "Google Sans", var(--font-en), sans-serif !important;
+    /* next/font variables only (see tailwind.config.js fontFamily);
+       --font-thai is the Thai safety net after Google Sans. */
+    font-family: var(--font-en), var(--font-thai), sans-serif !important;
   }
 
   /* Focus ring using brand blue — readable on both light and dark */

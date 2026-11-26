@@ -23,24 +23,35 @@ import './globals.css';
 // --font-en  → Google Sans (body / detail / EN)
 // --font-thai → LINE Seed Sans TH (Thai + headings)
 //
-// Google Sans is the official SIL OFL release (google/fonts, ofl/googlesans;
-// licence in src/fonts/OFL.txt): ONE variable file, wght 400–700, so the
-// 400/500/600/700 weights the site uses all come from it. opsz and GRAD were
-// pinned at their defaults (18 / 0) and the file subset to Latin
-// (U+0000-00FF, U+2000-206F, € ™ and friends) as WOFF2 — 44 KB instead of
-// four ~2 MB full-glyph TTFs. Characters outside that range fall through the
-// font stack to LINE Seed Sans TH, then the system sans-serif.
+// Google Sans is SIL OFL (licence in src/fonts/OFL.txt): FOUR STATIC faces,
+// 400/500/600/700, one family, so font-medium / font-semibold keep resolving
+// to real faces exactly as the earlier 400–700 variable file did.
 //
-// preload is per localFont() call in next/font, not per face, and splitting
-// one family across two calls would make two families and break weight
-// matching. So both calls keep preload on: Google Sans is a single file, and
+// THE FACES MUST CARRY THAI. Body text is Thai, and the previous file (the
+// v14 variable font subset to Latin only) had 0 of the 91 Thai code points:
+// every customer without a locally installed Google Sans fell back to a
+// system Thai font. These are built from the v12.001 static TTFs that were in
+// git before 78682a0c (src/fonts/GoogleSans-*.ttf, 87/91 Thai = the whole
+// assigned block), subset with fontTools to
+//   U+0000-00FF  U+0E00-0E7F (Thai, incl. ฿)  U+2000-206F  € ™  arrows
+//   + the dozen extra Latin code points the old subset carried
+// with --layout-features='*' (Thai ccmp / mark / mkmk survive), no hinting,
+// all name records kept. ~35–37 KB each, ~145 KB for the four.
+//
+// preload is per localFont() call in next/font (15.5), not per face, and
+// splitting the family across calls would break weight matching — so all
+// four faces are preloaded. Most pages paint 400 / 500-600 / 700 above the
+// fold and download all four anyway; preload only starts them earlier.
 // LINE Seed's 400/700 are above the fold on / and course pages (800/900 come
 // along at ~30 KB each). Weight 100 (Thin) was dropped — the one font-light
 // paragraph now matches Regular 400 instead of Thin.
 
 const googleSans = localFont({
   src: [
-    { path: '../fonts/GoogleSans-Latin-wght.woff2', weight: '400 700', style: 'normal' },
+    { path: '../fonts/GoogleSans-Regular.woff2',  weight: '400', style: 'normal' },
+    { path: '../fonts/GoogleSans-Medium.woff2',   weight: '500', style: 'normal' },
+    { path: '../fonts/GoogleSans-SemiBold.woff2', weight: '600', style: 'normal' },
+    { path: '../fonts/GoogleSans-Bold.woff2',     weight: '700', style: 'normal' },
   ],
   variable: '--font-en',
   display: 'swap',

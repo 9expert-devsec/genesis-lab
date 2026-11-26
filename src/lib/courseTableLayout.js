@@ -24,10 +24,10 @@
  *
  * THE FONT IS GOOGLE SANS, NOT LINE SEED, and that is a real difference from
  * /schedule. globals.css says `label, input, select, textarea, button, li, td,
- * th { @apply font-en; }`, `font-en` is ["Google Sans", var(--font-en),
- * sans-serif] with no LINE Seed in the stack, and the `:lang(th) → font-thai`
- * rule below it is commented out. Google Sans does cover Thai (verified against
- * its cmap), so the fallback never fires and these cells render in Google Sans.
+ * th { @apply font-en; }`, `font-en` is [var(--font-en), var(--font-thai),
+ * sans-serif], and the `:lang(th) → font-thai` rule below it is commented out.
+ * The self-hosted Google Sans faces cover Thai (87/91 in their cmap), so the
+ * LINE Seed safety net never fires and these cells render in Google Sans.
  * Measuring against LINESeedSansTH_W_Bd — the binary /schedule was measured
  * against — would have produced numbers for a font this table never uses.
  *

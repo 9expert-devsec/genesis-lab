@@ -107,13 +107,20 @@ module.exports = {
       },
 
       // ── Typography ────────────────────────────────────────────────
-      // Applied via next/font as CSS variables in src/app/layout.jsx
+      // Applied via next/font as CSS variables in src/app/layout.jsx.
+      // ONLY the next/font variables — no literal "Google Sans" /
+      // "LINE Seed Sans TH" local names in front of them. A literal name
+      // matches a copy installed on the viewer's machine, so a developer with
+      // Google Sans installed saw Thai rendered correctly while customers got
+      // the webfont (which then had no Thai). Every machine now renders the
+      // self-hosted files. var(--font-thai) follows var(--font-en) in the body
+      // stacks as the Thai safety net.
       fontFamily: {
         // Headings — LINE Seed Sans TH first (covers Thai + Latin), Google Sans fallback
-        heading: ['"LINE Seed Sans TH"', 'var(--font-thai)', '"Google Sans"', 'var(--font-en)', 'sans-serif'],
-        thai:    ['"LINE Seed Sans TH"', 'var(--font-thai)', 'sans-serif'],
-        en:      ['"Google Sans"', 'var(--font-en)', 'sans-serif'],
-        sans:    ['"Google Sans"', 'var(--font-en)', '"LINE Seed Sans TH"', 'var(--font-thai)', 'sans-serif'],
+        heading: ['var(--font-thai)', 'var(--font-en)', 'sans-serif'],
+        thai:    ['var(--font-thai)', 'sans-serif'],
+        en:      ['var(--font-en)', 'var(--font-thai)', 'sans-serif'],
+        sans:    ['var(--font-en)', 'var(--font-thai)', 'sans-serif'],
       },
 
       // ── Radii ─────────────────────────────────────────────────────
