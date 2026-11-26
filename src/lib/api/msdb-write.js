@@ -136,3 +136,75 @@ export async function msdbDelete(entity, id) {
   if (!id) throw new Error('[msdb-write] delete requires id');
   return request('DELETE', `/${entity}/${encodeURIComponent(id)}`);
 }
+
+// ── Article snapshot sync ───────────────────────────────────────────────────
+//
+// NOT an `entity` in ALLOWED above, and not sent through `request()`, on
+// purpose: it is a different endpoint contract with a different key.
+//   · PUT ${AI_API_BASE}/articles/sync, header `x-sync-key`, never AI_API_KEY
+//   · one bulk body `{ synced_at, items }` (lib/articles/msdbSnapshot.js)
+//   · MSDB answers 409 for an empty or >50%-drop snapshot, and the caller
+//     needs that status and body verbatim, not a flattened message
+// FAILS CLOSED: without MSDB_ARTICLES_SYNC_KEY nothing is sent.
+
+const ARTICLES_SYNC_TIMEOUT_MS = 30_000;
+
+/**
+ * Raised for any non-2xx MSDB answer. `status` and `body` are MSDB's own.
+ */
+export class MsdbSyncError extends Error {
+  constructor(message, status, body) {
+    super(message);
+    this.name = 'MsdbSyncError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
+/**
+ * @param {{ synced_at: string, items: object[] }} snapshot
+ * @returns {Promise<{ status: number, body: any }>} MSDB's 2xx answer
+ */
+export async function msdbPutArticleSnapshot(snapshot) {
+  const syncKey = process.env.MSDB_ARTICLES_SYNC_KEY;
+  if (!syncKey) {
+    throw new Error('[msdb-write] MSDB_ARTICLES_SYNC_KEY is not set; refusing to send the article snapshot.');
+  }
+  const path = '/articles/sync';
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      BASE + path,
+      {
+        method: 'PUT',
+        headers: {
+          'x-sync-key':   syncKey,
+          'content-type': 'application/json',
+          'accept':       'application/json',
+        },
+        body: JSON.stringify(snapshot),
+        cache: 'no-store',
+      },
+      ARTICLES_SYNC_TIMEOUT_MS
+    );
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error(`[msdb-write] PUT ${path} timed out after ${ARTICLES_SYNC_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  }
+
+  const text = await res.text().catch(() => '');
+  let body = text;
+  if (text) {
+    try { body = JSON.parse(text); } catch { /* keep raw text */ }
+  }
+  if (!res.ok) {
+    const detail =
+      (body && typeof body === 'object' && (body.error || body.message)) ||
+      String(text).slice(0, 500) ||
+      res.statusText;
+    throw new MsdbSyncError(`[msdb-write] PUT ${path} → ${res.status} ${detail}`, res.status, body);
+  }
+  return { status: res.status, body };
+}
