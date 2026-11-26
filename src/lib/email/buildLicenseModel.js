@@ -96,3 +96,82 @@ export function buildLicenseModel(doc, courseDoc) {
     license_conditions: conditions, // array | false
   };
 }
+
+/**
+ * Which license(s) the attendees actually chose: 'own' | 'team' | 'mixed'.
+ *
+ * Choice values are compared case-insensitively because the stored values
+ * follow the course's `choices[].value` as typed by the admin ("Own",
+ * "9expert"), not a fixed spelling.
+ *
+ *   scope "all"          → the one choice ('mixed' if missing or unknown)
+ *   scope "per_attendee" → 'own' / 'team' only when EVERY listed attendee has
+ *                          that same choice. 'mixed', the safe default, when:
+ *                          both appear, the names were withheld
+ *                          (attendeesListProvided === false), any attendee has
+ *                          no slot / no choice, or a value is unrecognised.
+ */
+export function resolveEffectiveLicenseMode(registration) {
+  const kindOf = (v) => {
+    const s = String(v ?? '').trim().toLowerCase();
+    return s === 'own' ? 'own' : s === '9expert' ? 'team' : null;
+  };
+
+  if (registration?.license_scope !== 'per_attendee') {
+    return kindOf(registration?.license_choice) ?? 'mixed';
+  }
+  if (registration.attendeesListProvided === false) return 'mixed';
+
+  const slots = Array.isArray(registration.license_per_attendee)
+    ? registration.license_per_attendee
+    : [];
+  const attendeeCount = Math.max(
+    Array.isArray(registration.attendees) ? registration.attendees.length : 0,
+    slots.length
+  );
+  if (attendeeCount === 0) return 'mixed';
+
+  const kinds = new Set();
+  for (let i = 0; i < attendeeCount; i++) {
+    const k = kindOf(slots[i]?.choice);
+    if (!k) return 'mixed';
+    kinds.add(k);
+  }
+  return kinds.size === 1 ? [...kinds][0] : 'mixed';
+}
+
+/**
+ * The license model for the Masterclass EMAILS (quote + paid receipt).
+ *
+ * Same as buildLicenseModel, except that a per-attendee registration whose
+ * attendees all chose the SAME license is rendered exactly as scope "all" with
+ * that choice: the chosen option's own conditions instead of the combined
+ * global_ack block that covers both. A genuinely mixed (or uncertain)
+ * registration keeps the per-attendee model.
+ *
+ * Only the emails use this. The per-attendee rows of the attendee table are
+ * built by the senders from license_per_attendee and are unaffected.
+ */
+export function buildEmailLicenseModel(doc, courseDoc) {
+  if (doc?.license_scope !== 'per_attendee') return buildLicenseModel(doc, courseDoc);
+
+  const mode = resolveEffectiveLicenseMode(doc);
+  if (mode === 'mixed') return buildLicenseModel(doc, courseDoc);
+
+  const target = mode === 'own' ? 'own' : '9expert';
+  const choice = (courseDoc?.license_options?.choices ?? []).find(
+    (c) => String(c?.value ?? '').trim().toLowerCase() === target
+  );
+  if (!choice) return buildLicenseModel(doc, courseDoc); // no matching option → safe default
+
+  return buildLicenseModel(
+    {
+      ...doc,
+      license_scope: 'all',
+      license_choice: choice.value,
+      license_level: null,
+      license_detail: null,
+    },
+    courseDoc
+  );
+}

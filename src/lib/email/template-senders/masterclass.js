@@ -2,7 +2,7 @@ import { sendEmail, sendTemplateEmail } from "@/lib/email/postmark";
 import { resolveRecipients } from "@/lib/email/recipients";
 import { formatTHB } from "@/lib/pricing";
 import { formatBillingAddress } from "@/lib/address/formatBillingAddress";
-import { buildLicenseModel } from "@/lib/email/buildLicenseModel";
+import { buildEmailLicenseModel } from "@/lib/email/buildLicenseModel";
 // Aliased: this module already uses `refNo` as a local const name.
 import { refNo as makeRefNo } from "@/lib/refNo";
 import { buildPrepModel } from "@/lib/email/buildPrepModel";
@@ -86,7 +86,7 @@ export async function sendMasterclassPaidReceipt(doc) {
     doc.payment?.method === "credit_card" ? "บัตรเครดิต/เดบิต" : "QR PromptPay";
 
   const billingAddressP = formatBillingAddress(doc.invoice);
-  const licenseModel = buildLicenseModel(doc, courseDoc);
+  const licenseModel = buildEmailLicenseModel(doc, courseDoc);
   const prepModel = buildPrepModel(batchDoc);
 
   const templateModel = {
@@ -234,7 +234,7 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
   const refNo = referenceNumber ?? makeRefNo(doc._id);
 
   const billingAddressQ = formatBillingAddress(doc.invoice);
-  const licenseModel = buildLicenseModel(doc, courseDoc);
+  const licenseModel = buildEmailLicenseModel(doc, courseDoc);
   const prepModel = buildPrepModel(batchDoc);
 
   const templateModel = {
